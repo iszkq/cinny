@@ -1,6 +1,7 @@
 import { atom } from 'jotai';
 
 const STORAGE_KEY = 'ai-settings';
+const LEGACY_MODELS_API_URL = 'https://aihubmix.com/api/v1/models?type=llm';
 
 export type AIModel = {
   id: string;
@@ -42,15 +43,25 @@ const defaultAISettings: AISettings = {
   skills: [],
 };
 
+const normalizeAISettings = (settings: Partial<AISettings>): AISettings => {
+  const nextModelsApiUrl = settings.modelsApiUrl?.trim();
+
+  return {
+    ...defaultAISettings,
+    ...settings,
+    modelsApiUrl:
+      !nextModelsApiUrl || nextModelsApiUrl === LEGACY_MODELS_API_URL
+        ? defaultAISettings.modelsApiUrl
+        : nextModelsApiUrl,
+  };
+};
+
 export const getAISettings = (): AISettings => {
   const settings = localStorage.getItem(STORAGE_KEY);
   if (settings === null) return defaultAISettings;
 
   try {
-    return {
-      ...defaultAISettings,
-      ...(JSON.parse(settings) as Partial<AISettings>),
-    };
+    return normalizeAISettings(JSON.parse(settings) as Partial<AISettings>);
   } catch {
     return defaultAISettings;
   }
