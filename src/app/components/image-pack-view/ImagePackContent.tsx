@@ -297,6 +297,9 @@ export const ImagePackContent = as<'div', ImagePackContentProps>(
             direction="Column"
             gap="400"
           >
+            <Text size="T200" priority="300">
+              Each pack acts like a separate emoji category or sticker category.
+            </Text>
             {metaEditing ? (
               <ImagePackProfileEdit
                 meta={currentMeta}
@@ -342,7 +345,7 @@ export const ImagePackContent = as<'div', ImagePackContentProps>(
               >
                 <SettingTile
                   title="Upload Images"
-                  description="Select images from your storage to upload them in pack."
+                  description="Select one or more images from your storage to upload them into this category."
                   after={
                     <Button
                       variant="Secondary"
@@ -359,27 +362,29 @@ export const ImagePackContent = as<'div', ImagePackContentProps>(
                 />
               </SequenceCard>
             )}
-            {files.map((file) => (
-              <SequenceCard
-                key={file.name}
-                style={{ padding: config.space.S300 }}
-                variant="SurfaceVariant"
-                direction="Column"
-                gap="400"
-              >
-                <ImageTileUpload file={file}>
-                  {(uploadAtom) => (
-                    <CompactUploadCardRenderer
-                      uploadAtom={uploadAtom}
-                      onRemove={handleUploadRemove}
-                      onComplete={handleUploadComplete}
-                    />
-                  )}
-                </ImageTileUpload>
-              </SequenceCard>
-            ))}
-            {uploadedImages.map(renderImage)}
-            {images.map(renderImage)}
+            <Box className={css.ImagePackGrid}>
+              {files.map((file) => (
+                <SequenceCard
+                  key={file.name}
+                  style={{ padding: config.space.S300 }}
+                  variant="SurfaceVariant"
+                  direction="Column"
+                  gap="400"
+                >
+                  <ImageTileUpload file={file}>
+                    {(uploadAtom) => (
+                      <CompactUploadCardRenderer
+                        uploadAtom={uploadAtom}
+                        onRemove={handleUploadRemove}
+                        onComplete={handleUploadComplete}
+                      />
+                    )}
+                  </ImageTileUpload>
+                </SequenceCard>
+              ))}
+              {uploadedImages.map(renderImage)}
+              {images.map(renderImage)}
+            </Box>
           </Box>
         )}
       </Box>

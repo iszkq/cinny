@@ -14,7 +14,7 @@ import {
   UploadResponse,
 } from 'matrix-js-sdk';
 import to from 'await-to-js';
-import { IImageInfo, IThumbnailContent, IVideoInfo } from '../../types/matrix/common';
+import { IAudioInfo, IImageInfo, IThumbnailContent, IVideoInfo } from '../../types/matrix/common';
 import { AccountDataEvent } from '../../types/matrix/accountData';
 import { getStateEvent } from './room';
 import { Membership, StateEvent } from '../../types/matrix/room';
@@ -71,6 +71,14 @@ export const getVideoInfo = (video: HTMLVideoElement, fileOrBlob: File | Blob): 
   info.duration = Number.isNaN(video.duration) ? undefined : Math.floor(video.duration * 1000);
   info.w = video.videoWidth;
   info.h = video.videoHeight;
+  info.mimetype = fileOrBlob.type;
+  info.size = fileOrBlob.size;
+  return info;
+};
+
+export const getAudioInfo = (audio: HTMLAudioElement, fileOrBlob: File | Blob): IAudioInfo => {
+  const info: IAudioInfo = {};
+  info.duration = Number.isNaN(audio.duration) ? undefined : Math.floor(audio.duration * 1000);
   info.mimetype = fileOrBlob.type;
   info.size = fileOrBlob.size;
   return info;

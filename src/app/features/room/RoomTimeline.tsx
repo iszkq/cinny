@@ -127,6 +127,8 @@ import { useAccessiblePowerTagColors, useGetMemberPowerTag } from '../../hooks/u
 import { useTheme } from '../../hooks/useTheme';
 import { useRoomCreatorsTag } from '../../hooks/useRoomCreatorsTag';
 import { usePowerLevelTags } from '../../hooks/usePowerLevelTags';
+import { ForwardableMessage, isForwardableMessage } from './forwardMessages';
+import { ForwardMessagesModal } from './ForwardMessagesModal';
 
 const TimelineFloat = as<'div', css.TimelineFloatVariants>(
   ({ position, className, ...props }, ref) => (
@@ -476,6 +478,8 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
   const canSendReaction = permissions.event(MessageEvent.Reaction, mx.getSafeUserId());
   const canPinEvent = permissions.stateEvent(StateEvent.RoomPinnedEvents, mx.getSafeUserId());
   const [editId, setEditId] = useState<string>();
+  const [forwardMessages, setForwardMessages] = useState<Record<string, ForwardableMessage>>({});
+  const [forwardDialog, setForwardDialog] = useState(false);
 
   const roomToParents = useAtomValue(roomToParentsAtom);
   const unread = useRoomUnread(room.roomId, roomToUnreadAtom);
@@ -1016,6 +1020,20 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     },
     [editor]
   );
+  const handleToggleForwardSelection = useCallback((message: ForwardableMessage) => {
+    setForwardMessages((current) => {
+      const next = { ...current };
+
+      if (next[message.eventId]) {
+        delete next[message.eventId];
+      } else {
+        next[message.eventId] = message;
+      }
+
+      return next;
+    });
+  }, []);
+  const selectedForwardCount = Object.keys(forwardMessages).length;
   const { t } = useTranslation();
 
   const renderMatrixEvent = useMatrixEventRenderer<
@@ -1036,6 +1054,17 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
         const senderId = mEvent.getSender() ?? '';
         const senderDisplayName =
           getMemberDisplayName(room, senderId) ?? getMxIdLocalPart(senderId) ?? senderId;
+        const forwardContent = getContent();
+        const forwardSource = isForwardableMessage(MessageEvent.RoomMessage, forwardContent)
+          ? {
+              eventId: mEventId,
+              eventType: MessageEvent.RoomMessage,
+              content: forwardContent,
+              senderId,
+              senderName: senderDisplayName,
+              timestamp: mEvent.getTs(),
+            }
+          : undefined;
 
         return (
           <Message
@@ -1044,6 +1073,10 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             data-message-id={mEventId}
             room={room}
             mEvent={mEvent}
+            forwardSource={forwardSource}
+            forwardSelectionMode={selectedForwardCount > 0}
+            forwardSelected={!!forwardMessages[mEventId]}
+            onToggleForwardSelection={handleToggleForwardSelection}
             messageSpacing={messageSpacing}
             messageLayout={messageLayout}
             collapse={collapse}
@@ -1118,6 +1151,19 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
         const hasReactions = reactions && reactions.length > 0;
         const { replyEventId, threadRootId } = mEvent;
         const highlighted = focusItem?.index === item && focusItem.highlight;
+        const senderId = mEvent.getSender() ?? '';
+        const senderDisplayName =
+          getMemberDisplayName(room, senderId) ?? getMxIdLocalPart(senderId) ?? senderId;
+        const forwardSource = isForwardableMessage(mEvent.getType(), mEvent.getContent())
+          ? {
+              eventId: mEventId,
+              eventType: mEvent.getType(),
+              content: mEvent.getContent(),
+              senderId,
+              senderName: senderDisplayName,
+              timestamp: mEvent.getTs(),
+            }
+          : undefined;
 
         return (
           <Message
@@ -1126,6 +1172,10 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             data-message-id={mEventId}
             room={room}
             mEvent={mEvent}
+            forwardSource={forwardSource}
+            forwardSelectionMode={selectedForwardCount > 0}
+            forwardSelected={!!forwardMessages[mEventId]}
+            onToggleForwardSelection={handleToggleForwardSelection}
             messageSpacing={messageSpacing}
             messageLayout={messageLayout}
             collapse={collapse}
@@ -1237,6 +1287,19 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
         const reactions = reactionRelations && reactionRelations.getSortedAnnotationsByKey();
         const hasReactions = reactions && reactions.length > 0;
         const highlighted = focusItem?.index === item && focusItem.highlight;
+        const senderId = mEvent.getSender() ?? '';
+        const senderDisplayName =
+          getMemberDisplayName(room, senderId) ?? getMxIdLocalPart(senderId) ?? senderId;
+        const forwardSource = isForwardableMessage(MessageEvent.Sticker, mEvent.getContent())
+          ? {
+              eventId: mEventId,
+              eventType: MessageEvent.Sticker,
+              content: mEvent.getContent(),
+              senderId,
+              senderName: senderDisplayName,
+              timestamp: mEvent.getTs(),
+            }
+          : undefined;
 
         return (
           <Message
@@ -1245,6 +1308,10 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             data-message-id={mEventId}
             room={room}
             mEvent={mEvent}
+            forwardSource={forwardSource}
+            forwardSelectionMode={selectedForwardCount > 0}
+            forwardSelected={!!forwardMessages[mEventId]}
+            onToggleForwardSelection={handleToggleForwardSelection}
             messageSpacing={messageSpacing}
             messageLayout={messageLayout}
             collapse={collapse}
@@ -1717,6 +1784,16 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
 
   return (
     <Box grow="Yes" style={{ position: 'relative' }}>
+      {forwardDialog && selectedForwardCount > 0 && (
+        <ForwardMessagesModal
+          messages={Object.values(forwardMessages)}
+          requestClose={() => setForwardDialog(false)}
+          onComplete={() => {
+            setForwardDialog(false);
+            setForwardMessages({});
+          }}
+        />
+      )}
       {unreadInfo?.readUptoEventId && !unreadInfo?.inLiveTimeline && (
         <TimelineFloat position="Top">
           <Chip
@@ -1827,7 +1904,35 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
           <span ref={atBottomAnchorRef} />
         </Box>
       </Scroll>
-      {!atBottom && (
+      {selectedForwardCount > 0 && (
+        <TimelineFloat position="Bottom">
+          <Chip variant="Primary" radii="Pill" outlined>
+            <Text size="L400">{`\u5df2\u9009\u62e9 ${selectedForwardCount} \u6761\u6d88\u606f`}</Text>
+          </Chip>
+          <Chip
+            variant="Success"
+            radii="Pill"
+            outlined
+            before={<Icon size="50" src={Icons.ArrowGoRight} />}
+            onClick={() => setForwardDialog(true)}
+          >
+            <Text size="L400">{'\u9009\u62e9\u8f6c\u53d1\u76ee\u6807'}</Text>
+          </Chip>
+          <Chip
+            variant="SurfaceVariant"
+            radii="Pill"
+            outlined
+            before={<Icon size="50" src={Icons.Cross} />}
+            onClick={() => {
+              setForwardDialog(false);
+              setForwardMessages({});
+            }}
+          >
+            <Text size="L400">{'\u6e05\u7a7a\u9009\u62e9'}</Text>
+          </Chip>
+        </TimelineFloat>
+      )}
+      {!atBottom && selectedForwardCount === 0 && (
         <TimelineFloat position="Bottom">
           <Chip
             variant="SurfaceVariant"

@@ -79,6 +79,7 @@ import { MemberPowerTag, StateEvent } from '../../../../types/matrix/room';
 import { PowerIcon } from '../../../components/power';
 import colorMXID from '../../../../util/colorMXID';
 import { getPowerTagIconSrc } from '../../../hooks/useMemberPowerTag';
+import { ForwardableMessage } from '../forwardMessages';
 
 export type ReactionHandler = (keyOrMxc: string, shortcode: string) => void;
 
@@ -389,6 +390,33 @@ export const MessagePinItem = as<
   );
 });
 
+export const MessageForwardItem = as<
+  'button',
+  {
+    selected: boolean;
+    onToggle: () => void;
+    onClose?: () => void;
+  }
+>(({ selected, onToggle, onClose, ...props }, ref) => (
+  <MenuItem
+    size="300"
+    after={<Icon size="100" src={selected ? Icons.Check : Icons.ArrowGoRight} />}
+    radii="300"
+    onClick={() => {
+      onToggle();
+      onClose?.();
+    }}
+    {...props}
+    ref={ref}
+  >
+    <Text className={css.MessageMenuItemText} as="span" size="T300" truncate>
+      {selected
+        ? '\u53d6\u6d88\u8f6c\u53d1\u9009\u62e9'
+        : '\u52a0\u5165\u8f6c\u53d1\u5217\u8868'}
+    </Text>
+  </MenuItem>
+));
+
 export const MessageDeleteItem = as<
   'button',
   {
@@ -655,6 +683,10 @@ export const MessageReportItem = as<
 export type MessageProps = {
   room: Room;
   mEvent: MatrixEvent;
+  forwardSource?: ForwardableMessage;
+  forwardSelectionMode?: boolean;
+  forwardSelected?: boolean;
+  onToggleForwardSelection?: (message: ForwardableMessage) => void;
   collapse: boolean;
   highlight: boolean;
   edit?: boolean;
@@ -689,6 +721,10 @@ export const Message = as<'div', MessageProps>(
       className,
       room,
       mEvent,
+      forwardSource,
+      forwardSelectionMode,
+      forwardSelected,
+      onToggleForwardSelection,
       collapse,
       highlight,
       edit,
@@ -835,6 +871,11 @@ export const Message = as<'div', MessageProps>(
       </Box>
     );
 
+    const handleToggleForwardSelection = useCallback(() => {
+      if (!forwardSource || !onToggleForwardSelection) return;
+      onToggleForwardSelection(forwardSource);
+    }, [forwardSource, onToggleForwardSelection]);
+
     const handleContextMenu: MouseEventHandler<HTMLDivElement> = (evt) => {
       if (evt.altKey || !window.getSelection()?.isCollapsed || edit) return;
       const tag = (evt.target as any).tagName;
@@ -874,6 +915,23 @@ export const Message = as<'div', MessageProps>(
 
     const isThreadedMessage = mEvent.threadRootId !== undefined;
 
+    const handleMessageClick: MouseEventHandler<HTMLDivElement> = (evt) => {
+      if (!forwardSelectionMode || !forwardSource) return;
+
+      const target = evt.target as HTMLElement | null;
+      if (
+        target?.closest(
+          'button,a,input,textarea,select,label,summary,[role="button"],audio,video'
+        )
+      ) {
+        return;
+      }
+
+      evt.preventDefault();
+      evt.stopPropagation();
+      handleToggleForwardSelection();
+    };
+
     return (
       <MessageBase
         className={classNames(css.MessageBase, className, {
@@ -883,7 +941,7 @@ export const Message = as<'div', MessageProps>(
         space={messageSpacing}
         collapse={collapse}
         highlight={highlight}
-        selected={!!menuAnchor || !!emojiBoardAnchor}
+        selected={!!menuAnchor || !!emojiBoardAnchor || !!forwardSelected}
         {...props}
         {...hoverProps}
         {...focusWithinProps}
@@ -928,6 +986,17 @@ export const Message = as<'div', MessageProps>(
                       <Icon src={Icons.SmilePlus} size="100" />
                     </IconButton>
                   </PopOut>
+                )}
+                {forwardSource && (
+                  <IconButton
+                    onClick={handleToggleForwardSelection}
+                    variant={forwardSelected ? 'Primary' : 'SurfaceVariant'}
+                    size="300"
+                    radii="300"
+                    aria-pressed={!!forwardSelected}
+                  >
+                    <Icon src={forwardSelected ? Icons.Check : Icons.ArrowGoRight} size="100" />
+                  </IconButton>
                 )}
                 <IconButton
                   onClick={onReplyClick}
@@ -1084,6 +1153,13 @@ export const Message = as<'div', MessageProps>(
                               onClose={closeMenu}
                             />
                           )}
+                          {forwardSource && (
+                            <MessageForwardItem
+                              selected={!!forwardSelected}
+                              onToggle={handleToggleForwardSelection}
+                              onClose={closeMenu}
+                            />
+                          )}
                           <MessageCopyLinkItem room={room} mEvent={mEvent} onClose={closeMenu} />
                           {canPinEvent && (
                             <MessagePinItem room={room} mEvent={mEvent} onClose={closeMenu} />
@@ -1130,17 +1206,30 @@ export const Message = as<'div', MessageProps>(
           </div>
         )}
         {messageLayout === MessageLayout.Compact && (
-          <CompactLayout before={headerJSX} onContextMenu={handleContextMenu}>
+          <CompactLayout
+            before={headerJSX}
+            onContextMenu={handleContextMenu}
+            onClick={handleMessageClick}
+          >
             {msgContentJSX}
           </CompactLayout>
         )}
         {messageLayout === MessageLayout.Bubble && (
-          <BubbleLayout before={avatarJSX} header={headerJSX} onContextMenu={handleContextMenu}>
+          <BubbleLayout
+            before={avatarJSX}
+            header={headerJSX}
+            onContextMenu={handleContextMenu}
+            onClick={handleMessageClick}
+          >
             {msgContentJSX}
           </BubbleLayout>
         )}
         {messageLayout !== MessageLayout.Compact && messageLayout !== MessageLayout.Bubble && (
-          <ModernLayout before={avatarJSX} onContextMenu={handleContextMenu}>
+          <ModernLayout
+            before={avatarJSX}
+            onContextMenu={handleContextMenu}
+            onClick={handleMessageClick}
+          >
             {headerJSX}
             {msgContentJSX}
           </ModernLayout>

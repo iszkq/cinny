@@ -11,6 +11,7 @@ import {
 } from 'matrix-js-sdk';
 import { RoomServerAclEventContent } from 'matrix-js-sdk/lib/types';
 import { useMemo } from 'react';
+import { useAtomValue } from 'jotai';
 import {
   addRoomIdToMDirect,
   getDMRoomFor,
@@ -27,6 +28,8 @@ import { Membership, StateEvent } from '../../types/matrix/room';
 import { getStateEvent } from '../utils/room';
 import { splitWithSpace } from '../utils/common';
 import { createRoomEncryptionState } from '../components/create-room';
+import { aiSettingsAtom } from '../state/ai';
+import { runAISkill } from '../utils/ai';
 
 export const SHRUG = '¯\\_(ツ)_/¯';
 export const TABLEFLIP = '(╯°□°)╯︵ ┻━┻';
@@ -167,10 +170,34 @@ export type CommandContent = {
   exe: CommandExe;
 };
 
-export type CommandRecord = Record<Command, CommandContent>;
+export type CommandRecord = Record<string, CommandContent>;
 
 export const useCommands = (mx: MatrixClient, room: Room): CommandRecord => {
   const { navigateRoom } = useRoomNavigate();
+  const aiSettings = useAtomValue(aiSettingsAtom);
+  const aiSkillCommands = useMemo(
+    () =>
+      aiSettings.skills.reduce<CommandRecord>((record, skill) => {
+        record[skill.command] = {
+          name: skill.command,
+          description: `AI Skill: ${skill.name}`,
+          exe: async (payload: string) => {
+            try {
+              const result = await runAISkill(room, aiSettings, skill, payload);
+              await mx.sendMessage(room.roomId, {
+                msgtype: 'm.text',
+                body: result,
+              } as any);
+            } catch (error) {
+              window.alert(error instanceof Error ? error.message : 'AI request failed.');
+            }
+          },
+        };
+
+        return record;
+      }, {}),
+    [aiSettings, mx, room]
+  );
 
   const commands: CommandRecord = useMemo(
     () => ({
@@ -531,8 +558,9 @@ export const useCommands = (mx: MatrixClient, room: Room): CommandRecord => {
           await mx.sendStateEvent(room.roomId, StateEvent.RoomServerAcl as any, aclContent);
         },
       },
+      ...aiSkillCommands,
     }),
-    [mx, room, navigateRoom]
+    [aiSkillCommands, mx, room, navigateRoom]
   );
 
   return commands;

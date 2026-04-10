@@ -5,6 +5,7 @@ export enum MarkType {
   StrikeThrough = 'strikeThrough',
   Code = 'code',
   Spoiler = 'spoiler',
+  TextColor = 'textColor',
 }
 
 export enum BlockType {

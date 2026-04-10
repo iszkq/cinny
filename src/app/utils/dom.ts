@@ -99,6 +99,8 @@ export const getImageFileUrl = (fileOrBlob: File | Blob) => URL.createObjectURL(
 
 export const getVideoFileUrl = (fileOrBlob: File | Blob) => URL.createObjectURL(fileOrBlob);
 
+export const getAudioFileUrl = (fileOrBlob: File | Blob) => URL.createObjectURL(fileOrBlob);
+
 export const loadImageElement = (url: string): Promise<HTMLImageElement> =>
   new Promise((resolve, reject) => {
     const img = document.createElement('img');
@@ -125,6 +127,23 @@ export const loadVideoElement = (url: string): Promise<HTMLVideoElement> =>
     video.src = url;
     video.load();
     video.play();
+  });
+
+export const loadAudioElement = (url: string): Promise<HTMLAudioElement> =>
+  new Promise((resolve, reject) => {
+    const audio = document.createElement('audio');
+    audio.preload = 'metadata';
+
+    audio.onloadeddata = () => {
+      resolve(audio);
+      audio.pause();
+    };
+    audio.onerror = (e) => {
+      reject(e);
+    };
+
+    audio.src = url;
+    audio.load();
   });
 
 export const getThumbnailDimensions = (width: number, height: number): [number, number] => {

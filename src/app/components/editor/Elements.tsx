@@ -269,6 +269,13 @@ export function RenderLeaf({ attributes, leaf, children }: RenderLeafProps) {
         {child}
       </span>
     );
+  if (leaf.textColor)
+    child = (
+      <span style={{ color: leaf.textColor }} {...attributes}>
+        <InlineChromiumBugfix />
+        {child}
+      </span>
+    );
 
   if (child !== children) return child;
 

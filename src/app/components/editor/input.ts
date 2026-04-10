@@ -32,6 +32,14 @@ import {
 } from '../../plugins/markdown';
 
 type ProcessTextCallback = (text: string) => string;
+type InlineMark =
+  | { type: MarkType.Bold; value: true }
+  | { type: MarkType.Italic; value: true }
+  | { type: MarkType.Underline; value: true }
+  | { type: MarkType.StrikeThrough; value: true }
+  | { type: MarkType.Code; value: true }
+  | { type: MarkType.Spoiler; value: true }
+  | { type: MarkType.TextColor; value: string };
 
 const getText = (node: ChildNode): string => {
   if (isText(node)) {
@@ -43,39 +51,60 @@ const getText = (node: ChildNode): string => {
   return '';
 };
 
-const getInlineNodeMarkType = (node: Element): MarkType | undefined => {
-  if (node.name === 'b' || node.name === 'strong') {
-    return MarkType.Bold;
+const getInlineNodeTextColor = (node: Element): string | undefined => {
+  const dataColor = node.attribs['data-mx-color'] ?? node.attribs.color;
+  if (typeof dataColor === 'string' && /^#(?:[0-9a-fA-F]{3}){1,2}$/.test(dataColor)) {
+    return dataColor;
   }
 
-  if (node.name === 'i' || node.name === 'em') {
-    return MarkType.Italic;
-  }
-
-  if (node.name === 'u') {
-    return MarkType.Underline;
-  }
-
-  if (node.name === 's' || node.name === 'del') {
-    return MarkType.StrikeThrough;
-  }
-
-  if (node.name === 'code') {
-    if (node.parent && 'name' in node.parent && node.parent.name === 'pre') {
-      return undefined; // Don't apply `Code` mark inside a <pre> tag
-    }
-    return MarkType.Code;
-  }
-
-  if (node.name === 'span' && node.attribs['data-mx-spoiler'] !== undefined) {
-    return MarkType.Spoiler;
+  const style = node.attribs.style;
+  const styleColor = style?.match(/(?:^|;)\s*color:\s*(#[0-9a-fA-F]{3,6})/i)?.[1];
+  if (styleColor && /^#(?:[0-9a-fA-F]{3}){1,2}$/.test(styleColor)) {
+    return styleColor;
   }
 
   return undefined;
 };
 
+const getInlineNodeMarks = (node: Element): InlineMark[] => {
+  const marks: InlineMark[] = [];
+  if (node.name === 'b' || node.name === 'strong') {
+    marks.push({ type: MarkType.Bold, value: true });
+  }
+
+  if (node.name === 'i' || node.name === 'em') {
+    marks.push({ type: MarkType.Italic, value: true });
+  }
+
+  if (node.name === 'u') {
+    marks.push({ type: MarkType.Underline, value: true });
+  }
+
+  if (node.name === 's' || node.name === 'del') {
+    marks.push({ type: MarkType.StrikeThrough, value: true });
+  }
+
+  if (node.name === 'code') {
+    if (node.parent && 'name' in node.parent && node.parent.name === 'pre') {
+      return marks; // Don't apply `Code` mark inside a <pre> tag
+    }
+    marks.push({ type: MarkType.Code, value: true });
+  }
+
+  if (node.name === 'span' && node.attribs['data-mx-spoiler'] !== undefined) {
+    marks.push({ type: MarkType.Spoiler, value: true });
+  }
+
+  const textColor = getInlineNodeTextColor(node);
+  if (textColor) {
+    marks.push({ type: MarkType.TextColor, value: textColor });
+  }
+
+  return marks;
+};
+
 const getInlineMarkElement = (
-  markType: MarkType,
+  marks: InlineMark[],
   node: Element,
   getChild: (child: ChildNode) => InlineElement[]
 ): InlineElement[] => {
@@ -88,7 +117,10 @@ const getInlineMarkElement = (
   }
   children.forEach((child) => {
     if (Text.isText(child)) {
-      child[markType] = true;
+      marks.forEach((mark) => {
+        const textChild = child as Text & Record<string, unknown>;
+        textChild[mark.type] = mark.value;
+      });
     }
   });
   return children;
@@ -139,10 +171,11 @@ const getInlineElement = (node: ChildNode, processText: ProcessTextCallback): In
   }
 
   if (isTag(node)) {
-    const markType = getInlineNodeMarkType(node);
-    if (markType) {
-      return getInlineMarkElement(markType, node, (child) => {
-        if (markType === MarkType.Code) return [{ text: getText(child) }];
+    const marks = getInlineNodeMarks(node);
+    if (marks.length > 0) {
+      const hasCode = marks.some((mark) => mark.type === MarkType.Code);
+      return getInlineMarkElement(marks, node, (child) => {
+        if (hasCode) return [{ text: getText(child) }];
         return getInlineElement(child, processText);
       });
     }

@@ -90,7 +90,7 @@ import {
 } from '../../state/upload';
 import { getImageUrlBlob, loadImageElement } from '../../utils/dom';
 import { safeFile } from '../../utils/mimeTypes';
-import { fulfilledPromiseSettledResult } from '../../utils/common';
+import { fulfilledPromiseSettledResult, millisecondsToMinutesAndSeconds } from '../../utils/common';
 import { useSetting } from '../../state/hooks/settings';
 import { settingsAtom } from '../../state/settings';
 import {
@@ -117,6 +117,9 @@ import { useTheme } from '../../hooks/useTheme';
 import { useRoomCreatorsTag } from '../../hooks/useRoomCreatorsTag';
 import { usePowerLevelTags } from '../../hooks/usePowerLevelTags';
 import { useComposingCheck } from '../../hooks/useComposingCheck';
+import { useInterval } from '../../hooks/useInterval';
+import { getAudioFileUrl, loadAudioElement } from '../../utils/dom';
+import { getAudioInfo } from '../../utils/matrix';
 
 interface RoomInputProps {
   editor: Editor;
@@ -161,7 +164,13 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       legacyUsernameColor || direct ? colorMXID(replyUserID ?? '') : replyPowerColor;
 
     const [uploadBoard, setUploadBoard] = useState(true);
+    const mediaRecorderRef = useRef<MediaRecorder>();
+    const mediaStreamRef = useRef<MediaStream>();
+    const recordingChunksRef = useRef<Blob[]>([]);
     const [selectedFiles, setSelectedFiles] = useAtom(roomIdToUploadItemsAtomFamily(roomId));
+    const [recording, setRecording] = useState(false);
+    const [recordingMs, setRecordingMs] = useState(0);
+    const [recordingError, setRecordingError] = useState<string>();
     const uploadFamilyObserverAtom = createUploadFamilyObserverAtom(
       roomUploadAtomFamily,
       selectedFiles.map((f) => f.file)
@@ -176,32 +185,65 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
 
     const sendTypingStatus = useTypingStatusUpdater(mx, roomId);
 
+    useInterval(
+      useCallback(() => {
+        setRecordingMs((current) => current + 1000);
+      }, []),
+      recording ? 1000 : -1
+    );
+
+    const stopRecordingTracks = useCallback(() => {
+      mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = undefined;
+    }, []);
+
+    const getAudioMetadata = useCallback(async (file: File): Promise<Partial<TUploadMetadata>> => {
+      if (!file.type.startsWith('audio')) {
+        return {};
+      }
+
+      const audioUrl = getAudioFileUrl(file);
+      try {
+        const audio = await loadAudioElement(audioUrl);
+        const info = getAudioInfo(audio, file);
+        return {
+          audioDuration: info.duration,
+          voice: file.name.startsWith('voice-note-'),
+        };
+      } finally {
+        URL.revokeObjectURL(audioUrl);
+      }
+    }, []);
+
     const handleFiles = useCallback(
       async (files: File[]) => {
         setUploadBoard(true);
         const safeFiles = files.map(safeFile);
+        const metadataList = await Promise.all(safeFiles.map(getAudioMetadata));
         const fileItems: TUploadItem[] = [];
 
         if (room.hasEncryptionStateEvent()) {
           const encryptFiles = fulfilledPromiseSettledResult(
             await Promise.allSettled(safeFiles.map((f) => encryptFile(f)))
           );
-          encryptFiles.forEach((ef) =>
+          encryptFiles.forEach((ef, index) =>
             fileItems.push({
               ...ef,
               metadata: {
                 markedAsSpoiler: false,
+                ...metadataList[index],
               },
             })
           );
         } else {
-          safeFiles.forEach((f) =>
+          safeFiles.forEach((f, index) =>
             fileItems.push({
               file: f,
               originalFile: f,
               encInfo: undefined,
               metadata: {
                 markedAsSpoiler: false,
+                ...metadataList[index],
               },
             })
           );
@@ -211,7 +253,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           item: fileItems,
         });
       },
-      [setSelectedFiles, room]
+      [getAudioMetadata, setSelectedFiles, room]
     );
     const pickFile = useFilePicker(handleFiles, true);
     const handlePaste = useFilePasteHandler(handleFiles);
@@ -231,6 +273,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
 
     useEffect(
       () => () => {
+        stopRecordingTracks();
         if (!isEmptyEditor(editor)) {
           const parsedDraft = JSON.parse(JSON.stringify(editor.children));
           setMsgDraft(parsedDraft);
@@ -240,8 +283,94 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         resetEditor(editor);
         resetEditorHistory(editor);
       },
-      [roomId, editor, setMsgDraft]
+      [roomId, editor, setMsgDraft, stopRecordingTracks]
     );
+
+    const finalizeVoiceRecording = useCallback(async () => {
+      const recorder = mediaRecorderRef.current;
+      const mimeType = recorder?.mimeType || 'audio/webm';
+      const extension = mimeType.includes('ogg') ? 'ogg' : 'webm';
+      const blob = new Blob(recordingChunksRef.current, { type: mimeType });
+      recordingChunksRef.current = [];
+      stopRecordingTracks();
+
+      if (blob.size === 0) return;
+
+      const voiceFile = new File([blob], `voice-note-${Date.now()}.${extension}`, {
+        type: mimeType,
+      });
+      await handleFiles([voiceFile]);
+    }, [handleFiles, stopRecordingTracks]);
+
+    const startVoiceRecording = useCallback(async () => {
+      if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+        setRecordingError('This browser does not support voice recording.');
+        return;
+      }
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const mimeType =
+          [
+            'audio/webm;codecs=opus',
+            'audio/ogg;codecs=opus',
+            'audio/webm',
+            'audio/ogg',
+          ].find(
+            (type) => typeof MediaRecorder.isTypeSupported === 'function' && MediaRecorder.isTypeSupported(type)
+          ) ?? 'audio/webm';
+
+        const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+        recordingChunksRef.current = [];
+        mediaStreamRef.current = stream;
+        mediaRecorderRef.current = recorder;
+        setRecordingError(undefined);
+        setRecordingMs(0);
+
+        recorder.ondataavailable = (evt) => {
+          if (evt.data.size > 0) {
+            recordingChunksRef.current.push(evt.data);
+          }
+        };
+        recorder.onstop = () => {
+          setRecording(false);
+          finalizeVoiceRecording().catch((error) => {
+            setRecordingError(error instanceof Error ? error.message : 'Failed to save recording.');
+          });
+        };
+
+        recorder.start();
+        setRecording(true);
+      } catch (error) {
+        setRecordingError(
+          error instanceof Error ? error.message : 'Failed to access your microphone.'
+        );
+        stopRecordingTracks();
+      }
+    }, [finalizeVoiceRecording, stopRecordingTracks]);
+
+    const stopVoiceRecording = useCallback(() => {
+      const recorder = mediaRecorderRef.current;
+      if (!recorder || recorder.state === 'inactive') return;
+      recorder.stop();
+    }, []);
+
+    const cancelVoiceRecording = useCallback(() => {
+      const recorder = mediaRecorderRef.current;
+      if (!recorder || recorder.state === 'inactive') {
+        recordingChunksRef.current = [];
+        setRecording(false);
+        stopRecordingTracks();
+        return;
+      }
+
+      recorder.onstop = () => {
+        recordingChunksRef.current = [];
+        setRecording(false);
+        stopRecordingTracks();
+      };
+      recorder.stop();
+    }, [stopRecordingTracks]);
 
     const handleFileMetadata = useCallback(
       (fileItem: TUploadItem, metadata: TUploadMetadata) => {
@@ -328,7 +457,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         plainText = `${UNFLIP} ${plainText}`;
         customHtml = `${UNFLIP} ${customHtml}`;
       } else if (commandName) {
-        const commandContent = commands[commandName as Command];
+        const commandContent = commands[commandName];
         if (commandContent) {
           commandContent.exe(plainText);
         }
@@ -544,41 +673,70 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           onKeyUp={handleKeyUp}
           onPaste={handlePaste}
           top={
-            replyDraft && (
+            (replyDraft || recording || recordingError) && (
               <div>
-                <Box
-                  alignItems="Center"
-                  gap="300"
-                  style={{ padding: `${config.space.S200} ${config.space.S300} 0` }}
-                >
-                  <IconButton
-                    onClick={() => setReplyDraft(undefined)}
-                    variant="SurfaceVariant"
-                    size="300"
-                    radii="300"
+                {replyDraft && (
+                  <Box
+                    alignItems="Center"
+                    gap="300"
+                    style={{ padding: `${config.space.S200} ${config.space.S300} 0` }}
                   >
-                    <Icon src={Icons.Cross} size="50" />
-                  </IconButton>
-                  <Box direction="Row" gap="200" alignItems="Center">
-                    {replyDraft.relation?.rel_type === RelationType.Thread && <ThreadIndicator />}
-                    <ReplyLayout
-                      userColor={replyUsernameColor}
-                      username={
-                        <Text size="T300" truncate>
-                          <b>
-                            {getMemberDisplayName(room, replyDraft.userId) ??
-                              getMxIdLocalPart(replyDraft.userId) ??
-                              replyDraft.userId}
-                          </b>
-                        </Text>
-                      }
+                    <IconButton
+                      onClick={() => setReplyDraft(undefined)}
+                      variant="SurfaceVariant"
+                      size="300"
+                      radii="300"
                     >
-                      <Text size="T300" truncate>
-                        {trimReplyFromBody(replyDraft.body)}
-                      </Text>
-                    </ReplyLayout>
+                      <Icon src={Icons.Cross} size="50" />
+                    </IconButton>
+                    <Box direction="Row" gap="200" alignItems="Center">
+                      {replyDraft.relation?.rel_type === RelationType.Thread && <ThreadIndicator />}
+                      <ReplyLayout
+                        userColor={replyUsernameColor}
+                        username={
+                          <Text size="T300" truncate>
+                            <b>
+                              {getMemberDisplayName(room, replyDraft.userId) ??
+                                getMxIdLocalPart(replyDraft.userId) ??
+                                replyDraft.userId}
+                            </b>
+                          </Text>
+                        }
+                      >
+                        <Text size="T300" truncate>
+                          {trimReplyFromBody(replyDraft.body)}
+                        </Text>
+                      </ReplyLayout>
+                    </Box>
                   </Box>
-                </Box>
+                )}
+                {(recording || recordingError) && (
+                  <Box
+                    alignItems="Center"
+                    gap="300"
+                    style={{ padding: `${config.space.S200} ${config.space.S300} 0` }}
+                  >
+                    {recording ? (
+                      <>
+                        <IconButton
+                          onClick={cancelVoiceRecording}
+                          variant="SurfaceVariant"
+                          size="300"
+                          radii="300"
+                        >
+                          <Icon src={Icons.Cross} size="50" />
+                        </IconButton>
+                        <Text size="T300">
+                          {`Recording voice note ${millisecondsToMinutesAndSeconds(recordingMs)}`}
+                        </Text>
+                      </>
+                    ) : (
+                      <Text size="T300" style={{ color: color.Critical.Main }}>
+                        {recordingError}
+                      </Text>
+                    )}
+                  </Box>
+                )}
               </div>
             )
           }
@@ -594,6 +752,15 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           }
           after={
             <>
+              <IconButton
+                onClick={recording ? stopVoiceRecording : startVoiceRecording}
+                variant={recording ? 'Primary' : 'SurfaceVariant'}
+                size="300"
+                radii="300"
+                aria-pressed={recording}
+              >
+                <Icon src={recording ? Icons.Check : Icons.Mic} />
+              </IconButton>
               <IconButton
                 variant="SurfaceVariant"
                 size="300"
@@ -669,7 +836,13 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                   </PopOut>
                 )}
               </UseStateProvider>
-              <IconButton onClick={submit} variant="SurfaceVariant" size="300" radii="300">
+              <IconButton
+                onClick={recording ? undefined : submit}
+                variant="SurfaceVariant"
+                size="300"
+                radii="300"
+                aria-disabled={recording}
+              >
                 <Icon src={Icons.Send} />
               </IconButton>
             </>

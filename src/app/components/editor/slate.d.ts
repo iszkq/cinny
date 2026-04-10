@@ -18,6 +18,7 @@ export type FormattedText = Text & {
   strikeThrough?: boolean;
   code?: boolean;
   spoiler?: boolean;
+  textColor?: string;
 };
 
 export type LinkElement = {

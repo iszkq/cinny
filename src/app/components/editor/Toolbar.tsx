@@ -2,11 +2,13 @@ import FocusTrap from 'focus-trap-react';
 import {
   Badge,
   Box,
+  Button,
   config,
   Icon,
   IconButton,
   Icons,
   IconSrc,
+  Input,
   Line,
   Menu,
   PopOut,
@@ -21,10 +23,12 @@ import React, { MouseEventHandler, ReactNode, useState } from 'react';
 import { ReactEditor, useSlate } from 'slate-react';
 import {
   headingLevel,
+  getTextColor,
   isAnyMarkActive,
   isBlockActive,
   isMarkActive,
   removeAllMark,
+  setTextColor,
   toggleBlock,
   toggleMark,
 } from './utils';
@@ -252,6 +256,94 @@ export function ExitFormatting({ tooltip }: ExitFormattingProps) {
   );
 }
 
+export function TextColorButton() {
+  const editor = useSlate();
+  const disableInline = isBlockActive(editor, BlockType.CodeBlock);
+  const [anchor, setAnchor] = useState<RectCords>();
+  const currentColor = getTextColor(editor) ?? '#2563eb';
+
+  const handleOpen: MouseEventHandler<HTMLButtonElement> = (evt) => {
+    setAnchor(evt.currentTarget.getBoundingClientRect());
+  };
+
+  return (
+    <PopOut
+      anchor={anchor}
+      offset={5}
+      position="Top"
+      content={
+        <FocusTrap
+          focusTrapOptions={{
+            initialFocus: false,
+            onDeactivate: () => setAnchor(undefined),
+            clickOutsideDeactivates: true,
+            escapeDeactivates: stopPropagation,
+          }}
+        >
+          <Menu style={{ padding: config.space.S200 }}>
+            <Box direction="Column" gap="200">
+              <input
+                type="color"
+                value={currentColor}
+                aria-label="Text Color"
+                onChange={(evt) => {
+                  setTextColor(editor, evt.currentTarget.value);
+                  ReactEditor.focus(editor);
+                }}
+                style={{
+                  width: '100%',
+                  minHeight: toRem(36),
+                  border: 0,
+                  background: 'transparent',
+                  cursor: 'pointer',
+                }}
+              />
+              <Input
+                value={currentColor}
+                readOnly
+                variant="Background"
+                size="300"
+                outlined
+              />
+              <Button
+                variant="Secondary"
+                fill="Soft"
+                size="300"
+                radii="300"
+                onClick={() => {
+                  setTextColor(editor, undefined);
+                  ReactEditor.focus(editor);
+                  setAnchor(undefined);
+                }}
+              >
+                <Text size="B300">Clear Color</Text>
+              </Button>
+            </Box>
+          </Menu>
+        </FocusTrap>
+      }
+    >
+      <TooltipProvider tooltip={<BtnTooltip text="Text Color" />} delay={500}>
+        {(triggerRef) => (
+          <IconButton
+            ref={triggerRef}
+            variant="SurfaceVariant"
+            onClick={handleOpen}
+            aria-pressed={!!getTextColor(editor)}
+            size="400"
+            radii="300"
+            disabled={disableInline}
+          >
+            <Text size="B400" style={{ color: currentColor }}>
+              A
+            </Text>
+          </IconButton>
+        )}
+      </TooltipProvider>
+    </PopOut>
+  );
+}
+
 export function Toolbar() {
   const editor = useSlate();
   const modKey = isMacOS() ? KeySymbol.Command : 'Ctrl';
@@ -298,6 +390,7 @@ export function Toolbar() {
                 icon={Icons.EyeBlind}
                 tooltip={<BtnTooltip text="Spoiler" shortCode={`${modKey} + H`} />}
               />
+              <TextColorButton />
             </Box>
             <Line variant="SurfaceVariant" direction="Vertical" style={{ height: toRem(12) }} />
           </>

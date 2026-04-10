@@ -15,17 +15,18 @@ const ALL_MARK_TYPE: MarkType[] = [
   MarkType.Italic,
   MarkType.Spoiler,
   MarkType.StrikeThrough,
+  MarkType.TextColor,
   MarkType.Underline,
 ];
 
 export const isMarkActive = (editor: Editor, format: MarkType) => {
   const marks = Editor.marks(editor);
-  return marks ? marks[format] === true : false;
+  return marks ? !!marks[format] : false;
 };
 
 export const isAnyMarkActive = (editor: Editor) => {
   const marks = Editor.marks(editor);
-  return marks && !!ALL_MARK_TYPE.find((type) => marks[type] === true);
+  return marks && !!ALL_MARK_TYPE.find((type) => !!marks[type]);
 };
 
 export const toggleMark = (editor: Editor, format: MarkType) => {
@@ -42,6 +43,22 @@ export const removeAllMark = (editor: Editor) => {
   ALL_MARK_TYPE.forEach((mark) => {
     if (isMarkActive(editor, mark)) Editor.removeMark(editor, mark);
   });
+};
+
+export const getTextColor = (editor: Editor): string | undefined => {
+  const marks = Editor.marks(editor);
+  return typeof marks?.[MarkType.TextColor] === 'string'
+    ? (marks[MarkType.TextColor] as string)
+    : undefined;
+};
+
+export const setTextColor = (editor: Editor, color?: string) => {
+  if (!color) {
+    Editor.removeMark(editor, MarkType.TextColor);
+    return;
+  }
+
+  Editor.addMark(editor, MarkType.TextColor, color);
 };
 
 export const isBlockActive = (editor: Editor, format: BlockType) => {

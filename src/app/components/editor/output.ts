@@ -28,6 +28,7 @@ const textToCustomHtml = (node: Text, opts: OutputOptions): string => {
     if (node.strikeThrough) string = `<s>${string}</s>`;
     if (node.code) string = `<code>${string}</code>`;
     if (node.spoiler) string = `<span data-mx-spoiler>${string}</span>`;
+    if (node.textColor) string = `<span data-mx-color="${sanitizeText(node.textColor)}">${string}</span>`;
   }
 
   if (opts.allowInlineMarkdown && string === sanitizeText(node.text)) {

@@ -35,3 +35,9 @@ export const UnsavedMenu = style({
   right: 0,
   zIndex: 1,
 });
+
+export const ImagePackGrid = style({
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+  gap: config.space.S300,
+});
