@@ -1,5 +1,10 @@
 /// <reference types="vite/client" />
 
+interface ImportMetaEnv {
+  readonly VITE_HASH_ROUTER_ENABLED?: string;
+  readonly VITE_HASH_ROUTER_BASENAME?: string;
+}
+
 declare module 'browser-encrypt-attachment' {
   export interface EncryptedAttachmentInfo {
     v: string;
