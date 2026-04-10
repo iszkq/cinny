@@ -65,7 +65,11 @@ const sanitizePollOptions = (options: string[]): PollOption[] =>
     .filter((option) => option.text.length > 0)
     .slice(0, POLL_MAX_OPTIONS);
 
-const getPollMaxSelections = (mode: PollMode, optionsLength: number, rawMaxSelections?: number): number => {
+const getPollMaxSelections = (
+  mode: PollMode,
+  optionsLength: number,
+  rawMaxSelections?: number
+): number => {
   if (mode === 'single' || mode === 'pk') return 1;
 
   const parsedMaxSelections =
@@ -77,13 +81,13 @@ const getPollMaxSelections = (mode: PollMode, optionsLength: number, rawMaxSelec
 };
 
 export const getPollModeLabel = (mode: PollMode): string => {
-  if (mode === 'multiple') return '多选投票';
-  if (mode === 'pk') return 'PK 投票';
-  return '单选投票';
+  if (mode === 'multiple') return '\u591a\u9009\u6295\u7968';
+  if (mode === 'pk') return 'PK \u6295\u7968';
+  return '\u5355\u9009\u6295\u7968';
 };
 
 const buildPollFallbackBody = (data: PollData): string => {
-  const lines = [`[投票] ${data.title}`];
+  const lines = [`[\u6295\u7968] ${data.title}`];
 
   if (data.description) {
     lines.push(data.description);
@@ -93,17 +97,17 @@ const buildPollFallbackBody = (data: PollData): string => {
     lines.push(`${index + 1}. ${option.text}`);
   });
 
-  lines.push(`类型: ${getPollModeLabel(data.mode)}`);
+  lines.push(`\u7c7b\u578b: ${getPollModeLabel(data.mode)}`);
 
   if (data.mode === 'multiple') {
-    lines.push(`最多可选: ${data.maxSelections} 项`);
+    lines.push(`\u6700\u591a\u53ef\u9009: ${data.maxSelections} \u9879`);
   }
 
   if (typeof data.expiresAt === 'number') {
-    lines.push(`截止时间: ${new Date(data.expiresAt).toLocaleString()}`);
+    lines.push(`\u622a\u6b62\u65f6\u95f4: ${new Date(data.expiresAt).toLocaleString()}`);
   }
 
-  lines.push(`投票昵称: ${data.showVoters ? '可见' : '隐藏'}`);
+  lines.push(`\u6295\u7968\u663e\u540d: ${data.showVoters ? '\u53ef\u89c1' : '\u9690\u85cf'}`);
 
   return lines.join('\n');
 };
@@ -114,7 +118,9 @@ export const createPollMessageContent = (input: CreatePollInput): IContent => {
   const title = input.title.trim();
   const description = sanitizeText(input.description);
   const expiresAt =
-    typeof input.expiresAt === 'number' && Number.isFinite(input.expiresAt) && input.expiresAt > Date.now()
+    typeof input.expiresAt === 'number' &&
+    Number.isFinite(input.expiresAt) &&
+    input.expiresAt > Date.now()
       ? input.expiresAt
       : undefined;
 
@@ -167,7 +173,9 @@ export const parsePollData = (content: IContent): PollData | undefined => {
   if (mode === 'pk' && options.length !== 2) return undefined;
 
   const expiresAt =
-    typeof rawData.expiresAt === 'number' && Number.isFinite(rawData.expiresAt) ? rawData.expiresAt : undefined;
+    typeof rawData.expiresAt === 'number' && Number.isFinite(rawData.expiresAt)
+      ? rawData.expiresAt
+      : undefined;
 
   return {
     version: 1,
@@ -244,14 +252,18 @@ export const isPollResponseEvent = (event: MatrixEvent, pollEventId?: string): b
       : undefined;
 
   const responsePollEventId =
-    relation?.event_id ?? (typeof rawData?.pollEventId === 'string' ? rawData.pollEventId : undefined);
+    relation?.event_id ??
+    (typeof rawData?.pollEventId === 'string' ? rawData.pollEventId : undefined);
 
   if (!responsePollEventId) return false;
   if (pollEventId) return responsePollEventId === pollEventId;
   return true;
 };
 
-export const parsePollResponseData = (event: MatrixEvent, poll: PollData): PollResponseData | undefined => {
+export const parsePollResponseData = (
+  event: MatrixEvent,
+  poll: PollData
+): PollResponseData | undefined => {
   if (!isPollResponseEvent(event)) return undefined;
 
   const content = event.getContent<IContent>();
@@ -271,7 +283,8 @@ export const parsePollResponseData = (event: MatrixEvent, poll: PollData): PollR
 
   const relation = event.getRelation();
   const pollEventId =
-    relation?.event_id ?? (typeof rawData?.pollEventId === 'string' ? rawData.pollEventId : undefined);
+    relation?.event_id ??
+    (typeof rawData?.pollEventId === 'string' ? rawData.pollEventId : undefined);
   if (!pollEventId) return undefined;
 
   return {

@@ -60,8 +60,10 @@ export function DirectCreate() {
                 <Box direction="Column" gap="700">
                   <PageHero
                     icon={<Icon size="600" src={Icons.Mention} />}
-                    title="Create Chat"
-                    subTitle="Start a private, encrypted chat by entering a user ID."
+                    title={'\u521b\u5efa\u804a\u5929'}
+                    subTitle={
+                      '\u8f93\u5165\u7528\u6237 ID\uff0c\u5f00\u59cb\u4e00\u573a\u79c1\u5bc6\u52a0\u5bc6\u804a\u5929\u3002'
+                    }
                   />
                   <CreateChat defaultUserId={userId} />
                 </Box>

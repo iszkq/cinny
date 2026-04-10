@@ -18,7 +18,9 @@ import { useLivekitSupport } from '../../hooks/useLivekitSupport';
 function LivekitServerMissingMessage() {
   return (
     <Text style={{ margin: 'auto', color: color.Critical.Main }} size="L400" align="Center">
-      Your homeserver does not support calling. But you can still join call started by others.
+      {
+        '\u4f60\u7684 Homeserver \u6682\u4e0d\u652f\u6301\u901a\u8bdd\uff0c\u4f46\u4f60\u4ecd\u53ef\u4ee5\u52a0\u5165\u5176\u4ed6\u4eba\u5df2\u53d1\u8d77\u7684\u901a\u8bdd\u3002'
+      }
     </Text>
   );
 }
@@ -38,7 +40,7 @@ function JoinMessage({
 
   return (
     <Text style={{ margin: 'auto' }} size="L400" align="Center">
-      Voice chat’s empty — Be the first to hop in!
+      {'\u8bed\u97f3\u804a\u5929\u8fd8\u6ca1\u6709\u4eba\uff0c\u5feb\u6765\u7b2c\u4e00\u4e2a\u52a0\u5165\u5427\uff01'}
     </Text>
   );
 }
@@ -46,7 +48,7 @@ function JoinMessage({
 function NoPermissionMessage() {
   return (
     <Text style={{ margin: 'auto' }} size="L400" align="Center">
-      You don&#39;t have permission to join!
+      {'\u4f60\u6ca1\u6709\u52a0\u5165\u6743\u9650\uff01'}
     </Text>
   );
 }
@@ -54,7 +56,9 @@ function NoPermissionMessage() {
 function AlreadyInCallMessage() {
   return (
     <Text style={{ margin: 'auto', color: color.Warning.Main }} size="L400" align="Center">
-      Already in another call — End the current call to join!
+      {
+        '\u4f60\u5df2\u5728\u5176\u4ed6\u901a\u8bdd\u4e2d\uff0c\u8bf7\u5148\u7ed3\u675f\u5f53\u524d\u901a\u8bdd\u518d\u52a0\u5165\u3002'
+      }
     </Text>
   );
 }
@@ -86,11 +90,11 @@ function CallPrescreen() {
           {hasParticipant && (
             <Header size="300">
               <Box grow="Yes" alignItems="Center">
-                <Text size="L400">Participant</Text>
+                <Text size="L400">{'\u53c2\u4e0e\u8005'}</Text>
               </Box>
               <Badge variant="Critical" fill="Solid" size="400">
                 <Text as="span" size="L400" truncate>
-                  {callMembers.length} Live
+                  {`${callMembers.length} \u4eba\u5728\u7ebf`}
                 </Text>
               </Badge>
             </Header>

@@ -59,7 +59,7 @@ export function PrescreenControls({ canJoin }: PrescreenControlsProps) {
             )
           }
         >
-          <Text size="B400">Join</Text>
+          <Text size="B400">{'\u52a0\u5165\u901a\u8bdd'}</Text>
         </Button>
       </Box>
     </SequenceCard>

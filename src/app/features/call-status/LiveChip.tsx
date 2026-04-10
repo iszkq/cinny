@@ -129,7 +129,7 @@ export function LiveChip({ count, room, members }: LiveChipProps) {
         onClick={handleOpenMenu}
       >
         <Text className={css.LiveChipText} as="span" size="L400" truncate>
-          {count} Live
+          {`${count} \u4eba\u5728\u7ebf`}
         </Text>
       </Chip>
     </PopOut>

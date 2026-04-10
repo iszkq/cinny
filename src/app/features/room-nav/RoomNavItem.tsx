@@ -121,7 +121,7 @@ const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
             disabled={!unread}
           >
             <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-              Mark as Read
+              {'\u6807\u8bb0\u4e3a\u5df2\u8bfb'}
             </Text>
           </MenuItem>
           <RoomNotificationModeSwitcher roomId={room.roomId} value={notificationMode}>
@@ -140,7 +140,7 @@ const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
                 onClick={handleOpen}
               >
                 <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-                  Notifications
+                  {'\u901a\u77e5\u63d0\u9192'}
                 </Text>
               </MenuItem>
             )}
@@ -159,7 +159,7 @@ const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
             disabled={!canInvite}
           >
             <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-              Invite
+              {'\u9080\u8bf7'}
             </Text>
           </MenuItem>
           <MenuItem
@@ -169,7 +169,7 @@ const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
             radii="300"
           >
             <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-              Copy Link
+              {'\u590d\u5236\u94fe\u63a5'}
             </Text>
           </MenuItem>
           <MenuItem
@@ -179,7 +179,7 @@ const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
             radii="300"
           >
             <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-              Room Settings
+              {'\u623f\u95f4\u8bbe\u7f6e'}
             </Text>
           </MenuItem>
         </Box>
@@ -198,7 +198,7 @@ const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
                   aria-pressed={promptLeave}
                 >
                   <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-                    Leave Room
+                    {'\u9000\u51fa\u623f\u95f4'}
                   </Text>
                 </MenuItem>
                 {promptLeave && (
@@ -224,7 +224,7 @@ function CallChatToggle() {
     <IconButton
       onClick={() => setChat(!chat)}
       aria-pressed={chat}
-      aria-label="Toggle Chat"
+      aria-label="\u5207\u6362\u804a\u5929"
       variant="Background"
       fill="None"
       size="300"
@@ -370,7 +370,7 @@ export function RoomNavItem({
             {room.isCallRoom() && callMembers.length > 0 && (
               <Badge variant="Critical" fill="Solid" size="400">
                 <Text as="span" size="L400" truncate>
-                  {callMembers.length} Live
+                  {`${callMembers.length} \u4eba\u5728\u7ebf`}
                 </Text>
               </Badge>
             )}
@@ -414,7 +414,7 @@ export function RoomNavItem({
               onClick={handleOpenMenu}
               aria-pressed={!!menuAnchor}
               aria-controls={`menu-${room.roomId}`}
-              aria-label="More Options"
+              aria-label="\u66f4\u591a\u9009\u9879"
               variant="Background"
               fill="None"
               size="300"

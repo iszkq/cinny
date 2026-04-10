@@ -66,7 +66,7 @@ export function LeaveSpacePrompt({ roomId, onDone, onCancel }: LeaveSpacePromptP
               size="500"
             >
               <Box grow="Yes">
-                <Text size="H4">Leave Space</Text>
+                <Text size="H4">{'\u9000\u51fa\u7a7a\u95f4'}</Text>
               </Box>
               <IconButton size="300" onClick={onCancel} radii="300">
                 <Icon src={Icons.Cross} />
@@ -74,10 +74,10 @@ export function LeaveSpacePrompt({ roomId, onDone, onCancel }: LeaveSpacePromptP
             </Header>
             <Box style={{ padding: config.space.S400 }} direction="Column" gap="400">
               <Box direction="Column" gap="200">
-                <Text priority="400">Are you sure you want to leave this space?</Text>
+                <Text priority="400">{'\u786e\u5b9a\u8981\u9000\u51fa\u8be5\u7a7a\u95f4\u5417\uff1f'}</Text>
                 {leaveState.status === AsyncStatus.Error && (
                   <Text style={{ color: color.Critical.Main }} size="T300">
-                    Failed to leave space! {leaveState.error.message}
+                    {'\u9000\u51fa\u7a7a\u95f4\u5931\u8d25\uff01'} {leaveState.error.message}
                   </Text>
                 )}
               </Box>
@@ -96,7 +96,9 @@ export function LeaveSpacePrompt({ roomId, onDone, onCancel }: LeaveSpacePromptP
                 }
               >
                 <Text size="B400">
-                  {leaveState.status === AsyncStatus.Loading ? 'Leaving...' : 'Leave'}
+                  {leaveState.status === AsyncStatus.Loading
+                    ? '\u9000\u51fa\u4e2d...'
+                    : '\u786e\u8ba4\u9000\u51fa'}
                 </Text>
               </Button>
             </Box>

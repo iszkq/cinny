@@ -138,7 +138,7 @@ export function CreateSpaceForm({ defaultAccess, space, onCreate }: CreateSpaceF
   return (
     <Box as="form" onSubmit={handleSubmit} grow="Yes" direction="Column" gap="500">
       <Box direction="Column" gap="100">
-        <Text size="L400">Access</Text>
+        <Text size="L400">{'\u8bbf\u95ee\u6743\u9650'}</Text>
         <CreateRoomAccessSelector
           value={access}
           onSelect={setAccess}
@@ -148,7 +148,7 @@ export function CreateSpaceForm({ defaultAccess, space, onCreate }: CreateSpaceF
         />
       </Box>
       <Box shrink="No" direction="Column" gap="100">
-        <Text size="L400">Name</Text>
+        <Text size="L400">{'\u540d\u79f0'}</Text>
         <Input
           required
           before={<Icon size="100" src={getCreateSpaceAccessToIcon(access)} />}
@@ -162,7 +162,7 @@ export function CreateSpaceForm({ defaultAccess, space, onCreate }: CreateSpaceF
         />
       </Box>
       <Box shrink="No" direction="Column" gap="100">
-        <Text size="L400">Topic (Optional)</Text>
+        <Text size="L400">{'\u4e3b\u9898\uff08\u53ef\u9009\uff09'}</Text>
         <TextArea
           name="topicTextAria"
           size="500"
@@ -176,7 +176,7 @@ export function CreateSpaceForm({ defaultAccess, space, onCreate }: CreateSpaceF
 
       <Box shrink="No" direction="Column" gap="100">
         <Box gap="200" alignItems="End">
-          <Text size="L400">Options</Text>
+          <Text size="L400">{'\u9009\u9879'}</Text>
           <Box grow="Yes" justifyContent="End">
             <Chip
               radii="Pill"
@@ -184,7 +184,7 @@ export function CreateSpaceForm({ defaultAccess, space, onCreate }: CreateSpaceF
               onClick={() => setAdvance(!advance)}
               type="button"
             >
-              <Text size="T200">Advanced Options</Text>
+              <Text size="T200">{'\u9ad8\u7ea7\u9009\u9879'}</Text>
             </Chip>
           </Box>
         </Box>
@@ -210,8 +210,8 @@ export function CreateSpaceForm({ defaultAccess, space, onCreate }: CreateSpaceF
             gap="500"
           >
             <SettingTile
-              title="Knock to Join"
-              description="Anyone can send request to join this space."
+              title={'\u7533\u8bf7\u52a0\u5165'}
+              description={'\u4efb\u4f55\u4eba\u90fd\u53ef\u4ee5\u53d1\u9001\u52a0\u5165\u6b64\u7a7a\u95f4\u7684\u8bf7\u6c42\u3002'}
               after={
                 <Switch variant="Primary" value={knock} onChange={setKnock} disabled={disabled} />
               }
@@ -226,8 +226,8 @@ export function CreateSpaceForm({ defaultAccess, space, onCreate }: CreateSpaceF
           gap="500"
         >
           <SettingTile
-            title="Allow Federation"
-            description="Users from other servers can join."
+            title={'\u5141\u8bb8\u8054\u90a6\u4e92\u901a'}
+            description={'\u5176\u4ed6\u670d\u52a1\u5668\u7684\u7528\u6237\u4e5f\u53ef\u4ee5\u52a0\u5165\u3002'}
             after={
               <Switch
                 variant="Primary"
@@ -254,9 +254,9 @@ export function CreateSpaceForm({ defaultAccess, space, onCreate }: CreateSpaceF
           <Text size="T300" style={{ color: color.Critical.Main }}>
             <b>
               {error instanceof MatrixError && error.name === ErrorCode.M_LIMIT_EXCEEDED
-                ? `Server rate-limited your request for ${millisecondsToMinutes(
+                ? `\u670d\u52a1\u5668\u5bf9\u4f60\u7684\u8bf7\u6c42\u8fdb\u884c\u4e86\u9650\u6d41\uff0c\u8bf7\u5728 ${millisecondsToMinutes(
                     (error.data.retry_after_ms as number | undefined) ?? 0
-                  )} minutes!`
+                  )} \u5206\u949f\u540e\u91cd\u8bd5\uff01`
                 : error.message}
             </b>
           </Text>
@@ -271,7 +271,7 @@ export function CreateSpaceForm({ defaultAccess, space, onCreate }: CreateSpaceF
           disabled={disabled}
           before={loading && <Spinner variant="Primary" fill="Solid" size="200" />}
         >
-          <Text size="B500">Create</Text>
+          <Text size="B500">{'\u521b\u5efa'}</Text>
         </Button>
       </Box>
     </Box>

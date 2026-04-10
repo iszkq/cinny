@@ -58,7 +58,7 @@ function CreateSpaceModal({ state }: CreateSpaceModalProps) {
                   }}
                 >
                   <Box grow="Yes">
-                    <Text size="H4">New Space</Text>
+                    <Text size="H4">{'\u65b0\u5efa\u7a7a\u95f4'}</Text>
                   </Box>
                   <Box shrink="No">
                     <IconButton size="300" radii="300" onClick={closeDialog}>

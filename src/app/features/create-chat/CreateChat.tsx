@@ -75,7 +75,7 @@ export function CreateChat({ defaultUserId }: CreateChatProps) {
   return (
     <Box as="form" onSubmit={handleSubmit} grow="Yes" direction="Column" gap="500">
       <Box direction="Column" gap="100">
-        <Text size="L400">User ID</Text>
+        <Text size="L400">{'\u7528\u6237 ID'}</Text>
         <Input
           defaultValue={defaultUserId}
           placeholder="@username:server"
@@ -92,13 +92,13 @@ export function CreateChat({ defaultUserId }: CreateChatProps) {
           <Box style={{ color: color.Critical.Main }} alignItems="Center" gap="100">
             <Icon src={Icons.Warning} filled size="50" />
             <Text size="T200" style={{ color: color.Critical.Main }}>
-              <b>Please enter a valid User ID.</b>
+              <b>{'\u8bf7\u8f93\u5165\u6709\u6548\u7684\u7528\u6237 ID\u3002'}</b>
             </Text>
           </Box>
         )}
       </Box>
       <Box shrink="No" direction="Column" gap="100">
-        <Text size="L400">Options</Text>
+        <Text size="L400">{'\u9009\u9879'}</Text>
         <SequenceCard
           style={{ padding: config.space.S300 }}
           variant="SurfaceVariant"
@@ -106,8 +106,10 @@ export function CreateChat({ defaultUserId }: CreateChatProps) {
           gap="500"
         >
           <SettingTile
-            title="End-to-End Encryption"
-            description="Once this feature is enabled, it can't be disabled after the room is created."
+            title={'\u7aef\u5230\u7aef\u52a0\u5bc6'}
+            description={
+              '\u5f00\u542f\u540e\uff0c\u623f\u95f4\u521b\u5efa\u5b8c\u6210\u540e\u5c06\u65e0\u6cd5\u5173\u95ed\u3002'
+            }
             after={
               <Switch
                 variant="Primary"
@@ -125,9 +127,9 @@ export function CreateChat({ defaultUserId }: CreateChatProps) {
           <Text size="T300" style={{ color: color.Critical.Main }}>
             <b>
               {error instanceof MatrixError && error.name === ErrorCode.M_LIMIT_EXCEEDED
-                ? `Server rate-limited your request for ${millisecondsToMinutes(
+                ? `\u670d\u52a1\u5668\u5bf9\u4f60\u7684\u8bf7\u6c42\u8fdb\u884c\u4e86\u9650\u6d41\uff0c\u8bf7\u5728 ${millisecondsToMinutes(
                     (error.data.retry_after_ms as number | undefined) ?? 0
-                  )} minutes!`
+                  )} \u5206\u949f\u540e\u91cd\u8bd5\uff01`
                 : error.message}
             </b>
           </Text>
@@ -142,7 +144,7 @@ export function CreateChat({ defaultUserId }: CreateChatProps) {
           disabled={disabled}
           before={loading && <Spinner variant="Primary" fill="Solid" size="200" />}
         >
-          <Text size="B500">Create</Text>
+          <Text size="B500">{'\u521b\u5efa'}</Text>
         </Button>
       </Box>
     </Box>

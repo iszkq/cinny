@@ -131,7 +131,7 @@ const RoomMenu = forwardRef<HTMLDivElement, RoomMenuProps>(({ room, requestClose
           disabled={!unread}
         >
           <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-            Mark as Read
+            {'\u6807\u8bb0\u4e3a\u5df2\u8bfb'}
           </Text>
         </MenuItem>
         <RoomNotificationModeSwitcher roomId={room.roomId} value={notificationMode}>
@@ -150,7 +150,7 @@ const RoomMenu = forwardRef<HTMLDivElement, RoomMenuProps>(({ room, requestClose
               onClick={handleOpen}
             >
               <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-                Notifications
+                {'\u901a\u77e5\u63d0\u9192'}
               </Text>
             </MenuItem>
           )}
@@ -169,7 +169,7 @@ const RoomMenu = forwardRef<HTMLDivElement, RoomMenuProps>(({ room, requestClose
           disabled={!canInvite}
         >
           <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-            Invite
+            {'\u9080\u8bf7'}
           </Text>
         </MenuItem>
         <MenuItem
@@ -179,7 +179,7 @@ const RoomMenu = forwardRef<HTMLDivElement, RoomMenuProps>(({ room, requestClose
           radii="300"
         >
           <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-            Copy Link
+            {'\u590d\u5236\u94fe\u63a5'}
           </Text>
         </MenuItem>
         <MenuItem
@@ -189,7 +189,7 @@ const RoomMenu = forwardRef<HTMLDivElement, RoomMenuProps>(({ room, requestClose
           radii="300"
         >
           <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-            Room Settings
+            {'\u623f\u95f4\u8bbe\u7f6e'}
           </Text>
         </MenuItem>
         <UseStateProvider initial={false}>
@@ -203,7 +203,7 @@ const RoomMenu = forwardRef<HTMLDivElement, RoomMenuProps>(({ room, requestClose
                 aria-pressed={promptJump}
               >
                 <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-                  Jump to Time
+                  {'\u8df3\u8f6c\u5230\u6307\u5b9a\u65f6\u95f4'}
                 </Text>
               </MenuItem>
               {promptJump && (
@@ -234,9 +234,9 @@ const RoomMenu = forwardRef<HTMLDivElement, RoomMenuProps>(({ room, requestClose
                 radii="300"
                 aria-pressed={promptLeave}
               >
-                <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-                  Leave Room
-                </Text>
+                  <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
+                    {'\u9000\u51fa\u623f\u95f4'}
+                  </Text>
               </MenuItem>
               {promptLeave && (
                 <LeaveRoomPrompt
@@ -385,7 +385,7 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
               offset={4}
               tooltip={
                 <Tooltip>
-                  <Text>Search</Text>
+                  <Text>{'\u641c\u7d22'}</Text>
                 </Tooltip>
               }
             >
@@ -401,7 +401,7 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
             offset={4}
             tooltip={
               <Tooltip>
-                <Text>Pinned Messages</Text>
+                <Text>{'\u7f6e\u9876\u6d88\u606f'}</Text>
               </Tooltip>
             }
           >
@@ -461,9 +461,11 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
               tooltip={
                 <Tooltip>
                   {callView ? (
-                    <Text>Members</Text>
+                    <Text>{'\u6210\u5458'}</Text>
                   ) : (
-                    <Text>{peopleDrawer ? 'Hide Members' : 'Show Members'}</Text>
+                    <Text>
+                      {peopleDrawer ? '\u9690\u85cf\u6210\u5458' : '\u663e\u793a\u6210\u5458'}
+                    </Text>
                   )}
                 </Tooltip>
               }
@@ -482,7 +484,7 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
             offset={4}
             tooltip={
               <Tooltip>
-                <Text>More Options</Text>
+                <Text>{'\u66f4\u591a\u9009\u9879'}</Text>
               </Tooltip>
             }
           >

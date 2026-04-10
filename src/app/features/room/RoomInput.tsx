@@ -308,7 +308,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
 
     const startVoiceRecording = useCallback(async () => {
       if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
-        setRecordingError('This browser does not support voice recording.');
+        setRecordingError('\u5f53\u524d\u6d4f\u89c8\u5668\u4e0d\u652f\u6301\u8bed\u97f3\u5f55\u5236\u3002');
         return;
       }
 
@@ -339,7 +339,9 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         recorder.onstop = () => {
           setRecording(false);
           finalizeVoiceRecording().catch((error) => {
-            setRecordingError(error instanceof Error ? error.message : 'Failed to save recording.');
+            setRecordingError(
+              error instanceof Error ? error.message : '\u4fdd\u5b58\u5f55\u97f3\u5931\u8d25\u3002'
+            );
           });
         };
 
@@ -347,7 +349,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         setRecording(true);
       } catch (error) {
         setRecordingError(
-          error instanceof Error ? error.message : 'Failed to access your microphone.'
+          error instanceof Error ? error.message : '\u65e0\u6cd5\u8bbf\u95ee\u9ea6\u514b\u98ce\u3002'
         );
         stopRecordingTracks();
       }
@@ -666,9 +668,11 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
               >
                 <Icon size="600" src={Icons.File} />
                 <Text size="H4" align="Center">
-                  {`Drop Files in "${room?.name || 'Room'}"`}
+                  {`\u62d6\u653e\u6587\u4ef6\u5230\u201c${room?.name || '\u623f\u95f4'}\u201d`}
                 </Text>
-                <Text align="Center">Drag and drop files here or click for selection dialog</Text>
+                <Text align="Center">
+                  {'\u62d6\u62fd\u6587\u4ef6\u5230\u8fd9\u91cc\uff0c\u6216\u70b9\u51fb\u9009\u62e9\u6587\u4ef6'}
+                </Text>
               </Box>
             </Dialog>
           </OverlayCenter>
@@ -708,7 +712,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         <CustomEditor
           editableName="RoomInput"
           editor={editor}
-          placeholder="Send a message..."
+          placeholder="\u53d1\u9001\u6d88\u606f..."
           onKeyDown={handleKeyDown}
           onKeyUp={handleKeyUp}
           onPaste={handlePaste}
@@ -767,7 +771,9 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                           <Icon src={Icons.Cross} size="50" />
                         </IconButton>
                         <Text size="T300">
-                          {`Recording voice note ${millisecondsToMinutesAndSeconds(recordingMs)}`}
+                          {`\u6b63\u5728\u5f55\u5236\u8bed\u97f3 ${millisecondsToMinutesAndSeconds(
+                            recordingMs
+                          )}`}
                         </Text>
                       </>
                     ) : (

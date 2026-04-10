@@ -29,27 +29,27 @@ const useSpaceSettingsMenuItems = (): SpaceSettingsMenuItem[] =>
     () => [
       {
         page: SpaceSettingsPage.GeneralPage,
-        name: 'General',
+        name: '\u5e38\u89c4',
         icon: Icons.Setting,
       },
       {
         page: SpaceSettingsPage.MembersPage,
-        name: 'Members',
+        name: '\u6210\u5458',
         icon: Icons.User,
       },
       {
         page: SpaceSettingsPage.PermissionsPage,
-        name: 'Permissions',
+        name: '\u6743\u9650',
         icon: Icons.Lock,
       },
       {
         page: SpaceSettingsPage.EmojisStickersPage,
-        name: 'Emojis & Stickers',
+        name: '\u8868\u60c5\u4e0e\u5206\u7c7b',
         icon: Icons.Smile,
       },
       {
         page: SpaceSettingsPage.DeveloperToolsPage,
-        name: 'Developer Tools',
+        name: '\u5f00\u53d1\u5de5\u5177',
         icon: Icons.Terminal,
       },
     ],

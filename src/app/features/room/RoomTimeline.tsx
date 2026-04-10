@@ -1490,7 +1490,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
                 <Box grow="Yes" direction="Column">
                   <Text size="T300" priority="300">
                     <b>{senderName}</b>
-                    {' changed room topic'}
+                    {' \u4fee\u6539\u4e86\u623f\u95f4\u8bdd\u9898'}
                   </Text>
                 </Box>
               }
@@ -1533,7 +1533,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
                 <Box grow="Yes" direction="Column">
                   <Text size="T300" priority="300">
                     <b>{senderName}</b>
-                    {' changed room avatar'}
+                    {' \u4fee\u6539\u4e86\u623f\u95f4\u5934\u50cf'}
                   </Text>
                 </Box>
               }
@@ -1584,7 +1584,9 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
                 <Box grow="Yes" direction="Column">
                   <Text size="T300" priority="300">
                     <b>{senderName}</b>
-                    {callJoined ? ' joined the call' : ' ended the call'}
+                    {callJoined
+                      ? ' \u52a0\u5165\u4e86\u8bed\u97f3/\u89c6\u9891\u901a\u8bdd'
+                      : ' \u7ed3\u675f\u4e86\u8bed\u97f3/\u89c6\u9891\u901a\u8bdd'}
                   </Text>
                 </Box>
               }
@@ -1629,9 +1631,9 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
               <Box grow="Yes" direction="Column">
                 <Text size="T300" priority="300">
                   <b>{senderName}</b>
-                  {' sent '}
+                  {' \u53d1\u9001\u4e86 '}
                   <code className={customHtmlCss.Code}>{mEvent.getType()}</code>
-                  {' state event'}
+                  {' \u72b6\u6001\u4e8b\u4ef6'}
                 </Text>
               </Box>
             }
@@ -1679,9 +1681,9 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
               <Box grow="Yes" direction="Column">
                 <Text size="T300" priority="300">
                   <b>{senderName}</b>
-                  {' sent '}
+                  {' \u53d1\u9001\u4e86 '}
                   <code className={customHtmlCss.Code}>{mEvent.getType()}</code>
-                  {' event'}
+                  {' \u4e8b\u4ef6'}
                 </Text>
               </Box>
             }
@@ -1747,7 +1749,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
         <MessageBase space={messageSpacing}>
           <TimelineDivider style={{ color: color.Success.Main }} variant="Inherit">
             <Badge as="span" size="500" variant="Success" fill="Solid" radii="300">
-              <Text size="L400">New Messages</Text>
+              <Text size="L400">{'\u65b0\u6d88\u606f'}</Text>
             </Badge>
           </TimelineDivider>
         </MessageBase>
@@ -1760,8 +1762,8 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             <Badge as="span" size="500" variant="Secondary" fill="None" radii="300">
               <Text size="L400">
                 {(() => {
-                  if (today(mEvent.getTs())) return 'Today';
-                  if (yesterday(mEvent.getTs())) return 'Yesterday';
+                  if (today(mEvent.getTs())) return '\u4eca\u5929';
+                  if (yesterday(mEvent.getTs())) return '\u6628\u5929';
                   return timeDayMonthYear(mEvent.getTs());
                 })()}
               </Text>
@@ -1807,7 +1809,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             before={<Icon size="50" src={Icons.MessageUnread} />}
             onClick={handleJumpToUnread}
           >
-            <Text size="L400">Jump to Unread</Text>
+            <Text size="L400">{'\u8df3\u8f6c\u5230\u672a\u8bfb'}</Text>
           </Chip>
 
           <Chip
@@ -1817,7 +1819,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             before={<Icon size="50" src={Icons.CheckTwice} />}
             onClick={handleMarkAsRead}
           >
-            <Text size="L400">Mark as Read</Text>
+            <Text size="L400">{'\u6807\u8bb0\u4e3a\u5df2\u8bfb'}</Text>
           </Chip>
         </TimelineFloat>
       )}
@@ -1945,7 +1947,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             before={<Icon size="50" src={Icons.ArrowBottom} />}
             onClick={handleJumpToLatest}
           >
-            <Text size="L400">Jump to Latest</Text>
+            <Text size="L400">{'\u8df3\u8f6c\u5230\u6700\u65b0'}</Text>
           </Chip>
         </TimelineFloat>
       )}

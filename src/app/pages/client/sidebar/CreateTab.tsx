@@ -40,7 +40,7 @@ export function CreateTab() {
 
   return (
     <SidebarItem active={createSelected}>
-      <SidebarItemTooltip tooltip="Add Space">
+      <SidebarItemTooltip tooltip={'\u65b0\u5efa/\u52a0\u5165'}>
         {(triggerRef) => (
           <PopOut
             anchor={menuCords}
@@ -73,9 +73,9 @@ export function CreateTab() {
                       onClick={handleCreateSpace}
                     >
                       <SettingTile before={<Icon size="400" src={Icons.Space} />}>
-                        <Text size="H6">Create Space</Text>
+                        <Text size="H6">{'\u521b\u5efa\u7a7a\u95f4'}</Text>
                         <Text size="T300" priority="300">
-                          Build a space for your community.
+                          {'\u4e3a\u4f60\u7684\u793e\u533a\u521b\u5efa\u4e00\u4e2a\u7a7a\u95f4\u3002'}
                         </Text>
                       </SettingTile>
                     </SequenceCard>
@@ -90,9 +90,9 @@ export function CreateTab() {
                       onClick={handleJoinWithAddress}
                     >
                       <SettingTile before={<Icon size="400" src={Icons.Link} />}>
-                        <Text size="H6">Join with Address</Text>
+                        <Text size="H6">{'\u901a\u8fc7\u5730\u5740\u52a0\u5165'}</Text>
                         <Text size="T300" priority="300">
-                          Become a part of existing community.
+                          {'\u52a0\u5165\u5df2\u6709\u793e\u533a\u3002'}
                         </Text>
                       </SettingTile>
                     </SequenceCard>

@@ -169,7 +169,7 @@ export function InviteUserPrompt({ room, requestClose }: InviteUserProps) {
               >
                 <Box grow="Yes">
                   <Text size="H4" truncate>
-                    Invite
+                    {'\u9080\u8bf7\u6210\u5458'}
                   </Text>
                 </Box>
                 <Box shrink="No">
@@ -187,7 +187,7 @@ export function InviteUserPrompt({ room, requestClose }: InviteUserProps) {
                 gap="400"
               >
                 <Box direction="Column" gap="100">
-                  <Text size="L400">User ID</Text>
+                  <Text size="L400">{'\u7528\u6237 ID'}</Text>
                   <div>
                     <Input
                       size="500"
@@ -260,7 +260,7 @@ export function InviteUserPrompt({ room, requestClose }: InviteUserProps) {
                   </div>
                 </Box>
                 <Box direction="Column" gap="100">
-                  <Text size="L400">Reason (Optional)</Text>
+                  <Text size="L400">{'\u9080\u8bf7\u539f\u56e0\uff08\u53ef\u9009\uff09'}</Text>
                   <TextArea
                     size="500"
                     name="reasonInput"
@@ -279,7 +279,7 @@ export function InviteUserPrompt({ room, requestClose }: InviteUserProps) {
                   disabled={!validUserId || inviting}
                   before={inviting && <Spinner size="200" variant="Primary" fill="Solid" />}
                 >
-                  <Text size="B400">Invite</Text>
+                  <Text size="B400">{'\u53d1\u9001\u9080\u8bf7'}</Text>
                 </Button>
               </Box>
             </Box>

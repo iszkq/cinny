@@ -92,7 +92,7 @@ const HomeMenu = forwardRef<HTMLDivElement, HomeMenuProps>(({ requestClose }, re
           aria-disabled={!unread}
         >
           <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-            Mark as Read
+            {'\u6807\u8bb0\u4e3a\u5df2\u8bfb'}
           </Text>
         </MenuItem>
       </Box>
@@ -117,7 +117,7 @@ function HomeHeader() {
         <Box alignItems="Center" grow="Yes" gap="300">
           <Box grow="Yes">
             <Text size="H4" truncate>
-              Home
+              {'\u9996\u9875'}
             </Text>
           </Box>
           <Box>
@@ -161,19 +161,19 @@ function HomeEmpty() {
         icon={<Icon size="600" src={Icons.Hash} />}
         title={
           <Text size="H5" align="Center">
-            No Rooms
+            {'\u6682\u65e0\u623f\u95f4'}
           </Text>
         }
         content={
           <Text size="T300" align="Center">
-            You do not have any rooms yet.
+            {'\u4f60\u8fd8\u6ca1\u6709\u4efb\u4f55\u623f\u95f4\u3002'}
           </Text>
         }
         options={
           <>
             <Button onClick={() => navigate(getHomeCreatePath())} variant="Secondary" size="300">
               <Text size="B300" truncate>
-                Create Room
+                {'\u521b\u5efa\u623f\u95f4'}
               </Text>
             </Button>
             <Button
@@ -183,7 +183,7 @@ function HomeEmpty() {
               size="300"
             >
               <Text size="B300" truncate>
-                Explore Community Rooms
+                {'\u6d4f\u89c8\u793e\u533a\u623f\u95f4'}
               </Text>
             </Button>
           </>
@@ -248,11 +248,11 @@ export function Home() {
                       <Avatar size="200" radii="400">
                         <Icon src={Icons.Plus} size="100" />
                       </Avatar>
-                      <Box as="span" grow="Yes">
-                        <Text as="span" size="Inherit" truncate>
-                          Create Room
-                        </Text>
-                      </Box>
+                        <Box as="span" grow="Yes">
+                          <Text as="span" size="Inherit" truncate>
+                            {'\u521b\u5efa\u623f\u95f4'}
+                          </Text>
+                        </Box>
                     </Box>
                   </NavItemContent>
                 </NavButton>
@@ -269,7 +269,7 @@ export function Home() {
                             </Avatar>
                             <Box as="span" grow="Yes">
                               <Text as="span" size="Inherit" truncate>
-                                Join with Address
+                                {'\u901a\u8fc7\u5730\u5740\u52a0\u5165'}
                               </Text>
                             </Box>
                           </Box>
@@ -304,7 +304,7 @@ export function Home() {
                       </Avatar>
                       <Box as="span" grow="Yes">
                         <Text as="span" size="Inherit" truncate>
-                          Message Search
+                          {'\u6d88\u606f\u641c\u7d22'}
                         </Text>
                       </Box>
                     </Box>
@@ -319,7 +319,7 @@ export function Home() {
                   data-category-id={DEFAULT_CATEGORY_ID}
                   onClick={handleCategoryClick}
                 >
-                  Rooms
+                  {'\u623f\u95f4'}
                 </RoomNavCategoryButton>
               </NavCategoryHeader>
               <div

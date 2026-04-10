@@ -24,7 +24,7 @@ export function SearchInput({ active, loading, searchInputRef, onSearch, onReset
   return (
     <Box as="form" direction="Column" gap="100" onSubmit={handleSearchSubmit}>
       <span data-spacing-node />
-      <Text size="L400">Search</Text>
+      <Text size="L400">{'\u641c\u7d22'}</Text>
       <Input
         ref={searchInputRef}
         style={{ paddingRight: config.space.S300 }}
@@ -32,7 +32,7 @@ export function SearchInput({ active, loading, searchInputRef, onSearch, onReset
         autoFocus
         size="500"
         variant="Background"
-        placeholder="Search for keyword"
+        placeholder="\u8f93\u5165\u5173\u952e\u8bcd\u641c\u7d22"
         autoComplete="off"
         before={
           active && loading ? (
@@ -53,11 +53,11 @@ export function SearchInput({ active, loading, searchInputRef, onSearch, onReset
               after={<Icon size="50" src={Icons.Cross} />}
               onClick={onReset}
             >
-              <Text size="B300">Clear</Text>
+              <Text size="B300">{'\u6e05\u7a7a'}</Text>
             </Chip>
           ) : (
             <Chip type="submit" variant="Primary" size="400" radii="Pill" outlined>
-              <Text size="B300">Enter</Text>
+              <Text size="B300">{'\u641c\u7d22'}</Text>
             </Chip>
           )
         }

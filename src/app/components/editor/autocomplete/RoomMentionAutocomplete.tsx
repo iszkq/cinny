@@ -86,7 +86,7 @@ export function RoomMentionAutocomplete({
     useCallback(
       (rId) => {
         const r = mx.getRoom(rId);
-        if (!r) return 'Unknown Room';
+        if (!r) return '\u672a\u77e5\u623f\u95f4';
         const alias = r.getCanonicalAlias();
         if (alias) return [r.name, alias];
         return r.name;
@@ -133,7 +133,10 @@ export function RoomMentionAutocomplete({
   });
 
   return (
-    <AutocompleteMenu headerContent={<Text size="L400">Rooms</Text>} requestClose={requestClose}>
+    <AutocompleteMenu
+      headerContent={<Text size="L400">{'\u623f\u95f4'}</Text>}
+      requestClose={requestClose}
+    >
       {autoCompleteRoomIds.length === 0 ? (
         <UnknownRoomMentionItem query={query} handleAutocomplete={handleAutocomplete} />
       ) : (

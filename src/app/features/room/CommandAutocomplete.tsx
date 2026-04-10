@@ -74,7 +74,7 @@ export function CommandAutocomplete({
     <AutocompleteMenu
       headerContent={
         <Box grow="Yes" direction="Row" gap="200" justifyContent="SpaceBetween">
-          <Text size="L400">Commands</Text>
+          <Text size="L400">{'\u547d\u4ee4'}</Text>
         </Box>
       }
       requestClose={requestClose}

@@ -137,7 +137,9 @@ export function CallControls({ callEmbed }: CallControlsProps) {
                         onClick={handleSpotlightClick}
                       >
                         <Text size="B300" truncate>
-                          {spotlight ? 'Grid View' : 'Spotlight View'}
+                          {spotlight
+                            ? '\u7f51\u683c\u89c6\u56fe'
+                            : '\u805a\u7126\u89c6\u56fe'}
                         </Text>
                       </MenuItem>
                       <MenuItem
@@ -147,7 +149,7 @@ export function CallControls({ callEmbed }: CallControlsProps) {
                         onClick={handleReactionsClick}
                       >
                         <Text size="B300" truncate>
-                          Reactions
+                          {'\u53cd\u5e94'}
                         </Text>
                       </MenuItem>
                       <MenuItem
@@ -157,7 +159,7 @@ export function CallControls({ callEmbed }: CallControlsProps) {
                         onClick={handleSettingsClick}
                       >
                         <Text size="B300" truncate>
-                          Settings
+                          {'\u8bbe\u7f6e'}
                         </Text>
                       </MenuItem>
                     </Box>
@@ -193,7 +195,7 @@ export function CallControls({ callEmbed }: CallControlsProps) {
               }
               disabled={exiting}
             >
-              <Text size="B400">End</Text>
+              <Text size="B400">{'\u7ed3\u675f'}</Text>
             </Button>
           </Box>
         </Box>

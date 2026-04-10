@@ -51,9 +51,9 @@ const DirectMenu = forwardRef<HTMLDivElement, DirectMenuProps>(({ requestClose }
           radii="300"
           aria-disabled={!unread}
         >
-          <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-            Mark as Read
-          </Text>
+            <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
+            {'\u6807\u8bb0\u4e3a\u5df2\u8bfb'}
+            </Text>
         </MenuItem>
       </Box>
     </Menu>
@@ -93,7 +93,7 @@ export function DirectTab() {
   };
   return (
     <SidebarItem active={directSelected}>
-      <SidebarItemTooltip tooltip="Direct Messages">
+      <SidebarItemTooltip tooltip="\u79c1\u804a\u6d88\u606f">
         {(triggerRef) => (
           <SidebarAvatar
             as="button"

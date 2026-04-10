@@ -180,7 +180,7 @@ export const useCommands = (mx: MatrixClient, room: Room): CommandRecord => {
       aiSettings.skills.reduce<CommandRecord>((record, skill) => {
         record[skill.command] = {
           name: skill.command,
-          description: `AI Skill: ${skill.name}`,
+          description: `AI \u6280\u80fd\uff1a${skill.name}`,
           exe: async (payload: string) => {
             try {
               const result = await runAISkill(room, aiSettings, skill, payload);
@@ -189,7 +189,9 @@ export const useCommands = (mx: MatrixClient, room: Room): CommandRecord => {
                 body: result,
               } as any);
             } catch (error) {
-              window.alert(error instanceof Error ? error.message : 'AI request failed.');
+              window.alert(
+                error instanceof Error ? error.message : 'AI \u8bf7\u6c42\u5931\u8d25\u3002'
+              );
             }
           },
         };
@@ -203,12 +205,12 @@ export const useCommands = (mx: MatrixClient, room: Room): CommandRecord => {
     () => ({
       [Command.Me]: {
         name: Command.Me,
-        description: 'Send action message',
+        description: '\u53d1\u9001\u52a8\u4f5c\u6d88\u606f',
         exe: async () => undefined,
       },
       [Command.Notice]: {
         name: Command.Notice,
-        description: 'Send notice message',
+        description: '\u53d1\u9001\u901a\u77e5\u6d88\u606f',
         exe: async () => undefined,
       },
       [Command.Shrug]: {
@@ -228,7 +230,7 @@ export const useCommands = (mx: MatrixClient, room: Room): CommandRecord => {
       },
       [Command.StartDm]: {
         name: Command.StartDm,
-        description: 'Start direct message with user. Example: /startdm userId1',
+        description: '\u4e0e\u7528\u6237\u53d1\u8d77\u79c1\u804a\u3002\u4f8b\uff1a/startdm userId1',
         exe: async (payload) => {
           const rawIds = splitWithSpace(payload);
           const userIds = rawIds.filter((id) => isUserId(id) && id !== mx.getSafeUserId());
@@ -253,7 +255,7 @@ export const useCommands = (mx: MatrixClient, room: Room): CommandRecord => {
       },
       [Command.Join]: {
         name: Command.Join,
-        description: 'Join room with address. Example: /join address1 address2',
+        description: '\u52a0\u5165\u6307\u5b9a\u623f\u95f4\u3002\u4f8b\uff1a/join address1 address2',
         exe: async (payload) => {
           const rawIds = splitWithSpace(payload);
           const roomIdOrAliases = rawIds.filter(
@@ -266,7 +268,7 @@ export const useCommands = (mx: MatrixClient, room: Room): CommandRecord => {
       },
       [Command.Leave]: {
         name: Command.Leave,
-        description: 'Leave current room.',
+        description: '\u79bb\u5f00\u5f53\u524d\u623f\u95f4\u3002',
         exe: async (payload) => {
           if (payload.trim() === '') {
             mx.leave(room.roomId);
@@ -279,7 +281,8 @@ export const useCommands = (mx: MatrixClient, room: Room): CommandRecord => {
       },
       [Command.Invite]: {
         name: Command.Invite,
-        description: 'Invite user to room. Example: /invite userId1 userId2 [-r reason]',
+        description:
+          '\u9080\u8bf7\u7528\u6237\u8fdb\u5165\u623f\u95f4\u3002\u4f8b\uff1a/invite userId1 userId2 [-r reason]',
         exe: async (payload) => {
           const [content, flags] = splitPayloadContentAndFlags(payload);
           const users = parseUsers(content);
@@ -290,7 +293,8 @@ export const useCommands = (mx: MatrixClient, room: Room): CommandRecord => {
       },
       [Command.DisInvite]: {
         name: Command.DisInvite,
-        description: 'Disinvite user to room. Example: /disinvite userId1 userId2 [-r reason]',
+        description:
+          '\u53d6\u6d88\u623f\u95f4\u9080\u8bf7\u3002\u4f8b\uff1a/disinvite userId1 userId2 [-r reason]',
         exe: async (payload) => {
           const [content, flags] = splitPayloadContentAndFlags(payload);
           const users = parseUsers(content);
@@ -301,7 +305,8 @@ export const useCommands = (mx: MatrixClient, room: Room): CommandRecord => {
       },
       [Command.Kick]: {
         name: Command.Kick,
-        description: 'Kick user from room. Example: /kick userId1 userId2 servername [-r reason]',
+        description:
+          '\u5c06\u7528\u6237\u79fb\u51fa\u623f\u95f4\u3002\u4f8b\uff1a/kick userId1 userId2 servername [-r reason]',
         exe: async (payload) => {
           const [content, flags] = splitPayloadContentAndFlags(payload);
           const users = parseUsers(content);
@@ -325,7 +330,8 @@ export const useCommands = (mx: MatrixClient, room: Room): CommandRecord => {
       },
       [Command.Ban]: {
         name: Command.Ban,
-        description: 'Ban user from room. Example: /ban userId1 userId2 servername [-r reason]',
+        description:
+          '\u5c01\u7981\u623f\u95f4\u6210\u5458\u3002\u4f8b\uff1a/ban userId1 userId2 servername [-r reason]',
         exe: async (payload) => {
           const [content, flags] = splitPayloadContentAndFlags(payload);
           const users = parseUsers(content);
@@ -347,7 +353,7 @@ export const useCommands = (mx: MatrixClient, room: Room): CommandRecord => {
       },
       [Command.UnBan]: {
         name: Command.UnBan,
-        description: 'Unban user from room. Example: /unban userId1 userId2',
+        description: '\u53d6\u6d88\u5c01\u7981\u7528\u6237\u3002\u4f8b\uff1a/unban userId1 userId2',
         exe: async (payload) => {
           const rawIds = splitWithSpace(payload);
           const users = rawIds.filter((id) => isUserId(id));
@@ -356,7 +362,7 @@ export const useCommands = (mx: MatrixClient, room: Room): CommandRecord => {
       },
       [Command.Ignore]: {
         name: Command.Ignore,
-        description: 'Ignore user. Example: /ignore userId1 userId2',
+        description: '\u5ffd\u7565\u7528\u6237\u3002\u4f8b\uff1a/ignore userId1 userId2',
         exe: async (payload) => {
           const rawIds = splitWithSpace(payload);
           const userIds = rawIds.filter((id) => isUserId(id));
@@ -369,7 +375,7 @@ export const useCommands = (mx: MatrixClient, room: Room): CommandRecord => {
       },
       [Command.UnIgnore]: {
         name: Command.UnIgnore,
-        description: 'Unignore user. Example: /unignore userId1 userId2',
+        description: '\u53d6\u6d88\u5ffd\u7565\u7528\u6237\u3002\u4f8b\uff1a/unignore userId1 userId2',
         exe: async (payload) => {
           const rawIds = splitWithSpace(payload);
           const userIds = rawIds.filter((id) => isUserId(id));
@@ -381,7 +387,7 @@ export const useCommands = (mx: MatrixClient, room: Room): CommandRecord => {
       },
       [Command.MyRoomNick]: {
         name: Command.MyRoomNick,
-        description: 'Change nick in current room.',
+        description: '\u4fee\u6539\u5f53\u524d\u623f\u95f4\u4e2d\u7684\u6635\u79f0\u3002',
         exe: async (payload) => {
           const nick = payload.trim();
           if (nick === '') return;
@@ -404,7 +410,8 @@ export const useCommands = (mx: MatrixClient, room: Room): CommandRecord => {
       },
       [Command.MyRoomAvatar]: {
         name: Command.MyRoomAvatar,
-        description: 'Change profile picture in current room. Example /myroomavatar mxc://xyzabc',
+        description:
+          '\u4fee\u6539\u5f53\u524d\u623f\u95f4\u4e2d\u7684\u5934\u50cf\u3002\u4f8b\uff1a/myroomavatar mxc://xyzabc',
         exe: async (payload) => {
           if (payload.match(/^mxc:\/\/\S+$/)) {
             const mEvent = room
@@ -427,7 +434,7 @@ export const useCommands = (mx: MatrixClient, room: Room): CommandRecord => {
       },
       [Command.ConvertToDm]: {
         name: Command.ConvertToDm,
-        description: 'Convert room to direct message',
+        description: '\u5c06\u623f\u95f4\u8f6c\u4e3a\u79c1\u804a',
         exe: async () => {
           const dmUserId = guessDmRoomUserId(room, mx.getSafeUserId());
           await addRoomIdToMDirect(mx, room.roomId, dmUserId);
@@ -435,7 +442,7 @@ export const useCommands = (mx: MatrixClient, room: Room): CommandRecord => {
       },
       [Command.ConvertToRoom]: {
         name: Command.ConvertToRoom,
-        description: 'Convert direct message to room',
+        description: '\u5c06\u79c1\u804a\u8f6c\u4e3a\u666e\u901a\u623f\u95f4',
         exe: async () => {
           await removeRoomIdFromMDirect(mx, room.roomId);
         },
@@ -443,7 +450,7 @@ export const useCommands = (mx: MatrixClient, room: Room): CommandRecord => {
       [Command.Delete]: {
         name: Command.Delete,
         description:
-          'Delete messages from users. Example: /delete userId1 servername -past 1d|2h|5m|30s [-t m.room.message] [-r spam]',
+          '\u6279\u91cf\u5220\u9664\u7528\u6237\u6d88\u606f\u3002\u4f8b\uff1a/delete userId1 servername -past 1d|2h|5m|30s [-t m.room.message] [-r spam]',
         exe: async (payload) => {
           const [content, flags] = splitPayloadContentAndFlags(payload);
           const users = parseUsers(content);
@@ -510,7 +517,7 @@ export const useCommands = (mx: MatrixClient, room: Room): CommandRecord => {
       [Command.Acl]: {
         name: Command.Acl,
         description:
-          'Manage server access control list. Example /acl [-a servername1] [-d servername2] [-ra servername1] [-rd servername2]',
+          '\u7ba1\u7406\u670d\u52a1\u5668 ACL \u5217\u8868\u3002\u4f8b\uff1a/acl [-a servername1] [-d servername2] [-ra servername1] [-rd servername2]',
         exe: async (payload) => {
           const [, flags] = splitPayloadContentAndFlags(payload);
 

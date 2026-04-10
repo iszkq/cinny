@@ -21,7 +21,9 @@ export function MicrophoneButton({ enabled, onToggle }: MicrophoneButtonProps) {
       delay={500}
       tooltip={
         <Tooltip>
-          <Text size="T200">{enabled ? 'Turn Off Microphone' : 'Turn On Microphone'}</Text>
+          <Text size="T200">
+            {enabled ? '\u5173\u95ed\u9ea6\u514b\u98ce' : '\u6253\u5f00\u9ea6\u514b\u98ce'}
+          </Text>
         </Tooltip>
       }
     >
@@ -53,7 +55,9 @@ export function SoundButton({ enabled, onToggle }: SoundButtonProps) {
       delay={500}
       tooltip={
         <Tooltip>
-          <Text size="T200">{enabled ? 'Turn Off Sound' : 'Turn On Sound'}</Text>
+          <Text size="T200">
+            {enabled ? '\u5173\u95ed\u626c\u58f0\u5668' : '\u6253\u5f00\u626c\u58f0\u5668'}
+          </Text>
         </Tooltip>
       }
     >
@@ -89,7 +93,9 @@ export function VideoButton({ enabled, onToggle }: VideoButtonProps) {
       delay={500}
       tooltip={
         <Tooltip>
-          <Text size="T200">{enabled ? 'Stop Camera' : 'Start Camera'}</Text>
+          <Text size="T200">
+            {enabled ? '\u5173\u95ed\u6444\u50cf\u5934' : '\u6253\u5f00\u6444\u50cf\u5934'}
+          </Text>
         </Tooltip>
       }
     >
@@ -125,7 +131,11 @@ export function ScreenShareButton({ enabled, onToggle }: ScreenShareButtonProps)
       delay={500}
       tooltip={
         <Tooltip>
-          <Text size="T200">{enabled ? 'Stop Screenshare' : 'Start Screenshare'}</Text>
+          <Text size="T200">
+            {enabled
+              ? '\u505c\u6b62\u5c4f\u5e55\u5171\u4eab'
+              : '\u5f00\u59cb\u5c4f\u5e55\u5171\u4eab'}
+          </Text>
         </Tooltip>
       }
     >
@@ -155,7 +165,7 @@ export function ChatButton() {
       delay={500}
       tooltip={
         <Tooltip>
-          <Text size="T200">{chat ? 'Close Chat' : 'Open Chat'}</Text>
+          <Text size="T200">{chat ? '\u5173\u95ed\u804a\u5929' : '\u6253\u5f00\u804a\u5929'}</Text>
         </Tooltip>
       }
     >

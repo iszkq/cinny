@@ -25,7 +25,7 @@ export function EmojisStickers({ requestClose }: EmojisStickersProps) {
         <Box grow="Yes" gap="200">
           <Box grow="Yes" alignItems="Center" gap="200">
             <Text size="H3" truncate>
-              Emojis & Stickers
+              {'\u8868\u60c5\u4e0e\u5206\u7c7b'}
             </Text>
           </Box>
           <Box shrink="No">

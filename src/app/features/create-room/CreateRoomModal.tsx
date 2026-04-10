@@ -59,7 +59,9 @@ function CreateRoomModal({ state }: CreateRoomModalProps) {
                 >
                   <Box grow="Yes">
                     <Text size="H4">
-                      {type === CreateRoomType.VoiceRoom ? 'New Voice Room' : 'New Chat Room'}
+                      {type === CreateRoomType.VoiceRoom
+                        ? '\u65b0\u5efa\u8bed\u97f3\u623f\u95f4'
+                        : '\u65b0\u5efa\u804a\u5929\u623f\u95f4'}
                     </Text>
                   </Box>
                   <Box shrink="No">

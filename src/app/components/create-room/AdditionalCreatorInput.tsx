@@ -150,8 +150,10 @@ export function AdditionalCreatorInput({
 
   return (
     <SettingTile
-      title="Founders"
-      description="Special privileged users can be assigned during creation. These users have elevated control and can only be modified during a upgrade."
+      title={'\u521b\u59cb\u6210\u5458'}
+      description={
+        '\u53ef\u5728\u521b\u5efa\u65f6\u6307\u5b9a\u5177\u6709\u7279\u6b8a\u6743\u9650\u7684\u7528\u6237\u3002\u8fd9\u4e9b\u7528\u6237\u62e5\u6709\u66f4\u9ad8\u63a7\u5236\u6743\u9650\uff0c\u4e14\u901a\u5e38\u53ea\u80fd\u5728\u5347\u7ea7\u623f\u95f4\u65f6\u8c03\u6574\u3002'
+      }
     >
       <Box shrink="No" direction="Column" gap="100">
         <Box gap="200" wrap="Wrap">
@@ -213,7 +215,7 @@ export function AdditionalCreatorInput({
                         onClick={handleEnterClick}
                         disabled={!validUserId}
                       >
-                        <Text size="B400">Enter</Text>
+                        <Text size="B400">{'\u6dfb\u52a0'}</Text>
                       </Button>
                     </Box>
                     <Line size="300" />
@@ -263,10 +265,10 @@ export function AdditionalCreatorInput({
                           gap="100"
                         >
                           <Text size="H6" align="Center">
-                            No Suggestions
+                            {'\u6682\u65e0\u5efa\u8bae'}
                           </Text>
                           <Text size="T200" align="Center">
-                            Please provide the user ID and hit Enter.
+                            {'\u8bf7\u8f93\u5165\u7528\u6237 ID \u540e\u70b9\u51fb\u6dfb\u52a0\u3002'}
                           </Text>
                         </Box>
                       )}

@@ -142,7 +142,7 @@ function PinnedMessage({
   const renderOptions = () => (
     <Box shrink="No" gap="200" alignItems="Center">
       <Chip data-event-id={eventId} onClick={handleOpenClick} variant="Secondary" radii="Pill">
-        <Text size="T200">Open</Text>
+        <Text size="T200">{'\u6253\u5f00'}</Text>
       </Chip>
       {canPinEvent && (
         <IconButton
@@ -168,7 +168,9 @@ function PinnedMessage({
     return (
       <Box gap="300" justifyContent="SpaceBetween" alignItems="Center">
         <Box>
-          <Text style={{ color: color.Critical.Main }}>Failed to load message!</Text>
+          <Text style={{ color: color.Critical.Main }}>
+            {'\u6d88\u606f\u52a0\u8f7d\u5931\u8d25\uff01'}
+          </Text>
         </Box>
         {renderOptions()}
       </Box>
@@ -350,7 +352,7 @@ export const RoomPinMenu = forwardRef<HTMLDivElement, RoomPinMenuProps>(
               <Box grow="Yes" direction="Column">
                 <Text size="T400" priority="300">
                   <code className={customHtmlCss.Code}>{event.getType()}</code>
-                  {' event'}
+                  {' \u4e8b\u4ef6'}
                 </Text>
               </Box>
             );
@@ -441,7 +443,7 @@ export const RoomPinMenu = forwardRef<HTMLDivElement, RoomPinMenuProps>(
           <Box grow="Yes" direction="Column">
             <Text size="T400" priority="300">
               <code className={customHtmlCss.Code}>{event.getType()}</code>
-              {' event'}
+              {' \u4e8b\u4ef6'}
             </Text>
           </Box>
         );
@@ -458,7 +460,7 @@ export const RoomPinMenu = forwardRef<HTMLDivElement, RoomPinMenuProps>(
         <Box grow="Yes" direction="Column">
           <Header className={css.PinMenuHeader} size="500">
             <Box grow="Yes">
-              <Text size="H5">Pinned Messages</Text>
+              <Text size="H5">{'\u7f6e\u9876\u6d88\u606f'}</Text>
             </Box>
             <Box shrink="No">
               <IconButton size="300" onClick={requestClose} radii="300">
@@ -531,10 +533,12 @@ export const RoomPinMenu = forwardRef<HTMLDivElement, RoomPinMenuProps>(
                       alignItems="Center"
                     >
                       <Text size="H4" align="Center">
-                        No Pinned Messages
+                        {'\u6682\u65e0\u7f6e\u9876\u6d88\u606f'}
                       </Text>
                       <Text size="T400" align="Center">
-                        Users with sufficient power level can pin a messages from its context menu.
+                        {
+                          '\u62e5\u6709\u8db3\u591f\u6743\u9650\u7b49\u7ea7\u7684\u7528\u6237\u53ef\u4ee5\u5728\u6d88\u606f\u53f3\u952e\u83dc\u5355\u4e2d\u7f6e\u9876\u6d88\u606f\u3002'
+                        }
                       </Text>
                     </Box>
                   </Box>

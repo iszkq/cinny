@@ -77,8 +77,8 @@ const DirectMenu = forwardRef<HTMLDivElement, DirectMenuProps>(({ requestClose }
           radii="300"
           aria-disabled={!unread}
         >
-          <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-            Mark as Read
+            <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
+            {'\u6807\u8bb0\u4e3a\u5df2\u8bfb'}
           </Text>
         </MenuItem>
       </Box>
@@ -103,7 +103,7 @@ function DirectHeader() {
         <Box alignItems="Center" grow="Yes" gap="300">
           <Box grow="Yes">
             <Text size="H4" truncate>
-              Direct Messages
+              {'\u79c1\u804a\u6d88\u606f'}
             </Text>
           </Box>
           <Box>
@@ -147,18 +147,18 @@ function DirectEmpty() {
         icon={<Icon size="600" src={Icons.Mention} />}
         title={
           <Text size="H5" align="Center">
-            No Direct Messages
+            {'\u6682\u65e0\u79c1\u804a\u6d88\u606f'}
           </Text>
         }
         content={
           <Text size="T300" align="Center">
-            You do not have any direct messages yet.
+            {'\u4f60\u8fd8\u6ca1\u6709\u4efb\u4f55\u79c1\u804a\u4f1a\u8bdd\u3002'}
           </Text>
         }
         options={
           <Button variant="Secondary" size="300" onClick={() => navigate(getDirectCreatePath())}>
             <Text size="B300" truncate>
-              Direct Message
+              {'\u53d1\u8d77\u79c1\u804a'}
             </Text>
           </Button>
         }
@@ -220,7 +220,7 @@ export function Direct() {
                       </Avatar>
                       <Box as="span" grow="Yes">
                         <Text as="span" size="Inherit" truncate>
-                          Create Chat
+                          {'\u521b\u5efa\u804a\u5929'}
                         </Text>
                       </Box>
                     </Box>
@@ -235,7 +235,7 @@ export function Direct() {
                   data-category-id={DEFAULT_CATEGORY_ID}
                   onClick={handleCategoryClick}
                 >
-                  Chats
+                  {'\u804a\u5929'}
                 </RoomNavCategoryButton>
               </NavCategoryHeader>
               <div

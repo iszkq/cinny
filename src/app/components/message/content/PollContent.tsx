@@ -20,7 +20,36 @@ type PollContentProps = {
   eventId?: string;
 };
 
-const getVisibilityLabel = (showVoters: boolean): string => (showVoters ? '显示昵称' : '隐藏昵称');
+const CN = {
+  visibleVoters: '\u663e\u793a\u6635\u79f0',
+  hiddenVoters: '\u9690\u85cf\u6635\u79f0',
+  endedCannotVote: '\u6295\u7968\u5df2\u622a\u6b62\uff0c\u65e0\u6cd5\u7ee7\u7eed\u6295\u7968\u3002',
+  tooManySelections: '\u8be5\u6295\u7968\u6700\u591a\u53ef\u9009',
+  submittingVote: '\u6b63\u5728\u63d0\u4ea4\u6295\u7968...',
+  clearingVote: '\u6b63\u5728\u6e05\u9664\u6295\u7968...',
+  voteUpdated: '\u6295\u7968\u5df2\u66f4\u65b0\u3002',
+  voteCleared: '\u5df2\u53d6\u6d88\u4f60\u7684\u6295\u7968\u3002',
+  voteFailed: '\u6295\u7968\u63d0\u4ea4\u5931\u8d25\u3002',
+  parseFailed: '\u8be5\u6295\u7968\u5185\u5bb9\u65e0\u6cd5\u89e3\u6790\u3002',
+  maxSelections: '\u6700\u591a\u53ef\u9009',
+  expiredAt: '\u622a\u6b62',
+  longTerm: '\u957f\u671f\u6709\u6548',
+  noNamedVoters: '\u6682\u65e0\u8bb0\u540d\u6295\u7968',
+  votes: '\u7968',
+  selected: '\u5df2\u9009',
+  participants: '\u53c2\u4e0e\u4eba\u6570',
+  totalSelections: '\u7d2f\u8ba1\u9009\u62e9',
+  openInTimeline:
+    '\u8bf7\u5728\u623f\u95f4\u6d88\u606f\u5217\u8868\u4e2d\u6253\u5f00\u8be5\u6295\u7968\uff0c\u4ee5\u4fbf\u76f4\u63a5\u53c2\u4e0e\u6295\u7968\u3002',
+  endedSummary: '\u8be5\u6295\u7968\u5df2\u7ecf\u622a\u6b62\uff0c\u53ea\u80fd\u67e5\u770b\u7ed3\u679c\u3002',
+  multipleHint:
+    '\u70b9\u51fb\u9009\u9879\u5373\u53ef\u5207\u6362\u4f60\u7684\u6295\u7968\u9009\u62e9\u3002',
+  singleHint:
+    '\u70b9\u51fb\u4efb\u4e00\u9009\u9879\u5373\u53ef\u6295\u7968\uff0c\u518d\u6b21\u70b9\u51fb\u5df2\u9009\u9879\u53ef\u53d6\u6d88\u6295\u7968\u3002',
+} as const;
+
+const getVisibilityLabel = (showVoters: boolean): string =>
+  showVoters ? CN.visibleVoters : CN.hiddenVoters;
 
 export function PollContent({ content, room, eventId }: PollContentProps) {
   const mx = useMatrixClient();
@@ -65,7 +94,7 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
       if (!poll || !room || !eventId) return;
       if (submitting) return;
       if (hasPollEnded(poll)) {
-        setStatus('投票已截止，无法继续投票。', true);
+        setStatus(CN.endedCannotVote, true);
         return;
       }
 
@@ -75,7 +104,7 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
         if (selectedSet.has(optionId)) {
           selectedSet.delete(optionId);
         } else if (selectedSet.size >= poll.maxSelections) {
-          setStatus(`该投票最多可选 ${poll.maxSelections} 项。`, true);
+          setStatus(`${CN.tooManySelections} ${poll.maxSelections} \u9879\u3002`, true);
           return;
         } else {
           selectedSet.add(optionId);
@@ -93,7 +122,7 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
         .slice(0, poll.maxSelections);
 
       setSubmitting(true);
-      setStatus(nextAnswers.length > 0 ? '正在提交投票...' : '正在清除投票...');
+      setStatus(nextAnswers.length > 0 ? CN.submittingVote : CN.clearingVote);
 
       try {
         await Promise.all(
@@ -110,10 +139,10 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
           );
         }
 
-        setStatus(nextAnswers.length > 0 ? '投票已更新。' : '已取消你的投票。');
+        setStatus(nextAnswers.length > 0 ? CN.voteUpdated : CN.voteCleared);
         setRevision((current) => current + 1);
       } catch (error) {
-        setStatus(error instanceof Error ? error.message : '投票提交失败。', true);
+        setStatus(error instanceof Error ? error.message : CN.voteFailed, true);
       } finally {
         setSubmitting(false);
       }
@@ -124,7 +153,7 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
   if (!poll) {
     return (
       <Text size="T300" priority="300">
-        该投票内容无法解析。
+        {CN.parseFailed}
       </Text>
     );
   }
@@ -167,21 +196,16 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
         </Badge>
         {poll.mode === 'multiple' && (
           <Badge size="300" variant="Secondary" fill="Soft" radii="Pill">
-            <Text size="T200">{`最多选 ${poll.maxSelections} 项`}</Text>
+            <Text size="T200">{`${CN.maxSelections} ${poll.maxSelections} \u9879`}</Text>
           </Badge>
         )}
-        <Badge
-          size="300"
-          variant={ended ? 'Critical' : 'Secondary'}
-          fill={ended ? 'Soft' : 'Soft'}
-          radii="Pill"
-        >
+        <Badge size="300" variant={ended ? 'Critical' : 'Secondary'} fill="Soft" radii="Pill">
           <Text size="T200">
             {ended
-              ? '已截止'
+              ? '\u5df2\u622a\u6b62'
               : poll.expiresAt
-                ? `截止 ${new Date(poll.expiresAt).toLocaleString()}`
-                : '长期有效'}
+                ? `${CN.expiredAt} ${new Date(poll.expiresAt).toLocaleString()}`
+                : CN.longTerm}
           </Text>
         </Badge>
         <Badge size="300" variant="Secondary" fill="Soft" radii="Pill">
@@ -199,9 +223,13 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
                   (userId) => getMemberDisplayName(room, userId) ?? getMxIdLocalPart(userId) ?? userId
                 )
               : [];
-          const visibleNames = voterNames.slice(0, 4).join('、');
+          const visibleNames = voterNames.slice(0, 4).join('\u3001');
           const namesSuffix =
-            voterNames.length > 4 ? ` 等 ${voterNames.length} 人` : voterNames.length > 0 ? '' : '暂无记名投票';
+            voterNames.length > 4
+              ? ` \u7b49 ${voterNames.length} \u4eba`
+              : voterNames.length > 0
+                ? ''
+                : CN.noNamedVoters;
 
           return (
             <Box
@@ -227,7 +255,7 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
                   {option.text}
                 </Text>
                 <Text size="T200" priority="300" align="Right">
-                  {`${voterIds.length} 票${selected ? ' · 已选' : ''}`}
+                  {`${voterIds.length} ${CN.votes}${selected ? ` \u00b7 ${CN.selected}` : ''}`}
                 </Text>
               </Box>
               <ProgressBar
@@ -250,20 +278,20 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
 
       <Box direction="Column" gap="50">
         <Text size="T200" priority="300">
-          {`参与人数 ${summaryData.totalVoters}`}
-          {poll.mode === 'multiple' ? ` · 累计选择 ${summaryData.totalSelections}` : ''}
+          {`${CN.participants} ${summaryData.totalVoters}`}
+          {poll.mode === 'multiple' ? ` \u00b7 ${CN.totalSelections} ${summaryData.totalSelections}` : ''}
         </Text>
         {!room || !eventId ? (
           <Text size="T200" priority="300">
-            请在房间消息列表中打开该投票，以便直接参与投票。
+            {CN.openInTimeline}
           </Text>
         ) : (
           <Text size="T200" priority="300">
             {ended
-              ? '该投票已经截止，只能查看结果。'
+              ? CN.endedSummary
               : poll.mode === 'multiple'
-                ? '点击选项即可切换你的投票选择。'
-                : '点击任一选项即可投票，再次点击已选项可取消投票。'}
+                ? CN.multipleHint
+                : CN.singleHint}
           </Text>
         )}
         {statusText && (

@@ -198,7 +198,7 @@ export function MessageSearch({
           radii="Pill"
           outlined
           size="300"
-          aria-label="Scroll to Top"
+          aria-label="\u56de\u5230\u9876\u90e8"
         >
           <Icon src={Icons.ChevronTop} size="300" />
         </IconButton>
@@ -229,8 +229,8 @@ export function MessageSearch({
           <PageHeroSection>
             <PageHero
               icon={<Icon size="600" src={Icons.Message} />}
-              title="Search Messages"
-              subTitle="Find helpful messages in your community by searching with related keywords."
+              title="\u641c\u7d22\u6d88\u606f"
+              subTitle="\u4f7f\u7528\u5173\u952e\u8bcd\u5728\u5f53\u524d\u793e\u533a\u4e2d\u67e5\u627e\u9700\u8981\u7684\u6d88\u606f\u3002"
             />
           </PageHeroSection>
         </PageHeroEmpty>
@@ -245,7 +245,9 @@ export function MessageSearch({
         >
           <Icon size="200" src={Icons.Info} />
           <Text>
-            No results found for <b>{`"${msgSearchParams.term}"`}</b>
+            {'\u672a\u627e\u5230\u4e0e '}
+            <b>{`"${msgSearchParams.term}"`}</b>
+            {' \u76f8\u5173\u7684\u7ed3\u679c'}
           </Text>
         </Box>
       )}
@@ -262,7 +264,7 @@ export function MessageSearch({
       {vItems.length > 0 && (
         <Box direction="Column" gap="300">
           <Box direction="Column" gap="200">
-            <Text size="H5">{`Results for "${msgSearchParams.term}"`}</Text>
+            <Text size="H5">{`"${msgSearchParams.term}" \u7684\u641c\u7d22\u7ed3\u679c`}</Text>
             <Line size="300" variant="Surface" />
           </Box>
           <div

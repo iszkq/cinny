@@ -166,7 +166,7 @@ const SpaceMenu = forwardRef<HTMLDivElement, SpaceMenuProps>(
             disabled={!unread}
           >
             <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-              Mark as Read
+              {'\u6807\u8bb0\u4e3a\u5df2\u8bfb'}
             </Text>
           </MenuItem>
           {onUnpin && (
@@ -176,8 +176,8 @@ const SpaceMenu = forwardRef<HTMLDivElement, SpaceMenuProps>(
               onClick={handleUnpin}
               after={<Icon size="100" src={Icons.Pin} />}
             >
-              <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-                Unpin
+                <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
+                {'\u53d6\u6d88\u7f6e\u9876'}
               </Text>
             </MenuItem>
           )}
@@ -194,9 +194,9 @@ const SpaceMenu = forwardRef<HTMLDivElement, SpaceMenuProps>(
             aria-pressed={invitePrompt}
             disabled={!canInvite}
           >
-            <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-              Invite
-            </Text>
+              <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
+              {'\u9080\u8bf7'}
+              </Text>
           </MenuItem>
           <MenuItem
             onClick={handleCopyLink}
@@ -204,9 +204,9 @@ const SpaceMenu = forwardRef<HTMLDivElement, SpaceMenuProps>(
             after={<Icon size="100" src={Icons.Link} />}
             radii="300"
           >
-            <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-              Copy Link
-            </Text>
+              <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
+              {'\u590d\u5236\u94fe\u63a5'}
+              </Text>
           </MenuItem>
           <MenuItem
             onClick={handleRoomSettings}
@@ -214,9 +214,9 @@ const SpaceMenu = forwardRef<HTMLDivElement, SpaceMenuProps>(
             after={<Icon size="100" src={Icons.Setting} />}
             radii="300"
           >
-            <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-              Space Settings
-            </Text>
+              <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
+              {'\u7a7a\u95f4\u8bbe\u7f6e'}
+              </Text>
           </MenuItem>
         </Box>
       </Menu>
@@ -556,7 +556,9 @@ function ClosedSpaceFolder({
   const dropType = dropState?.type;
 
   const tooltipName =
-    folder.name ?? folder.content.map((i) => mx.getRoom(i)?.name ?? '').join(', ') ?? 'Unnamed';
+    folder.name ??
+    folder.content.map((i) => mx.getRoom(i)?.name ?? '').join(', ') ??
+    '\u672a\u547d\u540d\u5206\u7ec4';
 
   return (
     <RoomsUnreadProvider rooms={folder.content}>

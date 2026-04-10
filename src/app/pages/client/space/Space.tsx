@@ -158,7 +158,7 @@ const SpaceMenu = forwardRef<HTMLDivElement, SpaceMenuProps>(({ room, requestClo
           disabled={!unread}
         >
           <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-            Mark as Read
+            {'\u6807\u8bb0\u4e3a\u5df2\u8bfb'}
           </Text>
         </MenuItem>
       </Box>
@@ -175,7 +175,7 @@ const SpaceMenu = forwardRef<HTMLDivElement, SpaceMenuProps>(({ room, requestClo
           disabled={!canInvite}
         >
           <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-            Invite
+            {'\u9080\u8bf7'}
           </Text>
         </MenuItem>
         <MenuItem
@@ -185,7 +185,7 @@ const SpaceMenu = forwardRef<HTMLDivElement, SpaceMenuProps>(({ room, requestClo
           radii="300"
         >
           <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-            Copy Link
+            {'\u590d\u5236\u94fe\u63a5'}
           </Text>
         </MenuItem>
         <MenuItem
@@ -195,7 +195,7 @@ const SpaceMenu = forwardRef<HTMLDivElement, SpaceMenuProps>(({ room, requestClo
           radii="300"
         >
           <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-            Space Settings
+            {'\u7a7a\u95f4\u8bbe\u7f6e'}
           </Text>
         </MenuItem>
         {developerTools && (
@@ -206,7 +206,7 @@ const SpaceMenu = forwardRef<HTMLDivElement, SpaceMenuProps>(({ room, requestClo
             radii="300"
           >
             <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-              Event Timeline
+              {'\u4e8b\u4ef6\u65f6\u95f4\u7ebf'}
             </Text>
           </MenuItem>
         )}
@@ -226,7 +226,7 @@ const SpaceMenu = forwardRef<HTMLDivElement, SpaceMenuProps>(({ room, requestClo
                 aria-pressed={promptLeave}
               >
                 <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-                  Leave Space
+                  {'\u9000\u51fa\u7a7a\u95f4'}
                 </Text>
               </MenuItem>
               {promptLeave && (
@@ -339,11 +339,11 @@ export function SpaceTombstone({ roomId, replacementRoomId }: SpaceTombstoneProp
       gap="300"
     >
       <Box direction="Column" grow="Yes" gap="100">
-        <Text size="L400">Space Upgraded</Text>
-        <Text size="T200">This space has been replaced and is no longer active.</Text>
+        <Text size="L400">{'\u7a7a\u95f4\u5df2\u5347\u7ea7'}</Text>
+        <Text size="T200">{'\u8be5\u7a7a\u95f4\u5df2\u88ab\u66ff\u6362\uff0c\u4e0d\u518d\u5904\u4e8e\u6d3b\u8dc3\u72b6\u6001\u3002'}</Text>
         {joinState.status === AsyncStatus.Error && (
           <Text className={BreakWord} style={{ color: color.Critical.Main }} size="T200">
-            {(joinState.error as any)?.message ?? 'Failed to join replacement space!'}
+            {(joinState.error as any)?.message ?? '\u52a0\u5165\u65b0\u7a7a\u95f4\u5931\u8d25\u3002'}
           </Text>
         )}
       </Box>
@@ -351,7 +351,7 @@ export function SpaceTombstone({ roomId, replacementRoomId }: SpaceTombstoneProp
         {replacementRoom?.getMyMembership() === Membership.Join ||
         joinState.status === AsyncStatus.Success ? (
           <Button onClick={handleOpen} size="300" variant="Success" fill="Solid" radii="300">
-            <Text size="B300">Open New Space</Text>
+            <Text size="B300">{'\u6253\u5f00\u65b0\u7a7a\u95f4'}</Text>
           </Button>
         ) : (
           <Button
@@ -367,7 +367,7 @@ export function SpaceTombstone({ roomId, replacementRoomId }: SpaceTombstoneProp
             }
             disabled={joinState.status === AsyncStatus.Loading}
           >
-            <Text size="B300">Join New Space</Text>
+            <Text size="B300">{'\u52a0\u5165\u65b0\u7a7a\u95f4'}</Text>
           </Button>
         )}
       </Box>
@@ -460,7 +460,7 @@ export function Space() {
                     </Avatar>
                     <Box as="span" grow="Yes">
                       <Text as="span" size="Inherit" truncate>
-                        Lobby
+                        {'\u5927\u5385'}
                       </Text>
                     </Box>
                   </Box>
@@ -476,7 +476,7 @@ export function Space() {
                     </Avatar>
                     <Box as="span" grow="Yes">
                       <Text as="span" size="Inherit" truncate>
-                        Message Search
+                        {'\u6d88\u606f\u641c\u7d22'}
                       </Text>
                     </Box>
                   </Box>
@@ -511,7 +511,7 @@ export function Space() {
                           onClick={handleCategoryClick}
                           closed={closedCategories.has(categoryId)}
                         >
-                          {roomId === space.roomId ? 'Rooms' : room?.name}
+                          {roomId === space.roomId ? '\u623f\u95f4' : room?.name}
                         </RoomNavCategoryButton>
                       </NavCategoryHeader>
                     </div>

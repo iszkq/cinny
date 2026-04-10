@@ -88,7 +88,7 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
         <Box grow="Yes" gap="200">
           <Box grow="Yes" alignItems="Center" gap="200">
             <Text size="H3" truncate>
-              Developer Tools
+              {'\u5f00\u53d1\u5de5\u5177'}
             </Text>
           </Box>
           <Box shrink="No">
@@ -103,7 +103,7 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
           <PageContent>
             <Box direction="Column" gap="700">
               <Box direction="Column" gap="100">
-                <Text size="L400">Options</Text>
+                <Text size="L400">{'\u9009\u9879'}</Text>
                 <SequenceCard
                   className={SequenceCardStyle}
                   variant="SurfaceVariant"
@@ -111,7 +111,7 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
                   gap="400"
                 >
                   <SettingTile
-                    title="Enable Developer Tools"
+                    title="\u542f\u7528\u5f00\u53d1\u5de5\u5177"
                     after={
                       <Switch
                         variant="Primary"
@@ -129,8 +129,8 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
                     gap="400"
                   >
                     <SettingTile
-                      title="Room ID"
-                      description={`Copy room ID to clipboard. ("${room.roomId}")`}
+                      title="\u623f\u95f4 ID"
+                      description={`\u5c06\u623f\u95f4 ID \u590d\u5236\u5230\u526a\u8d34\u677f\u3002("${room.roomId}")`}
                       after={
                         <Button
                           onClick={() => copyToClipboard(room.roomId ?? '<NO_ROOM_ID_FOUND>')}
@@ -140,7 +140,7 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
                           radii="300"
                           outlined
                         >
-                          <Text size="B300">Copy</Text>
+                          <Text size="B300">{'\u590d\u5236'}</Text>
                         </Button>
                       }
                     />
@@ -150,7 +150,7 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
 
               {developerTools && (
                 <Box direction="Column" gap="100">
-                  <Text size="L400">Data</Text>
+                  <Text size="L400">{'\u6570\u636e'}</Text>
 
                   <SequenceCard
                     className={SequenceCardStyle}
@@ -159,8 +159,8 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
                     gap="400"
                   >
                     <SettingTile
-                      title="New Message Event"
-                      description="Create and send a new message event within the room."
+                      title="\u65b0\u6d88\u606f\u4e8b\u4ef6"
+                      description="\u5728\u5f53\u524d\u623f\u95f4\u4e2d\u521b\u5efa\u5e76\u53d1\u9001\u65b0\u6d88\u606f\u4e8b\u4ef6\u3002"
                       after={
                         <Button
                           onClick={() => setComposeEvent({})}
@@ -170,7 +170,7 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
                           radii="300"
                           outlined
                         >
-                          <Text size="B300">Compose</Text>
+                          <Text size="B300">{'\u7f16\u5199'}</Text>
                         </Button>
                       }
                     />
@@ -182,8 +182,8 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
                     gap="400"
                   >
                     <SettingTile
-                      title="Room State"
-                      description="State events of the room."
+                      title="\u623f\u95f4\u72b6\u6001"
+                      description="\u67e5\u770b\u548c\u7f16\u8f91\u623f\u95f4\u7684\u72b6\u6001\u4e8b\u4ef6\u3002"
                       after={
                         <Button
                           onClick={() => setExpandState(!expandState)}
@@ -200,15 +200,17 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
                             />
                           }
                         >
-                          <Text size="B300">{expandState ? 'Collapse' : 'Expand'}</Text>
+                          <Text size="B300">
+                            {expandState ? '\u6536\u8d77' : '\u5c55\u5f00'}
+                          </Text>
                         </Button>
                       }
                     />
                     {expandState && (
                       <Box direction="Column" gap="100">
                         <Box justifyContent="SpaceBetween">
-                          <Text size="L400">Events</Text>
-                          <Text size="L400">Total: {roomState.size}</Text>
+                          <Text size="L400">{'\u4e8b\u4ef6'}</Text>
+                          <Text size="L400">{`\u603b\u6570\uff1a${roomState.size}`}</Text>
                         </Box>
                         <CutoutCard>
                           <MenuItem
@@ -221,7 +223,7 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
                           >
                             <Box grow="Yes">
                               <Text size="T200" truncate>
-                                Add New
+                                {'\u65b0\u589e'}
                               </Text>
                             </Box>
                           </MenuItem>
@@ -275,7 +277,7 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
                                       >
                                         <Box grow="Yes">
                                           <Text size="T200" truncate>
-                                            Add New
+                                            {'\u65b0\u589e'}
                                           </Text>
                                         </Box>
                                       </MenuItem>
@@ -298,7 +300,7 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
                                           >
                                             <Box grow="Yes">
                                               <Text size="T200" truncate>
-                                                {stateKey ? `"${stateKey}"` : 'Default'}
+                                                {stateKey ? `"${stateKey}"` : '\u9ed8\u8ba4'}
                                               </Text>
                                             </Box>
                                           </MenuItem>
@@ -319,8 +321,8 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
                     gap="400"
                   >
                     <SettingTile
-                      title="Account Data"
-                      description="Private personalization data stored within room."
+                      title="\u8d26\u53f7\u6570\u636e"
+                      description="\u67e5\u770b\u548c\u7f16\u8f91\u5b58\u50a8\u5728\u623f\u95f4\u5185\u7684\u79c1\u6709\u8d26\u53f7\u6570\u636e\u3002"
                       after={
                         <Button
                           onClick={() => setExpandAccountData(!expandAccountData)}
@@ -337,15 +339,17 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
                             />
                           }
                         >
-                          <Text size="B300">{expandAccountData ? 'Collapse' : 'Expand'}</Text>
+                          <Text size="B300">
+                            {expandAccountData ? '\u6536\u8d77' : '\u5c55\u5f00'}
+                          </Text>
                         </Button>
                       }
                     />
                     {expandAccountData && (
                       <Box direction="Column" gap="100">
                         <Box justifyContent="SpaceBetween">
-                          <Text size="L400">Events</Text>
-                          <Text size="L400">Total: {accountData.size}</Text>
+                          <Text size="L400">{'\u4e8b\u4ef6'}</Text>
+                          <Text size="L400">{`\u603b\u6570\uff1a${accountData.size}`}</Text>
                         </Box>
                         <CutoutCard>
                           <MenuItem
@@ -358,7 +362,7 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
                           >
                             <Box grow="Yes">
                               <Text size="T200" truncate>
-                                Add New
+                                {'\u65b0\u589e'}
                               </Text>
                             </Box>
                           </MenuItem>

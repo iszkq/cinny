@@ -67,7 +67,9 @@ function SuggestMenuItem({
       disabled={toggleState.status === AsyncStatus.Loading}
     >
       <Text as="span" size="T300" truncate>
-        {content.suggested ? 'Unset Suggested' : 'Set Suggested'}
+        {content.suggested
+          ? '\u53d6\u6d88\u63a8\u8350'
+          : '\u8bbe\u4e3a\u63a8\u8350'}
       </Text>
     </MenuItem>
   );
@@ -111,7 +113,7 @@ function RemoveMenuItem({
       disabled={removeState.status === AsyncStatus.Loading}
     >
       <Text as="span" size="T300" truncate>
-        Remove
+        {'\u79fb\u9664'}
       </Text>
     </MenuItem>
   );
@@ -146,7 +148,7 @@ function InviteMenuItem({
         disabled={disabled || !room}
       >
         <Text as="span" size="T300" truncate>
-          Invite
+          {'\u9080\u8bf7'}
         </Text>
       </MenuItem>
       {invitePrompt && room && (
@@ -187,7 +189,7 @@ function SettingsMenuItem({
   return (
     <MenuItem onClick={handleSettings} size="300" radii="300" disabled={disabled}>
       <Text as="span" size="T300" truncate>
-        Settings
+        {'\u8bbe\u7f6e'}
       </Text>
     </MenuItem>
   );
@@ -274,7 +276,9 @@ export function HierarchyItemMenu({
                         }}
                       >
                         <Text as="span" size="T300" truncate>
-                          {pinned ? 'Unpin from Sidebar' : 'Pin to Sidebar'}
+                          {pinned
+                            ? '\u4ece\u4fa7\u8fb9\u680f\u53d6\u6d88\u56fa\u5b9a'
+                            : '\u56fa\u5b9a\u5230\u4fa7\u8fb9\u680f'}
                         </Text>
                       </MenuItem>
                     )}
@@ -297,7 +301,7 @@ export function HierarchyItemMenu({
                             aria-pressed={promptLeave}
                           >
                             <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-                              Leave
+                              {'\u9000\u51fa'}
                             </Text>
                           </MenuItem>
                           {promptLeave &&

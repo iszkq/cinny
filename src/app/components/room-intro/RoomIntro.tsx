@@ -66,19 +66,19 @@ export const RoomIntro = as<'div', RoomIntroProps>(({ room, ...props }, ref) => 
             {name}
           </Text>
           <Text size="T400" priority="400">
-            {typeof topic === 'string' ? topic : 'This is the beginning of conversation.'}
+            {typeof topic === 'string' ? topic : '\u5bf9\u8bdd\u4ece\u8fd9\u91cc\u5f00\u59cb\u3002'}
           </Text>
           {creatorName && ts && (
             <Text size="T200" priority="300">
-              {'Created by '}
+              {'\u521b\u5efa\u8005 '}
               <b>@{creatorName}</b>
-              {` on ${timeDayMonthYear(ts)} ${timeHourMinute(ts, hour24Clock)}`}
+              {` \u4e8e ${timeDayMonthYear(ts)} ${timeHourMinute(ts, hour24Clock)}`}
             </Text>
           )}
         </Box>
         <Box gap="200" wrap="Wrap">
           <Button onClick={() => setInvitePrompt(true)} variant="Secondary" size="300" radii="300">
-            <Text size="B300">Invite Member</Text>
+            <Text size="B300">{'\u9080\u8bf7\u6210\u5458'}</Text>
           </Button>
 
           {invitePrompt && (
@@ -93,7 +93,7 @@ export const RoomIntro = as<'div', RoomIntroProps>(({ room, ...props }, ref) => 
                 fill="Soft"
                 radii="300"
               >
-                <Text size="B300">Open Old Room</Text>
+                <Text size="B300">{'\u6253\u5f00\u65e7\u623f\u95f4'}</Text>
               </Button>
             ) : (
               <Button
@@ -109,7 +109,7 @@ export const RoomIntro = as<'div', RoomIntroProps>(({ room, ...props }, ref) => 
                   ) : undefined
                 }
               >
-                <Text size="B300">Join Old Room</Text>
+                <Text size="B300">{'\u52a0\u5165\u65e7\u623f\u95f4'}</Text>
               </Button>
             ))}
         </Box>

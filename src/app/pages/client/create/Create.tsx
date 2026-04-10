@@ -23,8 +23,8 @@ export function Create() {
                 <Box direction="Column" gap="700">
                   <PageHero
                     icon={<Icon size="600" src={Icons.Space} />}
-                    title="Create Space"
-                    subTitle="Build a space for your community."
+                    title={'\u521b\u5efa\u7a7a\u95f4'}
+                    subTitle={'\u4e3a\u4f60\u7684\u793e\u533a\u521b\u5efa\u4e00\u4e2a\u7a7a\u95f4\u3002'}
                   />
                   <CreateSpaceForm onCreate={navigateSpace} />
                 </Box>

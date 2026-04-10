@@ -36,10 +36,10 @@ export function CreateRoomTypeSelector({
         >
           <Box gap="200" alignItems="Baseline">
             <Text size="H6" style={{ flexShrink: 0 }}>
-              Chat Room
+              {'\u804a\u5929\u623f\u95f4'}
             </Text>
             <Text size="T300" priority="300" truncate>
-              - Messages, photos, and videos.
+              {'- \u6587\u5b57\u3001\u56fe\u7247\u548c\u89c6\u9891\u4ea4\u6d41\u3002'}
             </Text>
           </Box>
         </SettingTile>
@@ -61,10 +61,10 @@ export function CreateRoomTypeSelector({
         >
           <Box gap="200" alignItems="Baseline">
             <Text size="H6" style={{ flexShrink: 0 }}>
-              Voice Room
+              {'\u8bed\u97f3\u623f\u95f4'}
             </Text>
             <Text size="T300" priority="300" truncate>
-              - Live audio and video conversations.
+              {'- \u5b9e\u65f6\u8bed\u97f3\u548c\u89c6\u9891\u4ea4\u6d41\u3002'}
             </Text>
             <BetaNoticeBadge />
           </Box>

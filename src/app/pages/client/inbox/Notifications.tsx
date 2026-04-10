@@ -380,7 +380,7 @@ function RoomNotificationsGroupComp({
         return (
           <Box grow="Yes" direction="Column">
             <Text size="T400" priority="300">
-              Room Tombstone. {content.body}
+              {'\u623f\u95f4\u5df2\u66ff\u6362\u3002'} {content.body}
             </Text>
           </Box>
         );
@@ -442,7 +442,7 @@ function RoomNotificationsGroupComp({
               onClick={handleMarkAsRead}
               before={<Icon size="100" src={Icons.CheckTwice} />}
             >
-              <Text size="T200">Mark as Read</Text>
+              <Text size="T200">{'\u6807\u8bb0\u4e3a\u5df2\u8bfb'}</Text>
             </Chip>
           )}
         </Box>
@@ -528,7 +528,7 @@ function RoomNotificationsGroupComp({
                       variant="Secondary"
                       radii="400"
                     >
-                      <Text size="T200">Open</Text>
+                      <Text size="T200">{'\u6253\u5f00'}</Text>
                     </Chip>
                   </Box>
                 </Box>
@@ -656,7 +656,7 @@ export function Notifications() {
           <Box alignItems="Center" gap="200">
             {screenSize !== ScreenSize.Mobile && <Icon size="400" src={Icons.Message} />}
             <Text size="H3" truncate>
-              Notification Messages
+              {'\u901a\u77e5\u6d88\u606f'}
             </Text>
           </Box>
           <Box grow="Yes" basis="No" />
@@ -670,7 +670,7 @@ export function Notifications() {
               <Box direction="Column" gap="200">
                 <Box ref={scrollTopAnchorRef} direction="Column" gap="100">
                   <span data-spacing-node />
-                  <Text size="L400">Filter</Text>
+                  <Text size="L400">{'\u7b5b\u9009'}</Text>
                   <Box gap="200">
                     <Chip
                       onClick={() => setOnlyHighlighted(false)}
@@ -679,7 +679,7 @@ export function Notifications() {
                       before={!onlyHighlight && <Icon size="100" src={Icons.Check} />}
                       outlined
                     >
-                      <Text size="T200">All Notifications</Text>
+                      <Text size="T200">{'\u5168\u90e8\u901a\u77e5'}</Text>
                     </Chip>
                     <Chip
                       onClick={() => setOnlyHighlighted(true)}
@@ -688,7 +688,7 @@ export function Notifications() {
                       before={onlyHighlight && <Icon size="100" src={Icons.Check} />}
                       outlined
                     >
-                      <Text size="T200">Highlighted</Text>
+                      <Text size="T200">{'\u9ad8\u4eae\u901a\u77e5'}</Text>
                     </Chip>
                   </Box>
                 </Box>
@@ -703,7 +703,7 @@ export function Notifications() {
                     radii="Pill"
                     outlined
                     size="300"
-                    aria-label="Scroll to Top"
+                    aria-label="\u56de\u5230\u9876\u90e8"
                   >
                     <Icon src={Icons.ChevronTop} size="300" />
                   </IconButton>
@@ -756,9 +756,9 @@ export function Notifications() {
                       direction="Column"
                       gap="200"
                     >
-                      <Text>No Notifications</Text>
+                      <Text>{'\u6682\u65e0\u901a\u77e5'}</Text>
                       <Text size="T200">
-                        You don&apos;t have any new notifications to display yet.
+                        {'\u76ee\u524d\u8fd8\u6ca1\u6709\u65b0\u901a\u77e5\u53ef\u663e\u793a\u3002'}
                       </Text>
                     </Box>
                   )}

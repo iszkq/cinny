@@ -36,9 +36,9 @@ export function CreateRoomAccessSelector({
             before={<Icon size="400" src={getIcon(CreateRoomAccess.Restricted)} />}
             after={value === CreateRoomAccess.Restricted && <Icon src={Icons.Check} />}
           >
-            <Text size="H6">Restricted</Text>
+            <Text size="H6">{'\u53d7\u9650'}</Text>
             <Text size="T300" priority="300">
-              Only member of parent space can join.
+              {'\u4ec5\u7236\u7a7a\u95f4\u6210\u5458\u53ef\u52a0\u5165\u3002'}
             </Text>
           </SettingTile>
         </SequenceCard>
@@ -58,9 +58,9 @@ export function CreateRoomAccessSelector({
           before={<Icon size="400" src={getIcon(CreateRoomAccess.Private)} />}
           after={value === CreateRoomAccess.Private && <Icon src={Icons.Check} />}
         >
-          <Text size="H6">Private</Text>
+          <Text size="H6">{'\u79c1\u5bc6'}</Text>
           <Text size="T300" priority="300">
-            Only people with invite can join.
+            {'\u4ec5\u88ab\u9080\u8bf7\u7684\u4eba\u53ef\u52a0\u5165\u3002'}
           </Text>
         </SettingTile>
       </SequenceCard>
@@ -79,9 +79,9 @@ export function CreateRoomAccessSelector({
           before={<Icon size="400" src={getIcon(CreateRoomAccess.Public)} />}
           after={value === CreateRoomAccess.Public && <Icon src={Icons.Check} />}
         >
-          <Text size="H6">Public</Text>
+          <Text size="H6">{'\u516c\u5f00'}</Text>
           <Text size="T300" priority="300">
-            Anyone with the address can join.
+            {'\u77e5\u9053\u5730\u5740\u7684\u4efb\u4f55\u4eba\u90fd\u53ef\u52a0\u5165\u3002'}
           </Text>
         </SettingTile>
       </SequenceCard>

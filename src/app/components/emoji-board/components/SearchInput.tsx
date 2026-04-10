@@ -27,7 +27,11 @@ export function SearchInput({
       ref={inputRef}
       variant="SurfaceVariant"
       size="400"
-      placeholder={allowTextCustomEmoji ? 'Search or Text Reaction ' : 'Search'}
+      placeholder={
+        allowTextCustomEmoji
+          ? '\u641c\u7d22\u8868\u60c5\u6216\u8f93\u5165\u6587\u5b57\u53cd\u5e94'
+          : '\u641c\u7d22'
+      }
       maxLength={50}
       after={
         allowTextCustomEmoji && query ? (
@@ -38,7 +42,7 @@ export function SearchInput({
             outlined
             onClick={handleReact}
           >
-            <Text size="L400">React</Text>
+            <Text size="L400">{'\u53d1\u9001\u53cd\u5e94'}</Text>
           </Chip>
         ) : (
           <Icon src={Icons.Search} size="50" />

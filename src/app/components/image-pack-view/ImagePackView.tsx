@@ -25,7 +25,7 @@ export function ImagePackView({ address, requestClose }: ImagePackViewProps) {
               onClick={requestClose}
               before={<Icon size="100" src={Icons.ArrowLeft} />}
             >
-              <Text size="T300">Emojis & Stickers</Text>
+              <Text size="T300">{'\u8868\u60c5\u4e0e\u5206\u7c7b'}</Text>
             </Chip>
           </Box>
           <Box shrink="No">
