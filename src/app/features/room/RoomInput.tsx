@@ -25,6 +25,7 @@ import {
   PopOut,
   Scroll,
   Text,
+  color,
   config,
   toRem,
 } from 'folds';
@@ -120,6 +121,8 @@ import { useComposingCheck } from '../../hooks/useComposingCheck';
 import { useInterval } from '../../hooks/useInterval';
 import { getAudioFileUrl, loadAudioElement } from '../../utils/dom';
 import { getAudioInfo } from '../../utils/matrix';
+import { CreatePollModal } from './CreatePollModal';
+import { createPollMessageContent, CreatePollInput } from '../../utils/polls';
 
 interface RoomInputProps {
   editor: Editor;
@@ -164,6 +167,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       legacyUsernameColor || direct ? colorMXID(replyUserID ?? '') : replyPowerColor;
 
     const [uploadBoard, setUploadBoard] = useState(true);
+    const [pollDialog, setPollDialog] = useState(false);
     const mediaRecorderRef = useRef<MediaRecorder>();
     const mediaStreamRef = useRef<MediaStream>();
     const recordingChunksRef = useRef<Blob[]>([]);
@@ -575,8 +579,44 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       });
     };
 
+    const closePollDialog = useCallback(() => {
+      setPollDialog(false);
+      setTimeout(() => ReactEditor.focus(editor), 100);
+    }, [editor]);
+
+    const handleCreatePoll = useCallback(
+      async (input: CreatePollInput) => {
+        const content = createPollMessageContent(input);
+
+        if (replyDraft) {
+          content['m.relates_to'] = {
+            'm.in_reply_to': {
+              event_id: replyDraft.eventId,
+            },
+          };
+
+          if (replyDraft.relation?.rel_type === RelationType.Thread) {
+            content['m.relates_to'].event_id = replyDraft.relation.event_id;
+            content['m.relates_to'].rel_type = RelationType.Thread;
+            content['m.relates_to'].is_falling_back = false;
+          }
+        }
+
+        await mx.sendMessage(roomId, content as never);
+        setReplyDraft(undefined);
+        sendTypingStatus(false);
+        closePollDialog();
+      },
+      [closePollDialog, mx, replyDraft, roomId, sendTypingStatus, setReplyDraft]
+    );
+
     return (
       <div ref={ref}>
+        <CreatePollModal
+          open={pollDialog}
+          requestClose={closePollDialog}
+          onCreate={handleCreatePoll}
+        />
         {selectedFiles.length > 0 && (
           <UploadBoard
             header={
@@ -752,6 +792,16 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           }
           after={
             <>
+              <IconButton
+                onClick={() => setPollDialog(true)}
+                variant="SurfaceVariant"
+                size="300"
+                radii="300"
+                disabled={recording}
+                aria-disabled={recording}
+              >
+                <Icon src={Icons.OrderList} />
+              </IconButton>
               <IconButton
                 onClick={recording ? stopVoiceRecording : startVoiceRecording}
                 variant={recording ? 'Primary' : 'SurfaceVariant'}

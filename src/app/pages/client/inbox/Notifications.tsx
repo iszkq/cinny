@@ -277,6 +277,8 @@ function RoomNotificationsGroupComp({
             htmlReactParserOptions={htmlReactParserOptions}
             linkifyOpts={linkifyOpts}
             outlineAttachment
+            room={room}
+            eventId={event.event_id}
           />
         );
       },
@@ -335,6 +337,8 @@ function RoomNotificationsGroupComp({
                     urlPreview={urlPreview}
                     htmlReactParserOptions={htmlReactParserOptions}
                     linkifyOpts={linkifyOpts}
+                    room={room}
+                    eventId={evt.event_id}
                   />
                 );
               }

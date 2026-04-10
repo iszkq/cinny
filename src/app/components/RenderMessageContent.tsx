@@ -1,5 +1,5 @@
 import React from 'react';
-import { MsgType } from 'matrix-js-sdk';
+import { MsgType, Room } from 'matrix-js-sdk';
 import { HTMLReactParserOptions } from 'html-react-parser';
 import { Opts } from 'linkifyjs';
 import { config } from 'folds';
@@ -23,6 +23,7 @@ import {
   ThumbnailContent,
   UnsupportedContent,
   VideoContent,
+  PollContent,
 } from './message';
 import { UrlPreviewCard, UrlPreviewHolder } from './url-preview';
 import { Image, MediaControl, Video } from './media';
@@ -31,6 +32,7 @@ import { PdfViewer } from './Pdf-viewer';
 import { TextViewer } from './text-viewer';
 import { testMatrixTo } from '../plugins/matrix-to';
 import { IImageContent } from '../../types/matrix/common';
+import { POLL_MSGTYPE } from '../utils/polls';
 
 type RenderMessageContentProps = {
   displayName: string;
@@ -44,6 +46,8 @@ type RenderMessageContentProps = {
   htmlReactParserOptions: HTMLReactParserOptions;
   linkifyOpts: Opts;
   outlineAttachment?: boolean;
+  room?: Room;
+  eventId?: string;
 };
 export function RenderMessageContent({
   displayName,
@@ -57,6 +61,8 @@ export function RenderMessageContent({
   htmlReactParserOptions,
   linkifyOpts,
   outlineAttachment,
+  room,
+  eventId,
 }: RenderMessageContentProps) {
   const renderUrlsPreview = (urls: string[]) => {
     const filteredUrls = urls.filter((url) => !testMatrixTo(url));
@@ -258,6 +264,10 @@ export function RenderMessageContent({
 
   if (msgType === MsgType.Location) {
     return <MLocation content={getContent()} />;
+  }
+
+  if (msgType === POLL_MSGTYPE) {
+    return <PollContent content={getContent()} room={room} eventId={eventId} />;
   }
 
   if (msgType === 'm.bad.encrypted') {

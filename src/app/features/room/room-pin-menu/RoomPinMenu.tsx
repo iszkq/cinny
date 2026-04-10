@@ -334,6 +334,8 @@ export const RoomPinMenu = forwardRef<HTMLDivElement, RoomPinMenuProps>(
               htmlReactParserOptions={htmlReactParserOptions}
               linkifyOpts={linkifyOpts}
               outlineAttachment
+              room={room}
+              eventId={event.getId()}
             />
           );
         },
@@ -389,6 +391,8 @@ export const RoomPinMenu = forwardRef<HTMLDivElement, RoomPinMenuProps>(
                       urlPreview={urlPreview}
                       htmlReactParserOptions={htmlReactParserOptions}
                       linkifyOpts={linkifyOpts}
+                      room={room}
+                      eventId={eventId}
                     />
                   );
                 }

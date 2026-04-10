@@ -139,6 +139,8 @@ export function SearchResultGroup({
             linkifyOpts={linkifyOpts}
             highlightRegex={highlightRegex}
             outlineAttachment
+            room={room}
+            eventId={event.event_id}
           />
         );
       },
