@@ -7,6 +7,11 @@ export type AIModel = {
   name: string;
   description?: string;
   contextWindow?: number;
+  type?: string;
+  provider?: string;
+  modalities?: string[];
+  capabilities?: string[];
+  supportsChat?: boolean;
 };
 
 export type AISkill = {
@@ -32,7 +37,7 @@ const defaultAISettings: AISettings = {
   provider: 'aihubmix',
   apiKey: '',
   baseUrl: 'https://aihubmix.com/v1',
-  modelsApiUrl: 'https://aihubmix.com/api/v1/models?type=llm',
+  modelsApiUrl: 'https://aihubmix.com/api/v1/models',
   models: [],
   skills: [],
 };

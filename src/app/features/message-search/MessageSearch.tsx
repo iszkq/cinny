@@ -198,7 +198,7 @@ export function MessageSearch({
           radii="Pill"
           outlined
           size="300"
-          aria-label="\u56de\u5230\u9876\u90e8"
+          aria-label="回到顶部"
         >
           <Icon src={Icons.ChevronTop} size="300" />
         </IconButton>
@@ -229,8 +229,8 @@ export function MessageSearch({
           <PageHeroSection>
             <PageHero
               icon={<Icon size="600" src={Icons.Message} />}
-              title="\u641c\u7d22\u6d88\u606f"
-              subTitle="\u4f7f\u7528\u5173\u952e\u8bcd\u5728\u5f53\u524d\u793e\u533a\u4e2d\u67e5\u627e\u9700\u8981\u7684\u6d88\u606f\u3002"
+              title="搜索消息"
+              subTitle="使用关键词在当前社区中查找需要的消息。"
             />
           </PageHeroSection>
         </PageHeroEmpty>

@@ -49,6 +49,103 @@ const getNumberValue = (...values: unknown[]): number | undefined => {
   return undefined;
 };
 
+const normalizeModelToken = (value: string): string => value.trim().toLowerCase();
+
+const getStringArray = (...values: unknown[]): string[] => {
+  const items: string[] = [];
+
+  values.forEach((value) => {
+    if (typeof value === 'string') {
+      const trimmedValue = value.trim();
+      if (trimmedValue) items.push(trimmedValue);
+      return;
+    }
+
+    if (Array.isArray(value)) {
+      value.forEach((item) => {
+        if (typeof item === 'string') {
+          const trimmedValue = item.trim();
+          if (trimmedValue) items.push(trimmedValue);
+          return;
+        }
+
+        if (item && typeof item === 'object') {
+          const record = item as Record<string, unknown>;
+          const nestedString = getStringValue(
+            record.type,
+            record.name,
+            record.id,
+            record.value,
+            record.label
+          );
+          if (nestedString) items.push(nestedString);
+        }
+      });
+      return;
+    }
+
+    if (value && typeof value === 'object') {
+      Object.values(value).forEach((nestedValue) => {
+        items.push(...getStringArray(nestedValue));
+      });
+    }
+  });
+
+  return Array.from(new Set(items));
+};
+
+const hasToken = (tokens: string[], ...patterns: string[]): boolean =>
+  patterns.some((pattern) => tokens.some((token) => token.includes(pattern)));
+
+const inferSupportsChat = (
+  id: string,
+  name: string,
+  type?: string,
+  capabilities?: string[],
+  modalities?: string[]
+): boolean => {
+  const tokens = [
+    id,
+    name,
+    type ?? '',
+    ...(capabilities ?? []),
+    ...(modalities ?? []),
+  ].map(normalizeModelToken);
+
+  const chatSignals = [
+    'chat',
+    'conversation',
+    'llm',
+    'text',
+    'reason',
+    'completion',
+    'assistant',
+    'instruct',
+    'vision',
+    'multimodal',
+  ];
+  const nonChatOnlySignals = [
+    'embedding',
+    'rerank',
+    'tts',
+    'speech',
+    'stt',
+    'transcription',
+    'audio-to-text',
+    'image-generation',
+    'images',
+    'image',
+    'video-generation',
+    'video',
+  ];
+
+  if (hasToken(tokens, ...chatSignals)) return true;
+  if (hasToken(tokens, ...nonChatOnlySignals)) return false;
+  return true;
+};
+
+export const isChatModel = (model: AIModel): boolean => model.supportsChat !== false;
+
 const flattenModelPayload = (payload: unknown): Array<Record<string, unknown> | string> => {
   if (Array.isArray(payload)) {
     return payload.flatMap((item) => flattenModelPayload(item));
@@ -80,17 +177,35 @@ const toAIModel = (item: Record<string, unknown> | string): AIModel | undefined 
     return {
       id: item,
       name: item,
+      supportsChat: true,
     };
   }
 
   const id = getStringValue(item.id, item.model_id, item.model, item.name);
   if (!id) return undefined;
 
+  const name =
+    getStringValue(item.name, item.display_name, item.model_name, item.model_id, item.model) ?? id;
+  const type = getStringValue(item.type, item.model_type, item.category, item.object);
+  const capabilities = getStringArray(
+    item.capabilities,
+    item.features,
+    item.tags,
+    item.tasks,
+    item.abilities
+  );
+  const modalities = getStringArray(
+    item.modalities,
+    item.input_modalities,
+    item.output_modalities,
+    item.modality,
+    item.input_types,
+    item.output_types
+  );
+
   return {
     id,
-    name:
-      getStringValue(item.name, item.display_name, item.model_name, item.model_id, item.model) ??
-      id,
+    name,
     description: getStringValue(item.description, item.desc, item.summary),
     contextWindow: getNumberValue(
       item.context_length,
@@ -98,6 +213,11 @@ const toAIModel = (item: Record<string, unknown> | string): AIModel | undefined 
       item.max_input_tokens,
       item.context_window
     ),
+    type,
+    provider: getStringValue(item.owned_by, item.provider, item.vendor),
+    capabilities: capabilities.length > 0 ? capabilities : undefined,
+    modalities: modalities.length > 0 ? modalities : undefined,
+    supportsChat: inferSupportsChat(id, name, type, capabilities, modalities),
   };
 };
 

@@ -52,45 +52,46 @@ export function VerificationStatusBadge({
   }
   if (verificationStatus === VerificationStatus.Unverified) {
     return (
-      <Badge variant="Critical" fill="Solid" size="500">
-        <Text size="L400">Unverified</Text>
-      </Badge>
+        <Badge variant="Critical" fill="Solid" size="500">
+          <Text size="L400">{'\u672a\u9a8c\u8bc1'}</Text>
+        </Badge>
     );
   }
 
   if (otherUnverifiedCount > 0) {
     return (
-      <Badge variant="Warning" fill="Solid" size="500">
-        <Text size="L400">{otherUnverifiedCount} Unverified</Text>
-      </Badge>
+        <Badge variant="Warning" fill="Solid" size="500">
+          <Text size="L400">{`${otherUnverifiedCount} \u4e2a\u672a\u9a8c\u8bc1`}</Text>
+        </Badge>
     );
   }
 
   return (
-    <Badge variant="Success" fill="Solid" size="500">
-      <Text size="L400">Verified</Text>
-    </Badge>
+        <Badge variant="Success" fill="Solid" size="500">
+          <Text size="L400">{'\u5df2\u9a8c\u8bc1'}</Text>
+        </Badge>
   );
 }
 
 function LearnStartVerificationFromOtherDevice() {
   return (
     <Box direction="Column">
-      <Text size="T200">Steps to verify from other device.</Text>
+      <Text size="T200">{'\u4ece\u5176\u4ed6\u8bbe\u5907\u53d1\u8d77\u9a8c\u8bc1\u7684\u6b65\u9aa4\uff1a'}</Text>
       <Text as="div" size="T200">
         <ul style={{ margin: `${config.space.S100} 0` }}>
-          <li>Open your other verified device.</li>
+          <li>{'\u6253\u5f00\u53e6\u4e00\u53f0\u5df2\u9a8c\u8bc1\u7684\u8bbe\u5907\u3002'}</li>
           <li>
-            Open <i>Settings</i>.
+            {'\u6253\u5f00'} <i>{'\u8bbe\u7f6e'}</i>。
           </li>
           <li>
-            Find this device in <i>Devices/Sessions</i> section.
+            {'\u5728'} <i>{'\u8bbe\u5907 / \u4f1a\u8bdd'}</i> {'\u4e2d\u627e\u5230\u8fd9\u53f0\u8bbe\u5907\u3002'}
           </li>
-          <li>Initiate verification.</li>
+          <li>{'\u5f00\u59cb\u9a8c\u8bc1\u3002'}</li>
         </ul>
       </Text>
       <Text size="T200">
-        If you do not have any verified device press the <i>&quot;Verify Manually&quot;</i> button.
+        {'\u5982\u679c\u4f60\u8fd8\u6ca1\u6709\u4efb\u4f55\u5df2\u9a8c\u8bc1\u8bbe\u5907\uff0c\u8bf7\u70b9\u51fb'}{' '}
+        <i>{'\u201c\u624b\u52a8\u9a8c\u8bc1\u201d'}</i> {'\u6309\u94ae\u3002'}
       </Text>
     </Box>
   );
@@ -113,12 +114,12 @@ export function VerifyCurrentDeviceTile({
     <>
       <InfoCard
         variant="Critical"
-        title="Unverified"
+        title={'\u672a\u9a8c\u8bc1'}
         description={
           <>
-            Start verification from other device or verify manually.{' '}
+            {'\u53ef\u4ee5\u4ece\u5176\u4ed6\u8bbe\u5907\u53d1\u8d77\u9a8c\u8bc1\uff0c\u6216\u8005\u76f4\u63a5\u624b\u52a8\u9a8c\u8bc1\u3002'}{' '}
             <Text as="a" size="T200" onClick={() => setLearnMore(!learnMore)}>
-              <b>{learnMore ? 'View Less' : 'Learn More'}</b>
+              <b>{learnMore ? '\u6536\u8d77' : '\u4e86\u89e3\u66f4\u591a'}</b>
             </Text>
           </>
         }
@@ -133,7 +134,7 @@ export function VerifyCurrentDeviceTile({
               onClick={() => setManualVerification(true)}
             >
               <Text as="span" size="B300">
-                Verify Manually
+                {'\u624b\u52a8\u9a8c\u8bc1'}
               </Text>
             </Button>
           )
@@ -190,8 +191,8 @@ export function VerifyOtherDeviceTile({ crypto, deviceId }: VerifyOtherDeviceTil
   return (
     <InfoCard
       variant="Warning"
-      title="Unverified"
-      description="Verify device identity and grant access to encrypted messages."
+      title={'\u672a\u9a8c\u8bc1'}
+      description={'\u9a8c\u8bc1\u8bbe\u5907\u8eab\u4efd\uff0c\u5e76\u6388\u4e88\u52a0\u5bc6\u6d88\u606f\u7684\u8bbf\u95ee\u6743\u9650\u3002'}
       after={
         <Button
           size="300"
@@ -202,7 +203,7 @@ export function VerifyOtherDeviceTile({ crypto, deviceId }: VerifyOtherDeviceTil
           disabled={requesting}
         >
           <Text as="span" size="B300">
-            Verify
+            {'\u9a8c\u8bc1'}
           </Text>
         </Button>
       }
@@ -230,7 +231,7 @@ export function EnableVerification({ visible }: EnableVerificationProps) {
       {visible && (
         <Button size="300" radii="300" onClick={() => setOpen(true)}>
           <Text as="span" size="B300">
-            Enable
+            {'\u542f\u7528'}
           </Text>
         </Button>
       )}
@@ -324,7 +325,7 @@ export function DeviceVerificationOptions() {
                   fill="None"
                 >
                   <Text as="span" size="T300" truncate>
-                    Reset
+                    {'\u91cd\u7f6e'}
                   </Text>
                 </MenuItem>
               </Box>

@@ -52,15 +52,15 @@ export const LogoutDialog = forwardRef<HTMLDivElement, LogoutDialogProps>(
               verificationStatus === VerificationStatus.Unverified && (
                 <InfoCard
                   variant="Critical"
-                  title="\u8bbe\u5907\u672a\u9a8c\u8bc1"
-                  description="\u8bf7\u5148\u9a8c\u8bc1\u8bbe\u5907\uff0c\u518d\u9000\u51fa\u767b\u5f55\uff0c\u4ee5\u514d\u4e22\u5931\u52a0\u5bc6\u6d88\u606f\u3002"
+              title="设备未验证"
+              description="请先验证设备，再退出登录，以免丢失加密消息。"
                 />
               )
             ) : (
               <InfoCard
                 variant="Critical"
-                title="\u63d0\u793a"
-                description="\u8bf7\u5148\u5f00\u542f\u8bbe\u5907\u9a8c\u8bc1\uff0c\u6216\u4ece\u8bbe\u7f6e\u4e2d\u5bfc\u51fa\u52a0\u5bc6\u6570\u636e\uff0c\u907f\u514d\u65e0\u6cd5\u518d\u6b21\u8bbf\u95ee\u6d88\u606f\u3002"
+              title="提示"
+              description="请先开启设备验证，或从设置中导出加密数据，避免无法再次访问消息。"
               />
             ))}
           <Text priority="400">{'\u4f60\u5373\u5c06\u9000\u51fa\u767b\u5f55\uff0c\u786e\u5b9a\u7ee7\u7eed\u5417\uff1f'}</Text>

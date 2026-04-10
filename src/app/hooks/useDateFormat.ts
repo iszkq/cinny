@@ -31,7 +31,7 @@ export const useDateFormatItems = (): DateFormatItem[] =>
       },
       {
         format: '',
-        name: 'Custom',
+        name: '自定义',
       },
     ],
     []

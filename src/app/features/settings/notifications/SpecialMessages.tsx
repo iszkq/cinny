@@ -124,9 +124,9 @@ export function SpecialMessagesNotifications() {
   return (
     <Box direction="Column" gap="100">
       <Box alignItems="Center" justifyContent="SpaceBetween" gap="200">
-        <Text size="L400">Special Messages</Text>
+        <Text size="L400">{'\u7279\u6b8a\u6d88\u606f'}</Text>
         <Box gap="100">
-          <Text size="T200">Badge: </Text>
+          <Text size="T200">{'\u5fbd\u6807\uff1a'}</Text>
           <Badge radii="300" variant="Success" fill="Solid">
             <Text size="L400">1</Text>
           </Badge>
@@ -139,7 +139,7 @@ export function SpecialMessagesNotifications() {
         gap="400"
       >
         <SettingTile
-          title={`Mention User ID ("${userId}")`}
+          title={`\u63d0\u53ca User ID ("${userId}")`}
           after={
             <MentionModeSwitcher
               pushRules={pushRules}
@@ -156,7 +156,7 @@ export function SpecialMessagesNotifications() {
         gap="400"
       >
         <SettingTile
-          title={`Contains Displayname ${displayName ? `("${displayName}")` : ''}`}
+          title={`\u5305\u542b\u663e\u793a\u540d ${displayName ? `("${displayName}")` : ''}`}
           after={
             <MentionModeSwitcher
               pushRules={pushRules}
@@ -173,7 +173,7 @@ export function SpecialMessagesNotifications() {
         gap="400"
       >
         <SettingTile
-          title={`Contains Username ("${getMxIdLocalPart(userId)}")`}
+          title={`\u5305\u542b\u7528\u6237\u540d ("${getMxIdLocalPart(userId)}")`}
           after={
             <MentionModeSwitcher
               pushRules={pushRules}
@@ -190,7 +190,7 @@ export function SpecialMessagesNotifications() {
         gap="400"
       >
         <SettingTile
-          title="Mention @room"
+          title={'\u63d0\u53ca @room'}
           after={
             <MentionModeSwitcher
               pushRules={pushRules}
@@ -207,7 +207,7 @@ export function SpecialMessagesNotifications() {
         gap="400"
       >
         <SettingTile
-          title="Contains @room"
+          title={'\u5305\u542b @room'}
           after={
             <MentionModeSwitcher
               pushRules={pushRules}

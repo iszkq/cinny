@@ -28,7 +28,7 @@ export function SettingsTab() {
 
   return (
     <SidebarItem active={settings}>
-      <SidebarItemTooltip tooltip="\u7528\u6237\u8bbe\u7f6e">
+      <SidebarItemTooltip tooltip="用户设置">
         {(triggerRef) => (
           <SidebarAvatar as="button" ref={triggerRef} onClick={openSettings}>
             <UserAvatar

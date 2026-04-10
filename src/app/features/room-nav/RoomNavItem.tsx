@@ -224,7 +224,7 @@ function CallChatToggle() {
     <IconButton
       onClick={() => setChat(!chat)}
       aria-pressed={chat}
-      aria-label="\u5207\u6362\u804a\u5929"
+                  aria-label="切换聊天"
       variant="Background"
       fill="None"
       size="300"
@@ -414,7 +414,7 @@ export function RoomNavItem({
               onClick={handleOpenMenu}
               aria-pressed={!!menuAnchor}
               aria-controls={`menu-${room.roomId}`}
-              aria-label="\u66f4\u591a\u9009\u9879"
+                  aria-label="更多选项"
               variant="Background"
               fill="None"
               size="300"

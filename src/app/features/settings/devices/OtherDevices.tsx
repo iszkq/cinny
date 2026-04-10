@@ -104,7 +104,7 @@ export function OtherDevices({ devices, refreshDeviceList, showVerification }: O
   return devices.length > 0 ? (
     <>
       <Box direction="Column" gap="100">
-        <Text size="L400">Others</Text>
+        <Text size="L400">{'\u5176\u4ed6\u8bbe\u5907'}</Text>
         {authMetadata && (
           <SequenceCard
             className={SequenceCardStyle}
@@ -113,8 +113,8 @@ export function OtherDevices({ devices, refreshDeviceList, showVerification }: O
             gap="400"
           >
             <SettingTile
-              title="Device Dashboard"
-              description="Manage your devices on OIDC dashboard."
+              title={'\u8bbe\u5907\u9762\u677f'}
+              description={'\u5728 OIDC \u8bbe\u5907\u9762\u677f\u4e2d\u7ba1\u7406\u4f60\u7684\u8bbe\u5907\u3002'}
               after={
                 <Button
                   size="300"
@@ -124,7 +124,7 @@ export function OtherDevices({ devices, refreshDeviceList, showVerification }: O
                   outlined
                   onClick={handleDashboardOIDC}
                 >
-                  <Text size="B300">Open</Text>
+                  <Text size="B300">{'\u6253\u5f00'}</Text>
                 </Button>
               }
             />
@@ -198,11 +198,15 @@ export function OtherDevices({ devices, refreshDeviceList, showVerification }: O
             <Box grow="Yes" direction="Column">
               {deleteError ? (
                 <Text size="T200">
-                  <b>Failed to logout devices! Please try again. {deleteError.message}</b>
+                  <b>
+                    {'\u9000\u51fa\u8bbe\u5907\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5\u3002'} {deleteError.message}
+                  </b>
                 </Text>
               ) : (
                 <Text size="T200">
-                  <b>Logout from selected devices. ({deleted.size} selected)</b>
+                  <b>
+                    {`\u9000\u51fa\u5df2\u9009\u8bbe\u5907\uff08\u5df2\u9009 ${deleted.size} \u4e2a\uff09`}
+                  </b>
                 </Text>
               )}
               {authData && (
@@ -210,7 +214,7 @@ export function OtherDevices({ devices, refreshDeviceList, showVerification }: O
                   authData={authData}
                   unsupported={() => (
                     <Text size="T200">
-                      Authentication steps to perform this action are not supported by client.
+                      {'\u5ba2\u6237\u7aef\u6682\u4e0d\u652f\u6301\u6267\u884c\u8be5\u64cd\u4f5c\u6240\u9700\u7684\u9a8c\u8bc1\u6d41\u7a0b\u3002'}
                     </Text>
                   )}
                 >
@@ -234,7 +238,7 @@ export function OtherDevices({ devices, refreshDeviceList, showVerification }: O
                 disabled={deleting}
                 onClick={handleCancelDelete}
               >
-                <Text size="B300">Cancel</Text>
+                <Text size="B300">{'\u53d6\u6d88'}</Text>
               </Button>
               <Button
                 size="300"
@@ -244,7 +248,7 @@ export function OtherDevices({ devices, refreshDeviceList, showVerification }: O
                 before={deleting && <Spinner variant="Critical" fill="Solid" size="100" />}
                 onClick={() => deleteDevices()}
               >
-                <Text size="B300">Logout</Text>
+                <Text size="B300">{'\u9000\u51fa\u767b\u5f55'}</Text>
               </Button>
             </Box>
           </Box>

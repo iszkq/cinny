@@ -703,7 +703,7 @@ export function Notifications() {
                     radii="Pill"
                     outlined
                     size="300"
-                    aria-label="\u56de\u5230\u9876\u90e8"
+          aria-label="回到顶部"
                   >
                     <Icon src={Icons.ChevronTop} size="300" />
                   </IconButton>

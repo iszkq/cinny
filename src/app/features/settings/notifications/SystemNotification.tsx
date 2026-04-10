@@ -53,21 +53,25 @@ function EmailNotification() {
 
   return (
     <SettingTile
-      title="Email Notification"
+      title={'\u90ae\u4ef6\u901a\u77e5'}
       description={
         <>
           {result && !result.email && (
             <Text as="span" style={{ color: color.Critical.Main }} size="T200">
-              Your account does not have any email attached.
+              {'\u5f53\u524d\u8d26\u53f7\u8fd8\u6ca1\u6709\u7ed1\u5b9a\u90ae\u7bb1\u3002'}
             </Text>
           )}
-          {result && result.email && <>Send notification to your email. {`("${result.email}")`}</>}
+          {result && result.email && (
+            <>
+              {'\u5c06\u901a\u77e5\u53d1\u9001\u5230\u4f60\u7684\u90ae\u7bb1\u3002'} {`("${result.email}")`}
+            </>
+          )}
           {result === null && (
             <Text as="span" style={{ color: color.Critical.Main }} size="T200">
-              Unexpected Error!
+              {'\u53d1\u751f\u4e86\u610f\u5916\u9519\u8bef\uff01'}
             </Text>
           )}
-          {result === undefined && 'Send notification to your email.'}
+          {result === undefined && '\u5c06\u901a\u77e5\u53d1\u9001\u5230\u4f60\u7684\u90ae\u7bb1\u3002'}
         </>
       }
       after={
@@ -98,7 +102,7 @@ export function SystemNotification() {
 
   return (
     <Box direction="Column" gap="100">
-      <Text size="L400">System</Text>
+      <Text size="L400">{'\u7cfb\u7edf'}</Text>
       <SequenceCard
         className={SequenceCardStyle}
         variant="SurfaceVariant"
@@ -106,22 +110,22 @@ export function SystemNotification() {
         gap="400"
       >
         <SettingTile
-          title="Desktop Notifications"
+          title={'\u684c\u9762\u901a\u77e5'}
           description={
             notifPermission === 'denied' ? (
               <Text as="span" style={{ color: color.Critical.Main }} size="T200">
                 {'Notification' in window
-                  ? 'Notification permission is blocked. Please allow notification permission from browser address bar.'
-                  : 'Notifications are not supported by the system.'}
+                  ? '\u901a\u77e5\u6743\u9650\u5df2\u88ab\u7981\u7528\uff0c\u8bf7\u4ece\u6d4f\u89c8\u5668\u5730\u5740\u680f\u91cc\u5141\u8bb8\u901a\u77e5\u6743\u9650\u3002'
+                  : '\u5f53\u524d\u7cfb\u7edf\u4e0d\u652f\u6301\u901a\u77e5\u529f\u80fd\u3002'}
               </Text>
             ) : (
-              <span>Show desktop notifications when message arrive.</span>
+              <span>{'\u5f53\u6709\u65b0\u6d88\u606f\u5230\u8fbe\u65f6\uff0c\u663e\u793a\u684c\u9762\u901a\u77e5\u3002'}</span>
             )
           }
           after={
             notifPermission === 'prompt' ? (
               <Button size="300" radii="300" onClick={requestNotificationPermission}>
-                <Text size="B300">Enable</Text>
+                <Text size="B300">{'\u542f\u7528'}</Text>
               </Button>
             ) : (
               <Switch
@@ -140,8 +144,8 @@ export function SystemNotification() {
         gap="400"
       >
         <SettingTile
-          title="Notification Sound"
-          description="Play sound when new message arrive."
+          title={'\u901a\u77e5\u58f0\u97f3'}
+          description={'\u5f53\u6709\u65b0\u6d88\u606f\u5230\u8fbe\u65f6\u64ad\u653e\u63d0\u793a\u97f3\u3002'}
           after={<Switch value={isNotificationSounds} onChange={setIsNotificationSounds} />}
         />
       </SequenceCard>

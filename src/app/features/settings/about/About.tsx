@@ -20,7 +20,7 @@ export function About({ requestClose }: AboutProps) {
         <Box grow="Yes" gap="200">
           <Box grow="Yes" alignItems="Center" gap="200">
             <Text size="H3" truncate>
-              About
+              {'\u5173\u4e8e'}
             </Text>
           </Box>
           <Box shrink="No">
@@ -48,7 +48,7 @@ export function About({ requestClose }: AboutProps) {
                       <Text size="H3">Cinny</Text>
                       <Text size="T200">v4.11.1</Text>
                     </Box>
-                    <Text>Yet another matrix client.</Text>
+                    <Text>{'\u53e6\u4e00\u4e2a Matrix \u5ba2\u6237\u7aef\u3002'}</Text>
                   </Box>
 
                   <Box gap="200" wrap="Wrap">
@@ -63,7 +63,7 @@ export function About({ requestClose }: AboutProps) {
                       radii="300"
                       before={<Icon src={Icons.Code} size="100" filled />}
                     >
-                      <Text size="B300">Source Code</Text>
+                      <Text size="B300">{'\u6e90\u4ee3\u7801'}</Text>
                     </Button>
                     <Button
                       as="a"
@@ -76,13 +76,13 @@ export function About({ requestClose }: AboutProps) {
                       radii="300"
                       before={<Icon src={Icons.Heart} size="100" filled />}
                     >
-                      <Text size="B300">Support</Text>
+                      <Text size="B300">{'\u652f\u6301\u9879\u76ee'}</Text>
                     </Button>
                   </Box>
                 </Box>
               </Box>
               <Box direction="Column" gap="100">
-                <Text size="L400">Options</Text>
+                <Text size="L400">{'\u9009\u9879'}</Text>
                 <SequenceCard
                   className={SequenceCardStyle}
                   variant="SurfaceVariant"
@@ -90,8 +90,10 @@ export function About({ requestClose }: AboutProps) {
                   gap="400"
                 >
                   <SettingTile
-                    title="Clear Cache & Reload"
-                    description="Clear all your locally stored data and reload from server."
+                    title={'\u6e05\u9664\u7f13\u5b58\u5e76\u91cd\u65b0\u52a0\u8f7d'}
+                    description={
+                      '\u6e05\u9664\u672c\u5730\u5b58\u50a8\u7684\u6240\u6709\u6570\u636e\uff0c\u7136\u540e\u91cd\u65b0\u4ece\u670d\u52a1\u5668\u52a0\u8f7d\u3002'
+                    }
                     after={
                       <Button
                         onClick={() => clearCacheAndReload(mx)}
@@ -101,14 +103,14 @@ export function About({ requestClose }: AboutProps) {
                         radii="300"
                         outlined
                       >
-                        <Text size="B300">Clear Cache</Text>
+                        <Text size="B300">{'\u6e05\u9664\u7f13\u5b58'}</Text>
                       </Button>
                     }
                   />
                 </SequenceCard>
               </Box>
               <Box direction="Column" gap="100">
-                <Text size="L400">Credits</Text>
+                <Text size="L400">{'\u81f4\u8c22'}</Text>
                 <SequenceCard
                   className={SequenceCardStyle}
                   variant="SurfaceVariant"

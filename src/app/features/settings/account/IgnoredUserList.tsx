@@ -89,7 +89,7 @@ function IgnoreUserInput({ userList }: { userList: string[] }) {
         disabled={ignoring}
       >
         {ignoring && <Spinner variant="Secondary" size="300" />}
-        <Text size="B400">Block</Text>
+        <Text size="B400">{'\u5c4f\u853d'}</Text>
       </Button>
     </Box>
   );
@@ -134,7 +134,7 @@ export function IgnoredUserList() {
   return (
     <Box direction="Column" gap="100">
       <Box alignItems="Center" justifyContent="SpaceBetween" gap="200">
-        <Text size="L400">Blocked Users</Text>
+        <Text size="L400">{'\u5c4f\u853d\u7528\u6237'}</Text>
       </Box>
       <SequenceCard
         className={SequenceCardStyle}
@@ -143,14 +143,16 @@ export function IgnoredUserList() {
         gap="400"
       >
         <SettingTile
-          title="Select User"
-          description="Prevent receiving messages or invites from user by adding their userId."
+          title={'\u9009\u62e9\u7528\u6237'}
+          description={
+            '\u8f93\u5165\u7528\u6237\u7684 userId \u540e\uff0c\u53ef\u963b\u6b62\u63a5\u6536\u5bf9\u65b9\u7684\u6d88\u606f\u6216\u9080\u8bf7\u3002'
+          }
         >
           <Box direction="Column" gap="300">
             <IgnoreUserInput userList={ignoredUsers} />
             {ignoredUsers.length > 0 && (
               <Box direction="Inherit" gap="100">
-                <Text size="L400">Users</Text>
+                <Text size="L400">{'\u5df2\u5c4f\u853d\u7528\u6237'}</Text>
                 <Box wrap="Wrap" gap="200">
                   {ignoredUsers.map((userId) => (
                     <IgnoredUserChip key={userId} userId={userId} userList={ignoredUsers} />

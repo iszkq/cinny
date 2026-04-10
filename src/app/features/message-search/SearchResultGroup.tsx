@@ -167,7 +167,7 @@ export function SearchResultGroup({
         return (
           <Box grow="Yes" direction="Column">
             <Text size="T400" priority="300">
-              Room Tombstone. {content.body}
+              {'\u623f\u95f4\u5df2\u88ab\u66ff\u6362\u3002'} {content.body}
             </Text>
           </Box>
         );
@@ -182,7 +182,7 @@ export function SearchResultGroup({
         <Box grow="Yes" direction="Column">
           <Text size="T400" priority="300">
             <code className={customHtmlCss.Code}>{event.type}</code>
-            {' event'}
+            {' \u4e8b\u4ef6'}
           </Text>
         </Box>
       );
@@ -305,7 +305,7 @@ export function SearchResultGroup({
                       variant="Secondary"
                       radii="400"
                     >
-                      <Text size="T200">Open</Text>
+                      <Text size="T200">{'\u6253\u5f00'}</Text>
                     </Chip>
                   </Box>
                 </Box>

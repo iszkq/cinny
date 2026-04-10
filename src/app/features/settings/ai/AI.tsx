@@ -18,7 +18,7 @@ import { SequenceCardStyle } from '../styles.css';
 import { SettingTile } from '../../../components/setting-tile';
 import { AIModel, AISkill, aiSettingsAtom } from '../../../state/ai';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
-import { fetchAihubmixModels } from '../../../utils/ai';
+import { fetchAihubmixModels, isChatModel } from '../../../utils/ai';
 
 type AIProps = {
   requestClose: () => void;
@@ -43,6 +43,17 @@ const CN = {
   noSkills: '\u8fd8\u6ca1\u6709\u521b\u5efa\u4efb\u4f55 Skill',
   currentSkills: '\u5df2\u521b\u5efa Skill',
   roomContext: '\u9ed8\u8ba4\u4f1a\u9644\u5e26\u5f53\u524d\u623f\u95f4\u6700\u8fd1\u804a\u5929\u4e0a\u4e0b\u6587',
+  modelsTitle: '\u5df2\u540c\u6b65\u6a21\u578b',
+  modelsDesc:
+    '\u4f1a\u5c55\u793a AIHubMix \u8fd4\u56de\u7684\u5168\u90e8\u6a21\u578b\uff0c\u5305\u62ec\u753b\u56fe\u3001\u97f3\u9891\u8f6c\u5199\u7b49\u80fd\u529b\u3002',
+  chatOnlyHint:
+    'Skill \u521b\u5efa\u5668\u53ea\u4f7f\u7528\u53ef\u804a\u5929\u6a21\u578b\uff0c\u4ee5\u907f\u514d\u8c03\u7528 /chat/completions \u65f6\u62a5\u9519\u3002',
+  noAllModels: '\u8fd8\u6ca1\u6709\u540c\u6b65\u4efb\u4f55\u6a21\u578b',
+  capabilities: '\u80fd\u529b',
+  modalities: '\u6a21\u6001',
+  type: '\u7c7b\u578b',
+  contextWindow: '\u4e0a\u4e0b\u6587',
+  chatCapable: '\u53ef\u804a\u5929',
 } as const;
 
 const makeSkillId = () => `skill_${Date.now()}`;
@@ -55,7 +66,26 @@ const removeSkill = (skills: AISkill[], id: string): AISkill[] =>
   skills.filter((skill) => skill.id !== id);
 
 const DEFAULT_BASE_URL = 'https://aihubmix.com/v1';
-const DEFAULT_MODELS_API_URL = 'https://aihubmix.com/api/v1/models?type=llm';
+const DEFAULT_MODELS_API_URL = 'https://aihubmix.com/api/v1/models';
+
+const joinModelMeta = (values?: string[]): string | undefined =>
+  values && values.length > 0 ? values.join(' / ') : undefined;
+
+const buildModelDescription = (model: AIModel): string => {
+  const lines = [
+    model.description,
+    model.type ? `${CN.type}\uff1a${model.type}` : undefined,
+    model.modalities ? `${CN.modalities}\uff1a${joinModelMeta(model.modalities)}` : undefined,
+    model.capabilities
+      ? `${CN.capabilities}\uff1a${joinModelMeta(model.capabilities)}`
+      : undefined,
+    typeof model.contextWindow === 'number'
+      ? `${CN.contextWindow}\uff1a${model.contextWindow}`
+      : undefined,
+  ].filter((item): item is string => !!item);
+
+  return lines.join('\n');
+};
 
 export function AI({ requestClose }: AIProps) {
   const [settings, setSettings] = useAtom(aiSettingsAtom);
@@ -79,6 +109,7 @@ export function AI({ requestClose }: AIProps) {
     () => [...settings.models].sort((a, b) => a.name.localeCompare(b.name)),
     [settings.models]
   );
+  const chatModels = useMemo(() => sortedModels.filter(isChatModel), [sortedModels]);
 
   const handleSaveBaseConfig: FormEventHandler<HTMLFormElement> = (evt) => {
     evt.preventDefault();
@@ -102,6 +133,8 @@ export function AI({ requestClose }: AIProps) {
 
     loadModels(nextModelsUrl, nextApiKey)
       .then((models) => {
+        const firstChatModel = models.find(isChatModel);
+
         setSettings({
           ...settings,
           apiKey: nextApiKey,
@@ -109,8 +142,8 @@ export function AI({ requestClose }: AIProps) {
           modelsApiUrl: nextModelsUrl,
           models,
         });
-        if (!skillModel && models[0]) {
-          setSkillModel(models[0].id);
+        if (!skillModel && firstChatModel) {
+          setSkillModel(firstChatModel.id);
         }
         setStatusText(
           models.length > 0
@@ -119,7 +152,9 @@ export function AI({ requestClose }: AIProps) {
         );
       })
       .catch((error) => {
-        setStatusText(error instanceof Error ? error.message : 'Failed to fetch models.');
+        setStatusText(
+          error instanceof Error ? error.message : '\u62c9\u53d6\u6a21\u578b\u5931\u8d25\u3002'
+        );
       });
   };
 
@@ -127,7 +162,7 @@ export function AI({ requestClose }: AIProps) {
     evt.preventDefault();
     const name = skillName.trim();
     const command = normalizeCommand(skillCommand || buildDefaultCommand(name));
-    const model = skillModel || sortedModels[0]?.id;
+    const model = skillModel || chatModels[0]?.id;
     const prompt = systemPrompt.trim();
 
     if (!name || !command || !model || !prompt) return;
@@ -249,6 +284,9 @@ export function AI({ requestClose }: AIProps) {
                   gap="400"
                 >
                   <Box as="form" direction="Column" gap="300" onSubmit={handleCreateSkill}>
+                    <Text size="T300" priority="300">
+                      {CN.chatOnlyHint}
+                    </Text>
                     <Input
                       value={skillName}
                       onChange={(evt) => setSkillName(evt.currentTarget.value)}
@@ -277,8 +315,8 @@ export function AI({ requestClose }: AIProps) {
                           padding: `0 ${config.space.S300}`,
                         }}
                       >
-                        <option value="">{sortedModels[0] ? '\u8bf7\u9009\u62e9' : CN.noModels}</option>
-                        {sortedModels.map((model) => (
+                        <option value="">{chatModels[0] ? '\u8bf7\u9009\u62e9' : CN.noModels}</option>
+                        {chatModels.map((model) => (
                           <option key={model.id} value={model.id}>
                             {model.name}
                           </option>
@@ -310,12 +348,41 @@ export function AI({ requestClose }: AIProps) {
                       variant="Primary"
                       size="300"
                       radii="300"
-                      disabled={!sortedModels.length}
-                      aria-disabled={!sortedModels.length}
+                      disabled={!chatModels.length}
+                      aria-disabled={!chatModels.length}
                     >
                       <Text size="B300">{CN.createSkill}</Text>
                     </Button>
                   </Box>
+                </SequenceCard>
+              </Box>
+
+              <Box direction="Column" gap="100">
+                <Text size="L400">{CN.modelsTitle}</Text>
+                <SequenceCard
+                  className={SequenceCardStyle}
+                  variant="SurfaceVariant"
+                  direction="Column"
+                  gap="400"
+                >
+                  <Text size="T300" priority="300">
+                    {CN.modelsDesc}
+                  </Text>
+                  <Text size="T300" priority="300">
+                    {`${CN.chatCapable}\uff1a${chatModels.length} / ${sortedModels.length}`}
+                  </Text>
+                  {sortedModels.length === 0 && (
+                    <Text size="T300" priority="300">
+                      {CN.noAllModels}
+                    </Text>
+                  )}
+                  {sortedModels.map((model) => (
+                    <SettingTile
+                      key={model.id}
+                      title={`${model.name}${isChatModel(model) ? '' : '  [\u975e\u804a\u5929]'}`}
+                      description={buildModelDescription(model)}
+                    />
+                  ))}
                 </SequenceCard>
               </Box>
 

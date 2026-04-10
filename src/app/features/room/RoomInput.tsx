@@ -123,6 +123,7 @@ import { getAudioFileUrl, loadAudioElement } from '../../utils/dom';
 import { getAudioInfo } from '../../utils/matrix';
 import { CreatePollModal } from './CreatePollModal';
 import { createPollMessageContent, CreatePollInput } from '../../utils/polls';
+import { BibleModal } from '../bible';
 
 interface RoomInputProps {
   editor: Editor;
@@ -168,6 +169,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
 
     const [uploadBoard, setUploadBoard] = useState(true);
     const [pollDialog, setPollDialog] = useState(false);
+    const [bibleDialog, setBibleDialog] = useState(false);
     const mediaRecorderRef = useRef<MediaRecorder>();
     const mediaStreamRef = useRef<MediaStream>();
     const recordingChunksRef = useRef<Blob[]>([]);
@@ -619,6 +621,14 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           requestClose={closePollDialog}
           onCreate={handleCreatePoll}
         />
+        <BibleModal
+          open={bibleDialog}
+          requestClose={() => setBibleDialog(false)}
+          onInsertSelected={(text) => {
+            Transforms.insertText(editor, text);
+            ReactEditor.focus(editor);
+          }}
+        />
         {selectedFiles.length > 0 && (
           <UploadBoard
             header={
@@ -712,7 +722,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         <CustomEditor
           editableName="RoomInput"
           editor={editor}
-          placeholder="\u53d1\u9001\u6d88\u606f..."
+          placeholder="发送消息..."
           onKeyDown={handleKeyDown}
           onKeyUp={handleKeyUp}
           onPaste={handlePaste}
@@ -807,6 +817,16 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                 aria-disabled={recording}
               >
                 <Icon src={Icons.OrderList} />
+              </IconButton>
+              <IconButton
+                onClick={() => setBibleDialog(true)}
+                variant="SurfaceVariant"
+                size="300"
+                radii="300"
+                disabled={recording}
+                aria-disabled={recording}
+              >
+                <Text size="B300">{'\u7ecf'}</Text>
               </IconButton>
               <IconButton
                 onClick={recording ? stopVoiceRecording : startVoiceRecording}

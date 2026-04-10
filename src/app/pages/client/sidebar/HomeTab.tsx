@@ -95,7 +95,7 @@ export function HomeTab() {
 
   return (
     <SidebarItem active={homeSelected}>
-      <SidebarItemTooltip tooltip="\u9996\u9875">
+    <SidebarItemTooltip tooltip="首页">
         {(triggerRef) => (
           <SidebarAvatar
             as="button"

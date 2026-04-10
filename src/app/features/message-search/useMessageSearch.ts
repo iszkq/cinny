@@ -1,13 +1,21 @@
 import {
+  Direction,
+  EventType,
   IEventWithRoomId,
   IResultContext,
   ISearchRequestBody,
   ISearchResponse,
   ISearchResult,
+  MatrixClient,
+  MatrixEvent,
+  MsgType,
+  Room,
   SearchOrderBy,
 } from 'matrix-js-sdk';
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { getLinkedTimelines, getLiveTimeline } from '../room/RoomTimeline';
+import { decryptAllTimelineEvent } from '../../utils/room';
 
 export type ResultItem = {
   rank: number;
@@ -24,6 +32,231 @@ export type SearchResult = {
   nextToken?: string;
   highlights: string[];
   groups: ResultGroup[];
+};
+
+type LocalResultItem = {
+  rank: number;
+  event: IEventWithRoomId;
+  ts: number;
+};
+
+type LocalSearchCache = {
+  key: string;
+  highlights: string[];
+  items: LocalResultItem[];
+};
+
+const LOCAL_SEARCH_PAGE_LIMIT = 20;
+const LOCAL_HISTORY_PAGINATION_LIMIT = 100;
+const MAX_LOCAL_HISTORY_PAGES_PER_ROOM = 250;
+
+const emptyResult = (): SearchResult => ({
+  highlights: [],
+  groups: [],
+});
+
+const unique = <T,>(items: T[]): T[] => Array.from(new Set(items));
+
+const normalizeSearchText = (value: string): string =>
+  value.toLowerCase().replace(/\s+/g, ' ').trim();
+
+const getSearchTerms = (term: string): string[] => {
+  const normalizedTerm = normalizeSearchText(term);
+  const splitTerms = normalizedTerm.split(' ').filter(Boolean);
+
+  if (!normalizedTerm) return [];
+  return unique([normalizedTerm, ...splitTerms]);
+};
+
+const eventToSearchBody = (event: MatrixEvent): string | undefined => {
+  if (event.isRedacted()) return undefined;
+
+  if (event.getType() === EventType.Sticker) {
+    const stickerBody = event.getContent().body;
+    return typeof stickerBody === 'string' ? stickerBody : undefined;
+  }
+
+  if (event.getType() !== EventType.RoomMessage) return undefined;
+
+  const content = event.getContent();
+  const body = typeof content.body === 'string' ? content.body : '';
+  const msgType = content.msgtype ?? MsgType.Text;
+
+  if (body) return body;
+
+  if (msgType === MsgType.Image) return '[image]';
+  if (msgType === MsgType.Video) return '[video]';
+  if (msgType === MsgType.Audio) return '[audio]';
+  if (msgType === MsgType.File) return '[file]';
+
+  return undefined;
+};
+
+const toSearchEvent = (event: MatrixEvent, roomId: string): IEventWithRoomId => {
+  const rawEvent = event.event as IEventWithRoomId;
+
+  return {
+    ...rawEvent,
+    room_id: rawEvent.room_id ?? roomId,
+    event_id: rawEvent.event_id ?? event.getId() ?? '',
+    sender: rawEvent.sender ?? event.getSender() ?? '',
+    type: event.getType(),
+    content: event.getContent(),
+    origin_server_ts: event.getTs(),
+  };
+};
+
+const calculateLocalRank = (body: string, terms: string[]): number => {
+  const normalizedBody = normalizeSearchText(body);
+
+  return terms.reduce((score, term) => {
+    if (!term) return score;
+
+    let fromIndex = 0;
+    let matches = 0;
+    while (fromIndex < normalizedBody.length) {
+      const matchIndex = normalizedBody.indexOf(term, fromIndex);
+      if (matchIndex < 0) break;
+      matches += 1;
+      fromIndex = matchIndex + term.length;
+    }
+
+    return score + matches * Math.max(term.length, 1);
+  }, 0);
+};
+
+const makeContext = (): IResultContext => ({
+  events_before: [],
+  events_after: [],
+  profile_info: {},
+  start: '',
+  end: '',
+});
+
+const groupLocalResults = (items: LocalResultItem[]): ResultGroup[] => {
+  const roomToItems = new Map<string, ResultItem[]>();
+
+  items.forEach((item) => {
+    const roomId = item.event.room_id;
+    const roomItems = roomToItems.get(roomId) ?? [];
+    roomItems.push({
+      rank: item.rank,
+      event: item.event,
+      context: makeContext(),
+    });
+    roomToItems.set(roomId, roomItems);
+  });
+
+  return Array.from(roomToItems.entries()).map(([roomId, groupedItems]) => ({
+    roomId,
+    items: groupedItems,
+  }));
+};
+
+const createCacheKey = (params: MessageSearchParams): string =>
+  JSON.stringify({
+    term: params.term ?? '',
+    order: params.order ?? '',
+    rooms: params.rooms ?? [],
+    senders: params.senders ?? [],
+  });
+
+const paginateLocalRoomHistory = async (mx: MatrixClient, room: Room) => {
+  let timeline = getLiveTimeline(room);
+  let pageCount = 0;
+
+  if (room.hasEncryptionStateEvent()) {
+    await decryptAllTimelineEvent(mx, timeline);
+  }
+
+  while (
+    timeline.getPaginationToken(Direction.Backward) &&
+    pageCount < MAX_LOCAL_HISTORY_PAGES_PER_ROOM
+  ) {
+    const paginated = await mx.paginateEventTimeline(timeline, {
+      backwards: true,
+      limit: LOCAL_HISTORY_PAGINATION_LIMIT,
+    });
+    if (!paginated) break;
+
+    const previousTimeline = timeline.getNeighbouringTimeline(Direction.Backward);
+    if (!previousTimeline || previousTimeline === timeline) break;
+
+    timeline = previousTimeline;
+    pageCount += 1;
+
+    if (room.hasEncryptionStateEvent()) {
+      await decryptAllTimelineEvent(mx, timeline);
+    }
+  }
+};
+
+const searchLocalRoomHistory = async (
+  mx: MatrixClient,
+  params: MessageSearchParams
+): Promise<LocalSearchCache> => {
+  const { term, order, rooms, senders } = params;
+  const searchKey = createCacheKey(params);
+  const searchTerm = term?.trim();
+
+  if (!searchTerm || !rooms || rooms.length === 0) {
+    return {
+      key: searchKey,
+      highlights: [],
+      items: [],
+    };
+  }
+
+  const terms = getSearchTerms(searchTerm);
+  const targetSenders = senders ? new Set(senders) : undefined;
+  const targetRooms = rooms
+    .map((roomId) => mx.getRoom(roomId))
+    .filter((room): room is Room => !!room);
+
+  const results: LocalResultItem[] = [];
+  for (const room of targetRooms) {
+    await paginateLocalRoomHistory(mx, room);
+
+    const seenEventIds = new Set<string>();
+    const timelines = getLinkedTimelines(getLiveTimeline(room));
+    timelines.forEach((timeline) => {
+      timeline.getEvents().forEach((matrixEvent) => {
+        const eventId = matrixEvent.getId();
+        if (!eventId || seenEventIds.has(eventId)) return;
+        seenEventIds.add(eventId);
+
+        const sender = matrixEvent.getSender();
+        if (targetSenders && (!sender || !targetSenders.has(sender))) return;
+
+        const body = eventToSearchBody(matrixEvent);
+        if (!body) return;
+
+        const normalizedBody = normalizeSearchText(body);
+        const matched = terms.every((token) => normalizedBody.includes(token));
+        if (!matched) return;
+
+        results.push({
+          rank: calculateLocalRank(body, terms),
+          event: toSearchEvent(matrixEvent, room.roomId),
+          ts: matrixEvent.getTs(),
+        });
+      });
+    });
+  }
+
+  results.sort((a, b) => {
+    if (order === SearchOrderBy.Rank) {
+      if (b.rank !== a.rank) return b.rank - a.rank;
+      return b.ts - a.ts;
+    }
+    return b.ts - a.ts;
+  });
+
+  return {
+    key: searchKey,
+    highlights: terms,
+    items: results,
+  };
 };
 
 const groupSearchResult = (results: ISearchResult[]): ResultGroup[] => {
@@ -72,15 +305,36 @@ export type MessageSearchParams = {
 export const useMessageSearch = (params: MessageSearchParams) => {
   const mx = useMatrixClient();
   const { term, order, rooms, senders } = params;
+  const localCacheRef = useRef<LocalSearchCache>();
 
   const searchMessages = useCallback(
     async (nextBatch?: string) => {
-      if (!term)
+      if (!term) return emptyResult();
+
+      const limit = LOCAL_SEARCH_PAGE_LIMIT;
+      const shouldUseLocalHistory =
+        !!rooms &&
+        rooms.length > 0 &&
+        rooms.some((roomId) => mx.getRoom(roomId)?.hasEncryptionStateEvent());
+
+      if (shouldUseLocalHistory) {
+        const cacheKey = createCacheKey(params);
+        if (localCacheRef.current?.key !== cacheKey) {
+          localCacheRef.current = await searchLocalRoomHistory(mx, params);
+        }
+
+        const offset = nextBatch ? Number(nextBatch) || 0 : 0;
+        const items = localCacheRef.current.items.slice(offset, offset + limit);
+
         return {
-          highlights: [],
-          groups: [],
+          nextToken:
+            offset + limit < localCacheRef.current.items.length
+              ? String(offset + limit)
+              : undefined,
+          highlights: localCacheRef.current.highlights,
+          groups: groupLocalResults(items),
         };
-      const limit = 20;
+      }
 
       const requestBody: ISearchRequestBody = {
         search_categories: {
@@ -108,7 +362,7 @@ export const useMessageSearch = (params: MessageSearchParams) => {
       });
       return parseSearchResult(r);
     },
-    [mx, term, order, rooms, senders]
+    [localCacheRef, mx, order, params, rooms, senders, term]
   );
 
   return searchMessages;

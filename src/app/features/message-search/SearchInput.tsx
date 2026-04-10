@@ -32,7 +32,7 @@ export function SearchInput({ active, loading, searchInputRef, onSearch, onReset
         autoFocus
         size="500"
         variant="Background"
-        placeholder="\u8f93\u5165\u5173\u952e\u8bcd\u641c\u7d22"
+        placeholder="输入关键词搜索"
         autoComplete="off"
         before={
           active && loading ? (

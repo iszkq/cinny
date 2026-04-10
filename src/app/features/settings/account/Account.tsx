@@ -16,7 +16,7 @@ export function Account({ requestClose }: AccountProps) {
         <Box grow="Yes" gap="200">
           <Box grow="Yes" alignItems="Center" gap="200">
             <Text size="H3" truncate>
-              Account
+              {'\u8d26\u53f7'}
             </Text>
           </Box>
           <Box shrink="No">

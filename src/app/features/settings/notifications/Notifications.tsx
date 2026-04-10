@@ -19,7 +19,7 @@ export function Notifications({ requestClose }: NotificationsProps) {
         <Box grow="Yes" gap="200">
           <Box grow="Yes" alignItems="Center" gap="200">
             <Text size="H3" truncate>
-              Notifications
+              {'\u901a\u77e5'}
             </Text>
           </Box>
           <Box shrink="No">
@@ -38,7 +38,7 @@ export function Notifications({ requestClose }: NotificationsProps) {
               <SpecialMessagesNotifications />
               <KeywordMessagesNotifications />
               <Box direction="Column" gap="100">
-                <Text size="L400">Block Messages</Text>
+                <Text size="L400">{'\u5c4f\u853d\u6d88\u606f'}</Text>
                 <SequenceCard
                   className={SequenceCardStyle}
                   variant="SurfaceVariant"
@@ -46,7 +46,9 @@ export function Notifications({ requestClose }: NotificationsProps) {
                   gap="400"
                 >
                   <SettingTile
-                    description={'This option has been moved to "Account > Block Users" section.'}
+                    description={
+                      '\u8fd9\u4e2a\u9009\u9879\u5df2\u79fb\u52a8\u5230\u201c\u8d26\u53f7 > \u5c4f\u853d\u7528\u6237\u201d\u3002'
+                    }
                   />
                 </SequenceCard>
               </Box>

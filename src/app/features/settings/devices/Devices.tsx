@@ -70,7 +70,7 @@ export function Devices({ requestClose }: DevicesProps) {
         <Box grow="Yes" gap="200">
           <Box grow="Yes" alignItems="Center" gap="200">
             <Text size="H3" truncate>
-              Devices
+              {'\u8bbe\u5907'}
             </Text>
           </Box>
           <Box shrink="No">
@@ -85,7 +85,7 @@ export function Devices({ requestClose }: DevicesProps) {
           <PageContent>
             <Box direction="Column" gap="700">
               <Box direction="Column" gap="100">
-                <Text size="L400">Security</Text>
+                <Text size="L400">{'\u5b89\u5168'}</Text>
                 <SequenceCard
                   className={SequenceCardStyle}
                   variant="SurfaceVariant"
@@ -93,8 +93,10 @@ export function Devices({ requestClose }: DevicesProps) {
                   gap="400"
                 >
                   <SettingTile
-                    title="Device Verification"
-                    description="To verify device identity and grant access to encrypted messages."
+                    title={'\u8bbe\u5907\u9a8c\u8bc1'}
+                    description={
+                      '\u7528\u4e8e\u9a8c\u8bc1\u8bbe\u5907\u8eab\u4efd\uff0c\u5e76\u6388\u4e88\u52a0\u5bc6\u6d88\u606f\u7684\u8bbf\u95ee\u6743\u9650\u3002'
+                    }
                     after={
                       <>
                         <EnableVerification visible={!crossSigningActive} />
@@ -113,7 +115,7 @@ export function Devices({ requestClose }: DevicesProps) {
                 </SequenceCard>
               </Box>
               <Box direction="Column" gap="100">
-                <Text size="L400">Current</Text>
+                <Text size="L400">{'\u5f53\u524d\u8bbe\u5907'}</Text>
                 {currentDevice ? (
                   <SequenceCard
                     className={SequenceCardStyle}

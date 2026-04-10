@@ -90,9 +90,9 @@ function ProfileAvatar({ profile, userId }: ProfileProps) {
   return (
     <SettingTile
       title={
-        <Text as="span" size="L400">
-          Avatar
-        </Text>
+          <Text as="span" size="L400">
+            {'\u5934\u50cf'}
+          </Text>
       }
       after={
         <Avatar size="500" radii="300">
@@ -123,7 +123,7 @@ function ProfileAvatar({ profile, userId }: ProfileProps) {
             radii="300"
             disabled={disableSetAvatar}
           >
-            <Text size="B300">Upload</Text>
+            <Text size="B300">{'\u4e0a\u4f20'}</Text>
           </Button>
           {avatarUrl && (
             <Button
@@ -134,7 +134,7 @@ function ProfileAvatar({ profile, userId }: ProfileProps) {
               disabled={disableSetAvatar}
               onClick={() => setAlertRemove(true)}
             >
-              <Text size="B300">Remove</Text>
+              <Text size="B300">{'\u79fb\u9664'}</Text>
             </Button>
           )}
         </Box>
@@ -183,7 +183,7 @@ function ProfileAvatar({ profile, userId }: ProfileProps) {
                 size="500"
               >
                 <Box grow="Yes">
-                  <Text size="H4">Remove Avatar</Text>
+                  <Text size="H4">{'\u79fb\u9664\u5934\u50cf'}</Text>
                 </Box>
                 <IconButton size="300" onClick={() => setAlertRemove(false)} radii="300">
                   <Icon src={Icons.Cross} />
@@ -191,10 +191,12 @@ function ProfileAvatar({ profile, userId }: ProfileProps) {
               </Header>
               <Box style={{ padding: config.space.S400 }} direction="Column" gap="400">
                 <Box direction="Column" gap="200">
-                  <Text priority="400">Are you sure you want to remove profile avatar?</Text>
+                  <Text priority="400">
+                    {'\u786e\u5b9a\u8981\u79fb\u9664\u5f53\u524d\u4e2a\u4eba\u5934\u50cf\u5417\uff1f'}
+                  </Text>
                 </Box>
                 <Button variant="Critical" onClick={handleRemoveAvatar}>
-                  <Text size="B400">Remove</Text>
+                  <Text size="B400">{'\u79fb\u9664'}</Text>
                 </Button>
               </Box>
             </Dialog>
@@ -248,7 +250,7 @@ function ProfileDisplayName({ profile, userId }: ProfileProps) {
     <SettingTile
       title={
         <Text as="span" size="L400">
-          Display Name
+          {'\u663e\u793a\u540d\u79f0'}
         </Text>
       }
     >
@@ -295,7 +297,7 @@ function ProfileDisplayName({ profile, userId }: ProfileProps) {
             type="submit"
           >
             {changingDisplayName && <Spinner variant="Success" fill="Solid" size="300" />}
-            <Text size="B400">Save</Text>
+            <Text size="B400">{'\u4fdd\u5b58'}</Text>
           </Button>
         </Box>
       </Box>
@@ -310,7 +312,7 @@ export function Profile() {
 
   return (
     <Box direction="Column" gap="100">
-      <Text size="L400">Profile</Text>
+      <Text size="L400">{'\u4e2a\u4eba\u8d44\u6599'}</Text>
       <SequenceCard
         className={SequenceCardStyle}
         variant="SurfaceVariant"

@@ -11,7 +11,7 @@ export function SearchTab() {
 
   return (
     <SidebarItem active={opened}>
-      <SidebarItemTooltip tooltip="Search">
+      <SidebarItemTooltip tooltip={'\u641c\u7d22'}>
         {(triggerRef) => (
           <SidebarAvatar as="button" ref={triggerRef} outlined onClick={open}>
             <Icon src={Icons.Search} filled={opened} />

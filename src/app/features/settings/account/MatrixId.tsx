@@ -12,7 +12,7 @@ export function MatrixId() {
 
   return (
     <Box direction="Column" gap="100">
-      <Text size="L400">Matrix ID</Text>
+      <Text size="L400">{'Matrix ID'}</Text>
       <SequenceCard
         className={SequenceCardStyle}
         variant="SurfaceVariant"
@@ -23,7 +23,7 @@ export function MatrixId() {
           title={userId}
           after={
             <Chip variant="Secondary" radii="Pill" onClick={() => copyToClipboard(userId)}>
-              <Text size="T200">Copy</Text>
+              <Text size="T200">{'\u590d\u5236'}</Text>
             </Chip>
           }
         />

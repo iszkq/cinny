@@ -111,7 +111,7 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
                   gap="400"
                 >
                   <SettingTile
-                    title="\u542f\u7528\u5f00\u53d1\u5de5\u5177"
+                title="启用开发工具"
                     after={
                       <Switch
                         variant="Primary"
@@ -129,7 +129,7 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
                     gap="400"
                   >
                     <SettingTile
-                      title="\u623f\u95f4 ID"
+                title="房间 ID"
                       description={`\u5c06\u623f\u95f4 ID \u590d\u5236\u5230\u526a\u8d34\u677f\u3002("${room.roomId}")`}
                       after={
                         <Button
@@ -159,8 +159,8 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
                     gap="400"
                   >
                     <SettingTile
-                      title="\u65b0\u6d88\u606f\u4e8b\u4ef6"
-                      description="\u5728\u5f53\u524d\u623f\u95f4\u4e2d\u521b\u5efa\u5e76\u53d1\u9001\u65b0\u6d88\u606f\u4e8b\u4ef6\u3002"
+                title="新消息事件"
+                description="在当前房间中创建并发送新的消息事件。"
                       after={
                         <Button
                           onClick={() => setComposeEvent({})}
@@ -182,8 +182,8 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
                     gap="400"
                   >
                     <SettingTile
-                      title="\u623f\u95f4\u72b6\u6001"
-                      description="\u67e5\u770b\u548c\u7f16\u8f91\u623f\u95f4\u7684\u72b6\u6001\u4e8b\u4ef6\u3002"
+                title="房间状态"
+                description="查看和编辑房间的状态事件。"
                       after={
                         <Button
                           onClick={() => setExpandState(!expandState)}
@@ -321,8 +321,8 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
                     gap="400"
                   >
                     <SettingTile
-                      title="\u8d26\u53f7\u6570\u636e"
-                      description="\u67e5\u770b\u548c\u7f16\u8f91\u5b58\u50a8\u5728\u623f\u95f4\u5185\u7684\u79c1\u6709\u8d26\u53f7\u6570\u636e\u3002"
+                title="账号数据"
+                description="查看和编辑存储在房间内的私有账号数据。"
                       after={
                         <Button
                           onClick={() => setExpandAccountData(!expandAccountData)}

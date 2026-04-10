@@ -82,9 +82,9 @@ export function AllMessagesNotifications() {
   return (
     <Box direction="Column" gap="100">
       <Box alignItems="Center" justifyContent="SpaceBetween" gap="200">
-        <Text size="L400">All Messages</Text>
+        <Text size="L400">{'\u6240\u6709\u6d88\u606f'}</Text>
         <Box gap="100">
-          <Text size="T200">Badge: </Text>
+          <Text size="T200">{'\u5fbd\u6807\uff1a'}</Text>
           <Badge radii="300" variant="Secondary" fill="Solid">
             <Text size="L400">1</Text>
           </Badge>
@@ -97,7 +97,7 @@ export function AllMessagesNotifications() {
         gap="400"
       >
         <SettingTile
-          title="1-to-1 Chats"
+          title={'\u4e00\u5bf9\u4e00\u804a\u5929'}
           after={<AllMessagesModeSwitcher pushRules={pushRules} ruleId={RuleId.DM} oneToOne />}
         />
       </SequenceCard>
@@ -108,7 +108,7 @@ export function AllMessagesNotifications() {
         gap="400"
       >
         <SettingTile
-          title="1-to-1 Chats (Encrypted)"
+          title={'\u4e00\u5bf9\u4e00\u804a\u5929\uff08\u52a0\u5bc6\uff09'}
           after={
             <AllMessagesModeSwitcher
               pushRules={pushRules}
@@ -126,7 +126,7 @@ export function AllMessagesNotifications() {
         gap="400"
       >
         <SettingTile
-          title="Rooms"
+          title={'\u623f\u95f4'}
           after={<AllMessagesModeSwitcher pushRules={pushRules} ruleId={RuleId.Message} />}
         />
       </SequenceCard>
@@ -137,7 +137,7 @@ export function AllMessagesNotifications() {
         gap="400"
       >
         <SettingTile
-          title="Rooms (Encrypted)"
+          title={'\u623f\u95f4\uff08\u52a0\u5bc6\uff09'}
           after={
             <AllMessagesModeSwitcher
               pushRules={pushRules}

@@ -182,7 +182,7 @@ export function Members({ requestClose }: MembersProps) {
                   before={<Icon size="200" src={Icons.Search} />}
                   variant="SurfaceVariant"
                   size="500"
-                  placeholder="\u641c\u7d22\u6210\u5458"
+                  placeholder="搜索成员"
                   outlined
                   after={
                     result && (
@@ -282,7 +282,7 @@ export function Members({ requestClose }: MembersProps) {
                   radii="Pill"
                   outlined
                   size="300"
-                  aria-label="\u56de\u5230\u9876\u90e8"
+                  aria-label="回到顶部"
                 >
                   <Icon src={Icons.ChevronTop} size="300" />
                 </IconButton>

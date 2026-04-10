@@ -143,7 +143,7 @@ export function Settings({ initialPage, requestClose }: SettingsProps) {
                   />
                 </Avatar>
                 <Text size="H4" truncate>
-                  \u8bbe\u7f6e
+                  设置
                 </Text>
               </Box>
               <Box shrink="No">
