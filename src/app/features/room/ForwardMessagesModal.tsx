@@ -204,7 +204,7 @@ export function ForwardMessagesModal({
           </Avatar>
           <Box grow="Yes" direction="Column" gap="50">
             <Text size="B300" truncate>
-              {queryHighlightRegex ? highlightText(roomName, queryHighlightRegex) : roomName}
+              {queryHighlightRegex ? highlightText(queryHighlightRegex, [roomName]) : roomName}
             </Text>
             <Text size="T200" priority="300" truncate>
               {direct ? CN.directLabel : CN.roomLabel}

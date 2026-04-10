@@ -57,42 +57,42 @@ const useSettingsMenuItems = (): SettingsMenuItem[] =>
     () => [
       {
         page: SettingsPages.GeneralPage,
-        name: 'General',
+        name: '\u5e38\u89c4',
         icon: Icons.Setting,
       },
       {
         page: SettingsPages.AccountPage,
-        name: 'Account',
+        name: '\u8d26\u53f7',
         icon: Icons.User,
       },
       {
         page: SettingsPages.NotificationPage,
-        name: 'Notifications',
+        name: '\u901a\u77e5',
         icon: Icons.Bell,
       },
       {
         page: SettingsPages.DevicesPage,
-        name: 'Devices',
+        name: '\u8bbe\u5907',
         icon: Icons.Monitor,
       },
       {
         page: SettingsPages.EmojisStickersPage,
-        name: 'Emojis & Stickers',
+        name: '\u8868\u60c5\u4e0e\u5206\u7c7b',
         icon: Icons.Smile,
       },
       {
         page: SettingsPages.AIPage,
-        name: 'AI Assistants',
+        name: 'AI \u52a9\u624b',
         icon: Icons.Terminal,
       },
       {
         page: SettingsPages.DeveloperToolsPage,
-        name: 'Developer Tools',
+        name: '\u5f00\u53d1\u5de5\u5177',
         icon: Icons.Terminal,
       },
       {
         page: SettingsPages.AboutPage,
-        name: 'About',
+        name: '\u5173\u4e8e',
         icon: Icons.Info,
       },
     ],
@@ -143,7 +143,7 @@ export function Settings({ initialPage, requestClose }: SettingsProps) {
                   />
                 </Avatar>
                 <Text size="H4" truncate>
-                  Settings
+                  \u8bbe\u7f6e
                 </Text>
               </Box>
               <Box shrink="No">
@@ -191,7 +191,7 @@ export function Settings({ initialPage, requestClose }: SettingsProps) {
                         before={<Icon src={Icons.Power} size="100" />}
                         onClick={() => setLogout(true)}
                       >
-                        <Text size="B400">Logout</Text>
+                        <Text size="B400">{'\u9000\u51fa\u767b\u5f55'}</Text>
                       </Button>
                       {logout && (
                         <Overlay open backdrop={<OverlayBackdrop />}>

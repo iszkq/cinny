@@ -290,7 +290,7 @@ export const ImagePackContent = as<'div', ImagePackContentProps>(
           </Menu>
         )}
         <Box direction="Column" gap="100">
-          <Text size="L400">Pack</Text>
+          <Text size="L400">{'\u5206\u7c7b'}</Text>
           <SequenceCard
             style={{ padding: config.space.S300 }}
             variant="SurfaceVariant"
@@ -298,7 +298,9 @@ export const ImagePackContent = as<'div', ImagePackContentProps>(
             gap="400"
           >
             <Text size="T200" priority="300">
-              Each pack acts like a separate emoji category or sticker category.
+              {
+                '\u6bcf\u4e00\u4e2a Pack \u90fd\u662f\u4e00\u4e2a\u72ec\u7acb\u7684\u8868\u60c5\u5206\u7c7b\uff0c\u4f60\u53ef\u4ee5\u4e3a\u5b83\u8bbe\u7f6e\u540d\u79f0\u3001\u7528\u9014\u548c\u8868\u60c5\u5185\u5bb9\u3002'
+              }
             </Text>
             {metaEditing ? (
               <ImagePackProfileEdit
@@ -321,8 +323,10 @@ export const ImagePackContent = as<'div', ImagePackContentProps>(
             gap="400"
           >
             <SettingTile
-              title="Images Usage"
-              description="Select how the images are being used: as emojis, as stickers, or as both."
+              title={'\u5206\u7c7b\u7528\u9014'}
+              description={
+                '\u9009\u62e9\u8fd9\u4e2a\u5206\u7c7b\u662f\u4f5c\u4e3a\u8868\u60c5\uff0c\u8d34\u7eb8\uff0c\u8fd8\u662f\u4e24\u8005\u90fd\u53ef\u7528\u3002'
+              }
               after={
                 <UsageSwitcher
                   usage={currentMeta.usage}
@@ -335,7 +339,7 @@ export const ImagePackContent = as<'div', ImagePackContentProps>(
         </Box>
         {images.length === 0 && !canEdit ? null : (
           <Box direction="Column" gap="100">
-            <Text size="L400">Images</Text>
+            <Text size="L400">{'\u8868\u60c5\u5185\u5bb9'}</Text>
             {canEdit && (
               <SequenceCard
                 style={{ padding: config.space.S300 }}
@@ -344,8 +348,10 @@ export const ImagePackContent = as<'div', ImagePackContentProps>(
                 gap="400"
               >
                 <SettingTile
-                  title="Upload Images"
-                  description="Select one or more images from your storage to upload them into this category."
+                  title={'\u5bfc\u5165\u8868\u60c5'}
+                  description={
+                    '\u4ece\u672c\u5730\u9009\u62e9\u4e00\u5f20\u6216\u591a\u5f20\u56fe\u7247\uff0c\u5bfc\u5165\u5230\u5f53\u524d\u5206\u7c7b\u4e2d\u3002'
+                  }
                   after={
                     <Button
                       variant="Secondary"
@@ -356,7 +362,7 @@ export const ImagePackContent = as<'div', ImagePackContentProps>(
                       outlined
                       onClick={() => pickFiles('image/*')}
                     >
-                      <Text size="B300">Select</Text>
+                      <Text size="B300">{'\u9009\u62e9\u56fe\u7247'}</Text>
                     </Button>
                   }
                 />

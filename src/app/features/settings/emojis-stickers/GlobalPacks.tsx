@@ -107,7 +107,7 @@ function GlobalPackSelector({
       <Header size="400" variant="Surface" style={{ padding: `0 ${config.space.S300}` }}>
         <Box grow="Yes">
           <Text size="L400" truncate>
-            Room Packs
+            {'\u623f\u95f4\u5206\u7c7b'}
           </Text>
         </Box>
         <Box shrink="No">
@@ -117,7 +117,7 @@ function GlobalPackSelector({
             outlined={hasSelected}
             onClick={() => onSelect(selected)}
           >
-            <Text size="B300">{hasSelected ? 'Save' : 'Close'}</Text>
+            <Text size="B300">{hasSelected ? '\u4fdd\u5b58' : '\u5173\u95ed'}</Text>
           </Chip>
         </Box>
       </Header>
@@ -162,7 +162,9 @@ function GlobalPackSelector({
                           addSelected(roomPackAddresses);
                         }}
                       >
-                        <Text size="B300">{allSelected ? 'Unselect All' : 'Select All'}</Text>
+                        <Text size="B300">
+                          {allSelected ? '\u53d6\u6d88\u5168\u9009' : '\u5168\u9009'}
+                        </Text>
                       </Chip>
                     </Box>
                   </Box>
@@ -184,7 +186,7 @@ function GlobalPackSelector({
                         gap="400"
                       >
                         <SettingTile
-                          title={pack.meta.name ?? 'Unknown'}
+                          title={pack.meta.name ?? '\u672a\u547d\u540d\u5206\u7c7b'}
                           description={<span className={LineClamp2}>{pack.meta.attribution}</span>}
                           before={
                             <Box alignItems="Center" gap="300">
@@ -232,10 +234,12 @@ function GlobalPackSelector({
                   }}
                 >
                   <Text size="H5" align="Center">
-                    No Packs
+                    {'\u6682\u65e0\u5206\u7c7b'}
                   </Text>
                   <Text size="T200" align="Center">
-                    Pack from rooms will appear here. You do not have any room with packs yet.
+                    {
+                      '\u623f\u95f4\u4e2d\u7684\u8868\u60c5\u5206\u7c7b\u4f1a\u663e\u793a\u5728\u8fd9\u91cc\uff0c\u76ee\u524d\u8fd8\u6ca1\u6709\u53ef\u9009\u7684\u5206\u7c7b\u3002'
+                    }
                   </Text>
                 </Box>
               </SequenceCard>
@@ -360,7 +364,7 @@ export function GlobalPacks({ onViewPack }: GlobalPacksProps) {
         <SettingTile
           title={
             <span style={{ textDecoration: removed ? 'line-through' : undefined }}>
-              {pack.meta.name ?? 'Unknown'}
+              {pack.meta.name ?? '未命名分类'}
             </span>
           }
           description={<span className={LineClamp2}>{pack.meta.attribution}</span>}
@@ -408,7 +412,7 @@ export function GlobalPacks({ onViewPack }: GlobalPacksProps) {
                 outlined
                 onClick={() => onViewPack(pack)}
               >
-                <Text size="B300">View</Text>
+                <Text size="B300">{'\u67e5\u770b\u5206\u7c7b'}</Text>
               </Button>
             )
           }
@@ -420,7 +424,7 @@ export function GlobalPacks({ onViewPack }: GlobalPacksProps) {
   return (
     <>
       <Box direction="Column" gap="100">
-        <Text size="L400">Favorite Packs</Text>
+        <Text size="L400">{'\u623f\u95f4/\u6536\u85cf\u5206\u7c7b'}</Text>
         <SequenceCard
           className={SequenceCardStyle}
           variant="SurfaceVariant"
@@ -428,8 +432,10 @@ export function GlobalPacks({ onViewPack }: GlobalPacksProps) {
           gap="400"
         >
           <SettingTile
-            title="Select Pack"
-            description="Pick emojis and stickers pack from rooms to use in all rooms."
+            title={'\u6dfb\u52a0\u5206\u7c7b'}
+            description={
+              '\u4ece\u623f\u95f4\u4e2d\u9009\u62e9\u4e0d\u540c\u7684\u8868\u60c5\u5206\u7c7b\uff0c\u52a0\u5165\u4f60\u7684\u5168\u5c40\u4f7f\u7528\u5217\u8868\u3002'
+            }
             after={
               <>
                 <Button
@@ -440,7 +446,7 @@ export function GlobalPacks({ onViewPack }: GlobalPacksProps) {
                   radii="300"
                   outlined
                 >
-                  <Text size="B300">Select</Text>
+                  <Text size="B300">{'\u9009\u62e9'}</Text>
                 </Button>
                 <PopOut
                   anchor={menuCords}
@@ -502,11 +508,11 @@ export function GlobalPacks({ onViewPack }: GlobalPacksProps) {
             <Box grow="Yes" direction="Column">
               {applyState.status === AsyncStatus.Error ? (
                 <Text size="T200">
-                  <b>Failed to apply changes! Please try again.</b>
+                  <b>{'\u5206\u7c7b\u53d8\u66f4\u4fdd\u5b58\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5\u3002'}</b>
                 </Text>
               ) : (
                 <Text size="T200">
-                  <b>Changes saved! Apply when ready.</b>
+                  <b>{'\u5206\u7c7b\u53d8\u66f4\u5df2\u6682\u5b58\uff0c\u53ef\u4ee5\u7ee7\u7eed\u5e94\u7528\u3002'}</b>
                 </Text>
               )}
             </Box>
@@ -519,7 +525,7 @@ export function GlobalPacks({ onViewPack }: GlobalPacksProps) {
                 disabled={applyingChanges}
                 onClick={resetChanges}
               >
-                <Text size="B300">Reset</Text>
+                <Text size="B300">{'\u91cd\u7f6e'}</Text>
               </Button>
               <Button
                 size="300"
@@ -529,7 +535,7 @@ export function GlobalPacks({ onViewPack }: GlobalPacksProps) {
                 before={applyingChanges && <Spinner variant="Success" fill="Solid" size="100" />}
                 onClick={applyChanges}
               >
-                <Text size="B300">Apply Changes</Text>
+                <Text size="B300">{'\u5e94\u7528\u53d8\u66f4'}</Text>
               </Button>
             </Box>
           </Box>

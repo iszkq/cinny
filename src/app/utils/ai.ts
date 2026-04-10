@@ -6,8 +6,8 @@ import { MessageEvent } from '../../types/matrix/room';
 import { getMxIdLocalPart } from './matrix';
 
 type OpenAIModelsResponse = {
-  data?: Array<Record<string, unknown>>;
-  models?: Array<Record<string, unknown>>;
+  data?: unknown;
+  models?: unknown;
 };
 
 type OpenAIChatResponse = {
@@ -27,39 +27,101 @@ const uniqById = (models: AIModel[]): AIModel[] => {
   });
 };
 
-export const fetchAihubmixModels = async (modelsApiUrl: string): Promise<AIModel[]> => {
-  const response = await fetch(modelsApiUrl);
+const getStringValue = (...values: unknown[]): string | undefined => {
+  for (const value of values) {
+    if (typeof value === 'string') {
+      const trimmedValue = value.trim();
+      if (trimmedValue) return trimmedValue;
+    }
+  }
+  return undefined;
+};
+
+const getNumberValue = (...values: unknown[]): number | undefined => {
+  for (const value of values) {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+
+    if (typeof value === 'string') {
+      const parsedValue = Number(value);
+      if (Number.isFinite(parsedValue)) return parsedValue;
+    }
+  }
+  return undefined;
+};
+
+const flattenModelPayload = (payload: unknown): Array<Record<string, unknown> | string> => {
+  if (Array.isArray(payload)) {
+    return payload.flatMap((item) => flattenModelPayload(item));
+  }
+
+  if (typeof payload === 'string') {
+    return [payload];
+  }
+
+  if (payload && typeof payload === 'object') {
+    const record = payload as Record<string, unknown>;
+
+    if (
+      typeof record.id === 'string' ||
+      typeof record.model_id === 'string' ||
+      typeof record.model === 'string'
+    ) {
+      return [record];
+    }
+
+    return Object.values(record).flatMap((value) => flattenModelPayload(value));
+  }
+
+  return [];
+};
+
+const toAIModel = (item: Record<string, unknown> | string): AIModel | undefined => {
+  if (typeof item === 'string') {
+    return {
+      id: item,
+      name: item,
+    };
+  }
+
+  const id = getStringValue(item.id, item.model_id, item.model, item.name);
+  if (!id) return undefined;
+
+  return {
+    id,
+    name:
+      getStringValue(item.name, item.display_name, item.model_name, item.model_id, item.model) ??
+      id,
+    description: getStringValue(item.description, item.desc, item.summary),
+    contextWindow: getNumberValue(
+      item.context_length,
+      item.max_context_tokens,
+      item.max_input_tokens,
+      item.context_window
+    ),
+  };
+};
+
+export const fetchAihubmixModels = async (
+  modelsApiUrl: string,
+  apiKey?: string
+): Promise<AIModel[]> => {
+  const trimmedApiKey = apiKey?.trim();
+  const response = await fetch(modelsApiUrl, {
+    headers: {
+      Accept: 'application/json',
+      ...(trimmedApiKey ? { Authorization: `Bearer ${trimmedApiKey}` } : {}),
+    },
+  });
   if (!response.ok) {
     throw new Error(`Failed to fetch models: ${response.status}`);
   }
 
   const data = (await response.json()) as OpenAIModelsResponse;
-  const rawModels = Array.isArray(data.data)
-    ? data.data
-    : Array.isArray(data.models)
-      ? data.models
-      : [];
+  const rawModels = flattenModelPayload(data.data ?? data.models ?? data);
 
   return uniqById(
     rawModels
-      .map((item) => {
-        const id = typeof item.id === 'string' ? item.id : undefined;
-        if (!id) return undefined;
-
-        const contextLength =
-          typeof item.context_length === 'number'
-            ? item.context_length
-            : typeof item.max_context_tokens === 'number'
-              ? item.max_context_tokens
-              : undefined;
-
-        return {
-          id,
-          name: typeof item.name === 'string' ? item.name : id,
-          description: typeof item.description === 'string' ? item.description : undefined,
-          contextWindow: contextLength,
-        } satisfies AIModel;
-      })
+      .map((item) => toAIModel(item))
       .filter((item): item is AIModel => !!item)
   );
 };

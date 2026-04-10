@@ -54,6 +54,9 @@ const buildDefaultCommand = (name: string): string => normalizeCommand(name) || 
 const removeSkill = (skills: AISkill[], id: string): AISkill[] =>
   skills.filter((skill) => skill.id !== id);
 
+const DEFAULT_BASE_URL = 'https://aihubmix.com/v1';
+const DEFAULT_MODELS_API_URL = 'https://aihubmix.com/api/v1/models?type=llm';
+
 export function AI({ requestClose }: AIProps) {
   const [settings, setSettings] = useAtom(aiSettingsAtom);
   const [skillName, setSkillName] = useState('');
@@ -63,9 +66,13 @@ export function AI({ requestClose }: AIProps) {
     '\u4f60\u662f\u4e00\u4e2a\u9ad8\u6548\u7684\u4e2d\u6587 Matrix \u6587\u79d8\uff0c\u8981\u5e2e\u7528\u6237\u68b3\u7406\u804a\u5929\u3001\u603b\u7ed3\u91cd\u70b9\u3001\u7edf\u8ba1\u6d3b\u8dc3\u60c5\u51b5\uff0c\u5e76\u7ed9\u51fa\u6e05\u6670\u3001\u53ef\u6267\u884c\u7684\u7ed3\u8bba\u3002'
   );
   const [statusText, setStatusText] = useState<string>();
+  const [apiKeyInput, setApiKeyInput] = useState(settings.apiKey);
+  const [baseUrlInput, setBaseUrlInput] = useState(settings.baseUrl);
+  const [modelsUrlInput, setModelsUrlInput] = useState(settings.modelsApiUrl);
 
   const [modelsState, loadModels] = useAsyncCallback(
-    async (modelsApiUrl: string): Promise<AIModel[]> => fetchAihubmixModels(modelsApiUrl)
+    async (modelsApiUrl: string, apiKey: string): Promise<AIModel[]> =>
+      fetchAihubmixModels(modelsApiUrl, apiKey)
   );
 
   const sortedModels = useMemo(
@@ -75,31 +82,41 @@ export function AI({ requestClose }: AIProps) {
 
   const handleSaveBaseConfig: FormEventHandler<HTMLFormElement> = (evt) => {
     evt.preventDefault();
-    const form = evt.target as HTMLFormElement;
-    const nextApiKey = (form.apiKey as HTMLInputElement).value.trim();
-    const nextBaseUrl = (form.baseUrl as HTMLInputElement).value.trim();
-    const nextModelsUrl = (form.modelsUrl as HTMLInputElement).value.trim();
+    const nextApiKey = apiKeyInput.trim();
+    const nextBaseUrl = baseUrlInput.trim() || DEFAULT_BASE_URL;
+    const nextModelsUrl = modelsUrlInput.trim() || DEFAULT_MODELS_API_URL;
 
     setSettings({
       ...settings,
       apiKey: nextApiKey,
-      baseUrl: nextBaseUrl || settings.baseUrl,
-      modelsApiUrl: nextModelsUrl || settings.modelsApiUrl,
+      baseUrl: nextBaseUrl,
+      modelsApiUrl: nextModelsUrl,
     });
     setStatusText('\u57fa\u7840 AI \u914d\u7f6e\u5df2\u4fdd\u5b58');
   };
 
   const handleFetchModels = () => {
-    loadModels(settings.modelsApiUrl)
+    const nextApiKey = apiKeyInput.trim();
+    const nextBaseUrl = baseUrlInput.trim() || DEFAULT_BASE_URL;
+    const nextModelsUrl = modelsUrlInput.trim() || DEFAULT_MODELS_API_URL;
+
+    loadModels(nextModelsUrl, nextApiKey)
       .then((models) => {
         setSettings({
           ...settings,
+          apiKey: nextApiKey,
+          baseUrl: nextBaseUrl,
+          modelsApiUrl: nextModelsUrl,
           models,
         });
         if (!skillModel && models[0]) {
           setSkillModel(models[0].id);
         }
-        setStatusText(`\u5df2\u540c\u6b65 ${models.length} \u4e2a\u6a21\u578b`);
+        setStatusText(
+          models.length > 0
+            ? `\u5df2\u540c\u6b65 ${models.length} \u4e2a\u6a21\u578b`
+            : '\u63a5\u53e3\u8fd4\u56de 0 \u4e2a\u6a21\u578b\uff0c\u8bf7\u68c0\u67e5 URL \u6216 API Key \u662f\u5426\u6b63\u786e'
+        );
       })
       .catch((error) => {
         setStatusText(error instanceof Error ? error.message : 'Failed to fetch models.');
@@ -168,21 +185,24 @@ export function AI({ requestClose }: AIProps) {
                   <Box as="form" direction="Column" gap="300" onSubmit={handleSaveBaseConfig}>
                     <Input
                       name="apiKey"
-                      defaultValue={settings.apiKey}
+                      value={apiKeyInput}
+                      onChange={(evt) => setApiKeyInput(evt.currentTarget.value)}
                       placeholder={CN.apiKey}
                       variant="Background"
                       outlined
                     />
                     <Input
                       name="baseUrl"
-                      defaultValue={settings.baseUrl}
+                      value={baseUrlInput}
+                      onChange={(evt) => setBaseUrlInput(evt.currentTarget.value)}
                       placeholder={CN.apiBaseUrl}
                       variant="Background"
                       outlined
                     />
                     <Input
                       name="modelsUrl"
-                      defaultValue={settings.modelsApiUrl}
+                      value={modelsUrlInput}
+                      onChange={(evt) => setModelsUrlInput(evt.currentTarget.value)}
                       placeholder={CN.modelsApiUrl}
                       variant="Background"
                       outlined
