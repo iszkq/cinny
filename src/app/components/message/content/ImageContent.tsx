@@ -226,6 +226,12 @@ export const ImageContent = as<'div', ImageContentProps>(
                   <Modal
                     className={ModalWide}
                     size="500"
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      minHeight: '92vh',
+                      maxHeight: '92vh',
+                    }}
                     onContextMenu={(evt: any) => evt.stopPropagation()}
                   >
                     {activeViewerSrc ? (
