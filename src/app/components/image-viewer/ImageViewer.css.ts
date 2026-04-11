@@ -5,6 +5,7 @@ export const ImageViewer = style([
   DefaultReset,
   {
     height: '100%',
+    minHeight: 0,
   },
 ]);
 
@@ -25,12 +26,14 @@ export const ImageViewerContent = style([
     backgroundColor: color.Background.Container,
     color: color.Background.OnContainer,
     overflow: 'hidden',
+    minHeight: 0,
   },
 ]);
 
 export const ImageViewerImg = style([
   DefaultReset,
   {
+    display: 'block',
     objectFit: 'contain',
     width: 'auto',
     height: 'auto',
