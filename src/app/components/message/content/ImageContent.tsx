@@ -1,4 +1,4 @@
-import React, { ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+import React, { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Badge,
   Box,
@@ -59,6 +59,23 @@ type RenderImageProps = {
   onClick: () => void;
   tabIndex: number;
 };
+
+type ViewerMediaState =
+  | {
+      status: AsyncStatus.Idle | AsyncStatus.Loading;
+      itemId?: string;
+    }
+  | {
+      status: AsyncStatus.Success;
+      itemId: string;
+      src: string;
+    }
+  | {
+      status: AsyncStatus.Error;
+      itemId: string;
+      error: unknown;
+    };
+
 export type ImageContentProps = {
   body: string;
   mimeType?: string;
@@ -73,6 +90,13 @@ export type ImageContentProps = {
   renderViewer: (props: RenderViewerProps) => ReactNode;
   renderImage: (props: RenderImageProps) => ReactNode;
 };
+
+const revokeBlobUrl = (src?: string) => {
+  if (src?.startsWith('blob:')) {
+    URL.revokeObjectURL(src);
+  }
+};
+
 export const ImageContent = as<'div', ImageContentProps>(
   (
     {
@@ -101,18 +125,32 @@ export const ImageContent = as<'div', ImageContentProps>(
     const [error, setError] = useState(false);
     const [viewer, setViewer] = useState(false);
     const [blurred, setBlurred] = useState(markedAsSpoiler ?? false);
+    const [viewerLoadNonce, setViewerLoadNonce] = useState(0);
+    const [viewerMediaState, setViewerMediaState] = useState<ViewerMediaState>({
+      status: AsyncStatus.Idle,
+    });
     const viewerTrapRef = useRef<HTMLDivElement>(null);
-    const baseViewerItem = {
-      id: viewerItemId ?? url,
-      body,
-      mimeType,
-      url,
-      encInfo,
-    };
-    const galleryItems =
-      viewerItems && viewerItems.length > 0
-        ? viewerItems
-        : [baseViewerItem];
+    const viewerCacheRef = useRef<Map<string, string>>(new Map());
+
+    const baseViewerItem = useMemo<ViewerImageItem>(
+      () => ({
+        id: viewerItemId ?? url,
+        body,
+        mimeType,
+        url,
+        encInfo,
+      }),
+      [body, encInfo, mimeType, url, viewerItemId]
+    );
+
+    const galleryItems = useMemo(() => {
+      const nextItems = viewerItems ? [...viewerItems] : [];
+      if (!nextItems.some((item) => item.id === baseViewerItem.id)) {
+        nextItems.push(baseViewerItem);
+      }
+      return nextItems.length > 0 ? nextItems : [baseViewerItem];
+    }, [baseViewerItem, viewerItems]);
+
     const initialViewerIndex = Math.max(
       galleryItems.findIndex((item) => item.id === baseViewerItem.id),
       0
@@ -120,7 +158,11 @@ export const ImageContent = as<'div', ImageContentProps>(
     const [viewerIndex, setViewerIndex] = useState(initialViewerIndex);
 
     const loadMediaSrc = useCallback(
-      async (targetUrl: string, targetMimeType?: string, targetEncInfo?: EncryptedAttachmentInfo) => {
+      async (
+        targetUrl: string,
+        targetMimeType?: string,
+        targetEncInfo?: EncryptedAttachmentInfo
+      ) => {
         const mediaUrl = mxcUrlToHttp(mx, targetUrl, useAuthentication);
         if (!mediaUrl) throw new Error('Invalid media URL');
         if (targetEncInfo) {
@@ -135,27 +177,15 @@ export const ImageContent = as<'div', ImageContentProps>(
     );
 
     const [srcState, loadSrc] = useAsyncCallback(
-      useCallback(async () => {
-        return loadMediaSrc(url, mimeType, encInfo);
-      }, [encInfo, loadMediaSrc, mimeType, url])
+      useCallback(async () => loadMediaSrc(url, mimeType, encInfo), [encInfo, loadMediaSrc, mimeType, url])
     );
 
     const currentViewerItem = galleryItems[viewerIndex] ?? baseViewerItem;
-    const [viewerSrcState, loadViewerSrc] = useAsyncCallback(
-      useCallback(
-        async () =>
-          loadMediaSrc(
-            currentViewerItem.url,
-            currentViewerItem.mimeType,
-            currentViewerItem.encInfo
-          ),
-        [currentViewerItem.encInfo, currentViewerItem.mimeType, currentViewerItem.url, loadMediaSrc]
-      )
-    );
 
     const handleLoad = () => {
       setLoad(true);
     };
+
     const handleError = () => {
       setLoad(false);
       setError(true);
@@ -163,11 +193,12 @@ export const ImageContent = as<'div', ImageContentProps>(
 
     const handleRetry = () => {
       setError(false);
-      loadSrc();
+      void loadSrc().catch(() => undefined);
     };
 
     useEffect(() => {
-      if (autoPlay) loadSrc();
+      if (!autoPlay) return;
+      void loadSrc().catch(() => undefined);
     }, [autoPlay, loadSrc]);
 
     useEffect(() => {
@@ -175,24 +206,82 @@ export const ImageContent = as<'div', ImageContentProps>(
     }, [initialViewerIndex]);
 
     useEffect(() => {
-      if (!viewer) return;
-      if (currentViewerItem.id === baseViewerItem.id && srcState.status === AsyncStatus.Success) {
+      if (!viewer) {
+        setViewerMediaState({ status: AsyncStatus.Idle });
         return;
       }
-      loadViewerSrc();
-    }, [
-      baseViewerItem.id,
-      currentViewerItem.id,
-      loadViewerSrc,
-      srcState.status,
-      viewer,
-    ]);
+
+      if (currentViewerItem.id === baseViewerItem.id && srcState.status === AsyncStatus.Success) {
+        setViewerMediaState({
+          status: AsyncStatus.Success,
+          itemId: currentViewerItem.id,
+          src: srcState.data,
+        });
+        return;
+      }
+
+      const cachedViewerSrc = viewerCacheRef.current.get(currentViewerItem.id);
+      if (cachedViewerSrc) {
+        setViewerMediaState({
+          status: AsyncStatus.Success,
+          itemId: currentViewerItem.id,
+          src: cachedViewerSrc,
+        });
+        return;
+      }
+
+      let disposed = false;
+      setViewerMediaState({
+        status: AsyncStatus.Loading,
+        itemId: currentViewerItem.id,
+      });
+
+      loadMediaSrc(
+        currentViewerItem.url,
+        currentViewerItem.mimeType,
+        currentViewerItem.encInfo
+      )
+        .then((loadedSrc) => {
+          if (disposed) {
+            revokeBlobUrl(loadedSrc);
+            return;
+          }
+
+          viewerCacheRef.current.set(currentViewerItem.id, loadedSrc);
+          setViewerMediaState({
+            status: AsyncStatus.Success,
+            itemId: currentViewerItem.id,
+            src: loadedSrc,
+          });
+        })
+        .catch((viewerError) => {
+          if (disposed) return;
+          setViewerMediaState({
+            status: AsyncStatus.Error,
+            itemId: currentViewerItem.id,
+            error: viewerError,
+          });
+        });
+
+      return () => {
+        disposed = true;
+      };
+    }, [baseViewerItem.id, currentViewerItem, loadMediaSrc, srcState, viewer, viewerLoadNonce]);
+
+    useEffect(
+      () => () => {
+        viewerCacheRef.current.forEach((cachedSrc) => revokeBlobUrl(cachedSrc));
+        viewerCacheRef.current.clear();
+      },
+      []
+    );
 
     const activeViewerSrc =
       currentViewerItem.id === baseViewerItem.id && srcState.status === AsyncStatus.Success
         ? srcState.data
-        : viewerSrcState.status === AsyncStatus.Success
-          ? viewerSrcState.data
+        : viewerMediaState.status === AsyncStatus.Success &&
+            viewerMediaState.itemId === currentViewerItem.id
+          ? viewerMediaState.src
           : undefined;
 
     const openViewer = () => {
@@ -203,6 +292,7 @@ export const ImageContent = as<'div', ImageContentProps>(
     const closeViewer = () => {
       setViewer(false);
       setViewerIndex(initialViewerIndex);
+      setViewerMediaState({ status: AsyncStatus.Idle });
     };
 
     const canPrev = viewerIndex > 0;
@@ -229,10 +319,18 @@ export const ImageContent = as<'div', ImageContentProps>(
                     style={{
                       display: 'flex',
                       flexDirection: 'column',
-                      minHeight: '92vh',
-                      maxHeight: '92vh',
+                      width: 'min(96vw, 1320px)',
+                      minWidth: 'min(96vw, 1320px)',
+                      height: 'min(92vh, 920px)',
+                      minHeight: 'min(92vh, 920px)',
+                      maxHeight: 'min(92vh, 920px)',
+                      padding: 0,
+                      background: 'transparent',
+                      boxShadow: 'none',
+                      border: 'none',
+                      overflow: 'hidden',
                     }}
-                    onContextMenu={(evt: any) => evt.stopPropagation()}
+                    onContextMenu={(evt: React.MouseEvent) => evt.stopPropagation()}
                   >
                     {activeViewerSrc ? (
                       renderViewer({
@@ -248,9 +346,22 @@ export const ImageContent = as<'div', ImageContentProps>(
                       <Box
                         alignItems="Center"
                         justifyContent="Center"
+                        direction="Column"
+                        gap="300"
                         style={{ minHeight: '70vh' }}
                       >
                         <Spinner variant="Secondary" />
+                        {viewerMediaState.status === AsyncStatus.Error && (
+                          <Button
+                            size="300"
+                            variant="Secondary"
+                            fill="Soft"
+                            radii="300"
+                            onClick={() => setViewerLoadNonce((value) => value + 1)}
+                          >
+                            <Text size="B300">重新加载</Text>
+                          </Button>
+                        )}
                       </Box>
                     )}
                   </Modal>
@@ -259,6 +370,7 @@ export const ImageContent = as<'div', ImageContentProps>(
             </OverlayCenter>
           </Overlay>
         )}
+
         {typeof blurHash === 'string' && !load && (
           <BlurhashCanvas
             style={{ width: '100%', height: '100%' }}
@@ -268,6 +380,7 @@ export const ImageContent = as<'div', ImageContentProps>(
             punch={1}
           />
         )}
+
         {!autoPlay && !markedAsSpoiler && srcState.status === AsyncStatus.Idle && (
           <Box className={css.AbsoluteContainer} alignItems="Center" justifyContent="Center">
             <Button
@@ -275,13 +388,14 @@ export const ImageContent = as<'div', ImageContentProps>(
               fill="Solid"
               radii="300"
               size="300"
-              onClick={loadSrc}
+              onClick={() => void loadSrc().catch(() => undefined)}
               before={<Icon size="Inherit" src={Icons.Photo} filled />}
             >
               <Text size="B300">查看</Text>
             </Button>
           </Box>
         )}
+
         {srcState.status === AsyncStatus.Success && (
           <Box className={classNames(css.AbsoluteContainer, blurred && css.Blur)}>
             {renderImage({
@@ -295,6 +409,7 @@ export const ImageContent = as<'div', ImageContentProps>(
             })}
           </Box>
         )}
+
         {blurred && !error && srcState.status !== AsyncStatus.Error && (
           <Box className={css.AbsoluteContainer} alignItems="Center" justifyContent="Center">
             <TooltipProvider
@@ -318,7 +433,7 @@ export const ImageContent = as<'div', ImageContentProps>(
                   onClick={() => {
                     setBlurred(false);
                     if (srcState.status === AsyncStatus.Idle) {
-                      loadSrc();
+                      void loadSrc().catch(() => undefined);
                     }
                   }}
                 >
@@ -328,6 +443,7 @@ export const ImageContent = as<'div', ImageContentProps>(
             </TooltipProvider>
           </Box>
         )}
+
         {(srcState.status === AsyncStatus.Loading || srcState.status === AsyncStatus.Success) &&
           !load &&
           !blurred && (
@@ -335,6 +451,7 @@ export const ImageContent = as<'div', ImageContentProps>(
               <Spinner variant="Secondary" />
             </Box>
           )}
+
         {(error || srcState.status === AsyncStatus.Error) && (
           <Box className={css.AbsoluteContainer} alignItems="Center" justifyContent="Center">
             <TooltipProvider
@@ -363,6 +480,7 @@ export const ImageContent = as<'div', ImageContentProps>(
             </TooltipProvider>
           </Box>
         )}
+
         {!load && typeof info?.size === 'number' && (
           <Box className={css.AbsoluteFooter} justifyContent="End" alignContent="Center" gap="200">
             <Badge variant="Secondary" fill="Soft">
