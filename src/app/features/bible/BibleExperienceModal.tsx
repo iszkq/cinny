@@ -110,7 +110,6 @@ const CN = {
   selected: '已选',
   verses: '节',
   copySelected: '复制已选',
-  copyPage: '复制本页',
   insert: '插入聊天框',
   reset: '清空选择',
   browseTitle: '卷章浏览',
@@ -186,7 +185,12 @@ const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\
 const isPrevChapterKey = (evt: KeyboardEvent): boolean =>
   evt.key === '-' || evt.key === '_' || evt.code === 'Minus' || evt.code === 'NumpadSubtract';
 const isNextChapterKey = (evt: KeyboardEvent): boolean =>
-  evt.key === '+' || evt.code === 'NumpadAdd' || (evt.code === 'Equal' && evt.shiftKey);
+  evt.key === '+' ||
+  evt.key === '=' ||
+  evt.key === '＋' ||
+  evt.key === 'Add' ||
+  evt.code === 'NumpadAdd' ||
+  evt.code === 'Equal';
 
 const getHighlightPattern = (keywords: string[]): RegExp | undefined => {
   const parts = Array.from(
@@ -492,10 +496,6 @@ export function BibleExperienceModal({
     () => selectedVerses.map((verse) => formatBibleVerse(verse)).join('\n'),
     [selectedVerses]
   );
-  const pageText = useMemo(
-    () => pageVerses.map((verse) => formatBibleVerse(verse)).join('\n'),
-    [pageVerses]
-  );
   const previewText = useMemo(() => {
     if (selectedVerses.length === 0) return '暂未选择经文，可直接点击下方经文开始多选。';
     const preview = selectedVerses
@@ -600,11 +600,6 @@ export function BibleExperienceModal({
   const handleCopySelected = () => {
     if (!selectedText) return;
     copyToClipboard(selectedText);
-  };
-
-  const handleCopyPage = () => {
-    if (!pageText) return;
-    copyToClipboard(pageText);
   };
 
   const handleInsert = () => {
@@ -1039,7 +1034,7 @@ export function BibleExperienceModal({
                           </Text>
                         </Box>
 
-                        <Box wrap="Wrap" gap="180" alignItems="Start" justifyContent="SpaceBetween">
+                        <Box wrap="Wrap" gap="120" alignItems="End" justifyContent="SpaceBetween">
                           <Box wrap="Wrap" gap="100" alignItems="Center">
                             <BiblePillButton
                               onClick={() => changeChapter(-1)}
@@ -1063,60 +1058,46 @@ export function BibleExperienceModal({
                             )}
                           </Box>
 
-                          <Box
-                            shrink="No"
-                            direction="Column"
-                            gap="140"
-                            alignItems="End"
-                            style={{ minWidth: toRem(280) }}
-                          >
-                            <Box direction="Column" gap="80" style={{ alignItems: 'flex-end' }}>
-                              <Text size="T300" priority="300">
-                                字体大小
-                              </Text>
-                              <Box wrap="Wrap" gap="100" style={SEGMENT_STYLE}>
-                                <BiblePillButton
-                                  onClick={() =>
-                                    setFontSize((size) =>
-                                      clamp(size - FONT_SIZE_STEP, FONT_SIZE_MIN, FONT_SIZE_MAX)
-                                    )
-                                  }
-                                  disabled={fontSize <= FONT_SIZE_MIN}
-                                >
-                                  {CN.fontSmaller}
-                                </BiblePillButton>
-                                <BiblePillButton
-                                  active={fontSize === 17}
-                                  onClick={() => setFontSize(17)}
-                                >
-                                  {CN.fontReset}
-                                </BiblePillButton>
-                                <BiblePillButton
-                                  onClick={() =>
-                                    setFontSize((size) =>
-                                      clamp(size + FONT_SIZE_STEP, FONT_SIZE_MIN, FONT_SIZE_MAX)
-                                    )
-                                  }
-                                  disabled={fontSize >= FONT_SIZE_MAX}
-                                >
-                                  {CN.fontLarger}
-                                </BiblePillButton>
-                              </Box>
-                            </Box>
-
-                            <Box wrap="Wrap" gap="100" justifyContent="End">
-                              {isSearchMode && (
-                                <BiblePillButton
-                                  onClick={() => {
-                                    setSearchInput('');
-                                    setCurrentPage(1);
-                                  }}
-                                >
-                                  {CN.backToChapter}
-                                </BiblePillButton>
-                              )}
-                              <BiblePillButton onClick={handleCopyPage} disabled={!pageText}>
-                                {CN.copyPage}
+                          <Box shrink="No" wrap="Wrap" gap="100" alignItems="Center" justifyContent="End">
+                            {isSearchMode && (
+                              <BiblePillButton
+                                onClick={() => {
+                                  setSearchInput('');
+                                  setCurrentPage(1);
+                                }}
+                              >
+                                {CN.backToChapter}
+                              </BiblePillButton>
+                            )}
+                            <Text size="T300" priority="300">
+                              字体大小
+                            </Text>
+                            <Box wrap="Wrap" gap="100" style={SEGMENT_STYLE}>
+                              <BiblePillButton
+                                onClick={() =>
+                                  setFontSize((size) =>
+                                    clamp(size - FONT_SIZE_STEP, FONT_SIZE_MIN, FONT_SIZE_MAX)
+                                  )
+                                }
+                                disabled={fontSize <= FONT_SIZE_MIN}
+                              >
+                                {CN.fontSmaller}
+                              </BiblePillButton>
+                              <BiblePillButton
+                                active={fontSize === 17}
+                                onClick={() => setFontSize(17)}
+                              >
+                                {CN.fontReset}
+                              </BiblePillButton>
+                              <BiblePillButton
+                                onClick={() =>
+                                  setFontSize((size) =>
+                                    clamp(size + FONT_SIZE_STEP, FONT_SIZE_MIN, FONT_SIZE_MAX)
+                                  )
+                                }
+                                disabled={fontSize >= FONT_SIZE_MAX}
+                              >
+                                {CN.fontLarger}
                               </BiblePillButton>
                             </Box>
                           </Box>
