@@ -183,6 +183,10 @@ const clamp = (value: number, min: number, max: number): number =>
   Math.min(Math.max(value, min), max);
 
 const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const isPrevChapterKey = (evt: KeyboardEvent): boolean =>
+  evt.key === '-' || evt.key === '_' || evt.code === 'Minus' || evt.code === 'NumpadSubtract';
+const isNextChapterKey = (evt: KeyboardEvent): boolean =>
+  evt.key === '+' || evt.code === 'NumpadAdd' || (evt.code === 'Equal' && evt.shiftKey);
 
 const getHighlightPattern = (keywords: string[]): RegExp | undefined => {
   const parts = Array.from(
@@ -645,6 +649,14 @@ export function BibleExperienceModal({
 
       if (editable) return;
 
+      const wantsPrevChapter = isPrevChapterKey(evt);
+      const wantsNextChapter = isNextChapterKey(evt);
+
+      if ((wantsPrevChapter || wantsNextChapter) && evt.repeat) {
+        evt.preventDefault();
+        return;
+      }
+
       if (evt.key === 'ArrowDown') {
         evt.preventDefault();
         verseScrollRef.current?.scrollBy({ top: fontSize * 5.5, behavior: 'smooth' });
@@ -669,15 +681,19 @@ export function BibleExperienceModal({
         return;
       }
 
-      if (evt.key === '-' && canGoPrevChapter) {
+      if (wantsPrevChapter) {
         evt.preventDefault();
-        changeChapter(-1);
+        if (canGoPrevChapter) {
+          changeChapter(-1);
+        }
         return;
       }
 
-      if ((evt.key === '+' || evt.key === '=') && canGoNextChapter) {
+      if (wantsNextChapter) {
         evt.preventDefault();
-        changeChapter(1);
+        if (canGoNextChapter) {
+          changeChapter(1);
+        }
       }
     };
 
@@ -717,9 +733,9 @@ export function BibleExperienceModal({
             <Header
               variant="Surface"
               size="500"
-              style={{ padding: `${toRem(22)} ${toRem(24)} ${toRem(26)}`, borderBottom: SOFT_LINE }}
+              style={{ padding: `${toRem(28)} ${toRem(28)} ${toRem(32)}`, borderBottom: SOFT_LINE }}
             >
-              <Box grow="Yes" direction="Column" gap="150" style={{ paddingBlock: toRem(4) }}>
+              <Box grow="Yes" direction="Column" gap="200" style={{ paddingBlock: toRem(8) }}>
                 <Text size="H4">{CN.title}</Text>
                 <Text size="T300" priority="300" style={{ lineHeight: 1.85 }}>
                   {headerHint}
@@ -750,64 +766,29 @@ export function BibleExperienceModal({
                     <SequenceCard
                       variant="SurfaceVariant"
                       direction="Column"
-                      gap="300"
-                      style={{ ...CARD_STYLE, padding: toRem(28) }}
+                      gap="220"
+                      style={{ ...CARD_STYLE, padding: `${toRem(22)} ${toRem(24)}` }}
                     >
-                      <Box direction="Column" gap="280">
-                        <Box wrap="Wrap" gap="300" alignItems="Start" justifyContent="SpaceBetween">
+                      <Box direction="Column" gap="220">
+                        <Box wrap="Wrap" gap="220" alignItems="Start" justifyContent="SpaceBetween">
                           <Box
                             grow="Yes"
                             direction="Column"
-                            gap="150"
-                            style={{ minWidth: 0, paddingBlock: `${toRem(8)} ${toRem(6)}` }}
+                            gap="120"
+                            style={{ minWidth: 0, paddingBlock: `${toRem(4)} ${toRem(2)}` }}
                           >
                             <Text size="H4">{CN.title}</Text>
                             <Text
                               size="T300"
                               priority="300"
-                              style={{ lineHeight: 1.85, color: TEXT_MAIN, paddingBlockEnd: toRem(2) }}
+                              style={{ lineHeight: 1.78, color: TEXT_MAIN }}
                             >
                               {CN.intro}
                             </Text>
                           </Box>
-                          <Box shrink="No" direction="Column" gap="100" style={{ minWidth: toRem(200) }}>
-                            <Box wrap="Wrap" gap="100" alignItems="Center" justifyContent="End">
-                              <BiblePillButton onClick={() => setToolbarCollapsed((state) => !state)}>
-                                {toolbarCollapsed ? CN.expandToolbar : CN.collapseToolbar}
-                              </BiblePillButton>
-                            </Box>
-                            <Text size="T300" priority="300">
-                              字体大小
-                            </Text>
-                            <Box wrap="Wrap" gap="100" style={SEGMENT_STYLE}>
-                              <BiblePillButton
-                                onClick={() =>
-                                  setFontSize((size) =>
-                                    clamp(size - FONT_SIZE_STEP, FONT_SIZE_MIN, FONT_SIZE_MAX)
-                                  )
-                                }
-                                disabled={fontSize <= FONT_SIZE_MIN}
-                              >
-                                {CN.fontSmaller}
-                              </BiblePillButton>
-                              <BiblePillButton
-                                active={fontSize === 17}
-                                onClick={() => setFontSize(17)}
-                              >
-                                {CN.fontReset}
-                              </BiblePillButton>
-                              <BiblePillButton
-                                onClick={() =>
-                                  setFontSize((size) =>
-                                    clamp(size + FONT_SIZE_STEP, FONT_SIZE_MIN, FONT_SIZE_MAX)
-                                  )
-                                }
-                                disabled={fontSize >= FONT_SIZE_MAX}
-                              >
-                                {CN.fontLarger}
-                              </BiblePillButton>
-                            </Box>
-                          </Box>
+                          <BiblePillButton onClick={() => setToolbarCollapsed((state) => !state)}>
+                            {toolbarCollapsed ? CN.expandToolbar : CN.collapseToolbar}
+                          </BiblePillButton>
                         </Box>
 
                         {toolbarCollapsed ? (
@@ -960,47 +941,28 @@ export function BibleExperienceModal({
                       </Box>
                     </SequenceCard>
 
-                    <SequenceCard
-                      variant="SurfaceVariant"
-                      direction="Column"
-                      gap="250"
-                      style={{ ...CARD_STYLE, padding: toRem(28) }}
-                    >
-                      <Box direction="Column" gap="250">
+                    {!browserCollapsed && (
+                      <SequenceCard
+                        variant="SurfaceVariant"
+                        direction="Column"
+                        gap="220"
+                        style={{ ...CARD_STYLE, padding: `${toRem(22)} ${toRem(24)}` }}
+                      >
                         <Box direction="Column" gap="200">
-                          <Box wrap="Wrap" gap="250" alignItems="Start" justifyContent="SpaceBetween">
+                          <Box wrap="Wrap" gap="220" alignItems="Start" justifyContent="SpaceBetween">
                             <Box grow="Yes" direction="Column" gap="100" style={{ minWidth: 0 }}>
                               <Text size="L400">
                                 <b>{CN.browseTitle}</b>
                               </Text>
                               <Text size="T300" priority="300" style={{ lineHeight: 1.75 }}>
-                                {browserCollapsed
-                                  ? `${CN.currentLocation}：${selectedBook.name} 第 ${selectedChapter} 章`
-                                  : CN.browseHelp}
+                                {CN.browseHelp}
                               </Text>
                             </Box>
-                            <BiblePillButton onClick={() => setBrowserCollapsed((state) => !state)}>
-                              {browserCollapsed ? CN.expand : CN.collapse}
+                            <BiblePillButton onClick={() => setBrowserCollapsed(true)}>
+                              {CN.collapse}
                             </BiblePillButton>
                           </Box>
 
-                          <Box wrap="Wrap" gap="100">
-                            <BiblePillButton
-                              onClick={() => changeChapter(-1)}
-                              disabled={!canGoPrevChapter}
-                            >
-                              {CN.prevChapter}
-                            </BiblePillButton>
-                            <BiblePillButton
-                              onClick={() => changeChapter(1)}
-                              disabled={!canGoNextChapter}
-                            >
-                              {CN.nextChapter}
-                            </BiblePillButton>
-                          </Box>
-                        </Box>
-
-                        {!browserCollapsed && (
                           <Box direction="Column" gap="200" style={PANEL_STYLE}>
                             <Box wrap="Wrap" gap="100" style={SEGMENT_STYLE}>
                               <BiblePillButton
@@ -1069,9 +1031,9 @@ export function BibleExperienceModal({
                               </Box>
                             </Box>
                           </Box>
-                        )}
-                      </Box>
-                    </SequenceCard>
+                        </Box>
+                      </SequenceCard>
+                    )}
 
                     <SequenceCard
                       variant="SurfaceVariant"
@@ -1079,7 +1041,7 @@ export function BibleExperienceModal({
                       gap="0"
                       style={{ ...CARD_STYLE, padding: 0, overflow: 'hidden' }}
                     >
-                      <Box direction="Column" gap="200" style={{ padding: `${toRem(24)} ${toRem(28)}` }}>
+                      <Box direction="Column" gap="220" style={{ padding: `${toRem(24)} ${toRem(28)}` }}>
                         <Box wrap="Wrap" gap="250" alignItems="Start" justifyContent="SpaceBetween">
                           <Box grow="Yes" direction="Column" gap="100" style={{ minWidth: 0 }}>
                             <Text size="H3">{sectionTitle}</Text>
@@ -1094,20 +1056,76 @@ export function BibleExperienceModal({
                           </Text>
                         </Box>
 
-                        <Box wrap="Wrap" gap="100" justifyContent="End">
-                          {isSearchMode && (
+                        <Box wrap="Wrap" gap="140" alignItems="Center" justifyContent="SpaceBetween">
+                          <Box wrap="Wrap" gap="100" alignItems="Center">
                             <BiblePillButton
-                              onClick={() => {
-                                setSearchInput('');
-                                setCurrentPage(1);
-                              }}
+                              onClick={() => changeChapter(-1)}
+                              disabled={!canGoPrevChapter}
                             >
-                              {CN.backToChapter}
+                              {CN.prevChapter}
                             </BiblePillButton>
-                          )}
-                          <BiblePillButton onClick={handleCopyPage} disabled={!pageText}>
-                            {CN.copyPage}
-                          </BiblePillButton>
+                            <BiblePillButton
+                              onClick={() => changeChapter(1)}
+                              disabled={!canGoNextChapter}
+                            >
+                              {CN.nextChapter}
+                            </BiblePillButton>
+                            <BiblePillButton onClick={() => setBrowserCollapsed((state) => !state)}>
+                              {browserCollapsed ? CN.expand : CN.collapse}
+                            </BiblePillButton>
+                          </Box>
+
+                          <Box wrap="Wrap" gap="120" alignItems="Center" justifyContent="End">
+                            <Box direction="Column" gap="80">
+                              <Text size="T300" priority="300">
+                                字体大小
+                              </Text>
+                              <Box wrap="Wrap" gap="100" style={SEGMENT_STYLE}>
+                                <BiblePillButton
+                                  onClick={() =>
+                                    setFontSize((size) =>
+                                      clamp(size - FONT_SIZE_STEP, FONT_SIZE_MIN, FONT_SIZE_MAX)
+                                    )
+                                  }
+                                  disabled={fontSize <= FONT_SIZE_MIN}
+                                >
+                                  {CN.fontSmaller}
+                                </BiblePillButton>
+                                <BiblePillButton
+                                  active={fontSize === 17}
+                                  onClick={() => setFontSize(17)}
+                                >
+                                  {CN.fontReset}
+                                </BiblePillButton>
+                                <BiblePillButton
+                                  onClick={() =>
+                                    setFontSize((size) =>
+                                      clamp(size + FONT_SIZE_STEP, FONT_SIZE_MIN, FONT_SIZE_MAX)
+                                    )
+                                  }
+                                  disabled={fontSize >= FONT_SIZE_MAX}
+                                >
+                                  {CN.fontLarger}
+                                </BiblePillButton>
+                              </Box>
+                            </Box>
+
+                            <Box wrap="Wrap" gap="100" justifyContent="End">
+                              {isSearchMode && (
+                                <BiblePillButton
+                                  onClick={() => {
+                                    setSearchInput('');
+                                    setCurrentPage(1);
+                                  }}
+                                >
+                                  {CN.backToChapter}
+                                </BiblePillButton>
+                              )}
+                              <BiblePillButton onClick={handleCopyPage} disabled={!pageText}>
+                                {CN.copyPage}
+                              </BiblePillButton>
+                            </Box>
+                          </Box>
                         </Box>
                       </Box>
 
