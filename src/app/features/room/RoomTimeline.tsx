@@ -596,12 +596,16 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     eventId ? getEmptyTimeline() : getInitialTimeline(room)
   );
   const eventsLength = getTimelinesEventsCount(timeline.linkedTimelines);
-  const imageViewerItems = useMemo(
-    () => getTimelineImageViewerItems(timeline.linkedTimelines),
-    [timeline]
-  );
+  const liveTimeline = getLiveTimeline(room);
   const liveTimelineLinked =
-    timeline.linkedTimelines[timeline.linkedTimelines.length - 1] === getLiveTimeline(room);
+    timeline.linkedTimelines[timeline.linkedTimelines.length - 1] === liveTimeline;
+  const imageViewerItems = useMemo(
+    () =>
+      getTimelineImageViewerItems(
+        liveTimelineLinked ? getLinkedTimelines(liveTimeline) : timeline.linkedTimelines
+      ),
+    [liveTimeline, liveTimelineLinked, timeline]
+  );
   const canPaginateBack =
     typeof timeline.linkedTimelines[0]?.getPaginationToken(Direction.Backward) === 'string';
   const rangeAtStart = timeline.range.start === 0;
