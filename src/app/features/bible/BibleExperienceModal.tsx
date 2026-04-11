@@ -801,6 +801,12 @@ export function BibleExperienceModal({
                                 setSearchInput(evt.currentTarget.value);
                                 setCurrentPage(1);
                               }}
+                              onKeyDown={(evt) => {
+                                if (evt.key !== 'Enter') return;
+                                if (!browserCollapsed) {
+                                  setBrowserCollapsed(true);
+                                }
+                              }}
                               placeholder={CN.searchPlaceholder}
                               variant="Background"
                               outlined
