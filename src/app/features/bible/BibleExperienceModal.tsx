@@ -155,11 +155,13 @@ type BibleExperienceModalProps = {
 type VerseRowProps = {
   verse: BibleVerse;
   selected: boolean;
+  focused: boolean;
   fontSize: number;
   onToggle: (verse: BibleVerse) => void;
   onCopy: (verse: BibleVerse) => void;
   onJump?: (verse: BibleVerse) => void;
   highlightPattern?: RegExp;
+  rowRef?: (node: HTMLButtonElement | null) => void;
 };
 
 type BiblePillButtonProps = Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'style'> & {
@@ -304,16 +306,19 @@ function BiblePillButton({
 function VerseRow({
   verse,
   selected,
+  focused,
   fontSize,
   onToggle,
   onCopy,
   onJump,
   highlightPattern,
+  rowRef,
 }: VerseRowProps) {
   return (
     <Box
       as="button"
       type="button"
+      ref={rowRef}
       onClick={() => onToggle(verse)}
       direction="Column"
       gap="250"
@@ -321,14 +326,22 @@ function VerseRow({
         width: '100%',
         border: 'none',
         borderBottom: SOFT_LINE,
-        background: selected ? 'rgba(219, 234, 254, 0.72)' : 'transparent',
-        borderInlineStart: selected
+        background: focused
+          ? 'rgba(219, 234, 254, 0.92)'
+          : selected
+          ? 'rgba(219, 234, 254, 0.72)'
+          : 'transparent',
+        borderInlineStart: focused
+          ? '3px solid rgba(59, 130, 246, 0.88)'
+          : selected
           ? '2px solid rgba(59, 130, 246, 0.68)'
           : '2px solid transparent',
         padding: `${toRem(18)} ${toRem(28)} ${toRem(20)} ${toRem(34)}`,
         textAlign: 'left',
         cursor: 'pointer',
-        transition: 'background-color 120ms ease, border-color 120ms ease',
+        boxShadow: focused ? '0 14px 32px rgba(59, 130, 246, 0.12)' : 'none',
+        scrollMarginBlock: toRem(28),
+        transition: 'background-color 120ms ease, border-color 120ms ease, box-shadow 180ms ease',
       }}
     >
       <Box gap="300" alignItems="Start" wrap="Wrap">
@@ -394,11 +407,14 @@ export function BibleExperienceModal({
   const [toolbarCollapsed, setToolbarCollapsed] = useState(false);
   const [browserCollapsed, setBrowserCollapsed] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
+  const [focusedVerseKey, setFocusedVerseKey] = useState<string>();
+  const [pendingFocusVerseKey, setPendingFocusVerseKey] = useState<string>();
   const [currentPage, setCurrentPage] = useState(1);
   const [fontSize, setFontSize] = useState(17);
   const [pageJumpOpen, setPageJumpOpen] = useState<'start-ellipsis' | 'end-ellipsis'>();
   const [pageJumpValue, setPageJumpValue] = useState('');
   const verseScrollRef = useRef<HTMLDivElement>(null);
+  const verseRowRefMap = useRef<Record<string, HTMLButtonElement | null>>({});
 
   useEffect(() => {
     let mounted = true;
@@ -504,6 +520,31 @@ export function BibleExperienceModal({
     scrollToTop(verseScrollRef);
   }, [currentPage, selectedBook?.name, selectedChapter, isSearchMode]);
 
+  useEffect(() => {
+    if (!pendingFocusVerseKey) return;
+    if (!pageVerses.some((verse) => verse.key === pendingFocusVerseKey)) return;
+
+    const node = verseRowRefMap.current[pendingFocusVerseKey];
+    if (!node) return;
+
+    if (typeof node.focus === 'function') {
+      node.focus({ preventScroll: true });
+    }
+    node.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    setFocusedVerseKey(pendingFocusVerseKey);
+    setPendingFocusVerseKey(undefined);
+  }, [pageVerses, pendingFocusVerseKey]);
+
+  useEffect(() => {
+    if (!focusedVerseKey) return;
+
+    const timerId = window.setTimeout(() => {
+      setFocusedVerseKey((current) => (current === focusedVerseKey ? undefined : current));
+    }, 2400);
+
+    return () => window.clearTimeout(timerId);
+  }, [focusedVerseKey]);
+
   const openBook = (book: BibleBook) => {
     setSelectedBookName(book.name);
     setActiveTestament(book.testament === CN.new ? 'new' : 'old');
@@ -546,6 +587,9 @@ export function BibleExperienceModal({
     const targetChapterVerses = getChapterVerses(data, verse.book, verse.chapter);
     const verseIndex = targetChapterVerses.findIndex((item) => item.key === verse.key);
     const page = verseIndex >= 0 ? Math.floor(verseIndex / PAGE_SIZE) + 1 : 1;
+    setSelectedKeys((current) => (current.includes(verse.key) ? current : current.concat(verse.key)));
+    setPendingFocusVerseKey(verse.key);
+    setFocusedVerseKey(verse.key);
     openChapter(verse.book, verse.chapter, page, true);
   };
 
@@ -1084,11 +1128,15 @@ export function BibleExperienceModal({
                             key={verse.key}
                             verse={verse}
                             selected={selectedSet.has(verse.key)}
+                            focused={focusedVerseKey === verse.key}
                             fontSize={fontSize}
                             onToggle={handleToggleVerse}
                             onCopy={(targetVerse) => copyToClipboard(formatBibleVerse(targetVerse))}
                             onJump={isSearchMode ? handleJumpToVerse : undefined}
                             highlightPattern={isSearchMode ? highlightPattern : undefined}
+                            rowRef={(node) => {
+                              verseRowRefMap.current[verse.key] = node;
+                            }}
                           />
                         ))}
                       </div>
