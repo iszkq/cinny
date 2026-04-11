@@ -32,6 +32,7 @@ import React, {
 } from 'react';
 import FocusTrap from 'focus-trap-react';
 import { useHover, useFocusWithin } from 'react-aria';
+import { EncryptedAttachmentInfo } from 'browser-encrypt-attachment';
 import { EventType, MatrixEvent, MsgType, Room } from 'matrix-js-sdk';
 import { Relations } from 'matrix-js-sdk/lib/models/relations';
 import classNames from 'classnames';
@@ -54,6 +55,9 @@ import {
   trimReplyFromBody,
 } from '../../../utils/room';
 import {
+  decryptFile,
+  downloadEncryptedMedia,
+  downloadMedia,
   getCanonicalAliasOrRoomId,
   getMxIdLocalPart,
   isRoomAlias,
@@ -81,6 +85,7 @@ import { PowerIcon } from '../../../components/power';
 import colorMXID from '../../../../util/colorMXID';
 import { getPowerTagIconSrc } from '../../../hooks/useMemberPowerTag';
 import { ForwardableMessage } from '../forwardMessages';
+import { FALLBACK_MIMETYPE, IMAGE_MIME_TYPES } from '../../../utils/mimeTypes';
 
 export type ReactionHandler = (keyOrMxc: string, shortcode: string) => void;
 
@@ -106,6 +111,49 @@ const getMessageCopyText = (mEvent: MatrixEvent): string | undefined => {
   if (msgType === MsgType.Location) return '[位置]';
 
   return undefined;
+};
+
+type MessageMediaCopySource = {
+  url: string;
+  mimeType?: string;
+  encInfo?: EncryptedAttachmentInfo;
+};
+
+const getMessageMediaCopySource = (mEvent: MatrixEvent): MessageMediaCopySource | undefined => {
+  if (mEvent.isRedacted()) return undefined;
+
+  const content = mEvent.getContent();
+  const sourceUrl = typeof content.file?.url === 'string' ? content.file.url : content.url;
+  const mimeType =
+    typeof content.info?.mimetype === 'string' ? content.info.mimetype : undefined;
+
+  if (typeof sourceUrl !== 'string') return undefined;
+
+  if (mEvent.getType() === EventType.Sticker) {
+    return {
+      url: sourceUrl,
+      mimeType,
+      encInfo: content.file,
+    };
+  }
+
+  if (mEvent.getType() !== EventType.RoomMessage || content.msgtype !== MsgType.Image) {
+    return undefined;
+  }
+
+  return {
+    url: sourceUrl,
+    mimeType,
+    encInfo: content.file,
+  };
+};
+
+const getClipboardImageMimeType = (mimeType?: string, blobType?: string): string | undefined => {
+  const candidates = [mimeType, blobType]
+    .filter((value): value is string => typeof value === 'string' && value.length > 0)
+    .map((value) => value.split(';')[0].trim().toLowerCase());
+
+  return candidates.find((value) => IMAGE_MIME_TYPES.includes(value));
 };
 
 type MessageQuickReactionsProps = {
@@ -382,7 +430,51 @@ export const MessageCopyTextItem = as<
     onClose?: () => void;
   }
 >(({ mEvent, onClose, ...props }, ref) => {
-  const handleCopy = () => {
+  const mx = useMatrixClient();
+  const useAuthentication = useMediaAuthentication();
+
+  const handleCopy = async () => {
+    const mediaSource = getMessageMediaCopySource(mEvent);
+
+    if (
+      mediaSource &&
+      navigator.clipboard?.write &&
+      typeof ClipboardItem !== 'undefined'
+    ) {
+      try {
+        const mediaUrl = mxcUrlToHttp(mx, mediaSource.url, useAuthentication);
+        if (mediaUrl) {
+          const mediaBlob = mediaSource.encInfo
+            ? await downloadEncryptedMedia(mediaUrl, (encBuf) =>
+                decryptFile(
+                  encBuf,
+                  mediaSource.mimeType ?? FALLBACK_MIMETYPE,
+                  mediaSource.encInfo as EncryptedAttachmentInfo
+                )
+              )
+            : await downloadMedia(mediaUrl);
+
+          const imageMimeType = getClipboardImageMimeType(mediaSource.mimeType, mediaBlob.type);
+          if (imageMimeType) {
+            const clipboardBlob =
+              mediaBlob.type === imageMimeType
+                ? mediaBlob
+                : new Blob([mediaBlob], { type: imageMimeType });
+
+            await navigator.clipboard.write([
+              new ClipboardItem({
+                [imageMimeType]: clipboardBlob,
+              }),
+            ]);
+            onClose?.();
+            return;
+          }
+        }
+      } catch {
+        // fall back to text copy when binary clipboard write is unavailable
+      }
+    }
+
     const text = getMessageCopyText(mEvent);
     if (!text) return;
     copyToClipboard(text);
