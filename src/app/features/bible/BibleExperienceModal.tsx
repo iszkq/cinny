@@ -117,8 +117,8 @@ const CN = {
   browseHelp: '先选卷名，再选章节；选中章节后浏览区会自动收起。',
   expand: '展开卷章',
   collapse: '收起卷章',
-  expandToolbar: '展开工具栏',
-  collapseToolbar: '收起工具栏',
+  expandToolbar: '展开搜索',
+  collapseToolbar: '收起搜索',
   chapterTitle: '章节',
   prevChapter: '上一章 (-)',
   nextChapter: '下一章 (+)',
@@ -699,7 +699,17 @@ export function BibleExperienceModal({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [canGoNextChapter, canGoPrevChapter, currentPage, fontSize, selectedText, totalPages]);
+  }, [
+    canGoNextChapter,
+    canGoPrevChapter,
+    currentPage,
+    fontSize,
+    selectedBook?.chapterCount,
+    selectedBook?.name,
+    selectedChapter,
+    selectedText,
+    totalPages,
+  ]);
 
   if (!open) return null;
 
@@ -709,9 +719,6 @@ export function BibleExperienceModal({
   const sectionDescription = isSearchMode
     ? `共找到 ${activeVerses.length} 节匹配经文，当前范围：${scopeLabel}。${CN.searchHintSuffix}`
     : `本章共 ${chapterVerses.length} 节，支持多选复制，并可通过底部分页继续浏览。`;
-  const toolbarSummary = isSearchMode
-    ? `关键词：${searchResult.keywords.join(' ')} · 范围：${scopeLabel} · 已选 ${selectedVerses.length} 节`
-    : `当前浏览：${selectedBook.name} 第 ${selectedChapter} 章 · 范围：${scopeLabel} · 已选 ${selectedVerses.length} 节`;
   const headerHint = `${CN.keyboardHint} ${CN.selectionHelp}`;
 
   return (
@@ -763,59 +770,35 @@ export function BibleExperienceModal({
               {!loading && !error && data && selectedBook && (
                 <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: `${toRem(18)} ${toRem(20)}` }}>
                   <Box direction="Column" gap="300">
-                    <SequenceCard
-                      variant="SurfaceVariant"
-                      direction="Column"
-                      gap="220"
-                      style={{ ...CARD_STYLE, padding: `${toRem(22)} ${toRem(24)}` }}
-                    >
-                      <Box direction="Column" gap="220">
-                        <Box wrap="Wrap" gap="220" alignItems="Start" justifyContent="SpaceBetween">
-                          <Box
-                            grow="Yes"
-                            direction="Column"
-                            gap="120"
-                            style={{ minWidth: 0, paddingBlock: `${toRem(4)} ${toRem(2)}` }}
-                          >
-                            <Text size="H4">{CN.title}</Text>
-                            <Text
-                              size="T300"
-                              priority="300"
-                              style={{ lineHeight: 1.78, color: TEXT_MAIN }}
+                    {!toolbarCollapsed && (
+                      <SequenceCard
+                        variant="SurfaceVariant"
+                        direction="Column"
+                        gap="220"
+                        style={{ ...CARD_STYLE, padding: `${toRem(22)} ${toRem(24)}` }}
+                      >
+                        <Box direction="Column" gap="220">
+                          <Box wrap="Wrap" gap="220" alignItems="Start" justifyContent="SpaceBetween">
+                            <Box
+                              grow="Yes"
+                              direction="Column"
+                              gap="120"
+                              style={{ minWidth: 0, paddingBlock: `${toRem(4)} ${toRem(2)}` }}
                             >
-                              {CN.intro}
-                            </Text>
+                              <Text size="H4">{CN.title}</Text>
+                              <Text
+                                size="T300"
+                                priority="300"
+                                style={{ lineHeight: 1.78, color: TEXT_MAIN }}
+                              >
+                                {CN.intro}
+                              </Text>
+                            </Box>
+                            <BiblePillButton onClick={() => setToolbarCollapsed(true)}>
+                              {CN.collapseToolbar}
+                            </BiblePillButton>
                           </Box>
-                          <BiblePillButton onClick={() => setToolbarCollapsed((state) => !state)}>
-                            {toolbarCollapsed ? CN.expandToolbar : CN.collapseToolbar}
-                          </BiblePillButton>
-                        </Box>
 
-                        {toolbarCollapsed ? (
-                          <Box
-                            direction="Column"
-                            gap="100"
-                            style={{
-                              ...PANEL_STYLE,
-                              gap: toRem(10),
-                              padding: toRem(18),
-                            }}
-                          >
-                            <Text size="T300" style={{ color: TEXT_MAIN }}>
-                              <b>工具栏已收起</b>
-                            </Text>
-                            <Text
-                              size="T300"
-                              priority="300"
-                              style={{
-                                lineHeight: 1.7,
-                                color: TEXT_MAIN,
-                              }}
-                            >
-                              {toolbarSummary}
-                            </Text>
-                          </Box>
-                        ) : (
                           <Box direction="Column" gap="250" style={PANEL_STYLE}>
                             <Input
                               value={searchInput}
@@ -937,9 +920,9 @@ export function BibleExperienceModal({
                               </Text>
                             </Box>
                           </Box>
-                        )}
-                      </Box>
-                    </SequenceCard>
+                        </Box>
+                      </SequenceCard>
+                    )}
 
                     {!browserCollapsed && (
                       <SequenceCard
@@ -1056,7 +1039,7 @@ export function BibleExperienceModal({
                           </Text>
                         </Box>
 
-                        <Box wrap="Wrap" gap="140" alignItems="Center" justifyContent="SpaceBetween">
+                        <Box wrap="Wrap" gap="180" alignItems="Start" justifyContent="SpaceBetween">
                           <Box wrap="Wrap" gap="100" alignItems="Center">
                             <BiblePillButton
                               onClick={() => changeChapter(-1)}
@@ -1073,10 +1056,21 @@ export function BibleExperienceModal({
                             <BiblePillButton onClick={() => setBrowserCollapsed((state) => !state)}>
                               {browserCollapsed ? CN.expand : CN.collapse}
                             </BiblePillButton>
+                            {toolbarCollapsed && (
+                              <BiblePillButton onClick={() => setToolbarCollapsed(false)}>
+                                {CN.expandToolbar}
+                              </BiblePillButton>
+                            )}
                           </Box>
 
-                          <Box wrap="Wrap" gap="120" alignItems="Center" justifyContent="End">
-                            <Box direction="Column" gap="80">
+                          <Box
+                            shrink="No"
+                            direction="Column"
+                            gap="140"
+                            alignItems="End"
+                            style={{ minWidth: toRem(280) }}
+                          >
+                            <Box direction="Column" gap="80" style={{ alignItems: 'flex-end' }}>
                               <Text size="T300" priority="300">
                                 字体大小
                               </Text>
