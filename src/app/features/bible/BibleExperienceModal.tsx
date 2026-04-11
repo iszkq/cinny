@@ -117,6 +117,8 @@ const CN = {
   browseHelp: '先选卷名，再选章节；选中章节后浏览区会自动收起。',
   expand: '展开卷章',
   collapse: '收起卷章',
+  expandToolbar: '展开工具栏',
+  collapseToolbar: '收起工具栏',
   chapterTitle: '章节',
   prevChapter: '上一章 (-)',
   nextChapter: '下一章 (+)',
@@ -389,6 +391,7 @@ export function BibleExperienceModal({
   const [scopeMode, setScopeMode] = useState<BibleSearchScopeMode>('all');
   const [customScopeBooks, setCustomScopeBooks] = useState<string[]>([]);
   const [activeTestament, setActiveTestament] = useState<TestamentTab>('old');
+  const [toolbarCollapsed, setToolbarCollapsed] = useState(false);
   const [browserCollapsed, setBrowserCollapsed] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
@@ -646,6 +649,9 @@ export function BibleExperienceModal({
   const sectionDescription = isSearchMode
     ? `共找到 ${activeVerses.length} 节匹配经文，当前范围：${scopeLabel}。${CN.searchHintSuffix}`
     : `本章共 ${chapterVerses.length} 节，支持多选复制，并可通过底部分页继续浏览。`;
+  const toolbarSummary = isSearchMode
+    ? `关键词：${searchResult.keywords.join(' ')} · 范围：${scopeLabel} · 已选 ${selectedVerses.length} 节`
+    : `当前浏览：${selectedBook.name} 第 ${selectedChapter} 章 · 范围：${scopeLabel} · 已选 ${selectedVerses.length} 节`;
 
   return (
     <Overlay open backdrop={<OverlayBackdrop onClick={requestClose} />}>
@@ -702,7 +708,7 @@ export function BibleExperienceModal({
                       gap="300"
                       style={{ ...CARD_STYLE, padding: toRem(28) }}
                     >
-                      <Box direction="Column" gap="300">
+                      <Box direction="Column" gap="240">
                         <Box wrap="Wrap" gap="300" alignItems="Start" justifyContent="SpaceBetween">
                           <Box grow="Yes" direction="Column" gap="100" style={{ minWidth: 0 }}>
                             <Text size="H4">{CN.title}</Text>
@@ -710,7 +716,12 @@ export function BibleExperienceModal({
                               {CN.intro}
                             </Text>
                           </Box>
-                          <Box shrink="No" direction="Column" gap="100" style={{ minWidth: toRem(180) }}>
+                          <Box shrink="No" direction="Column" gap="100" style={{ minWidth: toRem(200) }}>
+                            <Box wrap="Wrap" gap="100" alignItems="Center" justifyContent="End">
+                              <BiblePillButton onClick={() => setToolbarCollapsed((state) => !state)}>
+                                {toolbarCollapsed ? CN.expandToolbar : CN.collapseToolbar}
+                              </BiblePillButton>
+                            </Box>
                             <Text size="T300" priority="300">
                               字体大小
                             </Text>
@@ -745,127 +756,153 @@ export function BibleExperienceModal({
                           </Box>
                         </Box>
 
-                        <Box direction="Column" gap="250" style={PANEL_STYLE}>
-                          <Input
-                            value={searchInput}
-                            onChange={(evt) => {
-                              setSearchInput(evt.currentTarget.value);
-                              setCurrentPage(1);
-                            }}
-                            placeholder={CN.searchPlaceholder}
-                            variant="Background"
-                            outlined
-                            size="400"
-                            style={{ background: 'rgba(255, 255, 255, 0.88)', borderRadius: toRem(18) }}
-                          />
-
-                          <Box wrap="Wrap" gap="200" alignItems="Start" justifyContent="SpaceBetween">
-                            <Text
-                              size="T300"
-                              priority="300"
-                              style={{ lineHeight: 1.75, color: TEXT_MAIN, maxWidth: toRem(560) }}
-                            >
-                              {CN.searchHelp}
-                            </Text>
-                            <Text size="T300" priority="300">
-                              {`${CN.selected} ${selectedVerses.length} ${CN.verses}`}
-                            </Text>
-                          </Box>
-
-                          <Box wrap="Wrap" gap="200" alignItems="Start" justifyContent="SpaceBetween">
-                            <Box grow="Yes" direction="Column" gap="100" style={{ minWidth: 0 }}>
-                              <Text size="T300" priority="300">
-                                {CN.rangeTitle}
-                              </Text>
-                              <Box wrap="Wrap" gap="100" style={SEGMENT_STYLE}>
-                                {scopeOptions.map((option) => (
-                                  <BiblePillButton
-                                    key={option.value}
-                                    active={scopeMode === option.value}
-                                    onClick={() => {
-                                      setScopeMode(option.value);
-                                      setCurrentPage(1);
-                                    }}
-                                  >
-                                    {option.label}
-                                  </BiblePillButton>
-                                ))}
-                              </Box>
-                            </Box>
-                            <Box shrink="No" wrap="Wrap" gap="100" justifyContent="End">
-                              <BiblePillButton onClick={handleCopySelected} disabled={!selectedText}>
-                                {CN.copySelected}
-                              </BiblePillButton>
-                              {onInsertSelected && (
-                                <BiblePillButton onClick={handleInsert} disabled={!selectedText}>
-                                  {CN.insert}
-                                </BiblePillButton>
-                              )}
-                              <BiblePillButton
-                                onClick={() => setSelectedKeys([])}
-                                disabled={selectedKeys.length === 0}
-                              >
-                                {CN.reset}
-                              </BiblePillButton>
-                            </Box>
-                          </Box>
-
-                          {scopeMode === 'custom' && (
-                            <Box direction="Column" gap="200" style={SOFT_SCROLL_PANEL_STYLE}>
-                              <Text size="T300" priority="300">
-                                {CN.customBooks}
-                              </Text>
-                              {[oldBooks, newBooks].map((books, index) => (
-                                <Box key={index === 0 ? CN.old : CN.new} direction="Column" gap="100">
-                                  <Text size="T300" priority="300">
-                                    {index === 0 ? CN.old : CN.new}
-                                  </Text>
-                                  <Box wrap="Wrap" gap="100">
-                                    {books.map((book) => {
-                                      const active = customScopeBooks.includes(book.name);
-                                      return (
-                                        <BiblePillButton
-                                          key={book.bookNumber}
-                                          active={active}
-                                          onClick={() => toggleCustomBook(book.name)}
-                                        >
-                                          {book.name}
-                                        </BiblePillButton>
-                                      );
-                                    })}
-                                  </Box>
-                                </Box>
-                              ))}
-                            </Box>
-                          )}
-
+                        {toolbarCollapsed ? (
                           <Box
                             direction="Column"
                             gap="100"
                             style={{
-                              borderRadius: toRem(20),
-                              border: '1px solid rgba(191, 219, 254, 0.96)',
-                              background: 'rgba(239, 246, 255, 0.78)',
+                              ...PANEL_STYLE,
+                              gap: toRem(10),
                               padding: toRem(18),
                             }}
                           >
                             <Text size="T300" style={{ color: TEXT_MAIN }}>
-                              <b>{`${CN.selected} ${selectedVerses.length} ${CN.verses}`}</b>
+                              <b>工具栏已收起</b>
                             </Text>
                             <Text
                               size="T300"
                               priority="300"
                               style={{
-                                lineHeight: 1.8,
-                                whiteSpace: 'pre-wrap',
-                                wordBreak: 'break-word',
+                                lineHeight: 1.7,
                                 color: TEXT_MAIN,
                               }}
                             >
-                              {previewText}
+                              {toolbarSummary}
                             </Text>
                           </Box>
-                        </Box>
+                        ) : (
+                          <Box direction="Column" gap="250" style={PANEL_STYLE}>
+                            <Input
+                              value={searchInput}
+                              onChange={(evt) => {
+                                setSearchInput(evt.currentTarget.value);
+                                setCurrentPage(1);
+                              }}
+                              placeholder={CN.searchPlaceholder}
+                              variant="Background"
+                              outlined
+                              size="400"
+                              style={{ background: 'rgba(255, 255, 255, 0.88)', borderRadius: toRem(18) }}
+                            />
+
+                            <Box wrap="Wrap" gap="200" alignItems="Start" justifyContent="SpaceBetween">
+                              <Text
+                                size="T300"
+                                priority="300"
+                                style={{ lineHeight: 1.75, color: TEXT_MAIN, maxWidth: toRem(560) }}
+                              >
+                                {CN.searchHelp}
+                              </Text>
+                              <Text size="T300" priority="300">
+                                {`${CN.selected} ${selectedVerses.length} ${CN.verses}`}
+                              </Text>
+                            </Box>
+
+                            <Box wrap="Wrap" gap="200" alignItems="Start" justifyContent="SpaceBetween">
+                              <Box grow="Yes" direction="Column" gap="100" style={{ minWidth: 0 }}>
+                                <Text size="T300" priority="300">
+                                  {CN.rangeTitle}
+                                </Text>
+                                <Box wrap="Wrap" gap="100" style={SEGMENT_STYLE}>
+                                  {scopeOptions.map((option) => (
+                                    <BiblePillButton
+                                      key={option.value}
+                                      active={scopeMode === option.value}
+                                      onClick={() => {
+                                        setScopeMode(option.value);
+                                        setCurrentPage(1);
+                                      }}
+                                    >
+                                      {option.label}
+                                    </BiblePillButton>
+                                  ))}
+                                </Box>
+                              </Box>
+                              <Box shrink="No" wrap="Wrap" gap="100" justifyContent="End">
+                                <BiblePillButton onClick={handleCopySelected} disabled={!selectedText}>
+                                  {CN.copySelected}
+                                </BiblePillButton>
+                                {onInsertSelected && (
+                                  <BiblePillButton onClick={handleInsert} disabled={!selectedText}>
+                                    {CN.insert}
+                                  </BiblePillButton>
+                                )}
+                                <BiblePillButton
+                                  onClick={() => setSelectedKeys([])}
+                                  disabled={selectedKeys.length === 0}
+                                >
+                                  {CN.reset}
+                                </BiblePillButton>
+                              </Box>
+                            </Box>
+
+                            {scopeMode === 'custom' && (
+                              <Box direction="Column" gap="200" style={SOFT_SCROLL_PANEL_STYLE}>
+                                <Text size="T300" priority="300">
+                                  {CN.customBooks}
+                                </Text>
+                                {[oldBooks, newBooks].map((books, index) => (
+                                  <Box key={index === 0 ? CN.old : CN.new} direction="Column" gap="100">
+                                    <Text size="T300" priority="300">
+                                      {index === 0 ? CN.old : CN.new}
+                                    </Text>
+                                    <Box wrap="Wrap" gap="100">
+                                      {books.map((book) => {
+                                        const active = customScopeBooks.includes(book.name);
+                                        return (
+                                          <BiblePillButton
+                                            key={book.bookNumber}
+                                            active={active}
+                                            onClick={() => toggleCustomBook(book.name)}
+                                          >
+                                            {book.name}
+                                          </BiblePillButton>
+                                        );
+                                      })}
+                                    </Box>
+                                  </Box>
+                                ))}
+                              </Box>
+                            )}
+
+                            <Box
+                              direction="Column"
+                              gap="100"
+                              style={{
+                                borderRadius: toRem(20),
+                                border: '1px solid rgba(191, 219, 254, 0.96)',
+                                background: 'rgba(239, 246, 255, 0.78)',
+                                padding: toRem(18),
+                              }}
+                            >
+                              <Text size="T300" style={{ color: TEXT_MAIN }}>
+                                <b>{`${CN.selected} ${selectedVerses.length} ${CN.verses}`}</b>
+                              </Text>
+                              <Text
+                                size="T300"
+                                priority="300"
+                                style={{
+                                  lineHeight: 1.8,
+                                  whiteSpace: 'pre-wrap',
+                                  wordBreak: 'break-word',
+                                  color: TEXT_MAIN,
+                                }}
+                              >
+                                {previewText}
+                              </Text>
+                            </Box>
+                          </Box>
+                        )}
                       </Box>
                     </SequenceCard>
 
