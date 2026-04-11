@@ -25,6 +25,7 @@ import {
   getUnreadInfos,
   isNotificationEvent,
 } from '../../utils/room';
+import { ROOM_MARKED_AS_READ } from '../../utils/notifications';
 import { roomToParentsAtom } from './roomToParents';
 import { useStateEventCallback } from '../../hooks/useStateEventCallback';
 import { useSyncState } from '../../hooks/useSyncState';
@@ -242,6 +243,22 @@ export const useBindRoomToUnreadAtom = (mx: MatrixClient, unreadAtom: typeof roo
       mx.removeListener(RoomEvent.Receipt, handleReceipt);
     };
   }, [mx, setUnreadAtom]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+
+    const handleOptimisticRead = (evt: Event) => {
+      const customEvent = evt as CustomEvent<{ roomId?: string }>;
+      const roomId = customEvent.detail?.roomId;
+      if (!roomId) return;
+      setUnreadAtom({ type: 'DELETE', roomId });
+    };
+
+    window.addEventListener(ROOM_MARKED_AS_READ, handleOptimisticRead);
+    return () => {
+      window.removeEventListener(ROOM_MARKED_AS_READ, handleOptimisticRead);
+    };
+  }, [setUnreadAtom]);
 
   useEffect(() => {
     setUnreadAtom({
