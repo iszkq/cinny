@@ -36,6 +36,7 @@ import {
   resolveBibleBook,
   searchBible,
 } from './data';
+import { BibleExperienceModal } from './BibleExperienceModal';
 
 const PAGE_SIZE = 40;
 const SOFT_LINE = '1px solid rgba(148, 163, 184, 0.18)';
@@ -904,23 +905,12 @@ type BibleModalProps = {
 };
 
 export function BibleModal({ open, requestClose, onInsertSelected }: BibleModalProps) {
-  if (!open) return null;
-
   return (
-    <Overlay open backdrop={<OverlayBackdrop />}>
-      <OverlayCenter>
-        <FocusTrap
-          focusTrapOptions={{
-            initialFocus: false,
-            onDeactivate: requestClose,
-            clickOutsideDeactivates: true,
-            escapeDeactivates: stopPropagation,
-          }}
-        >
-          <BibleView requestClose={requestClose} onInsertSelected={onInsertSelected} />
-        </FocusTrap>
-      </OverlayCenter>
-    </Overlay>
+    <BibleExperienceModal
+      open={open}
+      requestClose={requestClose}
+      onInsertSelected={onInsertSelected}
+    />
   );
 }
 

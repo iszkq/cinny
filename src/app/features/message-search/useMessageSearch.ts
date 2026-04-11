@@ -161,6 +161,16 @@ const createCacheKey = (params: MessageSearchParams): string =>
     senders: params.senders ?? [],
   });
 
+const resolveTargetRooms = (mx: MatrixClient, roomIds?: string[]): Room[] => {
+  if (roomIds && roomIds.length > 0) {
+    return roomIds
+      .map((roomId) => mx.getRoom(roomId))
+      .filter((room): room is Room => !!room);
+  }
+
+  return mx.getRooms();
+};
+
 const paginateLocalRoomHistory = async (mx: MatrixClient, room: Room) => {
   let timeline = getLiveTimeline(room);
   let pageCount = 0;
@@ -199,7 +209,7 @@ const searchLocalRoomHistory = async (
   const searchKey = createCacheKey(params);
   const searchTerm = term?.trim();
 
-  if (!searchTerm || !rooms || rooms.length === 0) {
+  if (!searchTerm) {
     return {
       key: searchKey,
       highlights: [],
@@ -209,9 +219,15 @@ const searchLocalRoomHistory = async (
 
   const terms = getSearchTerms(searchTerm);
   const targetSenders = senders ? new Set(senders) : undefined;
-  const targetRooms = rooms
-    .map((roomId) => mx.getRoom(roomId))
-    .filter((room): room is Room => !!room);
+  const targetRooms = resolveTargetRooms(mx, rooms);
+
+  if (targetRooms.length === 0) {
+    return {
+      key: searchKey,
+      highlights: terms,
+      items: [],
+    };
+  }
 
   const results: LocalResultItem[] = [];
   for (const room of targetRooms) {
@@ -307,6 +323,28 @@ export const useMessageSearch = (params: MessageSearchParams) => {
   const { term, order, rooms, senders } = params;
   const localCacheRef = useRef<LocalSearchCache>();
 
+  const searchLocalFallback = useCallback(
+    async (nextBatch?: string): Promise<SearchResult> => {
+      const cacheKey = createCacheKey(params);
+      if (localCacheRef.current?.key !== cacheKey) {
+        localCacheRef.current = await searchLocalRoomHistory(mx, params);
+      }
+
+      const offset = nextBatch ? Number(nextBatch) || 0 : 0;
+      const items = localCacheRef.current.items.slice(offset, offset + LOCAL_SEARCH_PAGE_LIMIT);
+
+      return {
+        nextToken:
+          offset + LOCAL_SEARCH_PAGE_LIMIT < localCacheRef.current.items.length
+            ? String(offset + LOCAL_SEARCH_PAGE_LIMIT)
+            : undefined,
+        highlights: localCacheRef.current.highlights,
+        groups: groupLocalResults(items),
+      };
+    },
+    [mx, params]
+  );
+
   const searchMessages = useCallback(
     async (nextBatch?: string) => {
       if (!term) return emptyResult();
@@ -318,22 +356,7 @@ export const useMessageSearch = (params: MessageSearchParams) => {
         rooms.some((roomId) => mx.getRoom(roomId)?.hasEncryptionStateEvent());
 
       if (shouldUseLocalHistory) {
-        const cacheKey = createCacheKey(params);
-        if (localCacheRef.current?.key !== cacheKey) {
-          localCacheRef.current = await searchLocalRoomHistory(mx, params);
-        }
-
-        const offset = nextBatch ? Number(nextBatch) || 0 : 0;
-        const items = localCacheRef.current.items.slice(offset, offset + limit);
-
-        return {
-          nextToken:
-            offset + limit < localCacheRef.current.items.length
-              ? String(offset + limit)
-              : undefined,
-          highlights: localCacheRef.current.highlights,
-          groups: groupLocalResults(items),
-        };
+        return searchLocalFallback(nextBatch);
       }
 
       const requestBody: ISearchRequestBody = {
@@ -356,13 +379,26 @@ export const useMessageSearch = (params: MessageSearchParams) => {
         },
       };
 
-      const r = await mx.search({
-        body: requestBody,
-        next_batch: nextBatch === '' ? undefined : nextBatch,
-      });
-      return parseSearchResult(r);
+      try {
+        const r = await mx.search({
+          body: requestBody,
+          next_batch: nextBatch === '' ? undefined : nextBatch,
+        });
+        const parsed = parseSearchResult(r);
+
+        if (!nextBatch && parsed.groups.length === 0) {
+          return searchLocalFallback();
+        }
+
+        return parsed;
+      } catch (error) {
+        if (!nextBatch) {
+          return searchLocalFallback();
+        }
+        throw error;
+      }
     },
-    [localCacheRef, mx, order, params, rooms, senders, term]
+    [mx, order, rooms, senders, term, searchLocalFallback]
   );
 
   return searchMessages;

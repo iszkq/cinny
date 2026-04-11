@@ -36,7 +36,20 @@ type RenderViewerProps = {
   src: string;
   alt: string;
   requestClose: () => void;
+  canPrev?: boolean;
+  canNext?: boolean;
+  onPrev?: () => void;
+  onNext?: () => void;
 };
+
+export type ViewerImageItem = {
+  id: string;
+  body: string;
+  mimeType?: string;
+  url: string;
+  encInfo?: EncryptedAttachmentInfo;
+};
+
 type RenderImageProps = {
   alt: string;
   title: string;
@@ -55,6 +68,8 @@ export type ImageContentProps = {
   autoPlay?: boolean;
   markedAsSpoiler?: boolean;
   spoilerReason?: string;
+  viewerItems?: ViewerImageItem[];
+  viewerItemId?: string;
   renderViewer: (props: RenderViewerProps) => ReactNode;
   renderImage: (props: RenderImageProps) => ReactNode;
 };
@@ -70,6 +85,8 @@ export const ImageContent = as<'div', ImageContentProps>(
       autoPlay,
       markedAsSpoiler,
       spoilerReason,
+      viewerItems,
+      viewerItemId,
       renderViewer,
       renderImage,
       ...props
@@ -84,19 +101,55 @@ export const ImageContent = as<'div', ImageContentProps>(
     const [error, setError] = useState(false);
     const [viewer, setViewer] = useState(false);
     const [blurred, setBlurred] = useState(markedAsSpoiler ?? false);
+    const baseViewerItem = {
+      id: viewerItemId ?? url,
+      body,
+      mimeType,
+      url,
+      encInfo,
+    };
+    const galleryItems =
+      viewerItems && viewerItems.length > 0
+        ? viewerItems
+        : [baseViewerItem];
+    const initialViewerIndex = Math.max(
+      galleryItems.findIndex((item) => item.id === baseViewerItem.id),
+      0
+    );
+    const [viewerIndex, setViewerIndex] = useState(initialViewerIndex);
 
-    const [srcState, loadSrc] = useAsyncCallback(
-      useCallback(async () => {
-        const mediaUrl = mxcUrlToHttp(mx, url, useAuthentication);
+    const loadMediaSrc = useCallback(
+      async (targetUrl: string, targetMimeType?: string, targetEncInfo?: EncryptedAttachmentInfo) => {
+        const mediaUrl = mxcUrlToHttp(mx, targetUrl, useAuthentication);
         if (!mediaUrl) throw new Error('Invalid media URL');
-        if (encInfo) {
+        if (targetEncInfo) {
           const fileContent = await downloadEncryptedMedia(mediaUrl, (encBuf) =>
-            decryptFile(encBuf, mimeType ?? FALLBACK_MIMETYPE, encInfo)
+            decryptFile(encBuf, targetMimeType ?? FALLBACK_MIMETYPE, targetEncInfo)
           );
           return URL.createObjectURL(fileContent);
         }
         return mediaUrl;
-      }, [mx, url, useAuthentication, mimeType, encInfo])
+      },
+      [mx, useAuthentication]
+    );
+
+    const [srcState, loadSrc] = useAsyncCallback(
+      useCallback(async () => {
+        return loadMediaSrc(url, mimeType, encInfo);
+      }, [encInfo, loadMediaSrc, mimeType, url])
+    );
+
+    const currentViewerItem = galleryItems[viewerIndex] ?? baseViewerItem;
+    const [viewerSrcState, loadViewerSrc] = useAsyncCallback(
+      useCallback(
+        async () =>
+          loadMediaSrc(
+            currentViewerItem.url,
+            currentViewerItem.mimeType,
+            currentViewerItem.encInfo
+          ),
+        [currentViewerItem.encInfo, currentViewerItem.mimeType, currentViewerItem.url, loadMediaSrc]
+      )
     );
 
     const handleLoad = () => {
@@ -116,6 +169,44 @@ export const ImageContent = as<'div', ImageContentProps>(
       if (autoPlay) loadSrc();
     }, [autoPlay, loadSrc]);
 
+    useEffect(() => {
+      setViewerIndex(initialViewerIndex);
+    }, [initialViewerIndex]);
+
+    useEffect(() => {
+      if (!viewer) return;
+      if (currentViewerItem.id === baseViewerItem.id && srcState.status === AsyncStatus.Success) {
+        return;
+      }
+      loadViewerSrc();
+    }, [
+      baseViewerItem.id,
+      currentViewerItem.id,
+      loadViewerSrc,
+      srcState.status,
+      viewer,
+    ]);
+
+    const activeViewerSrc =
+      currentViewerItem.id === baseViewerItem.id && srcState.status === AsyncStatus.Success
+        ? srcState.data
+        : viewerSrcState.status === AsyncStatus.Success
+          ? viewerSrcState.data
+          : undefined;
+
+    const openViewer = () => {
+      setViewerIndex(initialViewerIndex);
+      setViewer(true);
+    };
+
+    const closeViewer = () => {
+      setViewer(false);
+      setViewerIndex(initialViewerIndex);
+    };
+
+    const canPrev = viewerIndex > 0;
+    const canNext = viewerIndex < galleryItems.length - 1;
+
     return (
       <Box className={classNames(css.RelativeBase, className)} {...props} ref={ref}>
         {srcState.status === AsyncStatus.Success && (
@@ -124,7 +215,7 @@ export const ImageContent = as<'div', ImageContentProps>(
               <FocusTrap
                 focusTrapOptions={{
                   initialFocus: false,
-                  onDeactivate: () => setViewer(false),
+                  onDeactivate: closeViewer,
                   clickOutsideDeactivates: true,
                   escapeDeactivates: stopPropagation,
                 }}
@@ -134,11 +225,25 @@ export const ImageContent = as<'div', ImageContentProps>(
                   size="500"
                   onContextMenu={(evt: any) => evt.stopPropagation()}
                 >
-                  {renderViewer({
-                    src: srcState.data,
-                    alt: body,
-                    requestClose: () => setViewer(false),
-                  })}
+                  {activeViewerSrc ? (
+                    renderViewer({
+                      src: activeViewerSrc,
+                      alt: currentViewerItem.body,
+                      requestClose: closeViewer,
+                      canPrev,
+                      canNext,
+                      onPrev: canPrev ? () => setViewerIndex((index) => index - 1) : undefined,
+                      onNext: canNext ? () => setViewerIndex((index) => index + 1) : undefined,
+                    })
+                  ) : (
+                    <Box
+                      alignItems="Center"
+                      justifyContent="Center"
+                      style={{ minHeight: '70vh' }}
+                    >
+                      <Spinner variant="Secondary" />
+                    </Box>
+                  )}
                 </Modal>
               </FocusTrap>
             </OverlayCenter>
@@ -163,7 +268,7 @@ export const ImageContent = as<'div', ImageContentProps>(
               onClick={loadSrc}
               before={<Icon size="Inherit" src={Icons.Photo} filled />}
             >
-              <Text size="B300">View</Text>
+              <Text size="B300">查看</Text>
             </Button>
           </Box>
         )}
@@ -175,7 +280,7 @@ export const ImageContent = as<'div', ImageContentProps>(
               src: srcState.data,
               onLoad: handleLoad,
               onError: handleError,
-              onClick: () => setViewer(true),
+              onClick: openViewer,
               tabIndex: 0,
             })}
           </Box>
@@ -207,7 +312,7 @@ export const ImageContent = as<'div', ImageContentProps>(
                     }
                   }}
                 >
-                  <Text size="B300">Spoiler</Text>
+                  <Text size="B300">剧透</Text>
                 </Chip>
               )}
             </TooltipProvider>
@@ -225,7 +330,7 @@ export const ImageContent = as<'div', ImageContentProps>(
             <TooltipProvider
               tooltip={
                 <Tooltip variant="Critical">
-                  <Text>Failed to load image!</Text>
+                  <Text>图片加载失败</Text>
                 </Tooltip>
               }
               position="Top"
@@ -242,7 +347,7 @@ export const ImageContent = as<'div', ImageContentProps>(
                   onClick={handleRetry}
                   before={<Icon size="Inherit" src={Icons.Warning} filled />}
                 >
-                  <Text size="B300">Retry</Text>
+                  <Text size="B300">重试</Text>
                 </Button>
               )}
             </TooltipProvider>

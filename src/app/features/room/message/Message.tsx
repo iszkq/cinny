@@ -32,7 +32,7 @@ import React, {
 } from 'react';
 import FocusTrap from 'focus-trap-react';
 import { useHover, useFocusWithin } from 'react-aria';
-import { MatrixEvent, Room } from 'matrix-js-sdk';
+import { EventType, MatrixEvent, MsgType, Room } from 'matrix-js-sdk';
 import { Relations } from 'matrix-js-sdk/lib/models/relations';
 import classNames from 'classnames';
 import { RoomPinnedEventsEventContent } from 'matrix-js-sdk/lib/types';
@@ -51,6 +51,7 @@ import {
   getEventEdits,
   getMemberAvatarMxc,
   getMemberDisplayName,
+  trimReplyFromBody,
 } from '../../../utils/room';
 import {
   getCanonicalAliasOrRoomId,
@@ -82,6 +83,30 @@ import { getPowerTagIconSrc } from '../../../hooks/useMemberPowerTag';
 import { ForwardableMessage } from '../forwardMessages';
 
 export type ReactionHandler = (keyOrMxc: string, shortcode: string) => void;
+
+const getMessageCopyText = (mEvent: MatrixEvent): string | undefined => {
+  if (mEvent.isRedacted()) return undefined;
+
+  if (mEvent.getType() === EventType.Sticker) {
+    const stickerBody = mEvent.getContent().body;
+    return typeof stickerBody === 'string' ? stickerBody : '[贴图]';
+  }
+
+  if (mEvent.getType() !== EventType.RoomMessage) return undefined;
+
+  const content = mEvent.getContent();
+  const body = typeof content.body === 'string' ? trimReplyFromBody(content.body).trim() : '';
+  if (body) return body;
+
+  const msgType = content.msgtype ?? MsgType.Text;
+  if (msgType === MsgType.Image) return '[图片]';
+  if (msgType === MsgType.Video) return '[视频]';
+  if (msgType === MsgType.Audio) return '[音频]';
+  if (msgType === MsgType.File) return '[文件]';
+  if (msgType === MsgType.Location) return '[位置]';
+
+  return undefined;
+};
 
 type MessageQuickReactionsProps = {
   onReaction: ReactionHandler;
@@ -177,7 +202,7 @@ export const MessageAllReactionItem = as<
         aria-pressed={open}
       >
         <Text className={css.MessageMenuItemText} as="span" size="T300" truncate>
-          View Reactions
+          查看回应
         </Text>
       </MenuItem>
     </>
@@ -227,7 +252,7 @@ export const MessageReadReceiptItem = as<
         aria-pressed={open}
       >
         <Text className={css.MessageMenuItemText} as="span" size="T300" truncate>
-          Read Receipts
+          已读详情
         </Text>
       </MenuItem>
     </>
@@ -291,7 +316,7 @@ export const MessageSourceCodeItem = as<
           >
             <Modal variant="Surface" size="500">
               <TextViewer
-                name="Source Code"
+                name="消息源码"
                 langName="json"
                 text={getText()}
                 requestClose={handleClose}
@@ -310,7 +335,7 @@ export const MessageSourceCodeItem = as<
         aria-pressed={open}
       >
         <Text className={css.MessageMenuItemText} as="span" size="T300" truncate>
-          View Source
+          查看源码
         </Text>
       </MenuItem>
     </>
@@ -344,7 +369,30 @@ export const MessageCopyLinkItem = as<
       ref={ref}
     >
       <Text className={css.MessageMenuItemText} as="span" size="T300" truncate>
-        Copy Link
+        复制链接
+      </Text>
+    </MenuItem>
+  );
+});
+
+export const MessageCopyTextItem = as<
+  'button',
+  {
+    mEvent: MatrixEvent;
+    onClose?: () => void;
+  }
+>(({ mEvent, onClose, ...props }, ref) => {
+  const handleCopy = () => {
+    const text = getMessageCopyText(mEvent);
+    if (!text) return;
+    copyToClipboard(text);
+    onClose?.();
+  };
+
+  return (
+    <MenuItem size="300" radii="300" onClick={handleCopy} {...props} ref={ref}>
+      <Text className={css.MessageMenuItemText} as="span" size="T300" truncate>
+        复制消息
       </Text>
     </MenuItem>
   );
@@ -384,7 +432,7 @@ export const MessagePinItem = as<
       ref={ref}
     >
       <Text className={css.MessageMenuItemText} as="span" size="T300" truncate>
-        {isPinned ? 'Unpin Message' : 'Pin Message'}
+        {isPinned ? '取消置顶消息' : '置顶消息'}
       </Text>
     </MenuItem>
   );
@@ -478,7 +526,7 @@ export const MessageDeleteItem = as<
                 size="500"
               >
                 <Box grow="Yes">
-                  <Text size="H4">Delete Message</Text>
+                  <Text size="H4">删除消息</Text>
                 </Box>
                 <IconButton size="300" onClick={handleClose} radii="300">
                   <Icon src={Icons.Cross} />
@@ -492,19 +540,19 @@ export const MessageDeleteItem = as<
                 gap="400"
               >
                 <Text priority="400">
-                  This action is irreversible! Are you sure that you want to delete this message?
+                  删除后无法恢复，确定要删除这条消息吗？
                 </Text>
                 <Box direction="Column" gap="100">
                   <Text size="L400">
-                    Reason{' '}
+                    删除原因{' '}
                     <Text as="span" size="T200">
-                      (optional)
+                      （可选）
                     </Text>
                   </Text>
                   <Input name="reasonInput" variant="Background" />
                   {deleteState.status === AsyncStatus.Error && (
                     <Text style={{ color: color.Critical.Main }} size="T300">
-                      Failed to delete message! Please try again.
+                      删除失败，请稍后重试。
                     </Text>
                   )}
                 </Box>
@@ -519,7 +567,7 @@ export const MessageDeleteItem = as<
                   aria-disabled={deleteState.status === AsyncStatus.Loading}
                 >
                   <Text size="B400">
-                    {deleteState.status === AsyncStatus.Loading ? 'Deleting...' : 'Delete'}
+                    {deleteState.status === AsyncStatus.Loading ? '删除中...' : '删除'}
                   </Text>
                 </Button>
               </Box>
@@ -539,7 +587,7 @@ export const MessageDeleteItem = as<
         ref={ref}
       >
         <Text className={css.MessageMenuItemText} as="span" size="T300" truncate>
-          Delete
+          删除
         </Text>
       </Button>
     </>
@@ -578,7 +626,7 @@ export const MessageReportItem = as<
     const reasonInput = target?.reasonInput as HTMLInputElement | undefined;
     const reason = reasonInput && reasonInput.value.trim();
     if (reasonInput) reasonInput.value = '';
-    reportMessage(eventId, reason ? -100 : -50, reason || 'No reason provided');
+    reportMessage(eventId, reason ? -100 : -50, reason || '未填写原因');
   };
 
   const handleClose = () => {
@@ -608,7 +656,7 @@ export const MessageReportItem = as<
                 size="500"
               >
                 <Box grow="Yes">
-                  <Text size="H4">Report Message</Text>
+                  <Text size="H4">举报消息</Text>
                 </Box>
                 <IconButton size="300" onClick={handleClose} radii="300">
                   <Icon src={Icons.Cross} />
@@ -622,20 +670,19 @@ export const MessageReportItem = as<
                 gap="400"
               >
                 <Text priority="400">
-                  Report this message to server, which may then notify the appropriate people to
-                  take action.
+                  举报后服务器可能会通知管理员或相关处理人员进行核查。
                 </Text>
                 <Box direction="Column" gap="100">
-                  <Text size="L400">Reason</Text>
+                  <Text size="L400">举报原因</Text>
                   <Input name="reasonInput" variant="Background" required />
                   {reportState.status === AsyncStatus.Error && (
                     <Text style={{ color: color.Critical.Main }} size="T300">
-                      Failed to report message! Please try again.
+                      举报失败，请稍后重试。
                     </Text>
                   )}
                   {reportState.status === AsyncStatus.Success && (
                     <Text style={{ color: color.Success.Main }} size="T300">
-                      Message has been reported to server.
+                      已成功举报这条消息。
                     </Text>
                   )}
                 </Box>
@@ -653,7 +700,7 @@ export const MessageReportItem = as<
                   }
                 >
                   <Text size="B400">
-                    {reportState.status === AsyncStatus.Loading ? 'Reporting...' : 'Report'}
+                    {reportState.status === AsyncStatus.Loading ? '提交中...' : '举报'}
                   </Text>
                 </Button>
               </Box>
@@ -673,7 +720,7 @@ export const MessageReportItem = as<
         ref={ref}
       >
         <Text className={css.MessageMenuItemText} as="span" size="T300" truncate>
-          Report
+          举报
         </Text>
       </Button>
     </>
@@ -1067,7 +1114,7 @@ export const Message = as<'div', MessageProps>(
                                 size="T300"
                                 truncate
                               >
-                                Add Reaction
+                                添加表情
                               </Text>
                             </MenuItem>
                           )}
@@ -1094,7 +1141,7 @@ export const Message = as<'div', MessageProps>(
                               size="T300"
                               truncate
                             >
-                              Reply
+                              回复
                             </Text>
                           </MenuItem>
                           {!isThreadedMessage && (
@@ -1114,7 +1161,7 @@ export const Message = as<'div', MessageProps>(
                                 size="T300"
                                 truncate
                               >
-                                Reply in Thread
+                                在线程中回复
                               </Text>
                             </MenuItem>
                           )}
@@ -1135,7 +1182,7 @@ export const Message = as<'div', MessageProps>(
                                 size="T300"
                                 truncate
                               >
-                                Edit Message
+                                编辑消息
                               </Text>
                             </MenuItem>
                           )}
@@ -1160,6 +1207,7 @@ export const Message = as<'div', MessageProps>(
                               onClose={closeMenu}
                             />
                           )}
+                          <MessageCopyTextItem mEvent={mEvent} onClose={closeMenu} />
                           <MessageCopyLinkItem room={room} mEvent={mEvent} onClose={closeMenu} />
                           {canPinEvent && (
                             <MessagePinItem room={room} mEvent={mEvent} onClose={closeMenu} />
@@ -1342,6 +1390,7 @@ export const Event = as<'div', EventProps>(
                               onClose={closeMenu}
                             />
                           )}
+                          <MessageCopyTextItem mEvent={mEvent} onClose={closeMenu} />
                           <MessageCopyLinkItem room={room} mEvent={mEvent} onClose={closeMenu} />
                         </Box>
                         {((!mEvent.isRedacted() && canDelete && !stateEvent) ||

@@ -19,6 +19,7 @@ import {
   IContent,
   MatrixClient,
   MatrixEvent,
+  MsgType,
   Room,
   RoomEvent,
   RoomEventHandlerMap,
@@ -109,6 +110,7 @@ import { useDocumentFocusChange } from '../../hooks/useDocumentFocusChange';
 import { RenderMessageContent } from '../../components/RenderMessageContent';
 import { Image } from '../../components/media';
 import { ImageViewer } from '../../components/image-viewer';
+import type { ViewerImageItem } from '../../components/message/content/ImageContent';
 import { roomToParentsAtom } from '../../state/room/roomToParents';
 import { useRoomUnread } from '../../state/hooks/unread';
 import { roomToUnreadAtom } from '../../state/room/roomToUnread';
@@ -182,6 +184,52 @@ export const getLinkedTimelines = (timeline: EventTimeline): EventTimeline[] => 
     timelines.push(nextTimeline);
   }
   return timelines;
+};
+
+const getTimelineImageViewerItems = (linkedTimelines: EventTimeline[]): ViewerImageItem[] => {
+  const seenEventIds = new Set<string>();
+  const items: ViewerImageItem[] = [];
+
+  linkedTimelines.forEach((timeline) => {
+    timeline.getEvents().forEach((mEvent) => {
+      const eventId = mEvent.getId();
+      if (!eventId || seenEventIds.has(eventId) || mEvent.isRedacted()) return;
+      seenEventIds.add(eventId);
+
+      const content = mEvent.getContent();
+      const url = typeof content.url === 'string' ? content.url : undefined;
+      const mimeType =
+        typeof content.info?.mimetype === 'string' ? content.info.mimetype : undefined;
+      const body = typeof content.body === 'string' ? content.body : '图片';
+
+      if (!url) return;
+
+      if (mEvent.getType() === MessageEvent.Sticker) {
+        items.push({
+          id: eventId,
+          body,
+          mimeType,
+          url,
+          encInfo: content.file,
+        });
+        return;
+      }
+
+      if (mEvent.getType() !== MessageEvent.RoomMessage || content.msgtype !== MsgType.Image) {
+        return;
+      }
+
+      items.push({
+        id: eventId,
+        body,
+        mimeType,
+        url,
+        encInfo: content.file,
+      });
+    });
+  });
+
+  return items;
 };
 
 export const timelineToEventsCount = (t: EventTimeline) => t.getEvents().length;
@@ -543,6 +591,10 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     eventId ? getEmptyTimeline() : getInitialTimeline(room)
   );
   const eventsLength = getTimelinesEventsCount(timeline.linkedTimelines);
+  const imageViewerItems = useMemo(
+    () => getTimelineImageViewerItems(timeline.linkedTimelines),
+    [timeline.linkedTimelines]
+  );
   const liveTimelineLinked =
     timeline.linkedTimelines[timeline.linkedTimelines.length - 1] === getLiveTimeline(room);
   const canPaginateBack =
@@ -1142,6 +1194,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
                 outlineAttachment={messageLayout === MessageLayout.Bubble}
                 room={room}
                 eventId={mEventId}
+                imageViewerItems={imageViewerItems}
               />
             )}
           </Message>
@@ -1238,6 +1291,8 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
                         <ImageContent
                           {...props}
                           autoPlay={mediaAutoLoad}
+                          viewerItems={imageViewerItems}
+                          viewerItemId={mEventId}
                           renderImage={(p) => <Image {...p} loading="lazy" />}
                           renderViewer={(p) => <ImageViewer {...p} />}
                         />
@@ -1267,6 +1322,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
                       outlineAttachment={messageLayout === MessageLayout.Bubble}
                       room={room}
                       eventId={mEventId}
+                      imageViewerItems={imageViewerItems}
                     />
                   );
                 }
@@ -1358,6 +1414,8 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
                   <ImageContent
                     {...props}
                     autoPlay={mediaAutoLoad}
+                    viewerItems={imageViewerItems}
+                    viewerItemId={mEventId}
                     renderImage={(p) => <Image {...p} loading="lazy" />}
                     renderViewer={(p) => <ImageViewer {...p} />}
                   />

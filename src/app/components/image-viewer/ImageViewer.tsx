@@ -1,8 +1,8 @@
 /* eslint-disable jsx-a11y/no-noninteractive-element-interactions */
-import React from 'react';
+import React, { useEffect } from 'react';
 import FileSaver from 'file-saver';
 import classNames from 'classnames';
-import { Box, Chip, Header, Icon, IconButton, Icons, Text, as } from 'folds';
+import { Box, Chip, Header, Icon, IconButton, Icons, Text, as, config } from 'folds';
 import * as css from './ImageViewer.css';
 import { useZoom } from '../../hooks/useZoom';
 import { usePan } from '../../hooks/usePan';
@@ -12,10 +12,14 @@ export type ImageViewerProps = {
   alt: string;
   src: string;
   requestClose: () => void;
+  canPrev?: boolean;
+  canNext?: boolean;
+  onPrev?: () => void;
+  onNext?: () => void;
 };
 
 export const ImageViewer = as<'div', ImageViewerProps>(
-  ({ className, alt, src, requestClose, ...props }, ref) => {
+  ({ className, alt, src, requestClose, canPrev, canNext, onPrev, onNext, ...props }, ref) => {
     const { zoom, zoomIn, zoomOut, setZoom } = useZoom(0.2);
     const { pan, cursor, onMouseDown } = usePan(zoom !== 1);
 
@@ -23,6 +27,27 @@ export const ImageViewer = as<'div', ImageViewerProps>(
       const fileContent = await downloadMedia(src);
       FileSaver.saveAs(fileContent, alt);
     };
+
+    useEffect(() => {
+      const handleKeyDown = (evt: KeyboardEvent) => {
+        if (evt.key === 'ArrowLeft' && canPrev && onPrev) {
+          evt.preventDefault();
+          onPrev();
+        }
+
+        if (evt.key === 'ArrowRight' && canNext && onNext) {
+          evt.preventDefault();
+          onNext();
+        }
+      };
+
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [canNext, canPrev, onNext, onPrev]);
+
+    useEffect(() => {
+      setZoom(1);
+    }, [setZoom, src]);
 
     return (
       <Box
@@ -70,7 +95,7 @@ export const ImageViewer = as<'div', ImageViewerProps>(
               radii="300"
               before={<Icon size="50" src={Icons.Download} />}
             >
-              <Text size="B300">Download</Text>
+              <Text size="B300">下载</Text>
             </Chip>
           </Box>
         </Header>
@@ -79,7 +104,31 @@ export const ImageViewer = as<'div', ImageViewerProps>(
           className={css.ImageViewerContent}
           justifyContent="Center"
           alignItems="Center"
+          style={{ position: 'relative' }}
         >
+          {onPrev && (
+            <IconButton
+              style={{
+                position: 'absolute',
+                left: config.space.S300,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                zIndex: 2,
+                background: 'rgba(15, 23, 42, 0.72)',
+                color: '#fff',
+                boxShadow: '0 18px 40px rgba(15, 23, 42, 0.18)',
+              }}
+              variant="SurfaceVariant"
+              size="400"
+              radii="Pill"
+              onClick={onPrev}
+              disabled={!canPrev}
+              aria-label="上一张"
+            >
+              <Icon size="100" src={Icons.ArrowLeft} />
+            </IconButton>
+          )}
+
           <img
             className={css.ImageViewerImg}
             style={{
@@ -90,6 +139,29 @@ export const ImageViewer = as<'div', ImageViewerProps>(
             alt={alt}
             onMouseDown={onMouseDown}
           />
+
+          {onNext && (
+            <IconButton
+              style={{
+                position: 'absolute',
+                right: config.space.S300,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                zIndex: 2,
+                background: 'rgba(15, 23, 42, 0.72)',
+                color: '#fff',
+                boxShadow: '0 18px 40px rgba(15, 23, 42, 0.18)',
+              }}
+              variant="SurfaceVariant"
+              size="400"
+              radii="Pill"
+              onClick={onNext}
+              disabled={!canNext}
+              aria-label="下一张"
+            >
+              <Icon size="100" src={Icons.ArrowRight} />
+            </IconButton>
+          )}
         </Box>
       </Box>
     );

@@ -189,6 +189,38 @@ const buildVerseReference = (book: string, chapter: number, verse: number): stri
 const buildCopyReference = (shortBook: string, chapter: number, verse: number): string =>
   `【${shortBook}${chapter}：${verse}】`;
 
+const BIBLE_TEXT_MARKERS = ['旧约', '新约', '创世记', '马太福音', '启示录'];
+
+const scoreDecodedBibleText = (text: string): number => {
+  const markerScore = BIBLE_TEXT_MARKERS.reduce(
+    (score, marker) => score + (text.includes(marker) ? 3 : 0),
+    0
+  );
+  const replacementPenalty = (text.match(/�/g) ?? []).length;
+  return markerScore - replacementPenalty;
+};
+
+const decodeBibleCsv = (buffer: ArrayBuffer): string => {
+  const labels = ['utf-8', 'gb18030'];
+  let bestText = '';
+  let bestScore = Number.NEGATIVE_INFINITY;
+
+  labels.forEach((label) => {
+    try {
+      const text = new TextDecoder(label).decode(buffer);
+      const score = scoreDecodedBibleText(text);
+      if (score > bestScore) {
+        bestText = text;
+        bestScore = score;
+      }
+    } catch {
+      // Ignore unsupported encodings and keep the best decoded result so far.
+    }
+  });
+
+  return bestText || new TextDecoder().decode(buffer);
+};
+
 const parseBibleCsv = (csvText: string): BibleData => {
   const lines = csvText
     .split(/\r?\n/)
@@ -296,8 +328,9 @@ export const loadBibleData = async (): Promise<BibleData> => {
         if (!response.ok) {
           throw new Error(`Failed to load bible data: ${response.status}`);
         }
-        return response.text();
+        return response.arrayBuffer();
       })
+      .then(decodeBibleCsv)
       .then(parseBibleCsv)
       .catch((error) => {
         bibleDataPromise = undefined;

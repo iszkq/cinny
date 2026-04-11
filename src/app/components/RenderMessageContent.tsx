@@ -33,6 +33,7 @@ import { TextViewer } from './text-viewer';
 import { testMatrixTo } from '../plugins/matrix-to';
 import { IImageContent } from '../../types/matrix/common';
 import { POLL_MSGTYPE } from '../utils/polls';
+import type { ViewerImageItem } from './message/content/ImageContent';
 
 type RenderMessageContentProps = {
   displayName: string;
@@ -48,6 +49,7 @@ type RenderMessageContentProps = {
   outlineAttachment?: boolean;
   room?: Room;
   eventId?: string;
+  imageViewerItems?: ViewerImageItem[];
 };
 export function RenderMessageContent({
   displayName,
@@ -63,6 +65,7 @@ export function RenderMessageContent({
   outlineAttachment,
   room,
   eventId,
+  imageViewerItems,
 }: RenderMessageContentProps) {
   const renderUrlsPreview = (urls: string[]) => {
     const filteredUrls = urls.filter((url) => !testMatrixTo(url));
@@ -198,6 +201,8 @@ export function RenderMessageContent({
             <ImageContent
               {...props}
               autoPlay={mediaAutoLoad}
+              viewerItems={imageViewerItems}
+              viewerItemId={eventId}
               renderImage={(p) => <Image {...p} loading="lazy" />}
               renderViewer={(p) => <ImageViewer {...p} />}
             />
