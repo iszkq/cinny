@@ -197,7 +197,12 @@ const getTimelineImageViewerItems = (linkedTimelines: EventTimeline[]): ViewerIm
       seenEventIds.add(eventId);
 
       const content = mEvent.getContent();
-      const url = typeof content.url === 'string' ? content.url : undefined;
+      const url =
+        typeof content.file?.url === 'string'
+          ? content.file.url
+          : typeof content.url === 'string'
+          ? content.url
+          : undefined;
       const mimeType =
         typeof content.info?.mimetype === 'string' ? content.info.mimetype : undefined;
       const body = typeof content.body === 'string' ? content.body : '图片';
@@ -593,7 +598,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
   const eventsLength = getTimelinesEventsCount(timeline.linkedTimelines);
   const imageViewerItems = useMemo(
     () => getTimelineImageViewerItems(timeline.linkedTimelines),
-    [timeline.linkedTimelines]
+    [timeline]
   );
   const liveTimelineLinked =
     timeline.linkedTimelines[timeline.linkedTimelines.length - 1] === getLiveTimeline(room);
