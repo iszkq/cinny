@@ -2,7 +2,6 @@ import React, { CSSProperties, ReactNode, useEffect, useMemo, useRef, useState }
 import FocusTrap from 'focus-trap-react';
 import {
   Box,
-  Button,
   Header,
   Icon,
   IconButton,
@@ -40,7 +39,9 @@ const FONT_SIZE_MAX = 23;
 const FONT_SIZE_STEP = 2;
 const SOFT_LINE = '1px solid rgba(148, 163, 184, 0.18)';
 const RED_REFERENCE = '#d93025';
-const BLUE_ACCENT = '#3b82f6';
+const TEXT_MAIN = '#0f172a';
+const BUTTON_TRANSITION =
+  'transform 120ms ease, box-shadow 120ms ease, background-color 120ms ease, border-color 120ms ease, color 120ms ease';
 const MARK_STYLE: CSSProperties = {
   background: 'rgba(253, 224, 71, 0.5)',
   borderRadius: 6,
@@ -62,6 +63,30 @@ const INPUT_STYLE: CSSProperties = {
   padding: `0 ${config.space.S200}`,
   textAlign: 'center',
   outline: 'none',
+};
+const SEGMENT_STYLE: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  flexWrap: 'wrap',
+  gap: config.space.S100,
+  padding: config.space.S100,
+  borderRadius: toRem(28),
+  background: 'rgba(241, 245, 249, 0.86)',
+  border: '1px solid rgba(226, 232, 240, 0.95)',
+  width: 'fit-content',
+  maxWidth: '100%',
+};
+const PANEL_STYLE: CSSProperties = {
+  borderRadius: toRem(24),
+  border: '1px solid rgba(226, 232, 240, 0.92)',
+  background: 'rgba(248, 250, 252, 0.92)',
+  padding: toRem(20),
+};
+const SOFT_SCROLL_PANEL_STYLE: CSSProperties = {
+  borderRadius: toRem(22),
+  border: '1px solid rgba(226, 232, 240, 0.9)',
+  background: 'rgba(255, 255, 255, 0.74)',
+  padding: toRem(14),
 };
 
 const CN = {
@@ -133,6 +158,11 @@ type VerseRowProps = {
   onCopy: (verse: BibleVerse) => void;
   onJump?: (verse: BibleVerse) => void;
   highlightPattern?: RegExp;
+};
+
+type BiblePillButtonProps = Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'style'> & {
+  active?: boolean;
+  style?: CSSProperties;
 };
 
 const isEditableTarget = (target: EventTarget | null): boolean => {
@@ -215,6 +245,60 @@ const buildPageItems = (currentPage: number, totalPages: number): PageItem[] => 
   return items;
 };
 
+function BiblePillButton({
+  active = false,
+  children,
+  disabled,
+  style,
+  ...props
+}: BiblePillButtonProps) {
+  const [hovered, setHovered] = useState(false);
+  const interactive = hovered && !disabled;
+
+  return (
+    <button
+      type="button"
+      aria-pressed={active || undefined}
+      disabled={disabled}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        minHeight: 38,
+        padding: `0 ${toRem(16)}`,
+        borderRadius: toRem(999),
+        border: active
+          ? '1px solid rgba(15, 23, 42, 0.96)'
+          : '1px solid rgba(148, 163, 184, 0.24)',
+        background: disabled
+          ? 'rgba(226, 232, 240, 0.45)'
+          : active
+          ? TEXT_MAIN
+          : interactive
+          ? 'rgba(255, 255, 255, 0.96)'
+          : 'rgba(255, 255, 255, 0.72)',
+        color: disabled ? 'rgba(15, 23, 42, 0.36)' : active ? '#ffffff' : TEXT_MAIN,
+        fontSize: toRem(13),
+        fontWeight: 600,
+        lineHeight: 1,
+        whiteSpace: 'nowrap',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        boxShadow: active
+          ? '0 14px 26px rgba(15, 23, 42, 0.16)'
+          : interactive
+          ? '0 10px 24px rgba(148, 163, 184, 0.16)'
+          : '0 1px 2px rgba(148, 163, 184, 0.08)',
+        transform: interactive ? 'translateY(-1px)' : 'translateY(0)',
+        transition: BUTTON_TRANSITION,
+        flexShrink: 0,
+        ...style,
+      }}
+      {...props}
+    >
+      {children}
+    </button>
+  );
+}
+
 function VerseRow({
   verse,
   selected,
@@ -235,51 +319,55 @@ function VerseRow({
         width: '100%',
         border: 'none',
         borderBottom: SOFT_LINE,
-        background: selected ? 'rgba(219, 234, 254, 0.78)' : 'transparent',
-        boxShadow: selected ? `inset 3px 0 0 ${BLUE_ACCENT}` : 'none',
-        padding: `${config.space.S350} ${config.space.S450}`,
+        background: selected ? 'rgba(219, 234, 254, 0.72)' : 'transparent',
+        borderInlineStart: selected
+          ? '2px solid rgba(59, 130, 246, 0.68)'
+          : '2px solid transparent',
+        padding: `${toRem(18)} ${toRem(28)} ${toRem(20)} ${toRem(34)}`,
         textAlign: 'left',
         cursor: 'pointer',
+        transition: 'background-color 120ms ease, border-color 120ms ease',
       }}
     >
-      <Box gap="300" alignItems="Start">
+      <Box gap="300" alignItems="Start" wrap="Wrap">
         <Box grow="Yes" direction="Column" gap="150" style={{ minWidth: 0 }}>
           <Text size="L400" style={{ color: RED_REFERENCE }}>
             <b>{verse.copyReference}</b>
           </Text>
           <Text
             size="T300"
-            style={{ fontSize, lineHeight: 1.95, whiteSpace: 'pre-wrap', color: '#0f172a' }}
+            style={{
+              fontSize,
+              lineHeight: 2,
+              whiteSpace: 'pre-wrap',
+              color: TEXT_MAIN,
+              paddingInlineEnd: toRem(6),
+              wordBreak: 'break-word',
+            }}
           >
             {highlightText(verse.text, highlightPattern)}
           </Text>
         </Box>
         <Box shrink="No" wrap="Wrap" gap="150" justifyContent="End">
-          <Button
-            size="300"
-            variant="Secondary"
-            fill="Soft"
-            radii="300"
+          <BiblePillButton
             onClick={(evt) => {
               evt.stopPropagation();
               onCopy(verse);
             }}
+            style={{ minHeight: 34, paddingInline: toRem(14) }}
           >
-            <Text size="B300">{CN.copy}</Text>
-          </Button>
+            {CN.copy}
+          </BiblePillButton>
           {onJump && (
-            <Button
-              size="300"
-              variant="Primary"
-              fill="Soft"
-              radii="300"
+            <BiblePillButton
               onClick={(evt) => {
                 evt.stopPropagation();
                 onJump(verse);
               }}
+              style={{ minHeight: 34, paddingInline: toRem(14) }}
             >
-              <Text size="B300">{CN.jump}</Text>
-            </Button>
+              {CN.jump}
+            </BiblePillButton>
           )}
         </Box>
       </Box>
@@ -578,7 +666,7 @@ export function BibleExperienceModal({
             <Header
               variant="Surface"
               size="500"
-              style={{ padding: `${config.space.S300} ${config.space.S350}`, borderBottom: SOFT_LINE }}
+              style={{ padding: `${toRem(18)} ${toRem(22)}`, borderBottom: SOFT_LINE }}
             >
               <Box grow="Yes" direction="Column" gap="100">
                 <Text size="H4">{CN.title}</Text>
@@ -606,307 +694,292 @@ export function BibleExperienceModal({
               )}
 
               {!loading && !error && data && selectedBook && (
-                <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: config.space.S350 }}>
+                <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: `${toRem(18)} ${toRem(20)}` }}>
                   <Box direction="Column" gap="300">
-                    <SequenceCard variant="SurfaceVariant" direction="Column" gap="300" style={CARD_STYLE}>
-                      <Box wrap="Wrap" gap="250" alignItems="Start">
-                        <Box grow="Yes" direction="Column" gap="100">
-                          <Text size="H4">{CN.title}</Text>
-                          <Text size="T300" priority="300" style={{ lineHeight: 1.75 }}>
-                            {CN.intro}
-                          </Text>
+                    <SequenceCard
+                      variant="SurfaceVariant"
+                      direction="Column"
+                      gap="300"
+                      style={{ ...CARD_STYLE, padding: toRem(28) }}
+                    >
+                      <Box direction="Column" gap="300">
+                        <Box wrap="Wrap" gap="300" alignItems="Start" justifyContent="SpaceBetween">
+                          <Box grow="Yes" direction="Column" gap="100" style={{ minWidth: 0 }}>
+                            <Text size="H4">{CN.title}</Text>
+                            <Text size="T300" priority="300" style={{ lineHeight: 1.8, color: TEXT_MAIN }}>
+                              {CN.intro}
+                            </Text>
+                          </Box>
+                          <Box shrink="No" direction="Column" gap="100" style={{ minWidth: toRem(180) }}>
+                            <Text size="T300" priority="300">
+                              字体大小
+                            </Text>
+                            <Box wrap="Wrap" gap="100" style={SEGMENT_STYLE}>
+                              <BiblePillButton
+                                onClick={() =>
+                                  setFontSize((size) =>
+                                    clamp(size - FONT_SIZE_STEP, FONT_SIZE_MIN, FONT_SIZE_MAX)
+                                  )
+                                }
+                                disabled={fontSize <= FONT_SIZE_MIN}
+                              >
+                                {CN.fontSmaller}
+                              </BiblePillButton>
+                              <BiblePillButton
+                                active={fontSize === 17}
+                                onClick={() => setFontSize(17)}
+                              >
+                                {CN.fontReset}
+                              </BiblePillButton>
+                              <BiblePillButton
+                                onClick={() =>
+                                  setFontSize((size) =>
+                                    clamp(size + FONT_SIZE_STEP, FONT_SIZE_MIN, FONT_SIZE_MAX)
+                                  )
+                                }
+                                disabled={fontSize >= FONT_SIZE_MAX}
+                              >
+                                {CN.fontLarger}
+                              </BiblePillButton>
+                            </Box>
+                          </Box>
                         </Box>
-                        <Box wrap="Wrap" gap="100" justifyContent="End">
-                          <Button
-                            size="300"
-                            variant="Secondary"
-                            fill="Soft"
-                            radii="300"
-                            onClick={() =>
-                              setFontSize((size) =>
-                                clamp(size - FONT_SIZE_STEP, FONT_SIZE_MIN, FONT_SIZE_MAX)
-                              )
-                            }
-                            disabled={fontSize <= FONT_SIZE_MIN}
-                          >
-                            <Text size="B300">{CN.fontSmaller}</Text>
-                          </Button>
-                          <Button
-                            size="300"
-                            variant="Secondary"
-                            fill="Soft"
-                            radii="300"
-                            onClick={() => setFontSize(17)}
-                            disabled={fontSize === 17}
-                          >
-                            <Text size="B300">{CN.fontReset}</Text>
-                          </Button>
-                          <Button
-                            size="300"
-                            variant="Secondary"
-                            fill="Soft"
-                            radii="300"
-                            onClick={() =>
-                              setFontSize((size) =>
-                                clamp(size + FONT_SIZE_STEP, FONT_SIZE_MIN, FONT_SIZE_MAX)
-                              )
-                            }
-                            disabled={fontSize >= FONT_SIZE_MAX}
-                          >
-                            <Text size="B300">{CN.fontLarger}</Text>
-                          </Button>
-                        </Box>
-                      </Box>
 
-                      <Input
-                        value={searchInput}
-                        onChange={(evt) => {
-                          setSearchInput(evt.currentTarget.value);
-                          setCurrentPage(1);
-                        }}
-                        placeholder={CN.searchPlaceholder}
-                        variant="Background"
-                        outlined
-                        size="400"
-                      />
-                      <Text size="T300" priority="300">
-                        {CN.searchHelp}
-                      </Text>
+                        <Box direction="Column" gap="250" style={PANEL_STYLE}>
+                          <Input
+                            value={searchInput}
+                            onChange={(evt) => {
+                              setSearchInput(evt.currentTarget.value);
+                              setCurrentPage(1);
+                            }}
+                            placeholder={CN.searchPlaceholder}
+                            variant="Background"
+                            outlined
+                            size="400"
+                            style={{ background: 'rgba(255, 255, 255, 0.88)', borderRadius: toRem(18) }}
+                          />
 
-                      <Box direction="Column" gap="150">
-                        <Text size="T300" priority="300">
-                          {CN.rangeTitle}
-                        </Text>
-                        <Box wrap="Wrap" gap="100">
-                          {scopeOptions.map((option) => (
-                            <Button
-                              key={option.value}
-                              size="300"
-                              variant={scopeMode === option.value ? 'Primary' : 'Secondary'}
-                              fill={scopeMode === option.value ? 'Solid' : 'Soft'}
-                              radii="300"
-                              onClick={() => {
-                                setScopeMode(option.value);
-                                setCurrentPage(1);
-                              }}
+                          <Box wrap="Wrap" gap="200" alignItems="Start" justifyContent="SpaceBetween">
+                            <Text
+                              size="T300"
+                              priority="300"
+                              style={{ lineHeight: 1.75, color: TEXT_MAIN, maxWidth: toRem(560) }}
                             >
-                              <Text size="B300">{option.label}</Text>
-                            </Button>
-                          ))}
-                        </Box>
-                      </Box>
+                              {CN.searchHelp}
+                            </Text>
+                            <Text size="T300" priority="300">
+                              {`${CN.selected} ${selectedVerses.length} ${CN.verses}`}
+                            </Text>
+                          </Box>
 
-                      {scopeMode === 'custom' && (
-                        <Box direction="Column" gap="200">
-                          <Text size="T300" priority="300">
-                            {CN.customBooks}
-                          </Text>
-                          {[oldBooks, newBooks].map((books, index) => (
-                            <Box key={index === 0 ? CN.old : CN.new} direction="Column" gap="100">
+                          <Box wrap="Wrap" gap="200" alignItems="Start" justifyContent="SpaceBetween">
+                            <Box grow="Yes" direction="Column" gap="100" style={{ minWidth: 0 }}>
                               <Text size="T300" priority="300">
-                                {index === 0 ? CN.old : CN.new}
+                                {CN.rangeTitle}
                               </Text>
-                              <Box wrap="Wrap" gap="100">
-                                {books.map((book) => {
-                                  const active = customScopeBooks.includes(book.name);
-                                  return (
-                                    <Button
-                                      key={book.bookNumber}
-                                      size="300"
-                                      variant={active ? 'Primary' : 'Secondary'}
-                                      fill={active ? 'Solid' : 'Soft'}
-                                      radii="300"
-                                      onClick={() => toggleCustomBook(book.name)}
-                                    >
-                                      <Text size="B300">{book.name}</Text>
-                                    </Button>
-                                  );
-                                })}
+                              <Box wrap="Wrap" gap="100" style={SEGMENT_STYLE}>
+                                {scopeOptions.map((option) => (
+                                  <BiblePillButton
+                                    key={option.value}
+                                    active={scopeMode === option.value}
+                                    onClick={() => {
+                                      setScopeMode(option.value);
+                                      setCurrentPage(1);
+                                    }}
+                                  >
+                                    {option.label}
+                                  </BiblePillButton>
+                                ))}
                               </Box>
                             </Box>
-                          ))}
-                        </Box>
-                      )}
+                            <Box shrink="No" wrap="Wrap" gap="100" justifyContent="End">
+                              <BiblePillButton onClick={handleCopySelected} disabled={!selectedText}>
+                                {CN.copySelected}
+                              </BiblePillButton>
+                              {onInsertSelected && (
+                                <BiblePillButton onClick={handleInsert} disabled={!selectedText}>
+                                  {CN.insert}
+                                </BiblePillButton>
+                              )}
+                              <BiblePillButton
+                                onClick={() => setSelectedKeys([])}
+                                disabled={selectedKeys.length === 0}
+                              >
+                                {CN.reset}
+                              </BiblePillButton>
+                            </Box>
+                          </Box>
 
-                      <Box
-                        wrap="Wrap"
-                        gap="250"
-                        alignItems="Start"
-                        style={{
-                          borderRadius: toRem(18),
-                          border: '1px solid rgba(219, 234, 254, 0.95)',
-                          background: 'rgba(239, 246, 255, 0.82)',
-                          padding: config.space.S300,
-                        }}
-                      >
-                        <Box grow="Yes" direction="Column" gap="100" style={{ minWidth: 0 }}>
-                          <Text size="L400">
-                            <b>{`${CN.selected} ${selectedVerses.length} ${CN.verses}`}</b>
-                          </Text>
-                          <Text
-                            size="T300"
-                            priority="300"
-                            style={{ lineHeight: 1.7, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
-                          >
-                            {previewText}
-                          </Text>
-                        </Box>
-                        <Box shrink="No" wrap="Wrap" gap="100" justifyContent="End">
-                          <Button
-                            size="300"
-                            variant="Secondary"
-                            fill="Soft"
-                            radii="300"
-                            onClick={handleCopySelected}
-                            disabled={!selectedText}
-                          >
-                            <Text size="B300">{CN.copySelected}</Text>
-                          </Button>
-                          {onInsertSelected && (
-                            <Button
-                              size="300"
-                              variant="Primary"
-                              radii="300"
-                              onClick={handleInsert}
-                              disabled={!selectedText}
-                            >
-                              <Text size="B300">{CN.insert}</Text>
-                            </Button>
+                          {scopeMode === 'custom' && (
+                            <Box direction="Column" gap="200" style={SOFT_SCROLL_PANEL_STYLE}>
+                              <Text size="T300" priority="300">
+                                {CN.customBooks}
+                              </Text>
+                              {[oldBooks, newBooks].map((books, index) => (
+                                <Box key={index === 0 ? CN.old : CN.new} direction="Column" gap="100">
+                                  <Text size="T300" priority="300">
+                                    {index === 0 ? CN.old : CN.new}
+                                  </Text>
+                                  <Box wrap="Wrap" gap="100">
+                                    {books.map((book) => {
+                                      const active = customScopeBooks.includes(book.name);
+                                      return (
+                                        <BiblePillButton
+                                          key={book.bookNumber}
+                                          active={active}
+                                          onClick={() => toggleCustomBook(book.name)}
+                                        >
+                                          {book.name}
+                                        </BiblePillButton>
+                                      );
+                                    })}
+                                  </Box>
+                                </Box>
+                              ))}
+                            </Box>
                           )}
-                          <Button
-                            size="300"
-                            variant="Secondary"
-                            fill="Soft"
-                            radii="300"
-                            onClick={() => setSelectedKeys([])}
-                            disabled={selectedKeys.length === 0}
+
+                          <Box
+                            direction="Column"
+                            gap="100"
+                            style={{
+                              borderRadius: toRem(20),
+                              border: '1px solid rgba(191, 219, 254, 0.96)',
+                              background: 'rgba(239, 246, 255, 0.78)',
+                              padding: toRem(18),
+                            }}
                           >
-                            <Text size="B300">{CN.reset}</Text>
-                          </Button>
+                            <Text size="T300" style={{ color: TEXT_MAIN }}>
+                              <b>{`${CN.selected} ${selectedVerses.length} ${CN.verses}`}</b>
+                            </Text>
+                            <Text
+                              size="T300"
+                              priority="300"
+                              style={{
+                                lineHeight: 1.8,
+                                whiteSpace: 'pre-wrap',
+                                wordBreak: 'break-word',
+                                color: TEXT_MAIN,
+                              }}
+                            >
+                              {previewText}
+                            </Text>
+                          </Box>
                         </Box>
                       </Box>
                     </SequenceCard>
 
-                    <SequenceCard variant="SurfaceVariant" direction="Column" gap="250" style={CARD_STYLE}>
-                      <Box wrap="Wrap" gap="250" alignItems="Center">
-                        <Box grow="Yes" direction="Column" gap="100">
-                          <Text size="L400">
-                            <b>{CN.browseTitle}</b>
-                          </Text>
-                          <Text size="T300" priority="300">
-                            {browserCollapsed
-                              ? `${CN.currentLocation}：${selectedBook.name} 第 ${selectedChapter} 章`
-                              : CN.browseHelp}
-                          </Text>
-                        </Box>
-                        <Button
-                          size="300"
-                          variant="Secondary"
-                          fill="Soft"
-                          radii="300"
-                          onClick={() => changeChapter(-1)}
-                          disabled={!canGoPrevChapter}
-                        >
-                          <Text size="B300">{CN.prevChapter}</Text>
-                        </Button>
-                        <Button
-                          size="300"
-                          variant="Secondary"
-                          fill="Soft"
-                          radii="300"
-                          onClick={() => setBrowserCollapsed((state) => !state)}
-                        >
-                          <Text size="B300">{browserCollapsed ? CN.expand : CN.collapse}</Text>
-                        </Button>
-                        <Button
-                          size="300"
-                          variant="Secondary"
-                          fill="Soft"
-                          radii="300"
-                          onClick={() => changeChapter(1)}
-                          disabled={!canGoNextChapter}
-                        >
-                          <Text size="B300">{CN.nextChapter}</Text>
-                        </Button>
-                      </Box>
+                    <SequenceCard
+                      variant="SurfaceVariant"
+                      direction="Column"
+                      gap="250"
+                      style={{ ...CARD_STYLE, padding: toRem(28) }}
+                    >
+                      <Box direction="Column" gap="250">
+                        <Box direction="Column" gap="200">
+                          <Box wrap="Wrap" gap="250" alignItems="Start" justifyContent="SpaceBetween">
+                            <Box grow="Yes" direction="Column" gap="100" style={{ minWidth: 0 }}>
+                              <Text size="L400">
+                                <b>{CN.browseTitle}</b>
+                              </Text>
+                              <Text size="T300" priority="300" style={{ lineHeight: 1.75 }}>
+                                {browserCollapsed
+                                  ? `${CN.currentLocation}：${selectedBook.name} 第 ${selectedChapter} 章`
+                                  : CN.browseHelp}
+                              </Text>
+                            </Box>
+                            <BiblePillButton onClick={() => setBrowserCollapsed((state) => !state)}>
+                              {browserCollapsed ? CN.expand : CN.collapse}
+                            </BiblePillButton>
+                          </Box>
 
-                      {!browserCollapsed && (
-                        <>
                           <Box wrap="Wrap" gap="100">
-                            <Button
-                              size="400"
-                              variant={activeTestament === 'old' ? 'Primary' : 'Secondary'}
-                              fill={activeTestament === 'old' ? 'Solid' : 'Soft'}
-                              radii="300"
-                              onClick={() => setActiveTestament('old')}
+                            <BiblePillButton
+                              onClick={() => changeChapter(-1)}
+                              disabled={!canGoPrevChapter}
                             >
-                              <Text size="B300">{CN.old}</Text>
-                            </Button>
-                            <Button
-                              size="400"
-                              variant={activeTestament === 'new' ? 'Primary' : 'Secondary'}
-                              fill={activeTestament === 'new' ? 'Solid' : 'Soft'}
-                              radii="300"
-                              onClick={() => setActiveTestament('new')}
+                              {CN.prevChapter}
+                            </BiblePillButton>
+                            <BiblePillButton
+                              onClick={() => changeChapter(1)}
+                              disabled={!canGoNextChapter}
                             >
-                              <Text size="B300">{CN.new}</Text>
-                            </Button>
+                              {CN.nextChapter}
+                            </BiblePillButton>
                           </Box>
+                        </Box>
 
-                          <Box
-                            wrap="Wrap"
-                            gap="100"
-                            style={{
-                              maxHeight: toRem(170),
-                              overflowY: 'auto',
-                              paddingRight: config.space.S100,
-                            }}
-                          >
-                            {visibleBooks.map((book) => (
-                              <Button
-                                key={book.bookNumber}
-                                size="300"
-                                variant={book.name === selectedBook.name ? 'Primary' : 'Secondary'}
-                                fill={book.name === selectedBook.name ? 'Solid' : 'Soft'}
-                                radii="300"
-                                onClick={() => openBook(book)}
+                        {!browserCollapsed && (
+                          <Box direction="Column" gap="200" style={PANEL_STYLE}>
+                            <Box wrap="Wrap" gap="100" style={SEGMENT_STYLE}>
+                              <BiblePillButton
+                                active={activeTestament === 'old'}
+                                onClick={() => setActiveTestament('old')}
                               >
-                                <Text size="B300">{book.name}</Text>
-                              </Button>
-                            ))}
-                          </Box>
+                                {CN.old}
+                              </BiblePillButton>
+                              <BiblePillButton
+                                active={activeTestament === 'new'}
+                                onClick={() => setActiveTestament('new')}
+                              >
+                                {CN.new}
+                              </BiblePillButton>
+                            </Box>
 
-                          <Line size="300" variant="Surface" />
+                            <Box direction="Column" gap="120">
+                              <Text size="T300" priority="300">
+                                书卷
+                              </Text>
+                              <Box
+                                wrap="Wrap"
+                                gap="100"
+                                style={{
+                                  ...SOFT_SCROLL_PANEL_STYLE,
+                                  maxHeight: toRem(182),
+                                  overflowY: 'auto',
+                                  paddingRight: toRem(10),
+                                }}
+                              >
+                                {visibleBooks.map((book) => (
+                                  <BiblePillButton
+                                    key={book.bookNumber}
+                                    active={book.name === selectedBook.name}
+                                    onClick={() => openBook(book)}
+                                  >
+                                    {book.name}
+                                  </BiblePillButton>
+                                ))}
+                              </Box>
+                            </Box>
 
-                          <Box direction="Column" gap="150">
-                            <Text size="T300" priority="300">
-                              {`${selectedBook.name} · ${CN.chapterTitle}`}
-                            </Text>
-                            <Box
-                              wrap="Wrap"
-                              gap="100"
-                              style={{
-                                maxHeight: toRem(164),
-                                overflowY: 'auto',
-                                paddingRight: config.space.S100,
-                              }}
-                            >
-                              {selectedBook.chapters.map((chapter) => (
-                                <Button
-                                  key={chapter}
-                                  size="300"
-                                  variant={chapter === selectedChapter ? 'Primary' : 'Secondary'}
-                                  fill={chapter === selectedChapter ? 'Solid' : 'Soft'}
-                                  radii="300"
-                                  onClick={() => openChapter(selectedBook.name, chapter, 1, true)}
-                                >
-                                  <Text size="B300">{chapter}</Text>
-                                </Button>
-                              ))}
+                            <Box direction="Column" gap="120">
+                              <Text size="T300" priority="300">
+                                {`${selectedBook.name} · ${CN.chapterTitle}`}
+                              </Text>
+                              <Box
+                                wrap="Wrap"
+                                gap="100"
+                                style={{
+                                  ...SOFT_SCROLL_PANEL_STYLE,
+                                  maxHeight: toRem(176),
+                                  overflowY: 'auto',
+                                  paddingRight: toRem(10),
+                                }}
+                              >
+                                {selectedBook.chapters.map((chapter) => (
+                                  <BiblePillButton
+                                    key={chapter}
+                                    active={chapter === selectedChapter}
+                                    onClick={() => openChapter(selectedBook.name, chapter, 1, true)}
+                                  >
+                                    {chapter}
+                                  </BiblePillButton>
+                                ))}
+                              </Box>
                             </Box>
                           </Box>
-                        </>
-                      )}
+                        )}
+                      </Box>
                     </SequenceCard>
 
                     <SequenceCard
@@ -915,43 +988,35 @@ export function BibleExperienceModal({
                       gap="0"
                       style={{ ...CARD_STYLE, padding: 0, overflow: 'hidden' }}
                     >
-                      <Box wrap="Wrap" gap="250" alignItems="Start" style={{ padding: config.space.S450 }}>
-                        <Box grow="Yes" direction="Column" gap="100">
-                          <Text size="H3">{sectionTitle}</Text>
-                          <Text size="T300" priority="300" style={{ lineHeight: 1.75 }}>
-                            {sectionDescription}
-                          </Text>
-                        </Box>
-                        <Box shrink="No" wrap="Wrap" gap="100" justifyContent="End">
+                      <Box direction="Column" gap="200" style={{ padding: `${toRem(24)} ${toRem(28)}` }}>
+                        <Box wrap="Wrap" gap="250" alignItems="Start" justifyContent="SpaceBetween">
+                          <Box grow="Yes" direction="Column" gap="100" style={{ minWidth: 0 }}>
+                            <Text size="H3">{sectionTitle}</Text>
+                            <Text size="T300" priority="300" style={{ lineHeight: 1.8 }}>
+                              {sectionDescription}
+                            </Text>
+                          </Box>
                           <Text size="T300" priority="300">
                             {isSearchMode
                               ? `${CN.searchSummary} ${activeVerses.length} ${CN.verses} · 第 ${currentPage}/${totalPages} ${CN.page}`
                               : `${CN.chapterSummary} ${chapterVerses.length} ${CN.verses} · 第 ${currentPage}/${totalPages} ${CN.page}`}
                           </Text>
+                        </Box>
+
+                        <Box wrap="Wrap" gap="100" justifyContent="End">
                           {isSearchMode && (
-                            <Button
-                              size="300"
-                              variant="Secondary"
-                              fill="Soft"
-                              radii="300"
+                            <BiblePillButton
                               onClick={() => {
                                 setSearchInput('');
                                 setCurrentPage(1);
                               }}
                             >
-                              <Text size="B300">{CN.backToChapter}</Text>
-                            </Button>
+                              {CN.backToChapter}
+                            </BiblePillButton>
                           )}
-                          <Button
-                            size="300"
-                            variant="Secondary"
-                            fill="Soft"
-                            radii="300"
-                            onClick={handleCopyPage}
-                            disabled={!pageText}
-                          >
-                            <Text size="B300">{CN.copyPage}</Text>
-                          </Button>
+                          <BiblePillButton onClick={handleCopyPage} disabled={!pageText}>
+                            {CN.copyPage}
+                          </BiblePillButton>
                         </Box>
                       </Box>
 
@@ -959,13 +1024,19 @@ export function BibleExperienceModal({
 
                       <div
                         ref={verseScrollRef}
-                        style={{ minHeight: toRem(360), maxHeight: '56vh', overflowY: 'auto' }}
+                        style={{
+                          minHeight: toRem(360),
+                          maxHeight: '56vh',
+                          overflowY: 'auto',
+                          paddingInline: toRem(10),
+                          scrollPaddingTop: toRem(20),
+                        }}
                       >
                         {pageVerses.length === 0 && (
                           <Box
                             alignItems="Center"
                             justifyContent="Center"
-                            style={{ minHeight: toRem(240), padding: config.space.S500 }}
+                            style={{ minHeight: toRem(240), padding: `${toRem(24)} ${toRem(28)}` }}
                           >
                             <Text size="L400">{CN.noResult}</Text>
                           </Box>
@@ -992,7 +1063,7 @@ export function BibleExperienceModal({
                         gap="250"
                         alignItems="Center"
                         justifyContent="SpaceBetween"
-                        style={{ padding: `${config.space.S250} ${config.space.S400}` }}
+                        style={{ padding: `${toRem(16)} ${toRem(28)}` }}
                       >
                         <Text size="T300" priority="300">
                           {CN.keyboardHint}
@@ -1010,31 +1081,24 @@ export function BibleExperienceModal({
                             gap="100"
                             alignItems="Center"
                             justifyContent="Center"
-                            style={{ padding: `${config.space.S300} ${config.space.S400}` }}
+                            style={{ padding: `${toRem(18)} ${toRem(28)} ${toRem(24)}` }}
                           >
-                            <Button
-                              size="300"
-                              variant="Secondary"
-                              fill="Soft"
-                              radii="300"
+                            <BiblePillButton
                               onClick={() => setCurrentPage((page) => Math.max(page - 1, 1))}
                               disabled={currentPage <= 1}
                             >
-                              <Text size="B300">上一页</Text>
-                            </Button>
+                              上一页
+                            </BiblePillButton>
 
                             {pageItems.map((item) =>
                               typeof item === 'number' ? (
-                                <Button
+                                <BiblePillButton
                                   key={item}
-                                  size="300"
-                                  variant={item === currentPage ? 'Primary' : 'Secondary'}
-                                  fill={item === currentPage ? 'Solid' : 'Soft'}
-                                  radii="300"
+                                  active={item === currentPage}
                                   onClick={() => setCurrentPage(item)}
                                 >
-                                  <Text size="B300">{item}</Text>
-                                </Button>
+                                  {item}
+                                </BiblePillButton>
                               ) : pageJumpOpen === item ? (
                                 <input
                                   key={item}
@@ -1055,35 +1119,32 @@ export function BibleExperienceModal({
                                   }}
                                   placeholder={CN.pageJump}
                                   autoFocus
-                                  style={INPUT_STYLE}
+                                  style={{
+                                    ...INPUT_STYLE,
+                                    minHeight: 38,
+                                    width: toRem(76),
+                                    background: 'rgba(255, 255, 255, 0.9)',
+                                  }}
                                 />
                               ) : (
-                                <Button
+                                <BiblePillButton
                                   key={item}
-                                  size="300"
-                                  variant="Secondary"
-                                  fill="Soft"
-                                  radii="300"
                                   onClick={() => {
                                     setPageJumpOpen(item);
                                     setPageJumpValue('');
                                   }}
                                 >
-                                  <Text size="B300">...</Text>
-                                </Button>
+                                  ...
+                                </BiblePillButton>
                               )
                             )}
 
-                            <Button
-                              size="300"
-                              variant="Secondary"
-                              fill="Soft"
-                              radii="300"
+                            <BiblePillButton
                               onClick={() => setCurrentPage((page) => Math.min(page + 1, totalPages))}
                               disabled={currentPage >= totalPages}
                             >
-                              <Text size="B300">下一页</Text>
-                            </Button>
+                              下一页
+                            </BiblePillButton>
                           </Box>
                         </>
                       )}
