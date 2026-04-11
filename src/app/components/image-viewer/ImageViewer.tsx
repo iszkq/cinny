@@ -1,5 +1,5 @@
 /* eslint-disable jsx-a11y/no-noninteractive-element-interactions */
-import React, { useEffect } from 'react';
+import React, { useEffect, useLayoutEffect, useState } from 'react';
 import FileSaver from 'file-saver';
 import classNames from 'classnames';
 import { Box, Chip, Header, Icon, IconButton, Icons, Text, as, config } from 'folds';
@@ -18,14 +18,34 @@ export type ImageViewerProps = {
   onNext?: () => void;
 };
 
+const ZOOM_STEP = 0.2;
+const MIN_ZOOM = 0.1;
+const MAX_ZOOM = 5;
+
 export const ImageViewer = as<'div', ImageViewerProps>(
   ({ className, alt, src, requestClose, canPrev, canNext, onPrev, onNext, ...props }, ref) => {
-    const { zoom, zoomIn, zoomOut, setZoom } = useZoom(0.2);
-    const { pan, cursor, onMouseDown } = usePan(zoom !== 1);
+    const [rotation, setRotation] = useState(0);
+    const { zoom, zoomIn, zoomOut, setZoom } = useZoom(ZOOM_STEP, MIN_ZOOM, MAX_ZOOM);
+    const rotated = Math.abs(rotation % 180) === 90;
+    const { pan, cursor, onMouseDown } = usePan(zoom !== 1 || rotated, `${src}-${rotation}`);
+    const displayRotation = ((rotation % 360) + 360) % 360;
 
     const handleDownload = async () => {
       const fileContent = await downloadMedia(src);
       FileSaver.saveAs(fileContent, alt);
+    };
+
+    const rotateLeft = () => setRotation((angle) => angle - 90);
+    const rotateRight = () => setRotation((angle) => angle + 90);
+    const handleWheel: React.WheelEventHandler<HTMLDivElement> = (evt) => {
+      evt.preventDefault();
+      const direction = evt.deltaY < 0 ? 1 : -1;
+      setZoom((currentZoom) => {
+        const nextZoom = Number((currentZoom + direction * ZOOM_STEP).toFixed(2));
+        if (nextZoom < MIN_ZOOM) return MIN_ZOOM;
+        if (nextZoom > MAX_ZOOM) return MAX_ZOOM;
+        return nextZoom;
+      });
     };
 
     useEffect(() => {
@@ -45,8 +65,9 @@ export const ImageViewer = as<'div', ImageViewerProps>(
       return () => window.removeEventListener('keydown', handleKeyDown);
     }, [canNext, canPrev, onNext, onPrev]);
 
-    useEffect(() => {
+    useLayoutEffect(() => {
       setZoom(1);
+      setRotation(0);
     }, [setZoom, src]);
 
     return (
@@ -58,25 +79,29 @@ export const ImageViewer = as<'div', ImageViewerProps>(
       >
         <Header className={css.ImageViewerHeader} size="400">
           <Box grow="Yes" alignItems="Center" gap="200">
-            <IconButton size="300" radii="300" onClick={requestClose}>
+            <IconButton size="300" radii="300" onClick={requestClose} aria-label="Close viewer">
               <Icon size="50" src={Icons.ArrowLeft} />
             </IconButton>
             <Text size="T300" truncate>
               {alt}
             </Text>
           </Box>
-          <Box shrink="No" alignItems="Center" gap="200">
+          <Box shrink="No" alignItems="Center" gap="200" style={{ flexWrap: 'wrap' }}>
             <IconButton
               variant={zoom < 1 ? 'Success' : 'SurfaceVariant'}
               outlined={zoom < 1}
               size="300"
               radii="Pill"
               onClick={zoomOut}
-              aria-label="Zoom Out"
+              aria-label="Zoom out"
             >
               <Icon size="50" src={Icons.Minus} />
             </IconButton>
-            <Chip variant="SurfaceVariant" radii="Pill" onClick={() => setZoom(zoom === 1 ? 2 : 1)}>
+            <Chip
+              variant="SurfaceVariant"
+              radii="Pill"
+              onClick={() => setZoom(zoom === 1 ? 2 : 1)}
+            >
               <Text size="B300">{Math.round(zoom * 100)}%</Text>
             </Chip>
             <IconButton
@@ -85,10 +110,23 @@ export const ImageViewer = as<'div', ImageViewerProps>(
               size="300"
               radii="Pill"
               onClick={zoomIn}
-              aria-label="Zoom In"
+              aria-label="Zoom in"
             >
               <Icon size="50" src={Icons.Plus} />
             </IconButton>
+            <Chip variant="SurfaceVariant" radii="Pill" onClick={rotateLeft}>
+              <Text size="B300">左转</Text>
+            </Chip>
+            <Chip
+              variant={displayRotation !== 0 ? 'Success' : 'SurfaceVariant'}
+              radii="Pill"
+              onClick={() => setRotation(0)}
+            >
+              <Text size="B300">{displayRotation}°</Text>
+            </Chip>
+            <Chip variant="SurfaceVariant" radii="Pill" onClick={rotateRight}>
+              <Text size="B300">右转</Text>
+            </Chip>
             <Chip
               variant="Primary"
               onClick={handleDownload}
@@ -123,22 +161,30 @@ export const ImageViewer = as<'div', ImageViewerProps>(
               radii="Pill"
               onClick={onPrev}
               disabled={!canPrev}
-              aria-label="上一张"
+              aria-label="Previous image"
             >
               <Icon size="100" src={Icons.ArrowLeft} />
             </IconButton>
           )}
 
-          <img
-            className={css.ImageViewerImg}
-            style={{
-              cursor,
-              transform: `scale(${zoom}) translate(${pan.translateX}px, ${pan.translateY}px)`,
-            }}
-            src={src}
-            alt={alt}
-            onMouseDown={onMouseDown}
-          />
+          <Box
+            className={css.ImageViewerViewport}
+            alignItems="Center"
+            justifyContent="Center"
+            onWheel={handleWheel}
+          >
+            <img
+              className={css.ImageViewerImg}
+              style={{
+                cursor,
+                transform: `translate(${pan.translateX}px, ${pan.translateY}px) rotate(${rotation}deg) scale(${zoom})`,
+              }}
+              src={src}
+              alt={alt}
+              onMouseDown={onMouseDown}
+              draggable={false}
+            />
+          </Box>
 
           {onNext && (
             <IconButton
@@ -157,7 +203,7 @@ export const ImageViewer = as<'div', ImageViewerProps>(
               radii="Pill"
               onClick={onNext}
               disabled={!canNext}
-              aria-label="下一张"
+              aria-label="Next image"
             >
               <Icon size="100" src={Icons.ArrowRight} />
             </IconButton>
