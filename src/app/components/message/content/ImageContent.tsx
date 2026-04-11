@@ -1,4 +1,4 @@
-import React, { ReactNode, useCallback, useEffect, useState } from 'react';
+import React, { ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import {
   Badge,
   Box,
@@ -101,6 +101,7 @@ export const ImageContent = as<'div', ImageContentProps>(
     const [error, setError] = useState(false);
     const [viewer, setViewer] = useState(false);
     const [blurred, setBlurred] = useState(markedAsSpoiler ?? false);
+    const viewerTrapRef = useRef<HTMLDivElement>(null);
     const baseViewerItem = {
       id: viewerItemId ?? url,
       body,
@@ -215,36 +216,39 @@ export const ImageContent = as<'div', ImageContentProps>(
               <FocusTrap
                 focusTrapOptions={{
                   initialFocus: false,
+                  fallbackFocus: () => viewerTrapRef.current as HTMLDivElement,
                   onDeactivate: closeViewer,
                   clickOutsideDeactivates: true,
                   escapeDeactivates: stopPropagation,
                 }}
               >
-                <Modal
-                  className={ModalWide}
-                  size="500"
-                  onContextMenu={(evt: any) => evt.stopPropagation()}
-                >
-                  {activeViewerSrc ? (
-                    renderViewer({
-                      src: activeViewerSrc,
-                      alt: currentViewerItem.body,
-                      requestClose: closeViewer,
-                      canPrev,
-                      canNext,
-                      onPrev: canPrev ? () => setViewerIndex((index) => index - 1) : undefined,
-                      onNext: canNext ? () => setViewerIndex((index) => index + 1) : undefined,
-                    })
-                  ) : (
-                    <Box
-                      alignItems="Center"
-                      justifyContent="Center"
-                      style={{ minHeight: '70vh' }}
-                    >
-                      <Spinner variant="Secondary" />
-                    </Box>
-                  )}
-                </Modal>
+                <div ref={viewerTrapRef} tabIndex={-1} style={{ outline: 'none' }}>
+                  <Modal
+                    className={ModalWide}
+                    size="500"
+                    onContextMenu={(evt: any) => evt.stopPropagation()}
+                  >
+                    {activeViewerSrc ? (
+                      renderViewer({
+                        src: activeViewerSrc,
+                        alt: currentViewerItem.body,
+                        requestClose: closeViewer,
+                        canPrev,
+                        canNext,
+                        onPrev: canPrev ? () => setViewerIndex((index) => index - 1) : undefined,
+                        onNext: canNext ? () => setViewerIndex((index) => index + 1) : undefined,
+                      })
+                    ) : (
+                      <Box
+                        alignItems="Center"
+                        justifyContent="Center"
+                        style={{ minHeight: '70vh' }}
+                      >
+                        <Spinner variant="Secondary" />
+                      </Box>
+                    )}
+                  </Modal>
+                </div>
               </FocusTrap>
             </OverlayCenter>
           </Overlay>
