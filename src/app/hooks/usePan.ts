@@ -1,4 +1,4 @@
-import { MouseEventHandler, useEffect, useState } from 'react';
+import { MouseEventHandler, useCallback, useEffect, useState } from 'react';
 
 export type Pan = {
   translateX: number;
@@ -10,17 +10,13 @@ const INITIAL_PAN = {
   translateY: 0,
 };
 
-export const usePan = (active: boolean) => {
+export const usePan = (active: boolean, resetKey?: string) => {
   const [pan, setPan] = useState<Pan>(INITIAL_PAN);
   const [cursor, setCursor] = useState<'grab' | 'grabbing' | 'initial'>(
     active ? 'grab' : 'initial'
   );
 
-  useEffect(() => {
-    setCursor(active ? 'grab' : 'initial');
-  }, [active]);
-
-  const handleMouseMove = (evt: MouseEvent) => {
+  const handleMouseMove = useCallback((evt: MouseEvent) => {
     evt.preventDefault();
     evt.stopPropagation();
 
@@ -31,28 +27,55 @@ export const usePan = (active: boolean) => {
 
       return { translateX: mX, translateY: mY };
     });
-  };
+  }, []);
 
-  const handleMouseUp = (evt: MouseEvent) => {
-    evt.preventDefault();
-    setCursor('grab');
+  const handleMouseUp = useCallback(
+    (evt: MouseEvent) => {
+      evt.preventDefault();
+      setCursor(active ? 'grab' : 'initial');
 
-    document.removeEventListener('mousemove', handleMouseMove);
-    document.removeEventListener('mouseup', handleMouseUp);
-  };
+      document.removeEventListener('mousemove', handleMouseMove);
+    },
+    [active, handleMouseMove]
+  );
 
-  const handleMouseDown: MouseEventHandler<HTMLElement> = (evt) => {
-    if (!active) return;
-    evt.preventDefault();
-    setCursor('grabbing');
+  const handleMouseDown = useCallback<MouseEventHandler<HTMLElement>>(
+    (evt) => {
+      if (!active) return;
+      evt.preventDefault();
+      setCursor('grabbing');
 
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-  };
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp, { once: true });
+    },
+    [active, handleMouseMove, handleMouseUp]
+  );
 
   useEffect(() => {
-    if (!active) setPan(INITIAL_PAN);
-  }, [active]);
+    setCursor(active ? 'grab' : 'initial');
+    if (!active) {
+      setPan(INITIAL_PAN);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    }
+  }, [active, handleMouseMove, handleMouseUp]);
+
+  useEffect(() => {
+    setPan(INITIAL_PAN);
+    document.removeEventListener('mousemove', handleMouseMove);
+    document.removeEventListener('mouseup', handleMouseUp);
+    if (active) {
+      setCursor('grab');
+    }
+  }, [active, handleMouseMove, handleMouseUp, resetKey]);
+
+  useEffect(
+    () => () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    },
+    [handleMouseMove, handleMouseUp]
+  );
 
   return {
     pan,
