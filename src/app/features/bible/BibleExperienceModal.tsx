@@ -493,7 +493,7 @@ export function BibleExperienceModal({
     [pageVerses]
   );
   const previewText = useMemo(() => {
-    if (selectedVerses.length === 0) return CN.selectionHelp;
+    if (selectedVerses.length === 0) return '暂未选择经文，可直接点击下方经文开始多选。';
     const preview = selectedVerses
       .slice(0, 2)
       .map((verse) => formatBibleVerse(verse))
@@ -696,6 +696,7 @@ export function BibleExperienceModal({
   const toolbarSummary = isSearchMode
     ? `关键词：${searchResult.keywords.join(' ')} · 范围：${scopeLabel} · 已选 ${selectedVerses.length} 节`
     : `当前浏览：${selectedBook.name} 第 ${selectedChapter} 章 · 范围：${scopeLabel} · 已选 ${selectedVerses.length} 节`;
+  const headerHint = `${CN.keyboardHint} ${CN.selectionHelp}`;
 
   return (
     <Overlay open backdrop={<OverlayBackdrop onClick={requestClose} />}>
@@ -716,12 +717,12 @@ export function BibleExperienceModal({
             <Header
               variant="Surface"
               size="500"
-              style={{ padding: `${toRem(18)} ${toRem(22)}`, borderBottom: SOFT_LINE }}
+              style={{ padding: `${toRem(22)} ${toRem(24)} ${toRem(26)}`, borderBottom: SOFT_LINE }}
             >
-              <Box grow="Yes" direction="Column" gap="100">
+              <Box grow="Yes" direction="Column" gap="150" style={{ paddingBlock: toRem(4) }}>
                 <Text size="H4">{CN.title}</Text>
-                <Text size="T300" priority="300">
-                  {CN.keyboardHint}
+                <Text size="T300" priority="300" style={{ lineHeight: 1.85 }}>
+                  {headerHint}
                 </Text>
               </Box>
               <IconButton onClick={requestClose} size="300" radii="300">
@@ -752,11 +753,20 @@ export function BibleExperienceModal({
                       gap="300"
                       style={{ ...CARD_STYLE, padding: toRem(28) }}
                     >
-                      <Box direction="Column" gap="240">
+                      <Box direction="Column" gap="280">
                         <Box wrap="Wrap" gap="300" alignItems="Start" justifyContent="SpaceBetween">
-                          <Box grow="Yes" direction="Column" gap="100" style={{ minWidth: 0 }}>
+                          <Box
+                            grow="Yes"
+                            direction="Column"
+                            gap="150"
+                            style={{ minWidth: 0, paddingBlock: `${toRem(8)} ${toRem(6)}` }}
+                          >
                             <Text size="H4">{CN.title}</Text>
-                            <Text size="T300" priority="300" style={{ lineHeight: 1.8, color: TEXT_MAIN }}>
+                            <Text
+                              size="T300"
+                              priority="300"
+                              style={{ lineHeight: 1.85, color: TEXT_MAIN, paddingBlockEnd: toRem(2) }}
+                            >
                               {CN.intro}
                             </Text>
                           </Box>
