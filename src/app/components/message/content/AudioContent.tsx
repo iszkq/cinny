@@ -10,6 +10,7 @@ import {
   PlayTimeCallback,
   useMediaLoading,
   useMediaPlay,
+  useMediaPlaybackRate,
   useMediaPlayTimeCallback,
   useMediaSeek,
   useMediaVolume,
@@ -28,6 +29,7 @@ const PLAY_TIME_THROTTLE_OPS = {
   wait: 500,
   immediate: true,
 };
+const AUDIO_PLAYBACK_RATES = [1, 1.25, 1.5, 2];
 
 type RenderMediaControlProps = {
   after: ReactNode;
@@ -73,6 +75,7 @@ export function AudioContent({
   const getAudioRef = useCallback(() => audioRef.current, []);
   const { loading } = useMediaLoading(getAudioRef);
   const { playing, setPlaying } = useMediaPlay(getAudioRef);
+  const { playbackRate, setPlaybackRate } = useMediaPlaybackRate(getAudioRef);
   const { seek } = useMediaSeek(getAudioRef);
   const { volume, mute, setMute, setVolume } = useMediaVolume(getAudioRef);
   const handlePlayTimeCallback: PlayTimeCallback = useCallback((d, ct) => {
@@ -91,6 +94,20 @@ export function AudioContent({
       loadSrc();
     }
   };
+
+  const handleCyclePlaybackRate = () => {
+    const currentIndex = AUDIO_PLAYBACK_RATES.findIndex(
+      (rate) => Math.abs(rate - playbackRate) < 0.001
+    );
+    const nextRate =
+      AUDIO_PLAYBACK_RATES[
+        currentIndex >= 0 ? (currentIndex + 1) % AUDIO_PLAYBACK_RATES.length : 0
+      ];
+
+    setPlaybackRate(nextRate);
+  };
+
+  const playbackRateLabel = `${Number.isInteger(playbackRate) ? playbackRate.toFixed(0) : playbackRate}x`;
 
   return renderMediaControl({
     after: (
@@ -155,6 +172,9 @@ export function AudioContent({
     ),
     rightControl: (
       <>
+        <Chip variant="SurfaceVariant" radii="300" onClick={handleCyclePlaybackRate}>
+          <Text size="B300">{playbackRateLabel}</Text>
+        </Chip>
         <IconButton
           variant="SurfaceVariant"
           size="300"
