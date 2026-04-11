@@ -9,7 +9,7 @@ export const ImageViewer = style([
     borderRadius: config.radii.R500,
     overflow: 'hidden',
     backgroundColor: 'rgba(7, 10, 16, 0.96)',
-    color: color.Common.White,
+    color: '#fff',
     boxShadow: '0 28px 80px rgba(7, 10, 16, 0.4)',
   },
 ]);
