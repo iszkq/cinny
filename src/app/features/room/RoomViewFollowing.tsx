@@ -45,7 +45,7 @@ export const RoomViewFollowing = as<'div', RoomViewFollowingProps>(
     const latestEventReaders = useRoomEventReaders(room, latestEvent?.getId()).filter(
       (readerId) => readerId !== mx.getUserId()
     );
-    const visibleReaders = latestEventReaders.slice(-MAX_VISIBLE_READERS);
+    const visibleReaders = latestEventReaders.slice(0, MAX_VISIBLE_READERS);
     const overflowCount = Math.max(latestEventReaders.length - visibleReaders.length, 0);
 
     const eventId = latestEvent?.getId();
