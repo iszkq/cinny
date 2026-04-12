@@ -25,6 +25,7 @@ export interface Settings {
   editorToolbar: boolean;
   twitterEmoji: boolean;
   pageZoom: number;
+  readReceiptAvatarCount: number;
   hideActivity: boolean;
 
   isPeopleDrawer: boolean;
@@ -59,6 +60,7 @@ const defaultSettings: Settings = {
   editorToolbar: false,
   twitterEmoji: false,
   pageZoom: 100,
+  readReceiptAvatarCount: 7,
   hideActivity: false,
 
   isPeopleDrawer: true,
