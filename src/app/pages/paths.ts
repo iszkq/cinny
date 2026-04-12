@@ -33,6 +33,11 @@ export type _SearchPathSearchParams = {
   order?: string;
   rooms?: string;
   senders?: string;
+  senderQuery?: string;
+  msgTypes?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  links?: string;
 };
 export const _SEARCH_PATH = 'search/';
 
