@@ -19,3 +19,13 @@ export const Content = style({
   paddingLeft: config.space.S200,
   paddingBottom: config.space.S400,
 });
+
+export const ReaderMeta = style({
+  minWidth: 0,
+  paddingTop: config.space.S100,
+  paddingBottom: config.space.S100,
+});
+
+export const ReaderTime = style({
+  fontSize: '0.875rem',
+});

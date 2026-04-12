@@ -14,7 +14,7 @@ import {
   config,
 } from 'folds';
 import { Room } from 'matrix-js-sdk';
-import { useRoomEventReaders } from '../../hooks/useRoomEventReaders';
+import { useRoomEventReadersInfo } from '../../hooks/useRoomEventReaders';
 import { getMemberDisplayName } from '../../utils/room';
 import { getMxIdLocalPart } from '../../utils/matrix';
 import * as css from './EventReaders.css';
@@ -24,6 +24,9 @@ import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 import { useOpenUserRoomProfile } from '../../state/hooks/userRoomProfile';
 import { useSpaceOptionally } from '../../hooks/useSpace';
 import { getMouseEventCords } from '../../utils/dom';
+import { useSetting } from '../../state/hooks/settings';
+import { settingsAtom } from '../../state/settings';
+import { Time } from '../message';
 
 export type EventReadersProps = {
   room: Room;
@@ -34,9 +37,11 @@ export const EventReaders = as<'div', EventReadersProps>(
   ({ className, room, eventId, requestClose, ...props }, ref) => {
     const mx = useMatrixClient();
     const useAuthentication = useMediaAuthentication();
-    const latestEventReaders = useRoomEventReaders(room, eventId);
+    const latestEventReaders = useRoomEventReadersInfo(room, eventId);
     const openProfile = useOpenUserRoomProfile();
     const space = useSpaceOptionally();
+    const [hour24Clock] = useSetting(settingsAtom, 'hour24Clock');
+    const [dateFormatString] = useSetting(settingsAtom, 'dateFormatString');
 
     const getName = (userId: string) =>
       getMemberDisplayName(room, userId) ?? getMxIdLocalPart(userId) ?? userId;
@@ -50,7 +55,7 @@ export const EventReaders = as<'div', EventReadersProps>(
       >
         <Header className={css.Header} variant="Surface" size="600">
           <Box grow="Yes">
-            <Text size="H3">Seen by</Text>
+            <Text size="H3">{`已被${latestEventReaders.length}人查看`}</Text>
           </Box>
           <IconButton size="300" onClick={requestClose}>
             <Icon src={Icons.Cross} />
@@ -59,7 +64,7 @@ export const EventReaders = as<'div', EventReadersProps>(
         <Box grow="Yes">
           <Scroll visibility="Hover" hideTrack size="300">
             <Box className={css.Content} direction="Column">
-              {latestEventReaders.map((readerId) => {
+              {latestEventReaders.map(({ userId: readerId, ts }) => {
                 const name = getName(readerId);
                 const avatarMxcUrl = room.getMember(readerId)?.getMxcAvatarUrl();
                 const avatarUrl = avatarMxcUrl
@@ -99,9 +104,24 @@ export const EventReaders = as<'div', EventReadersProps>(
                       </Avatar>
                     }
                   >
-                    <Text size="T400" truncate>
-                      {name}
-                    </Text>
+                    <Box className={css.ReaderMeta} direction="Column" gap="50">
+                      <Text size="T400" truncate>
+                        {name}
+                      </Text>
+                      {typeof ts === 'number' ? (
+                        <Time
+                          className={css.ReaderTime}
+                          compact
+                          ts={ts}
+                          hour24Clock={hour24Clock}
+                          dateFormatString={dateFormatString}
+                        />
+                      ) : (
+                        <Text className={css.ReaderTime} size="T200" priority="300">
+                          时间未知
+                        </Text>
+                      )}
+                    </Box>
                   </MenuItem>
                 );
               })}
