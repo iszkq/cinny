@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import classNames from 'classnames';
 import {
   Avatar,
@@ -31,10 +31,11 @@ import { Time } from '../message';
 export type EventReadersProps = {
   room: Room;
   eventId: string;
+  readerIds?: string[];
   requestClose: () => void;
 };
 export const EventReaders = as<'div', EventReadersProps>(
-  ({ className, room, eventId, requestClose, ...props }, ref) => {
+  ({ className, room, eventId, readerIds, requestClose, ...props }, ref) => {
     const mx = useMatrixClient();
     const useAuthentication = useMediaAuthentication();
     const latestEventReaders = useRoomEventReadersInfo(room, eventId);
@@ -45,6 +46,12 @@ export const EventReaders = as<'div', EventReadersProps>(
 
     const getName = (userId: string) =>
       getMemberDisplayName(room, userId) ?? getMxIdLocalPart(userId) ?? userId;
+    const filteredReaders = useMemo(() => {
+      if (!readerIds || readerIds.length === 0) return latestEventReaders;
+
+      const allowedIds = new Set(readerIds);
+      return latestEventReaders.filter((reader) => allowedIds.has(reader.userId));
+    }, [latestEventReaders, readerIds]);
 
     return (
       <Box
@@ -55,7 +62,7 @@ export const EventReaders = as<'div', EventReadersProps>(
       >
         <Header className={css.Header} variant="Surface" size="600">
           <Box grow="Yes">
-            <Text size="H3">{`已被${latestEventReaders.length}人查看`}</Text>
+            <Text size="H3">{`\u5df2\u88ab${filteredReaders.length}\u4eba\u67e5\u770b`}</Text>
           </Box>
           <IconButton size="300" onClick={requestClose}>
             <Icon src={Icons.Cross} />
@@ -64,7 +71,7 @@ export const EventReaders = as<'div', EventReadersProps>(
         <Box grow="Yes">
           <Scroll visibility="Hover" hideTrack size="300">
             <Box className={css.Content} direction="Column">
-              {latestEventReaders.map(({ userId: readerId, ts }) => {
+              {filteredReaders.map(({ userId: readerId, ts }) => {
                 const name = getName(readerId);
                 const avatarMxcUrl = room.getMember(readerId)?.getMxcAvatarUrl();
                 const avatarUrl = avatarMxcUrl
