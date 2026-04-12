@@ -94,6 +94,7 @@ import {
   getFavoriteEventsBySource,
   getFavoritesRoomId,
   removeFavoriteMessage,
+  removeFavoriteNote,
 } from '../../favorites';
 
 export type ReactionHandler = (keyOrMxc: string, shortcode: string) => void;
@@ -620,6 +621,7 @@ export const MessageFavoriteItem = as<
             removeFavoriteMessage(mx, targetFavoritesRoomId, eventId)
           )
         );
+        await removeFavoriteNote(mx, room.roomId, sourceEventId);
 
         return {
           eventIds: [] as string[],
