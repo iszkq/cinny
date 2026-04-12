@@ -5,6 +5,7 @@ export enum AccountDataEvent {
 
   CinnySpaces = 'in.cinny.spaces',
   CinnyFavorites = 'in.cinny.favorites',
+  CinnyFavoriteNotes = 'in.cinny.favorite_notes',
 
   ElementRecentEmoji = 'io.element.recent_emoji',
 
@@ -25,6 +26,12 @@ export type CinnyFavoritesContent = {
   roomId?: string;
   createdAt?: number;
   version?: number;
+};
+
+export type CinnyFavoriteNotesContent = {
+  version?: number;
+  updatedAt?: number;
+  notes?: Record<string, string>;
 };
 
 export type SecretStorageDefaultKeyContent = {
