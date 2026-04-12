@@ -121,7 +121,6 @@ import { useRoomNavigate } from '../../hooks/useRoomNavigate';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 import { useIgnoredUsers } from '../../hooks/useIgnoredUsers';
 import { useImagePackRooms } from '../../hooks/useImagePackRooms';
-import { getRoomEventReadersInfo } from '../../hooks/useRoomEventReaders';
 import { useIsDirectRoom } from '../../hooks/useRoom';
 import { useOpenUserRoomProfile } from '../../state/hooks/userRoomProfile';
 import { useSpaceOptionally } from '../../hooks/useSpace';
@@ -668,7 +667,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     const myUserId = mx.getUserId();
     if (!myUserId) return new Map<string, string[]>();
 
-    const visibleTodayMessages = visibleItems.reduce<
+    const visibleMessages = visibleItems.reduce<
       Array<{
         eventId: string;
         event: MatrixEvent;
@@ -683,7 +682,6 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
 
       if (!event || !targetEventId) return messages;
       if (senderId && ignoredUsersSet.has(senderId)) return messages;
-      if (!today(event.getTs())) return messages;
       if (!RECEIPT_MESSAGE_TYPES.has(event.getType())) return messages;
       if (reactionOrEditEvent(event)) return messages;
 
@@ -698,11 +696,15 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     const receiptMap = new Map<string, string[]>();
     const assignedUsers = new Set<string>();
 
-    for (let index = visibleTodayMessages.length - 1; index >= 0; index -= 1) {
-      const target = visibleTodayMessages[index];
-      const readers = getRoomEventReadersInfo(room, target.eventId)
-        .map((reader) => reader.userId)
-        .filter((readerId) => readerId !== myUserId && !assignedUsers.has(readerId));
+    for (let index = visibleMessages.length - 1; index >= 0; index -= 1) {
+      const target = visibleMessages[index];
+      const readers = Array.from(new Set(room.getUsersReadUpTo(target.event)))
+        .filter(
+          (readerId) =>
+            readerId !== myUserId &&
+            !assignedUsers.has(readerId) &&
+            !ignoredUsersSet.has(readerId)
+        );
 
       if (readers.length === 0) continue;
 
