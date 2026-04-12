@@ -38,7 +38,7 @@ import { ImageViewer } from '../../../components/image-viewer';
 import { SequenceCard } from '../../../components/sequence-card';
 import { UserAvatar } from '../../../components/user-avatar';
 import { RenderMessageContent } from '../../../components/RenderMessageContent';
-import { useAsyncCallback, AsyncStatus } from '../../../hooks/useAsyncCallback';
+import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { useFavoritesRoom } from '../../../hooks/useFavoritesRoom';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { useMatrixEventRenderer } from '../../../hooks/useMatrixEventRenderer';
@@ -99,6 +99,7 @@ const getFavoriteEvents = (room?: Room): FavoriteItem[] => {
         metadata,
         category: getFavoriteCategory(event),
       });
+
       return items;
     }, [])
     .sort((a, b) => b.event.getTs() - a.event.getTs());
@@ -110,6 +111,7 @@ const getFavoriteImageViewerItems = (items: FavoriteItem[]): ViewerImageItem[] =
     const content = item.event.getContent();
     const isImageMessage =
       eventType === MessageEvent.Sticker || content.msgtype === MsgType.Image;
+
     if (!isImageMessage) return viewerItems;
 
     const url =
@@ -118,6 +120,7 @@ const getFavoriteImageViewerItems = (items: FavoriteItem[]): ViewerImageItem[] =
         : typeof content.url === 'string'
           ? content.url
           : undefined;
+
     if (!url) return viewerItems;
 
     const mimeType =
@@ -125,7 +128,7 @@ const getFavoriteImageViewerItems = (items: FavoriteItem[]): ViewerImageItem[] =
 
     viewerItems.push({
       id: item.event.getId() ?? `${item.metadata.sourceRoomId}:${item.metadata.sourceEventId}`,
-      body: typeof content.body === 'string' ? content.body : '\u56fe\u7247',
+      body: typeof content.body === 'string' ? content.body : '图片',
       mimeType,
       url,
       encInfo: content.file,
@@ -134,10 +137,7 @@ const getFavoriteImageViewerItems = (items: FavoriteItem[]): ViewerImageItem[] =
     return viewerItems;
   }, []);
 
-const getCategoryCount = (
-  items: FavoriteItem[],
-  category: FavoriteVisibleCategory
-): number => {
+const getCategoryCount = (items: FavoriteItem[], category: FavoriteVisibleCategory): number => {
   if (category === 'all') return items.length;
   return items.filter((item) => item.category === category).length;
 };
@@ -181,32 +181,20 @@ function FavoritesEmpty({
       <PageHeroSection>
         <PageHero
           icon={
-            loading ? (
-              <Spinner size="600" variant="Secondary" />
-            ) : (
-              <Icon size="600" src={Icons.Heart} />
-            )
+            loading ? <Spinner size="600" variant="Secondary" /> : <Icon size="600" src={Icons.Heart} />
           }
-          title={
-            hasRoom
-              ? '\u8fd8\u6ca1\u6709\u6536\u85cf\u5185\u5bb9'
-              : '\u521b\u5efa\u9ed8\u8ba4\u6536\u85cf'
-          }
+          title={hasRoom ? '还没有收藏内容' : '创建默认收藏'}
           subTitle={
             hasRoom
-              ? '\u53f3\u952e\u6d88\u606f\u540e\u70b9\u51fb\u201c\u6536\u85cf\u201d\uff0c\u5185\u5bb9\u5c31\u4f1a\u51fa\u73b0\u5728\u8fd9\u91cc\u3002'
-              : '\u9ed8\u8ba4\u6536\u85cf\u4f1a\u81ea\u52a8\u4f7f\u7528\u4e00\u4e2a\u4e13\u5c5e\u79c1\u5bc6\u623f\u95f4\u6765\u4fdd\u5b58\u4f60\u6536\u85cf\u7684\u6d88\u606f\u526f\u672c\u3002'
+              ? '右键消息后点击“收藏”，内容就会出现在这里。'
+              : '默认收藏会自动使用一个专属私密房间来保存你收藏的消息副本。'
           }
         >
           {!hasRoom && (
             <Box justifyContent="Center">
               <Button onClick={onCreate} disabled={loading}>
                 {loading && <Spinner size="200" variant="Secondary" />}
-                <Text size="B400">
-                  {loading
-                    ? '\u521b\u5efa\u4e2d...'
-                    : '\u521b\u5efa\u6536\u85cf\u623f\u95f4'}
-                </Text>
+                <Text size="B400">{loading ? '创建中...' : '创建收藏房间'}</Text>
               </Button>
             </Box>
           )}
@@ -223,6 +211,7 @@ function FavoriteCard({
   hour24Clock,
   dateFormatString,
   onOpenSource,
+  onRemoved,
 }: {
   favoritesRoom: Room;
   item: FavoriteItem;
@@ -230,6 +219,7 @@ function FavoriteCard({
   hour24Clock: boolean;
   dateFormatString: string;
   onOpenSource: MouseEventHandler<HTMLButtonElement>;
+  onRemoved: (eventId: string) => void;
 }) {
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
@@ -241,17 +231,22 @@ function FavoriteCard({
       const eventId = event.getId();
       if (!eventId) throw new Error('Missing favorite event id.');
       await removeFavoriteMessage(mx, favoritesRoom.roomId, eventId);
+      return eventId;
     }, [mx, favoritesRoom.roomId, event])
   );
 
   const handleRemove = () => {
     if (removeState.status === AsyncStatus.Loading) return;
-    remove().catch(() => {});
+
+    remove()
+      .then((eventId) => {
+        if (eventId) onRemoved(eventId);
+      })
+      .catch(() => {});
   };
 
   return (
     <SequenceCard
-      key={event.getId() ?? `${metadata.sourceRoomId}:${metadata.sourceEventId}`}
       style={{ padding: config.space.S400 }}
       variant="SurfaceVariant"
       direction="Column"
@@ -305,7 +300,7 @@ function FavoriteCard({
                   <Text size="T200">{getFavoriteCategoryLabel(category)}</Text>
                 </Chip>
                 <Text size="T200" priority="300">
-                  {`\u6536\u85cf\u4e8e ${new Date(metadata.favoritedAt).toLocaleString()}`}
+                  {`收藏于 ${new Date(metadata.favoritedAt).toLocaleString()}`}
                 </Text>
               </Box>
             </Box>
@@ -320,7 +315,7 @@ function FavoriteCard({
                   data-event-id={metadata.sourceEventId}
                   onClick={onOpenSource}
                 >
-                  <Text size="B300">\u67e5\u770b\u539f\u6d88\u606f</Text>
+                  <Text size="B300">跳转到原消息</Text>
                 </Button>
               )}
               <Button
@@ -333,9 +328,7 @@ function FavoriteCard({
                   <Spinner size="200" variant="Secondary" />
                 )}
                 <Text size="B300">
-                  {removeState.status === AsyncStatus.Loading
-                    ? '\u53d6\u6d88\u4e2d...'
-                    : '\u53d6\u6d88\u6536\u85cf'}
+                  {removeState.status === AsyncStatus.Loading ? '取消中...' : '取消收藏'}
                 </Text>
               </Button>
             </Box>
@@ -350,9 +343,9 @@ function FavoriteCard({
 
 export function Favorites() {
   const mx = useMatrixClient();
+  const useAuthentication = useMediaAuthentication();
   const { navigateRoom } = useRoomNavigate();
   const favoritesRoom = useFavoritesRoom();
-  const useAuthentication = useMediaAuthentication();
   const [mediaAutoLoad] = useSetting(settingsAtom, 'mediaAutoLoad');
   const [urlPreview] = useSetting(settingsAtom, 'urlPreview');
   const [hour24Clock] = useSetting(settingsAtom, 'hour24Clock');
@@ -382,7 +375,10 @@ export function Favorites() {
   }, [favoritesRoom]);
 
   useEffect(() => {
-    if (activeCategory !== 'all' && !favoriteItems.some((item) => item.category === activeCategory)) {
+    if (
+      activeCategory !== 'all' &&
+      !favoriteItems.some((item) => item.category === activeCategory)
+    ) {
       setActiveCategory('all');
     }
   }, [activeCategory, favoriteItems]);
@@ -484,8 +480,13 @@ export function Favorites() {
     navigateRoom(roomId, eventId);
   };
 
+  const handleRemoveFavorite = useCallback((eventId: string) => {
+    setFavoriteItems((items) => items.filter((item) => item.event.getId() !== eventId));
+  }, []);
+
   const hasRoom = !!favoritesRoom;
   const loadingRoom = createState.status === AsyncStatus.Loading;
+  const showGroupedHeading = activeCategory === 'all';
 
   return (
     <Page>
@@ -493,17 +494,16 @@ export function Favorites() {
         <Box grow="Yes" direction="Column" gap="300">
           <Box alignItems="Center" justifyContent="SpaceBetween" gap="300">
             <Box direction="Column" gap="100" grow="Yes">
-              <Text size="H3">\u6536\u85cf</Text>
+              <Text size="H3">收藏</Text>
               <Text size="T300" priority="300">
-                \u73b0\u5728\u5df2\u7ecf\u652f\u6301\u6309\u5206\u7c7b\u67e5\u770b\u6536\u85cf\u5185\u5bb9\u3002\u9ed8\u8ba4\u6536\u85cf\u4f9d\u7136\u4fdd\u5b58\u5728
-                Matrix \u623f\u95f4\u4e2d\uff0c\u4e0d\u4f1a\u989d\u5916\u5360\u7528\u524d\u7aef\u672c\u5730\u7a7a\u95f4\u3002
+                默认收藏保存在 Matrix 收藏房间里，不会额外堆在前端本地。现在也支持按内容类型筛选查看。
               </Text>
             </Box>
 
             <Box shrink="No" gap="200" alignItems="Center">
               {favoriteItems.length > 0 && (
                 <Chip variant="SurfaceVariant" radii="Pill">
-                  <Text size="B300">{`${favoriteItems.length} \u6761`}</Text>
+                  <Text size="B300">{`${favoriteItems.length} 条`}</Text>
                 </Chip>
               )}
               {!hasRoom && (
@@ -518,33 +518,13 @@ export function Favorites() {
                   )}
                   <Text size="B300">
                     {createState.status === AsyncStatus.Loading
-                      ? '\u521b\u5efa\u4e2d...'
-                      : '\u521b\u5efa\u6536\u85cf\u623f\u95f4'}
+                      ? '创建中...'
+                      : '创建收藏房间'}
                   </Text>
                 </Button>
               )}
             </Box>
           </Box>
-
-          {favoriteItems.length > 0 && (
-            <Box gap="200" wrap="Wrap">
-              {FAVORITE_VISIBLE_CATEGORIES.map((category) => (
-                <Chip
-                  key={category}
-                  variant={activeCategory === category ? 'Primary' : 'SurfaceVariant'}
-                  radii="Pill"
-                  onClick={() => setActiveCategory(category)}
-                >
-                  <Text size="B300">
-                    {`${getFavoriteCategoryLabel(category)} ${getCategoryCount(
-                      favoriteItems,
-                      category
-                    )}`}
-                  </Text>
-                </Chip>
-              ))}
-            </Box>
-          )}
         </Box>
       </PageHeader>
 
@@ -553,6 +533,35 @@ export function Favorites() {
           <PageContent>
             <PageContentCenter>
               <Box direction="Column" gap="400" style={{ width: '100%' }}>
+                {favoriteItems.length > 0 && (
+                  <SequenceCard
+                    variant="SurfaceVariant"
+                    direction="Column"
+                    gap="200"
+                    style={{ padding: config.space.S300 }}
+                  >
+                    <Text size="L400">分类查看</Text>
+                    <Box gap="200" wrap="Wrap">
+                      {FAVORITE_VISIBLE_CATEGORIES.map((category) => (
+                        <Button
+                          key={category}
+                          size="300"
+                          variant={activeCategory === category ? 'Primary' : 'Secondary'}
+                          fill={activeCategory === category ? 'Solid' : 'Soft'}
+                          onClick={() => setActiveCategory(category)}
+                        >
+                          <Text size="B300">
+                            {`${getFavoriteCategoryLabel(category)} ${getCategoryCount(
+                              favoriteItems,
+                              category
+                            )}`}
+                          </Text>
+                        </Button>
+                      ))}
+                    </Box>
+                  </SequenceCard>
+                )}
+
                 {(loadingRoom || favoriteItems.length === 0) && (
                   <FavoritesEmpty
                     loading={loadingRoom}
@@ -565,13 +574,21 @@ export function Favorites() {
                   <Box direction="Column" gap="500">
                     {favoriteGroups.map((group, groupIndex) => (
                       <Box key={group.category} direction="Column" gap="300">
-                        {groupIndex > 0 && <Line size="300" />}
-                        <Box alignItems="Center" justifyContent="SpaceBetween" gap="200" wrap="Wrap">
-                          <Text size="H4">{getFavoriteCategoryLabel(group.category)}</Text>
-                          <Chip variant="SurfaceVariant" radii="Pill">
-                            <Text size="B300">{`${group.items.length} \u6761`}</Text>
-                          </Chip>
-                        </Box>
+                        {showGroupedHeading && groupIndex > 0 && <Line size="300" />}
+                        {showGroupedHeading && (
+                          <Box
+                            alignItems="Center"
+                            justifyContent="SpaceBetween"
+                            gap="200"
+                            wrap="Wrap"
+                            style={{ paddingTop: groupIndex === 0 ? config.space.S100 : 0 }}
+                          >
+                            <Text size="H4">{getFavoriteCategoryLabel(group.category)}</Text>
+                            <Chip variant="SurfaceVariant" radii="Pill">
+                              <Text size="B300">{`${group.items.length} 条`}</Text>
+                            </Chip>
+                          </Box>
+                        )}
 
                         <Box direction="Column" gap="300">
                           {group.items.map((item) => (
@@ -591,6 +608,7 @@ export function Favorites() {
                               hour24Clock={hour24Clock}
                               dateFormatString={dateFormatString}
                               onOpenSource={handleOpenSource}
+                              onRemoved={handleRemoveFavorite}
                             />
                           ))}
                         </Box>
