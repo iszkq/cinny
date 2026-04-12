@@ -51,6 +51,9 @@ import { useMessageSpacingItems } from '../../../hooks/useMessageSpacing';
 import { useDateFormatItems } from '../../../hooks/useDateFormat';
 import { SequenceCardStyle } from '../styles.css';
 
+const MIN_READ_RECEIPT_AVATAR_COUNT = 1;
+const MAX_READ_RECEIPT_AVATAR_COUNT = 12;
+
 type ThemeSelectorProps = {
   themeNames: Record<string, string>;
   themes: Theme[];
@@ -303,6 +306,71 @@ function PageZoomInput() {
   );
 }
 
+function ReadReceiptAvatarCountInput() {
+  const [readReceiptAvatarCount, setReadReceiptAvatarCount] = useSetting(
+    settingsAtom,
+    'readReceiptAvatarCount'
+  );
+  const [currentCount, setCurrentCount] = useState(`${readReceiptAvatarCount}`);
+
+  useEffect(() => {
+    setCurrentCount(`${readReceiptAvatarCount}`);
+  }, [readReceiptAvatarCount]);
+
+  const handleCountChange: ChangeEventHandler<HTMLInputElement> = (evt) => {
+    setCurrentCount(evt.target.value);
+  };
+
+  const applyCount = (value: string) => {
+    const nextCount = parseInt(value, 10);
+    if (Number.isNaN(nextCount)) {
+      setCurrentCount(readReceiptAvatarCount.toString());
+      return;
+    }
+
+    const safeCount = Math.max(
+      Math.min(nextCount, MAX_READ_RECEIPT_AVATAR_COUNT),
+      MIN_READ_RECEIPT_AVATAR_COUNT
+    );
+    setReadReceiptAvatarCount(safeCount);
+    setCurrentCount(safeCount.toString());
+  };
+
+  const handleCountEnter: KeyboardEventHandler<HTMLInputElement> = (evt) => {
+    if (isKeyHotkey('escape', evt)) {
+      evt.stopPropagation();
+      setCurrentCount(readReceiptAvatarCount.toString());
+    }
+    if (
+      isKeyHotkey('enter', evt) &&
+      'value' in evt.target &&
+      typeof evt.target.value === 'string'
+    ) {
+      applyCount(evt.target.value);
+    }
+  };
+
+  return (
+    <Input
+      style={{ width: toRem(100) }}
+      variant={
+        readReceiptAvatarCount === parseInt(currentCount, 10) ? 'Secondary' : 'Success'
+      }
+      size="300"
+      radii="300"
+      type="number"
+      min={`${MIN_READ_RECEIPT_AVATAR_COUNT}`}
+      max={`${MAX_READ_RECEIPT_AVATAR_COUNT}`}
+      value={currentCount}
+      onChange={handleCountChange}
+      onKeyDown={handleCountEnter}
+      onBlur={(evt) => applyCount(evt.target.value)}
+      after={<Text size="T300">个</Text>}
+      outlined
+    />
+  );
+}
+
 function Appearance() {
   const [systemTheme, setSystemTheme] = useSetting(settingsAtom, 'useSystemTheme');
   const [monochromeMode, setMonochromeMode] = useSetting(settingsAtom, 'monochromeMode');
@@ -349,6 +417,14 @@ function Appearance() {
 
       <SequenceCard className={SequenceCardStyle} variant="SurfaceVariant" direction="Column">
         <SettingTile title="页面缩放" after={<PageZoomInput />} />
+      </SequenceCard>
+
+      <SequenceCard className={SequenceCardStyle} variant="SurfaceVariant" direction="Column">
+        <SettingTile
+          title="已读头像显示数量"
+          description={`控制底部已读头像最多显示几个，仅对当前设备生效。范围 ${MIN_READ_RECEIPT_AVATAR_COUNT}-${MAX_READ_RECEIPT_AVATAR_COUNT}，输入后回车或失焦自动保存。`}
+          after={<ReadReceiptAvatarCountInput />}
+        />
       </SequenceCard>
     </Box>
   );
