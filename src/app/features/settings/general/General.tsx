@@ -52,7 +52,7 @@ import { useDateFormatItems } from '../../../hooks/useDateFormat';
 import { SequenceCardStyle } from '../styles.css';
 
 const MIN_READ_RECEIPT_AVATAR_COUNT = 1;
-const MAX_READ_RECEIPT_AVATAR_COUNT = 12;
+const MAX_READ_RECEIPT_AVATAR_COUNT = 50;
 
 type ThemeSelectorProps = {
   themeNames: Record<string, string>;
