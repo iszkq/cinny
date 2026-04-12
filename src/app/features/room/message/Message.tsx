@@ -80,12 +80,14 @@ import { getMatrixToRoomEvent } from '../../../plugins/matrix-to';
 import { getViaServers } from '../../../plugins/via-servers';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { useRoomPinnedEvents } from '../../../hooks/useRoomPinnedEvents';
+import { useFavoritesRoomId } from '../../../hooks/useFavoritesRoom';
 import { MemberPowerTag, StateEvent } from '../../../../types/matrix/room';
 import { PowerIcon } from '../../../components/power';
 import colorMXID from '../../../../util/colorMXID';
 import { getPowerTagIconSrc } from '../../../hooks/useMemberPowerTag';
 import { ForwardableMessage } from '../forwardMessages';
 import { FALLBACK_MIMETYPE, IMAGE_MIME_TYPES } from '../../../utils/mimeTypes';
+import { ensureFavoritesRoom, favoriteMessageToRoom } from '../../favorites';
 
 export type ReactionHandler = (keyOrMxc: string, shortcode: string) => void;
 
@@ -557,6 +559,54 @@ export const MessageForwardItem = as<
   </MenuItem>
 ));
 
+export const MessageFavoriteItem = as<
+  'button',
+  {
+    room: Room;
+    mEvent: MatrixEvent;
+    onClose?: () => void;
+  }
+>(({ room, mEvent, onClose, ...props }, ref) => {
+  const mx = useMatrixClient();
+  const [favoriteState, favorite] = useAsyncCallback(
+    useCallback(async () => {
+      const favoritesRoomId = await ensureFavoritesRoom(mx);
+      await favoriteMessageToRoom(mx, favoritesRoomId, room, mEvent);
+    }, [mx, room, mEvent])
+  );
+
+  const handleFavorite = () => {
+    if (favoriteState.status === AsyncStatus.Loading) return;
+
+    favorite()
+      .then(() => {
+        onClose?.();
+      })
+      .catch(() => {});
+  };
+
+  return (
+    <MenuItem
+      size="300"
+      after={
+        favoriteState.status === AsyncStatus.Loading ? (
+          <Spinner size="100" variant="Secondary" />
+        ) : (
+          <Icon size="100" src={Icons.Heart} filled={favoriteState.status === AsyncStatus.Success} />
+        )
+      }
+      radii="300"
+      onClick={handleFavorite}
+      {...props}
+      ref={ref}
+    >
+      <Text className={css.MessageMenuItemText} as="span" size="T300" truncate>
+        {favoriteState.status === AsyncStatus.Loading ? '收藏中...' : '收藏'}
+      </Text>
+    </MenuItem>
+  );
+});
+
 export const MessageDeleteItem = as<
   'button',
   {
@@ -895,6 +945,7 @@ export const Message = as<'div', MessageProps>(
   ) => {
     const mx = useMatrixClient();
     const useAuthentication = useMediaAuthentication();
+    const favoritesRoomId = useFavoritesRoomId();
     const senderId = mEvent.getSender() ?? '';
 
     const [hover, setHover] = useState(false);
@@ -1298,6 +1349,9 @@ export const Message = as<'div', MessageProps>(
                               onToggle={handleToggleForwardSelection}
                               onClose={closeMenu}
                             />
+                          )}
+                          {forwardSource && room.roomId !== favoritesRoomId && (
+                            <MessageFavoriteItem room={room} mEvent={mEvent} onClose={closeMenu} />
                           )}
                           <MessageCopyTextItem mEvent={mEvent} onClose={closeMenu} />
                           <MessageCopyLinkItem room={room} mEvent={mEvent} onClose={closeMenu} />
