@@ -139,6 +139,7 @@ export const ImageContent = as<'div', ImageContentProps>(
 
     const viewerTrapRef = useRef<HTMLDivElement>(null);
     const viewerCacheRef = useRef<Map<string, string>>(new Map());
+    const viewerPreloadRef = useRef<Set<string>>(new Set());
 
     const baseViewerItem = useMemo<ViewerImageItem>(
       () => ({
@@ -197,6 +198,29 @@ export const ImageContent = as<'div', ImageContentProps>(
       0
     );
     const currentViewerItem = galleryItems[viewerIndex] ?? baseViewerItem;
+
+    const preloadViewerItem = useCallback(
+      (item?: ViewerImageItem) => {
+        if (!item || item.id === currentViewerItem.id) return;
+        if (viewerCacheRef.current.has(item.id) || viewerPreloadRef.current.has(item.id)) return;
+
+        viewerPreloadRef.current.add(item.id);
+        loadMediaSrc(item.url, item.mimeType, item.encInfo)
+          .then((loadedSrc) => {
+            if (viewerCacheRef.current.has(item.id)) {
+              revokeBlobUrl(loadedSrc);
+              return;
+            }
+
+            viewerCacheRef.current.set(item.id, loadedSrc);
+          })
+          .catch(() => {})
+          .finally(() => {
+            viewerPreloadRef.current.delete(item.id);
+          });
+      },
+      [currentViewerItem.id, loadMediaSrc]
+    );
 
     const handleLoad = () => {
       setLoad(true);
@@ -293,6 +317,13 @@ export const ImageContent = as<'div', ImageContentProps>(
         disposed = true;
       };
     }, [baseViewerItem.id, currentViewerItem, loadMediaSrc, srcState, viewer, viewerLoadNonce]);
+
+    useEffect(() => {
+      if (!viewer) return;
+
+      preloadViewerItem(galleryItems[viewerIndex - 1]);
+      preloadViewerItem(galleryItems[viewerIndex + 1]);
+    }, [galleryItems, preloadViewerItem, viewer, viewerIndex]);
 
     useEffect(
       () => () => {
