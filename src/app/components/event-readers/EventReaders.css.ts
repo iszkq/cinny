@@ -1,5 +1,5 @@
 import { style } from '@vanilla-extract/css';
-import { DefaultReset, config } from 'folds';
+import { DefaultReset, color, config } from 'folds';
 
 export const EventReaders = style([
   DefaultReset,
@@ -28,4 +28,13 @@ export const ReaderMeta = style({
 
 export const ReaderTime = style({
   fontSize: '0.875rem',
+});
+
+export const ReaderItem = style({
+  borderBottom: `1px dashed ${color.SurfaceVariant.ContainerLine}`,
+  selectors: {
+    '&:last-child': {
+      borderBottom: 'none',
+    },
+  },
 });

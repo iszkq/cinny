@@ -82,6 +82,7 @@ export const EventReaders = as<'div', EventReadersProps>(
                 return (
                   <MenuItem
                     key={readerId}
+                    className={css.ReaderItem}
                     style={{ padding: `0 ${config.space.S200}` }}
                     radii="400"
                     onClick={(event) => {
