@@ -487,6 +487,26 @@ const getRoomUnreadInfo = (room: Room, scrollTo = false) => {
   };
 };
 
+type ReceiptWithTs = {
+  data?: {
+    ts?: number;
+  };
+  ts?: number;
+};
+
+const RECEIPT_MESSAGE_TYPES = new Set<string>([
+  MessageEvent.RoomMessage,
+  MessageEvent.RoomMessageEncrypted,
+  MessageEvent.Sticker,
+]);
+
+const getReceiptTimestamp = (room: Room, userId: string): number | undefined => {
+  const receipt = room.getReadReceiptForUserId(userId) as ReceiptWithTs | null;
+  if (typeof receipt?.data?.ts === 'number') return receipt.data.ts;
+  if (typeof receipt?.ts === 'number') return receipt.ts;
+  return undefined;
+};
+
 export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimelineProps) {
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
@@ -638,6 +658,64 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
       ),
       onEnd: handleTimelinePagination,
     });
+  const visibleItems = getItems();
+
+  const messageReadReceipts = useMemo(() => {
+    if (hideActivity) return new Map<string, string[]>();
+
+    const myUserId = mx.getUserId();
+    if (!myUserId) return new Map<string, string[]>();
+
+    const visibleTodayMessages = visibleItems.reduce<
+      Array<{
+        eventId: string;
+        event: MatrixEvent;
+      }>
+    >((messages, item) => {
+      const [eventTimeline, baseIndex] = getTimelineAndBaseIndex(timeline.linkedTimelines, item);
+      if (!eventTimeline) return messages;
+
+      const event = getTimelineEvent(eventTimeline, getTimelineRelativeIndex(item, baseIndex));
+      const targetEventId = event?.getId();
+      const senderId = event?.getSender();
+
+      if (!event || !targetEventId) return messages;
+      if (senderId && ignoredUsersSet.has(senderId)) return messages;
+      if (!today(event.getTs())) return messages;
+      if (!RECEIPT_MESSAGE_TYPES.has(event.getType())) return messages;
+      if (reactionOrEditEvent(event)) return messages;
+
+      messages.push({
+        eventId: targetEventId,
+        event,
+      });
+
+      return messages;
+    }, []);
+
+    const receiptMap = new Map<string, string[]>();
+    const assignedUsers = new Set<string>();
+
+    for (let index = visibleTodayMessages.length - 1; index >= 0; index -= 1) {
+      const target = visibleTodayMessages[index];
+      const readers = room
+        .getUsersReadUpTo(target.event)
+        .filter((readerId) => readerId !== myUserId && !assignedUsers.has(readerId));
+
+      if (readers.length === 0) continue;
+
+      readers.sort((a, b) => {
+        const aTs = getReceiptTimestamp(room, a) ?? 0;
+        const bTs = getReceiptTimestamp(room, b) ?? 0;
+        return bTs - aTs;
+      });
+
+      receiptMap.set(target.eventId, readers);
+      readers.forEach((readerId) => assignedUsers.add(readerId));
+    }
+
+    return receiptMap;
+  }, [hideActivity, ignoredUsersSet, mx, room, timeline.linkedTimelines, visibleItems]);
 
   const loadEventTimeline = useEventTimelineLoader(
     mx,
@@ -1187,6 +1265,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             legacyUsernameColor={legacyUsernameColor || direct}
             hour24Clock={hour24Clock}
             dateFormatString={dateFormatString}
+            readReceiptUserIds={messageReadReceipts.get(mEventId)}
           >
             {mEvent.isRedacted() ? (
               <RedactedContent reason={mEvent.getUnsigned().redacted_because?.content.reason} />
@@ -1289,6 +1368,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             legacyUsernameColor={legacyUsernameColor || direct}
             hour24Clock={hour24Clock}
             dateFormatString={dateFormatString}
+            readReceiptUserIds={messageReadReceipts.get(mEventId)}
           >
             <EncryptedContent mEvent={mEvent}>
               {() => {
@@ -1414,6 +1494,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             legacyUsernameColor={legacyUsernameColor || direct}
             hour24Clock={hour24Clock}
             dateFormatString={dateFormatString}
+            readReceiptUserIds={messageReadReceipts.get(mEventId)}
           >
             {mEvent.isRedacted() ? (
               <RedactedContent reason={mEvent.getUnsigned().redacted_because?.content.reason} />

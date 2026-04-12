@@ -13,7 +13,7 @@ import { RoomTimeline } from './RoomTimeline';
 import { RoomViewTyping } from './RoomViewTyping';
 import { RoomTombstone } from './RoomTombstone';
 import { RoomInput } from './RoomInput';
-import { RoomViewFollowing, RoomViewFollowingPlaceholder } from './RoomViewFollowing';
+import { RoomViewFollowingPlaceholder } from './RoomViewFollowing';
 import { Page } from '../../components/page';
 import { useKeyDown } from '../../hooks/useKeyDown';
 import { editableActiveElement } from '../../utils/dom';
@@ -133,7 +133,7 @@ export function RoomView({ eventId }: { eventId?: string }) {
             </>
           )}
         </div>
-        {hideActivity ? <RoomViewFollowingPlaceholder /> : <RoomViewFollowing room={room} />}
+        {hideActivity ? <RoomViewFollowingPlaceholder /> : null}
       </Box>
     </Page>
   );
