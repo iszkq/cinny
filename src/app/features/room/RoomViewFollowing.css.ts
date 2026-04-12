@@ -37,3 +37,45 @@ export const RoomViewFollowing = recipe({
     },
   },
 });
+
+export const ReadersSummary = style([
+  DefaultReset,
+  {
+    minWidth: 0,
+    display: 'flex',
+    alignItems: 'center',
+  },
+]);
+
+export const ReaderOverflow = style([
+  DefaultReset,
+  {
+    fontWeight: 600,
+    opacity: config.opacity.P400,
+  },
+]);
+
+export const ReaderAvatarStack = style([
+  DefaultReset,
+  {
+    display: 'flex',
+    alignItems: 'center',
+    paddingLeft: config.space.S100,
+  },
+]);
+
+export const ReaderAvatar = style([
+  DefaultReset,
+  {
+    marginLeft: toRem(-6),
+    border: `2px solid ${color.Surface.Container}`,
+    borderRadius: '999px',
+    boxShadow: '0 0 0 1px rgba(15, 23, 42, 0.04)',
+    overflow: 'hidden',
+    selectors: {
+      '&:first-child': {
+        marginLeft: 0,
+      },
+    },
+  },
+]);
