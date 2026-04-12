@@ -101,6 +101,7 @@ import {
 export type ReactionHandler = (keyOrMxc: string, shortcode: string) => void;
 const DEFAULT_INLINE_READ_RECEIPTS = 7;
 const MIN_INLINE_READ_RECEIPTS = 1;
+const MAX_INLINE_READ_RECEIPTS = 50;
 
 const getMessageCopyText = (mEvent: MatrixEvent): string | undefined => {
   if (mEvent.isRedacted()) return undefined;
@@ -702,7 +703,10 @@ export const MessageInlineReadReceipts = as<
   const configuredVisibleCount = Number.isFinite(readReceiptAvatarCount)
     ? Math.trunc(readReceiptAvatarCount)
     : DEFAULT_INLINE_READ_RECEIPTS;
-  const visibleCount = Math.max(configuredVisibleCount, MIN_INLINE_READ_RECEIPTS);
+  const visibleCount = Math.max(
+    Math.min(configuredVisibleCount, MAX_INLINE_READ_RECEIPTS),
+    MIN_INLINE_READ_RECEIPTS
+  );
   const visibleReaderIds = readerIds.slice(0, visibleCount);
   const overflowCount = Math.max(readerIds.length - visibleReaderIds.length, 0);
 
@@ -742,6 +746,7 @@ export const MessageInlineReadReceipts = as<
           {...props}
           ref={ref}
         >
+          <Icon className={css.MessageReadReceiptsIcon} size="100" src={Icons.CheckTwice} />
           {overflowCount > 0 && (
             <Text className={css.MessageReadReceiptOverflow} size="T100" priority="300">
               {`+${overflowCount}`}
@@ -751,14 +756,14 @@ export const MessageInlineReadReceipts = as<
             {visibleReaderIds.map((readerId) => {
               const avatarMxcUrl = room.getMember(readerId)?.getMxcAvatarUrl();
               const avatarUrl = avatarMxcUrl
-                ? mx.mxcUrlToHttp(avatarMxcUrl, 32, 32, 'crop', undefined, false, useAuthentication)
+                ? mx.mxcUrlToHttp(avatarMxcUrl, 48, 48, 'crop', undefined, false, useAuthentication)
                 : undefined;
 
               return (
                 <Avatar
                   key={readerId}
                   className={css.MessageReadReceiptAvatar}
-                  size="100"
+                  size="200"
                   title={getName(readerId)}
                 >
                   <UserAvatar
