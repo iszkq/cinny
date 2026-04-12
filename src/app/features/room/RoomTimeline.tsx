@@ -554,6 +554,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
   const [editId, setEditId] = useState<string>();
   const [forwardMessages, setForwardMessages] = useState<Record<string, ForwardableMessage>>({});
   const [forwardDialog, setForwardDialog] = useState(false);
+  const [receiptTick, setReceiptTick] = useState(0);
 
   const roomToParents = useAtomValue(roomToParentsAtom);
   const unread = useRoomUnread(room.roomId, roomToUnreadAtom);
@@ -715,7 +716,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     }
 
     return receiptMap;
-  }, [hideActivity, ignoredUsersSet, mx, room, timeline.linkedTimelines, visibleItems]);
+  }, [hideActivity, ignoredUsersSet, mx, receiptTick, room, timeline.linkedTimelines, visibleItems]);
 
   const loadEventTimeline = useEventTimelineLoader(
     mx,
@@ -788,6 +789,18 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
       [mx, room, unreadInfo, hideActivity]
     )
   );
+
+  useEffect(() => {
+    const handleReceipt: RoomEventHandlerMap[RoomEvent.Receipt] = (_, eventRoom) => {
+      if (eventRoom?.roomId !== room.roomId) return;
+      setReceiptTick((state) => state + 1);
+    };
+
+    room.on(RoomEvent.Receipt, handleReceipt);
+    return () => {
+      room.removeListener(RoomEvent.Receipt, handleReceipt);
+    };
+  }, [room]);
 
   const handleOpenEvent = useCallback(
     async (
