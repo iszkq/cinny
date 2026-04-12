@@ -17,6 +17,16 @@ import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { getLinkedTimelines, getLiveTimeline } from '../room/RoomTimeline';
 import { decryptAllTimelineEvent } from '../../utils/room';
 
+export type SearchMessageType = 'text' | 'image' | 'video' | 'audio' | 'file' | 'sticker';
+export const SEARCH_MESSAGE_TYPES: SearchMessageType[] = [
+  'text',
+  'image',
+  'video',
+  'audio',
+  'file',
+  'sticker',
+];
+
 export type ResultItem = {
   rank: number;
   event: IEventWithRoomId;
@@ -49,6 +59,7 @@ type LocalSearchCache = {
 const LOCAL_SEARCH_PAGE_LIMIT = 20;
 const LOCAL_HISTORY_PAGINATION_LIMIT = 100;
 const MAX_LOCAL_HISTORY_PAGES_PER_ROOM = 250;
+const URL_SEARCH_REG = /(?:https?:\/\/|www\.|matrix\.to\/#\/|magnet:)/i;
 
 const emptyResult = (): SearchResult => ({
   highlights: [],
@@ -59,6 +70,89 @@ const unique = <T,>(items: T[]): T[] => Array.from(new Set(items));
 
 const normalizeSearchText = (value: string): string =>
   value.toLowerCase().replace(/\s+/g, ' ').trim();
+
+const normalizeSenderQuery = (value: string): string => value.toLowerCase().trim();
+
+const parseDateStart = (value?: string): number | undefined => {
+  if (!value) return undefined;
+  const parsed = new Date(`${value}T00:00:00`);
+  const time = parsed.getTime();
+  return Number.isNaN(time) ? undefined : time;
+};
+
+const parseDateEnd = (value?: string): number | undefined => {
+  if (!value) return undefined;
+  const parsed = new Date(`${value}T23:59:59.999`);
+  const time = parsed.getTime();
+  return Number.isNaN(time) ? undefined : time;
+};
+
+const matchesDateRange = (ts: number, dateFrom?: string, dateTo?: string): boolean => {
+  const start = parseDateStart(dateFrom);
+  const end = parseDateEnd(dateTo);
+
+  if (typeof start === 'number' && ts < start) return false;
+  if (typeof end === 'number' && ts > end) return false;
+  return true;
+};
+
+const bodyContainsUrl = (...values: Array<string | undefined>): boolean =>
+  values.some((value) => typeof value === 'string' && URL_SEARCH_REG.test(value));
+
+const getMatrixEventMessageType = (event: MatrixEvent): SearchMessageType | undefined => {
+  if (event.getType() === EventType.Sticker) return 'sticker';
+  if (event.getType() !== EventType.RoomMessage) return undefined;
+
+  const msgType = event.getContent().msgtype ?? MsgType.Text;
+
+  if (msgType === MsgType.Image) return 'image';
+  if (msgType === MsgType.Video) return 'video';
+  if (msgType === MsgType.Audio) return 'audio';
+  if (msgType === MsgType.File) return 'file';
+  return 'text';
+};
+
+const matchesMessageType = (
+  messageType: SearchMessageType | undefined,
+  selectedTypes?: SearchMessageType[]
+): boolean => {
+  if (!selectedTypes || selectedTypes.length === 0) return true;
+  if (!messageType) return false;
+  return selectedTypes.includes(messageType);
+};
+
+const matchesSenderFilter = (
+  room: Room,
+  senderId: string | undefined,
+  senderQuery?: string
+): boolean => {
+  if (!senderQuery) return true;
+  if (!senderId) return false;
+
+  const query = normalizeSenderQuery(senderQuery);
+  if (!query) return true;
+
+  const displayName = room.getMember(senderId)?.name;
+  return [senderId, displayName]
+    .filter((value): value is string => !!value)
+    .some((value) => value.toLowerCase().includes(query));
+};
+
+const eventMatchesLinkFilter = (
+  event: MatrixEvent | IEventWithRoomId,
+  messageType: SearchMessageType | undefined,
+  onlyLinks?: boolean
+): boolean => {
+  if (!onlyLinks) return true;
+  if (messageType && messageType !== 'text') return false;
+
+  const content = 'getContent' in event ? event.getContent() : event.content;
+  const body = typeof content?.body === 'string' ? content.body : undefined;
+  const formattedBody =
+    typeof content?.formatted_body === 'string' ? content.formatted_body : undefined;
+
+  return bodyContainsUrl(body, formattedBody);
+};
 
 const getSearchTerms = (term: string): string[] => {
   const normalizedTerm = normalizeSearchText(term);
@@ -159,6 +253,11 @@ const createCacheKey = (params: MessageSearchParams): string =>
     order: params.order ?? '',
     rooms: params.rooms ?? [],
     senders: params.senders ?? [],
+    senderQuery: params.senderQuery ?? '',
+    msgTypes: params.msgTypes ?? [],
+    dateFrom: params.dateFrom ?? '',
+    dateTo: params.dateTo ?? '',
+    onlyLinks: params.onlyLinks ?? false,
   });
 
 const resolveTargetRooms = (mx: MatrixClient, roomIds?: string[]): Room[] => {
@@ -205,7 +304,8 @@ const searchLocalRoomHistory = async (
   mx: MatrixClient,
   params: MessageSearchParams
 ): Promise<LocalSearchCache> => {
-  const { term, order, rooms, senders } = params;
+  const { term, order, rooms, senders, senderQuery, msgTypes, dateFrom, dateTo, onlyLinks } =
+    params;
   const searchKey = createCacheKey(params);
   const searchTerm = term?.trim();
 
@@ -243,6 +343,14 @@ const searchLocalRoomHistory = async (
 
         const sender = matrixEvent.getSender();
         if (targetSenders && (!sender || !targetSenders.has(sender))) return;
+        if (!matchesSenderFilter(room, sender ?? undefined, senderQuery)) return;
+
+        const ts = matrixEvent.getTs();
+        if (!matchesDateRange(ts, dateFrom, dateTo)) return;
+
+        const messageType = getMatrixEventMessageType(matrixEvent);
+        if (!matchesMessageType(messageType, msgTypes)) return;
+        if (!eventMatchesLinkFilter(matrixEvent, messageType, onlyLinks)) return;
 
         const body = eventToSearchBody(matrixEvent);
         if (!body) return;
@@ -254,7 +362,7 @@ const searchLocalRoomHistory = async (
         results.push({
           rank: calculateLocalRank(body, terms),
           event: toSearchEvent(matrixEvent, room.roomId),
-          ts: matrixEvent.getTs(),
+          ts,
         });
       });
     });
@@ -317,11 +425,19 @@ export type MessageSearchParams = {
   order?: string;
   rooms?: string[];
   senders?: string[];
+  senderQuery?: string;
+  msgTypes?: SearchMessageType[];
+  dateFrom?: string;
+  dateTo?: string;
+  onlyLinks?: boolean;
 };
 export const useMessageSearch = (params: MessageSearchParams) => {
   const mx = useMatrixClient();
-  const { term, order, rooms, senders } = params;
+  const { term, order, rooms, senders, senderQuery, msgTypes, dateFrom, dateTo, onlyLinks } =
+    params;
   const localCacheRef = useRef<LocalSearchCache>();
+  const hasAdvancedFilters =
+    !!senderQuery || !!dateFrom || !!dateTo || !!onlyLinks || !!(msgTypes && msgTypes.length > 0);
 
   const searchLocalFallback = useCallback(
     async (nextBatch?: string): Promise<SearchResult> => {
@@ -351,9 +467,10 @@ export const useMessageSearch = (params: MessageSearchParams) => {
 
       const limit = LOCAL_SEARCH_PAGE_LIMIT;
       const shouldUseLocalHistory =
-        !!rooms &&
-        rooms.length > 0 &&
-        rooms.some((roomId) => mx.getRoom(roomId)?.hasEncryptionStateEvent());
+        hasAdvancedFilters ||
+        (!!rooms &&
+          rooms.length > 0 &&
+          rooms.some((roomId) => mx.getRoom(roomId)?.hasEncryptionStateEvent()));
 
       if (shouldUseLocalHistory) {
         return searchLocalFallback(nextBatch);
@@ -398,7 +515,7 @@ export const useMessageSearch = (params: MessageSearchParams) => {
         throw error;
       }
     },
-    [mx, order, rooms, senders, term, searchLocalFallback]
+    [hasAdvancedFilters, mx, order, rooms, searchLocalFallback, senders, term]
   );
 
   return searchMessages;

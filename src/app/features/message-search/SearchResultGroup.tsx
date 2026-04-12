@@ -1,10 +1,32 @@
 /* eslint-disable react/destructuring-assignment */
 import React, { MouseEventHandler, useMemo } from 'react';
-import { IEventWithRoomId, JoinRule, RelationType, Room } from 'matrix-js-sdk';
 import { HTMLReactParserOptions } from 'html-react-parser';
+import { IEventWithRoomId, JoinRule, RelationType, Room } from 'matrix-js-sdk';
 import { Avatar, Box, Chip, Header, Icon, Icons, Text, config } from 'folds';
 import { Opts as LinkifyOpts } from 'linkifyjs';
+import { RenderMessageContent } from '../../components/RenderMessageContent';
+import { AvatarBase, ImageContent, MSticker, ModernLayout, RedactedContent, Reply, Time, Username, UsernameBold } from '../../components/message';
+import { Image } from '../../components/media';
+import { ImageViewer } from '../../components/image-viewer';
+import { PowerIcon } from '../../components/power';
+import { RoomAvatar, RoomIcon } from '../../components/room-avatar';
+import { SequenceCard } from '../../components/sequence-card';
+import { UserAvatar } from '../../components/user-avatar';
+import { useMatrixEventRenderer } from '../../hooks/useMatrixEventRenderer';
+import {
+  getPowerTagIconSrc,
+  useAccessiblePowerTagColors,
+  useGetMemberPowerTag,
+} from '../../hooks/useMemberPowerTag';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
+import { useMentionClickHandler } from '../../hooks/useMentionClickHandler';
+import { usePowerLevels } from '../../hooks/usePowerLevels';
+import { usePowerLevelTags } from '../../hooks/usePowerLevelTags';
+import { useRoomCreators } from '../../hooks/useRoomCreators';
+import { useRoomCreatorsTag } from '../../hooks/useRoomCreatorsTag';
+import { useSpoilerClickHandler } from '../../hooks/useSpoilerClickHandler';
+import { useTheme } from '../../hooks/useTheme';
 import {
   factoryRenderLinkifyWithMention,
   getReactCustomHtmlParser,
@@ -13,44 +35,12 @@ import {
   makeMentionCustomProps,
   renderMatrixMention,
 } from '../../plugins/react-custom-html-parser';
-import { getMxIdLocalPart, mxcUrlToHttp } from '../../utils/matrix';
-import { useMatrixEventRenderer } from '../../hooks/useMatrixEventRenderer';
-import { GetContentCallback, MessageEvent, StateEvent } from '../../../types/matrix/room';
-import {
-  AvatarBase,
-  ImageContent,
-  MSticker,
-  ModernLayout,
-  RedactedContent,
-  Reply,
-  Time,
-  Username,
-  UsernameBold,
-} from '../../components/message';
-import { RenderMessageContent } from '../../components/RenderMessageContent';
-import { Image } from '../../components/media';
-import { ImageViewer } from '../../components/image-viewer';
 import * as customHtmlCss from '../../styles/CustomHtml.css';
-import { RoomAvatar, RoomIcon } from '../../components/room-avatar';
 import { getMemberAvatarMxc, getMemberDisplayName, getRoomAvatarUrl } from '../../utils/room';
+import { getMxIdLocalPart, mxcUrlToHttp } from '../../utils/matrix';
 import { ResultItem } from './useMessageSearch';
-import { SequenceCard } from '../../components/sequence-card';
-import { UserAvatar } from '../../components/user-avatar';
-import { useMentionClickHandler } from '../../hooks/useMentionClickHandler';
-import { useSpoilerClickHandler } from '../../hooks/useSpoilerClickHandler';
-import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
-import { usePowerLevels } from '../../hooks/usePowerLevels';
-import { usePowerLevelTags } from '../../hooks/usePowerLevelTags';
-import { useTheme } from '../../hooks/useTheme';
-import { PowerIcon } from '../../components/power';
+import { GetContentCallback, MessageEvent, StateEvent } from '../../../types/matrix/room';
 import colorMXID from '../../../util/colorMXID';
-import {
-  getPowerTagIconSrc,
-  useAccessiblePowerTagColors,
-  useGetMemberPowerTag,
-} from '../../hooks/useMemberPowerTag';
-import { useRoomCreators } from '../../hooks/useRoomCreators';
-import { useRoomCreatorsTag } from '../../hooks/useRoomCreatorsTag';
 
 type SearchResultGroupProps = {
   room: Room;
@@ -63,6 +53,7 @@ type SearchResultGroupProps = {
   hour24Clock: boolean;
   dateFormatString: string;
 };
+
 export function SearchResultGroup({
   room,
   highlights,
@@ -80,7 +71,6 @@ export function SearchResultGroup({
 
   const powerLevels = usePowerLevels(room);
   const creators = useRoomCreators(room);
-
   const creatorsTag = useRoomCreatorsTag();
   const powerLevelTags = usePowerLevelTags(room, powerLevels);
   const getMemberPowerTag = useGetMemberPowerTag(room, creators, powerLevels);
@@ -100,6 +90,7 @@ export function SearchResultGroup({
     }),
     [mx, room, mentionClickHandler]
   );
+
   const htmlReactParserOptions = useMemo<HTMLReactParserOptions>(
     () =>
       getReactCustomHtmlParser(mx, room.roomId, {
@@ -148,6 +139,7 @@ export function SearchResultGroup({
         if (event.unsigned?.redacted_because) {
           return <RedactedContent reason={event.unsigned?.redacted_because.content.reason} />;
         }
+
         return (
           <MSticker
             content={getContent()}
@@ -178,6 +170,7 @@ export function SearchResultGroup({
       if (event.unsigned?.redacted_because) {
         return <RedactedContent reason={event.unsigned?.redacted_because.content.reason} />;
       }
+
       return (
         <Box grow="Yes" direction="Column">
           <Text size="T400" priority="300">
@@ -219,6 +212,7 @@ export function SearchResultGroup({
           </Text>
         </Box>
       </Header>
+
       <Box direction="Column" gap="100">
         {items.map((item) => {
           const { event } = item;
@@ -298,6 +292,7 @@ export function SearchResultGroup({
                       dateFormatString={dateFormatString}
                     />
                   </Box>
+
                   <Box shrink="No" gap="200" alignItems="Center">
                     <Chip
                       data-event-id={mainEventId}
@@ -305,10 +300,11 @@ export function SearchResultGroup({
                       variant="Secondary"
                       radii="400"
                     >
-                      <Text size="T200">{'\u6253\u5f00'}</Text>
+                      <Text size="T200">{'\u8df3\u8f6c\u5b9a\u4f4d'}</Text>
                     </Chip>
                   </Box>
                 </Box>
+
                 {replyEventId && (
                   <Reply
                     room={room}
@@ -320,6 +316,7 @@ export function SearchResultGroup({
                     legacyUsernameColor={legacyUsernameColor}
                   />
                 )}
+
                 {renderMatrixEvent(event.type, false, event, displayName, getContent)}
               </ModernLayout>
             </SequenceCard>
