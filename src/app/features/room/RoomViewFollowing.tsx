@@ -30,7 +30,7 @@ import { useSetting } from '../../state/hooks/settings';
 import { settingsAtom } from '../../state/settings';
 
 const MIN_VISIBLE_READERS = 1;
-const MAX_VISIBLE_READERS = 12;
+const MAX_VISIBLE_READERS = 50;
 
 export function RoomViewFollowingPlaceholder() {
   return <div className={css.RoomViewFollowingPlaceholder} />;
