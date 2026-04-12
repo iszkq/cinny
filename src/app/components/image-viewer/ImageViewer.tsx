@@ -1,5 +1,5 @@
 /* eslint-disable jsx-a11y/no-noninteractive-element-interactions */
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import FileSaver from 'file-saver';
 import classNames from 'classnames';
 import { Box, Chip, Header, Icon, IconButton, Icons, Text, as } from 'folds';
@@ -56,10 +56,15 @@ export const ImageViewer = as<'div', ImageViewerProps>(
     const rotated = Math.abs(rotation % 180) === 90;
     const panEnabled = viewMode === 'actual' || zoom !== 1 || rotated;
     const { pan, cursor, onMouseDown } = usePan(panEnabled, `${src}-${rotation}-${viewMode}`);
+    const [swiping, setSwiping] = useState(false);
+    const [swipeOffsetX, setSwipeOffsetX] = useState(0);
     const displayRotation = ((rotation % 360) + 360) % 360;
     const resolvedActiveItemId = activeItemId ?? src;
     const thumbnailRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+    const swipeDeltaRef = useRef({ x: 0, y: 0 });
+    const swipeCleanupRef = useRef<(() => void) | null>(null);
     const hasThumbnailRail = !!items && items.length > 1;
+    const swipeEnabled = !panEnabled && Boolean(onPrev || onNext);
 
     const handleDownload = async () => {
       const response = await fetch(src);
@@ -86,6 +91,64 @@ export const ImageViewer = as<'div', ImageViewerProps>(
       });
     };
 
+    const clearSwipeListeners = useCallback(() => {
+      swipeCleanupRef.current?.();
+      swipeCleanupRef.current = null;
+    }, []);
+
+    const finishSwipe = useCallback(() => {
+      clearSwipeListeners();
+
+      const { x, y } = swipeDeltaRef.current;
+      setSwiping(false);
+      setSwipeOffsetX(0);
+      swipeDeltaRef.current = { x: 0, y: 0 };
+
+      if (Math.abs(x) < 120 || Math.abs(x) <= Math.abs(y) * 1.15) {
+        return;
+      }
+
+      if (x > 0 && canPrev && onPrev) {
+        onPrev();
+      } else if (x < 0 && canNext && onNext) {
+        onNext();
+      }
+    }, [canNext, canPrev, clearSwipeListeners, onNext, onPrev]);
+
+    const handleSwipeMouseDown = useCallback<React.MouseEventHandler<HTMLImageElement>>(
+      (evt) => {
+        if (!swipeEnabled) return;
+
+        evt.preventDefault();
+        const startX = evt.clientX;
+        const startY = evt.clientY;
+
+        swipeDeltaRef.current = { x: 0, y: 0 };
+        setSwiping(true);
+        setSwipeOffsetX(0);
+
+        const handleMouseMove = (moveEvt: MouseEvent) => {
+          const deltaX = moveEvt.clientX - startX;
+          const deltaY = moveEvt.clientY - startY;
+
+          swipeDeltaRef.current = { x: deltaX, y: deltaY };
+          setSwipeOffsetX(deltaX);
+        };
+
+        const handleMouseUp = () => {
+          finishSwipe();
+        };
+
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseup', handleMouseUp, { once: true });
+        swipeCleanupRef.current = () => {
+          document.removeEventListener('mousemove', handleMouseMove);
+          document.removeEventListener('mouseup', handleMouseUp);
+        };
+      },
+      [finishSwipe, swipeEnabled]
+    );
+
     useEffect(() => {
       const handleKeyDown = (evt: KeyboardEvent) => {
         if (evt.key === 'ArrowLeft' && canPrev && onPrev) {
@@ -111,11 +174,27 @@ export const ImageViewer = as<'div', ImageViewerProps>(
       });
     }, [hasThumbnailRail, resolvedActiveItemId]);
 
+    useEffect(
+      () => () => {
+        clearSwipeListeners();
+      },
+      [clearSwipeListeners]
+    );
+
     useLayoutEffect(() => {
+      clearSwipeListeners();
+      setSwiping(false);
+      setSwipeOffsetX(0);
+      swipeDeltaRef.current = { x: 0, y: 0 };
       setZoom(1);
       setRotation(0);
       setViewMode('fit');
-    }, [setZoom, src]);
+    }, [clearSwipeListeners, setZoom, src]);
+
+    const imageCursor = panEnabled ? cursor : swipeEnabled ? (swiping ? 'grabbing' : 'grab') : 'default';
+    const handleImageMouseDown = (
+      panEnabled ? onMouseDown : swipeEnabled ? handleSwipeMouseDown : undefined
+    ) as React.MouseEventHandler<HTMLImageElement> | undefined;
 
     return (
       <Box
@@ -233,14 +312,15 @@ export const ImageViewer = as<'div', ImageViewerProps>(
               <img
                 className={css.ImageViewerImg}
                 style={{
-                  cursor,
+                  cursor: imageCursor,
                   maxWidth: viewMode === 'fit' ? '100%' : 'none',
                   maxHeight: viewMode === 'fit' ? '100%' : 'none',
-                  transform: `translate(${pan.translateX}px, ${pan.translateY}px) rotate(${rotation}deg) scale(${zoom})`,
+                  transform: `translate(${pan.translateX + swipeOffsetX}px, ${pan.translateY}px) rotate(${rotation}deg) scale(${zoom})`,
+                  transition: swiping || cursor === 'grabbing' ? 'none' : undefined,
                 }}
                 src={src}
                 alt={alt}
-                onMouseDown={onMouseDown}
+                onMouseDown={handleImageMouseDown}
                 onDoubleClick={toggleViewMode}
                 draggable={false}
               />
