@@ -30,6 +30,12 @@ import {
   UnreadInfo,
 } from '../../types/matrix/room';
 
+type FullyReadContent = {
+  event_id?: string;
+};
+
+const FULLY_READ_EVENT_TYPE = 'm.fully_read';
+
 export const getStateEvent = (
   room: Room,
   eventType: StateEvent,
@@ -45,6 +51,22 @@ export const getAccountData = (
   mx: MatrixClient,
   eventType: AccountDataEvent
 ): MatrixEvent | undefined => mx.getAccountData(eventType as any);
+
+export const getRoomFullyReadEventId = (room: Room): string | undefined => {
+  const fullyReadEvent = room.accountData.get(FULLY_READ_EVENT_TYPE);
+  const eventId = fullyReadEvent?.getContent<FullyReadContent>()?.event_id;
+  return typeof eventId === 'string' ? eventId : undefined;
+};
+
+export const getRoomReadMarkerEventId = (
+  room: Room,
+  userId?: string | null
+): string | undefined => {
+  const fullyReadEventId = getRoomFullyReadEventId(room);
+  if (fullyReadEventId) return fullyReadEventId;
+  if (!userId) return undefined;
+  return room.getEventReadUpTo(userId) ?? undefined;
+};
 
 export const getMDirects = (mDirectEvent: MatrixEvent): Set<string> => {
   const roomIds = new Set<string>();
@@ -217,7 +239,7 @@ export const roomHaveNotification = (room: Room): boolean => {
 export const roomHaveUnread = (mx: MatrixClient, room: Room) => {
   const userId = mx.getUserId();
   if (!userId) return false;
-  const readUpToId = room.getEventReadUpTo(userId);
+  const readUpToId = getRoomReadMarkerEventId(room, userId);
   const liveEvents = room.getLiveTimeline().getEvents();
 
   if (liveEvents[liveEvents.length - 1]?.getSender() === userId) {

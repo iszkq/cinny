@@ -1,6 +1,8 @@
 import { MatrixClient, ReceiptType } from 'matrix-js-sdk';
+import { getRoomFullyReadEventId } from './room';
 
 export const ROOM_MARKED_AS_READ = 'cinny:room-marked-as-read';
+const FULLY_READ_EVENT_TYPE = 'm.fully_read';
 
 type RoomMarkedAsReadDetail = {
   roomId: string;
@@ -19,15 +21,16 @@ export async function markAsRead(mx: MatrixClient, roomId: string, privateReceip
   const room = mx.getRoom(roomId);
   if (!room) return;
 
-  dispatchRoomMarkedAsRead(roomId);
+  const userId = mx.getUserId();
+  if (!userId) return;
 
   const timeline = room.getLiveTimeline().getEvents();
-  const readEventId = room.getEventReadUpTo(mx.getUserId()!);
+  const publicReadEventId = room.getEventReadUpTo(userId);
+  const fullyReadEventId = getRoomFullyReadEventId(room);
 
   const getLatestValidEvent = () => {
     for (let i = timeline.length - 1; i >= 0; i -= 1) {
       const latestEvent = timeline[i];
-      if (latestEvent.getId() === readEventId) return null;
       if (!latestEvent.isSending()) return latestEvent;
     }
     return null;
@@ -35,9 +38,32 @@ export async function markAsRead(mx: MatrixClient, roomId: string, privateReceip
   if (timeline.length === 0) return;
   const latestEvent = getLatestValidEvent();
   if (latestEvent === null) return;
+  const latestEventId = latestEvent.getId();
+  if (!latestEventId) return;
 
-  await mx.sendReadReceipt(
-    latestEvent,
-    privateReceipt ? ReceiptType.ReadPrivate : ReceiptType.Read
-  );
+  const fullyReadUpToDate = latestEventId === fullyReadEventId;
+  const publicReadUpToDate = latestEventId === publicReadEventId;
+
+  if ((privateReceipt && fullyReadUpToDate) || (!privateReceipt && fullyReadUpToDate && publicReadUpToDate)) {
+    return;
+  }
+
+  try {
+    await mx.setRoomReadMarkers(
+      roomId,
+      latestEventId,
+      privateReceipt ? undefined : latestEvent,
+      privateReceipt ? latestEvent : undefined
+    );
+  } catch (error) {
+    await Promise.all([
+      mx.setRoomAccountData(roomId, FULLY_READ_EVENT_TYPE, { event_id: latestEventId }),
+      mx.sendReadReceipt(
+        latestEvent,
+        privateReceipt ? ReceiptType.ReadPrivate : ReceiptType.Read
+      ),
+    ]);
+  }
+
+  dispatchRoomMarkedAsRead(roomId);
 }
