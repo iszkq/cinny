@@ -27,6 +27,8 @@ import { EventReaders } from '../../components/event-readers';
 import { UserAvatar } from '../../components/user-avatar';
 import { stopPropagation } from '../../utils/keyboard';
 
+const MAX_VISIBLE_READERS = 7;
+
 export function RoomViewFollowingPlaceholder() {
   return <div className={css.RoomViewFollowingPlaceholder} />;
 }
@@ -43,7 +45,7 @@ export const RoomViewFollowing = as<'div', RoomViewFollowingProps>(
     const latestEventReaders = useRoomEventReaders(room, latestEvent?.getId()).filter(
       (readerId) => readerId !== mx.getUserId()
     );
-    const visibleReaders = latestEventReaders.slice(-3);
+    const visibleReaders = latestEventReaders.slice(-MAX_VISIBLE_READERS);
     const overflowCount = Math.max(latestEventReaders.length - visibleReaders.length, 0);
 
     const eventId = latestEvent?.getId();
