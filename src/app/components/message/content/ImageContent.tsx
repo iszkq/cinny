@@ -22,15 +22,15 @@ import FocusTrap from 'focus-trap-react';
 import { EncryptedAttachmentInfo } from 'browser-encrypt-attachment';
 import { IImageInfo, MATRIX_BLUR_HASH_PROPERTY_NAME } from '../../../../types/matrix/common';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
-import * as css from './style.css';
-import { bytesToSize } from '../../../utils/common';
-import { FALLBACK_MIMETYPE } from '../../../utils/mimeTypes';
-import { stopPropagation } from '../../../utils/keyboard';
-import { decryptFile, downloadEncryptedMedia, mxcUrlToHttp } from '../../../utils/matrix';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
+import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { ModalWide } from '../../../styles/Modal.css';
 import { validBlurHash } from '../../../utils/blurHash';
+import { bytesToSize } from '../../../utils/common';
+import { stopPropagation } from '../../../utils/keyboard';
+import { FALLBACK_MIMETYPE } from '../../../utils/mimeTypes';
+import { decryptFile, downloadEncryptedMedia, mxcUrlToHttp } from '../../../utils/matrix';
+import * as css from './style.css';
 
 type RenderViewerProps = {
   src: string;
@@ -40,6 +40,13 @@ type RenderViewerProps = {
   canNext?: boolean;
   onPrev?: () => void;
   onNext?: () => void;
+  items?: Array<{
+    id: string;
+    alt: string;
+    previewSrc?: string;
+  }>;
+  activeItemId?: string;
+  onSelectItem?: (itemId: string) => void;
 };
 
 export type ViewerImageItem = {
@@ -129,6 +136,7 @@ export const ImageContent = as<'div', ImageContentProps>(
     const [viewerMediaState, setViewerMediaState] = useState<ViewerMediaState>({
       status: AsyncStatus.Idle,
     });
+
     const viewerTrapRef = useRef<HTMLDivElement>(null);
     const viewerCacheRef = useRef<Map<string, string>>(new Map());
 
@@ -144,18 +152,17 @@ export const ImageContent = as<'div', ImageContentProps>(
     );
 
     const galleryItems = useMemo(() => {
-      const nextItems = viewerItems ? [...viewerItems] : [];
-      if (!nextItems.some((item) => item.id === baseViewerItem.id)) {
-        nextItems.push(baseViewerItem);
-      }
-      return nextItems.length > 0 ? nextItems : [baseViewerItem];
+      const itemMap = new Map<string, ViewerImageItem>();
+      [...(viewerItems ?? []), baseViewerItem].forEach((item) => {
+        if (!itemMap.has(item.id)) {
+          itemMap.set(item.id, item);
+        }
+      });
+      return Array.from(itemMap.values());
     }, [baseViewerItem, viewerItems]);
 
-    const initialViewerIndex = Math.max(
-      galleryItems.findIndex((item) => item.id === baseViewerItem.id),
-      0
-    );
-    const [viewerIndex, setViewerIndex] = useState(initialViewerIndex);
+    const initialViewerItemId = baseViewerItem.id;
+    const [viewerItemId, setViewerItemId] = useState(initialViewerItemId);
 
     const loadMediaSrc = useCallback(
       async (
@@ -165,21 +172,30 @@ export const ImageContent = as<'div', ImageContentProps>(
       ) => {
         const mediaUrl = mxcUrlToHttp(mx, targetUrl, useAuthentication);
         if (!mediaUrl) throw new Error('Invalid media URL');
+
         if (targetEncInfo) {
           const fileContent = await downloadEncryptedMedia(mediaUrl, (encBuf) =>
             decryptFile(encBuf, targetMimeType ?? FALLBACK_MIMETYPE, targetEncInfo)
           );
           return URL.createObjectURL(fileContent);
         }
+
         return mediaUrl;
       },
       [mx, useAuthentication]
     );
 
     const [srcState, loadSrc] = useAsyncCallback(
-      useCallback(async () => loadMediaSrc(url, mimeType, encInfo), [encInfo, loadMediaSrc, mimeType, url])
+      useCallback(
+        async () => loadMediaSrc(url, mimeType, encInfo),
+        [encInfo, loadMediaSrc, mimeType, url]
+      )
     );
 
+    const viewerIndex = Math.max(
+      galleryItems.findIndex((item) => item.id === viewerItemId),
+      0
+    );
     const currentViewerItem = galleryItems[viewerIndex] ?? baseViewerItem;
 
     const handleLoad = () => {
@@ -197,13 +213,27 @@ export const ImageContent = as<'div', ImageContentProps>(
     };
 
     useEffect(() => {
+      setBlurred(markedAsSpoiler ?? false);
+    }, [markedAsSpoiler]);
+
+    useEffect(() => {
+      setLoad(false);
+      setError(false);
+    }, [url]);
+
+    useEffect(() => {
       if (!autoPlay) return;
       void loadSrc().catch(() => undefined);
     }, [autoPlay, loadSrc]);
 
     useEffect(() => {
-      setViewerIndex(initialViewerIndex);
-    }, [initialViewerIndex]);
+      setViewerItemId(initialViewerItemId);
+    }, [initialViewerItemId]);
+
+    useEffect(() => {
+      if (galleryItems.some((item) => item.id === viewerItemId)) return;
+      setViewerItemId(initialViewerItemId);
+    }, [galleryItems, initialViewerItemId, viewerItemId]);
 
     useEffect(() => {
       if (!viewer) {
@@ -236,11 +266,7 @@ export const ImageContent = as<'div', ImageContentProps>(
         itemId: currentViewerItem.id,
       });
 
-      loadMediaSrc(
-        currentViewerItem.url,
-        currentViewerItem.mimeType,
-        currentViewerItem.encInfo
-      )
+      loadMediaSrc(currentViewerItem.url, currentViewerItem.mimeType, currentViewerItem.encInfo)
         .then((loadedSrc) => {
           if (disposed) {
             revokeBlobUrl(loadedSrc);
@@ -270,10 +296,13 @@ export const ImageContent = as<'div', ImageContentProps>(
 
     useEffect(
       () => () => {
+        if (srcState.status === AsyncStatus.Success) {
+          revokeBlobUrl(srcState.data);
+        }
         viewerCacheRef.current.forEach((cachedSrc) => revokeBlobUrl(cachedSrc));
         viewerCacheRef.current.clear();
       },
-      []
+      [srcState]
     );
 
     const activeViewerSrc =
@@ -284,14 +313,48 @@ export const ImageContent = as<'div', ImageContentProps>(
           ? viewerMediaState.src
           : undefined;
 
+    const getViewerPreviewSrc = useCallback(
+      (item: ViewerImageItem): string | undefined => {
+        if (item.id === baseViewerItem.id && srcState.status === AsyncStatus.Success) {
+          return srcState.data;
+        }
+
+        if (item.id === currentViewerItem.id && activeViewerSrc) {
+          return activeViewerSrc;
+        }
+
+        const cachedViewerSrc = viewerCacheRef.current.get(item.id);
+        if (cachedViewerSrc) {
+          return cachedViewerSrc;
+        }
+
+        if (item.encInfo) {
+          return undefined;
+        }
+
+        return mxcUrlToHttp(mx, item.url, useAuthentication, 160, 160, 'scale') ?? undefined;
+      },
+      [activeViewerSrc, baseViewerItem.id, currentViewerItem.id, mx, srcState, useAuthentication]
+    );
+
+    const viewerPreviewItems = useMemo(
+      () =>
+        galleryItems.map((item) => ({
+          id: item.id,
+          alt: item.body,
+          previewSrc: getViewerPreviewSrc(item),
+        })),
+      [galleryItems, getViewerPreviewSrc]
+    );
+
     const openViewer = () => {
-      setViewerIndex(initialViewerIndex);
+      setViewerItemId(initialViewerItemId);
       setViewer(true);
     };
 
     const closeViewer = () => {
       setViewer(false);
-      setViewerIndex(initialViewerIndex);
+      setViewerItemId(initialViewerItemId);
       setViewerMediaState({ status: AsyncStatus.Idle });
     };
 
@@ -339,8 +402,15 @@ export const ImageContent = as<'div', ImageContentProps>(
                         requestClose: closeViewer,
                         canPrev,
                         canNext,
-                        onPrev: canPrev ? () => setViewerIndex((index) => index - 1) : undefined,
-                        onNext: canNext ? () => setViewerIndex((index) => index + 1) : undefined,
+                        onPrev: canPrev
+                          ? () => setViewerItemId(galleryItems[viewerIndex - 1].id)
+                          : undefined,
+                        onNext: canNext
+                          ? () => setViewerItemId(galleryItems[viewerIndex + 1].id)
+                          : undefined,
+                        items: viewerPreviewItems,
+                        activeItemId: currentViewerItem.id,
+                        onSelectItem: setViewerItemId,
                       })
                     ) : (
                       <Box
@@ -359,7 +429,7 @@ export const ImageContent = as<'div', ImageContentProps>(
                             radii="300"
                             onClick={() => setViewerLoadNonce((value) => value + 1)}
                           >
-                            <Text size="B300">重新加载</Text>
+                            <Text size="B300">{'\u91cd\u65b0\u52a0\u8f7d'}</Text>
                           </Button>
                         )}
                       </Box>
@@ -391,7 +461,7 @@ export const ImageContent = as<'div', ImageContentProps>(
               onClick={() => void loadSrc().catch(() => undefined)}
               before={<Icon size="Inherit" src={Icons.Photo} filled />}
             >
-              <Text size="B300">查看</Text>
+              <Text size="B300">{'\u67e5\u770b'}</Text>
             </Button>
           </Box>
         )}
@@ -437,7 +507,7 @@ export const ImageContent = as<'div', ImageContentProps>(
                     }
                   }}
                 >
-                  <Text size="B300">剧透</Text>
+                  <Text size="B300">{'\u663e\u793a\u5267\u900f'}</Text>
                 </Chip>
               )}
             </TooltipProvider>
@@ -457,7 +527,7 @@ export const ImageContent = as<'div', ImageContentProps>(
             <TooltipProvider
               tooltip={
                 <Tooltip variant="Critical">
-                  <Text>图片加载失败</Text>
+                  <Text>{'\u56fe\u7247\u52a0\u8f7d\u5931\u8d25'}</Text>
                 </Tooltip>
               }
               position="Top"
@@ -474,7 +544,7 @@ export const ImageContent = as<'div', ImageContentProps>(
                   onClick={handleRetry}
                   before={<Icon size="Inherit" src={Icons.Warning} filled />}
                 >
-                  <Text size="B300">重试</Text>
+                  <Text size="B300">{'\u91cd\u8bd5'}</Text>
                 </Button>
               )}
             </TooltipProvider>
