@@ -13,6 +13,7 @@ import { AuthLayout, Login, Register, ResetPassword } from './auth';
 import {
   DIRECT_PATH,
   EXPLORE_PATH,
+  FAVORITES_PATH,
   HOME_PATH,
   LOGIN_PATH,
   INBOX_PATH,
@@ -42,6 +43,7 @@ import {
 import { ClientBindAtoms, ClientLayout, ClientRoot } from './client';
 import { Home, HomeRouteRoomProvider, HomeSearch } from './client/home';
 import { Direct, DirectCreate, DirectRouteRoomProvider } from './client/direct';
+import { Favorites } from './client/favorites';
 import { RouteSpaceProvider, Space, SpaceRouteRoomProvider, SpaceSearch } from './client/space';
 import { Explore, FeaturedRooms, PublicRooms } from './client/explore';
 import { Notifications, Inbox, Invites } from './client/inbox';
@@ -206,6 +208,7 @@ export const createRouter = (clientConfig: ClientConfig, screenSize: ScreenSize)
             }
           />
         </Route>
+        <Route path={FAVORITES_PATH} element={<Favorites />} />
         <Route
           path={SPACE_PATH}
           element={
