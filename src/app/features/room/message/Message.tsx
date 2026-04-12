@@ -27,13 +27,14 @@ import React, {
   FormEventHandler,
   MouseEventHandler,
   ReactNode,
+  useEffect,
   useCallback,
   useState,
 } from 'react';
 import FocusTrap from 'focus-trap-react';
 import { useHover, useFocusWithin } from 'react-aria';
 import { EncryptedAttachmentInfo } from 'browser-encrypt-attachment';
-import { EventType, MatrixEvent, MsgType, Room } from 'matrix-js-sdk';
+import { EventType, MatrixEvent, MsgType, Room, RoomEvent } from 'matrix-js-sdk';
 import { Relations } from 'matrix-js-sdk/lib/models/relations';
 import classNames from 'classnames';
 import { RoomPinnedEventsEventContent } from 'matrix-js-sdk/lib/types';
@@ -80,14 +81,20 @@ import { getMatrixToRoomEvent } from '../../../plugins/matrix-to';
 import { getViaServers } from '../../../plugins/via-servers';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { useRoomPinnedEvents } from '../../../hooks/useRoomPinnedEvents';
-import { useFavoritesRoomId } from '../../../hooks/useFavoritesRoom';
+import { useFavoritesRoom, useFavoritesRoomId } from '../../../hooks/useFavoritesRoom';
 import { MemberPowerTag, StateEvent } from '../../../../types/matrix/room';
 import { PowerIcon } from '../../../components/power';
 import colorMXID from '../../../../util/colorMXID';
 import { getPowerTagIconSrc } from '../../../hooks/useMemberPowerTag';
 import { ForwardableMessage } from '../forwardMessages';
 import { FALLBACK_MIMETYPE, IMAGE_MIME_TYPES } from '../../../utils/mimeTypes';
-import { ensureFavoritesRoom, favoriteMessageToRoom } from '../../favorites';
+import {
+  ensureFavoritesRoom,
+  favoriteMessageToRoom,
+  getFavoriteEventsBySource,
+  getFavoritesRoomId,
+  removeFavoriteMessage,
+} from '../../favorites';
 
 export type ReactionHandler = (keyOrMxc: string, shortcode: string) => void;
 
@@ -568,22 +575,81 @@ export const MessageFavoriteItem = as<
   }
 >(({ room, mEvent, onClose, ...props }, ref) => {
   const mx = useMatrixClient();
+  const favoritesRoom = useFavoritesRoom();
+  const sourceEventId = mEvent.getId() ?? '';
+
+  const getFavoriteEventIds = useCallback(
+    () =>
+      getFavoriteEventsBySource(favoritesRoom, room.roomId, sourceEventId)
+        .map((event) => event.getId())
+        .filter((eventId): eventId is string => typeof eventId === 'string'),
+    [favoritesRoom, room.roomId, sourceEventId]
+  );
+
+  const [favoriteEventIds, setFavoriteEventIds] = useState<string[]>(getFavoriteEventIds);
+
+  useEffect(() => {
+    setFavoriteEventIds(getFavoriteEventIds());
+  }, [getFavoriteEventIds]);
+
+  useEffect(() => {
+    if (!favoritesRoom) return undefined;
+
+    const refresh = () => setFavoriteEventIds(getFavoriteEventIds());
+
+    favoritesRoom.on(RoomEvent.Timeline, refresh);
+    favoritesRoom.on(RoomEvent.TimelineRefresh, refresh);
+
+    return () => {
+      favoritesRoom.removeListener(RoomEvent.Timeline, refresh);
+      favoritesRoom.removeListener(RoomEvent.TimelineRefresh, refresh);
+    };
+  }, [favoritesRoom, getFavoriteEventIds]);
+
+  const favorited = favoriteEventIds.length > 0;
   const [favoriteState, favorite] = useAsyncCallback(
     useCallback(async () => {
-      const favoritesRoomId = await ensureFavoritesRoom(mx);
-      await favoriteMessageToRoom(mx, favoritesRoomId, room, mEvent);
-    }, [mx, room, mEvent])
+      if (favorited) {
+        const targetFavoritesRoomId = favoritesRoom?.roomId ?? getFavoritesRoomId(mx);
+        if (!targetFavoritesRoomId) {
+          throw new Error('Missing favorites room id.');
+        }
+
+        await Promise.all(
+          favoriteEventIds.map((eventId) =>
+            removeFavoriteMessage(mx, targetFavoritesRoomId, eventId)
+          )
+        );
+
+        return {
+          eventIds: [] as string[],
+          favorited: false,
+        };
+      }
+
+      const favoritesRoomId = favoritesRoom?.roomId ?? (await ensureFavoritesRoom(mx));
+      const favoriteEventId = await favoriteMessageToRoom(mx, favoritesRoomId, room, mEvent);
+
+      return {
+        eventIds: favoriteEventId ? [favoriteEventId] : getFavoriteEventIds(),
+        favorited: true,
+      };
+    }, [favorited, favoriteEventIds, favoritesRoom, mx, room, mEvent, getFavoriteEventIds])
   );
 
   const handleFavorite = () => {
     if (favoriteState.status === AsyncStatus.Loading) return;
 
     favorite()
-      .then(() => {
-        onClose?.();
+      .then((result) => {
+        if (!result) return;
+        setFavoriteEventIds(result.eventIds);
       })
       .catch(() => {});
   };
+
+  const favoriteLoadingLabel = favorited ? '取消中...' : '收藏中...';
+  const favoriteDefaultLabel = favorited ? '已收藏' : '收藏';
 
   return (
     <MenuItem
@@ -592,16 +658,24 @@ export const MessageFavoriteItem = as<
         favoriteState.status === AsyncStatus.Loading ? (
           <Spinner size="100" variant="Secondary" />
         ) : (
-          <Icon size="100" src={Icons.Heart} filled={favoriteState.status === AsyncStatus.Success} />
+          <Icon
+            style={favorited ? { color: color.Critical.Main } : undefined}
+            size="100"
+            src={Icons.Heart}
+            filled={favorited}
+          />
         )
       }
       radii="300"
       onClick={handleFavorite}
+      aria-pressed={favorited}
       {...props}
       ref={ref}
     >
       <Text className={css.MessageMenuItemText} as="span" size="T300" truncate>
-        {favoriteState.status === AsyncStatus.Loading ? '收藏中...' : '收藏'}
+        {favoriteState.status === AsyncStatus.Loading
+          ? favoriteLoadingLabel
+          : favoriteDefaultLabel}
       </Text>
     </MenuItem>
   );
