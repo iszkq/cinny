@@ -6,6 +6,7 @@ import {
   EXPLORE_FEATURED_PATH,
   EXPLORE_PATH,
   EXPLORE_SERVER_PATH,
+  FAVORITES_PATH,
   HOME_CREATE_PATH,
   HOME_JOIN_PATH,
   HOME_PATH,
@@ -110,6 +111,8 @@ export const getDirectRoomPath = (roomIdOrAlias: string, eventId?: string): stri
 
   return generatePath(DIRECT_ROOM_PATH, params);
 };
+
+export const getFavoritesPath = (): string => FAVORITES_PATH;
 
 export const getSpacePath = (spaceIdOrAlias: string): string => {
   const params = {
