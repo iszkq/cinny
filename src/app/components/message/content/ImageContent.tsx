@@ -35,6 +35,7 @@ import * as css from './style.css';
 type RenderViewerProps = {
   src: string;
   alt: string;
+  loading?: boolean;
   requestClose: () => void;
   canPrev?: boolean;
   canNext?: boolean;
@@ -133,9 +134,17 @@ export const ImageContent = as<'div', ImageContentProps>(
     const [viewer, setViewer] = useState(false);
     const [blurred, setBlurred] = useState(markedAsSpoiler ?? false);
     const [viewerLoadNonce, setViewerLoadNonce] = useState(0);
+    const [viewerPreviewVersion, setViewerPreviewVersion] = useState(0);
     const [viewerMediaState, setViewerMediaState] = useState<ViewerMediaState>({
       status: AsyncStatus.Idle,
     });
+    const [viewerDisplayedState, setViewerDisplayedState] = useState<
+      | {
+          itemId: string;
+          src: string;
+        }
+      | undefined
+    >();
 
     const viewerTrapRef = useRef<HTMLDivElement>(null);
     const viewerCacheRef = useRef<Map<string, string>>(new Map());
@@ -213,6 +222,7 @@ export const ImageContent = as<'div', ImageContentProps>(
             }
 
             viewerCacheRef.current.set(item.id, loadedSrc);
+            setViewerPreviewVersion((value) => value + 1);
           })
           .catch(() => {})
           .finally(() => {
@@ -298,6 +308,7 @@ export const ImageContent = as<'div', ImageContentProps>(
           }
 
           viewerCacheRef.current.set(currentViewerItem.id, loadedSrc);
+          setViewerPreviewVersion((value) => value + 1);
           setViewerMediaState({
             status: AsyncStatus.Success,
             itemId: currentViewerItem.id,
@@ -344,6 +355,17 @@ export const ImageContent = as<'div', ImageContentProps>(
           ? viewerMediaState.src
           : undefined;
 
+    useEffect(() => {
+      if (!viewer) return;
+
+      if (activeViewerSrc) {
+        setViewerDisplayedState({
+          itemId: currentViewerItem.id,
+          src: activeViewerSrc,
+        });
+      }
+    }, [activeViewerSrc, currentViewerItem.id, viewer]);
+
     const getViewerPreviewSrc = useCallback(
       (item: ViewerImageItem): string | undefined => {
         if (item.id === baseViewerItem.id && srcState.status === AsyncStatus.Success) {
@@ -365,7 +387,15 @@ export const ImageContent = as<'div', ImageContentProps>(
 
         return mxcUrlToHttp(mx, item.url, useAuthentication, 160, 160, 'scale') ?? undefined;
       },
-      [activeViewerSrc, baseViewerItem.id, currentViewerItem.id, mx, srcState, useAuthentication]
+      [
+        activeViewerSrc,
+        baseViewerItem.id,
+        currentViewerItem.id,
+        mx,
+        srcState,
+        useAuthentication,
+        viewerPreviewVersion,
+      ]
     );
 
     const viewerPreviewItems = useMemo(
@@ -380,6 +410,14 @@ export const ImageContent = as<'div', ImageContentProps>(
 
     const openViewer = () => {
       setViewerItemId(initialViewerItemId);
+      if (srcState.status === AsyncStatus.Success) {
+        setViewerDisplayedState({
+          itemId: baseViewerItem.id,
+          src: srcState.data,
+        });
+      } else {
+        setViewerDisplayedState(undefined);
+      }
       setViewer(true);
     };
 
@@ -387,10 +425,20 @@ export const ImageContent = as<'div', ImageContentProps>(
       setViewer(false);
       setViewerItemId(initialViewerItemId);
       setViewerMediaState({ status: AsyncStatus.Idle });
+      setViewerDisplayedState(undefined);
     };
 
     const canPrev = viewerIndex > 0;
     const canNext = viewerIndex < galleryItems.length - 1;
+
+    const renderedViewerSrc = activeViewerSrc ?? viewerDisplayedState?.src;
+    const safeRenderedViewerSrc = renderedViewerSrc ?? '';
+    const shouldRenderViewer =
+      safeRenderedViewerSrc.length > 0 && viewerMediaState.status !== AsyncStatus.Error;
+    const viewerLoading =
+      viewer &&
+      (!activeViewerSrc || viewerDisplayedState?.itemId !== currentViewerItem.id) &&
+      viewerMediaState.status !== AsyncStatus.Error;
 
     return (
       <Box className={classNames(css.RelativeBase, className)} {...props} ref={ref}>
@@ -426,10 +474,11 @@ export const ImageContent = as<'div', ImageContentProps>(
                     }}
                     onContextMenu={(evt: React.MouseEvent) => evt.stopPropagation()}
                   >
-                    {activeViewerSrc ? (
+                    {shouldRenderViewer ? (
                       renderViewer({
-                        src: activeViewerSrc,
+                        src: safeRenderedViewerSrc,
                         alt: currentViewerItem.body,
+                        loading: viewerLoading,
                         requestClose: closeViewer,
                         canPrev,
                         canNext,
