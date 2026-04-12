@@ -106,6 +106,9 @@ const DATE_FILTER_OPTIONS: Array<{ id: FavoriteDateFilter; label: string }> = [
   { id: '90d', label: '近 90 天' },
 ];
 
+const getDateFilterLabel = (dateFilter: FavoriteDateFilter): string =>
+  DATE_FILTER_OPTIONS.find((option) => option.id === dateFilter)?.label ?? '全部时间';
+
 const getStartOfToday = (): number => {
   const now = new Date();
   now.setHours(0, 0, 0, 0);
@@ -398,6 +401,7 @@ function FavoriteCard({
   content,
   hour24Clock,
   dateFormatString,
+  showSelection,
   selected,
   note,
   onToggleSelect,
@@ -410,6 +414,7 @@ function FavoriteCard({
   content: ReactNode;
   hour24Clock: boolean;
   dateFormatString: string;
+  showSelection: boolean;
   selected: boolean;
   note?: string;
   onToggleSelect: () => void;
@@ -474,36 +479,49 @@ function FavoriteCard({
         }
       >
         <Box direction="Column" gap="300" style={{ minWidth: 0 }}>
-          <Box gap="300" justifyContent="SpaceBetween" alignItems="Start" grow="Yes">
+          <Box
+            gap="300"
+            justifyContent="SpaceBetween"
+            alignItems="Start"
+            grow="Yes"
+            wrap="Wrap"
+          >
             <Box gap="300" alignItems="Start" grow="Yes" style={{ minWidth: 0 }}>
-              <Box shrink="No" style={{ paddingTop: config.space.S100 }}>
-                <Checkbox checked={selected} onClick={onToggleSelect} size="50" variant="Primary" />
-              </Box>
+              {showSelection && (
+                <Box shrink="No" style={{ paddingTop: config.space.S100 }}>
+                  <Checkbox
+                    checked={selected}
+                    onClick={onToggleSelect}
+                    size="50"
+                    variant="Primary"
+                  />
+                </Box>
+              )}
               <Box direction="Column" gap="100" grow="Yes" style={{ minWidth: 0 }}>
-              <Box gap="200" alignItems="Center" wrap="Wrap">
-                <Username>
-                  <Text as="span" truncate>
-                    <UsernameBold>{metadata.sourceSenderName}</UsernameBold>
+                <Box gap="200" alignItems="Center" wrap="Wrap">
+                  <Username>
+                    <Text as="span" truncate>
+                      <UsernameBold>{metadata.sourceSenderName}</UsernameBold>
+                    </Text>
+                  </Username>
+                  <Time
+                    ts={metadata.sourceTimestamp}
+                    hour24Clock={hour24Clock}
+                    dateFormatString={dateFormatString}
+                  />
+                </Box>
+                <Box gap="200" alignItems="Center" wrap="Wrap">
+                  <Chip variant="Secondary" radii="Pill">
+                    <Text size="T200">{metadata.sourceRoomName}</Text>
+                  </Chip>
+                  <Chip variant="SurfaceVariant" radii="Pill">
+                    <Text size="T200">{getFavoriteCategoryLabel(category)}</Text>
+                  </Chip>
+                  <Text size="T200" priority="300">
+                    {`收藏于 ${new Date(metadata.favoritedAt).toLocaleString()}`}
                   </Text>
-                </Username>
-                <Time
-                  ts={metadata.sourceTimestamp}
-                  hour24Clock={hour24Clock}
-                  dateFormatString={dateFormatString}
-                />
+                </Box>
               </Box>
-              <Box gap="200" alignItems="Center" wrap="Wrap">
-                <Chip variant="Secondary" radii="Pill">
-                  <Text size="T200">{metadata.sourceRoomName}</Text>
-                </Chip>
-                <Chip variant="SurfaceVariant" radii="Pill">
-                  <Text size="T200">{getFavoriteCategoryLabel(category)}</Text>
-                </Chip>
-                <Text size="T200" priority="300">
-                  {`收藏于 ${new Date(metadata.favoritedAt).toLocaleString()}`}
-                </Text>
-              </Box>
-            </Box>
             </Box>
 
             <Box shrink="No" gap="200" alignItems="Center" wrap="Wrap">
@@ -558,6 +576,7 @@ export function Favorites() {
   const [dateFormatString] = useSetting(settingsAtom, 'dateFormatString');
   const [activeCategory, setActiveCategory] = useState<FavoriteVisibleCategory>('all');
   const [dateFilter, setDateFilter] = useState<FavoriteDateFilter>('all');
+  const [manageOpen, setManageOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFavoriteIds, setSelectedFavoriteIds] = useState<Set<string>>(new Set());
 
@@ -911,6 +930,37 @@ export function Favorites() {
   const showGroupedHeading = activeCategory === 'all';
   const hasFavorites = favoriteItems.length > 0;
   const hasVisibleItems = visibleItems.length > 0;
+  const hasSearchQuery = searchQuery.trim().length > 0;
+  const hasActiveFilter = hasSearchQuery || dateFilter !== 'all' || activeCategory !== 'all';
+  const managementSummary = useMemo(() => {
+    const summaryParts: string[] = [];
+
+    if (hasSearchQuery) {
+      summaryParts.push(`关键词：${searchQuery.trim()}`);
+    }
+    if (dateFilter !== 'all') {
+      summaryParts.push(`时间：${getDateFilterLabel(dateFilter)}`);
+    }
+    if (activeCategory !== 'all') {
+      summaryParts.push(`分类：${getFavoriteCategoryLabel(activeCategory)}`);
+    }
+    if (selectedCount > 0) {
+      summaryParts.push(`已选 ${selectedCount} 条`);
+    }
+
+    if (summaryParts.length === 0) {
+      return `当前显示 ${visibleItems.length} 条收藏，可展开后搜索、筛选或批量管理。`;
+    }
+
+    return `当前显示 ${visibleItems.length} 条收藏，${summaryParts.join('，')}。`;
+  }, [
+    activeCategory,
+    dateFilter,
+    hasSearchQuery,
+    searchQuery,
+    selectedCount,
+    visibleItems.length,
+  ]);
 
   return (
     <Page>
@@ -964,114 +1014,154 @@ export function Favorites() {
                     gap="300"
                     style={{ padding: config.space.S300 }}
                   >
-                    <Text size="L400">筛选与管理</Text>
-                    <Input
-                      size="400"
-                      variant="Secondary"
-                      radii="300"
-                      placeholder="搜索收藏内容或备注"
-                      value={searchQuery}
-                      onChange={(evt: React.ChangeEvent<HTMLInputElement>) =>
-                        setSearchQuery(evt.target.value)
-                      }
-                      before={<Icon size="200" src={Icons.Search} />}
-                    />
-                    <Box direction="Column" gap="100">
-                      <Text size="T200" priority="300">
-                        日期筛选
-                      </Text>
-                      <Box gap="200" wrap="Wrap">
-                        {DATE_FILTER_OPTIONS.map((option) => (
+                    <Box alignItems="Center" justifyContent="SpaceBetween" gap="300" wrap="Wrap">
+                      <Box direction="Column" gap="100" grow="Yes" style={{ minWidth: 0 }}>
+                        <Text size="L400">筛选与管理</Text>
+                        <Text size="T300" priority="300">
+                          {managementSummary}
+                        </Text>
+                      </Box>
+                      <Box shrink="No" gap="200" wrap="Wrap">
+                        {hasActiveFilter && (
                           <Button
-                            key={option.id}
-                            size="300"
-                            variant={dateFilter === option.id ? 'Primary' : 'Secondary'}
-                            fill={dateFilter === option.id ? 'Solid' : 'Soft'}
+                            variant="Secondary"
+                            fill="Soft"
                             radii="300"
-                            onClick={() => setDateFilter(option.id)}
+                            onClick={() => {
+                              setSearchQuery('');
+                              setDateFilter('all');
+                              setActiveCategory('all');
+                            }}
                           >
-                            <Text size="B300">{option.label}</Text>
+                            <Text size="B300">重置筛选</Text>
                           </Button>
-                        ))}
+                        )}
+                        <Button
+                          size="300"
+                          variant="Secondary"
+                          fill="Soft"
+                          radii="300"
+                          onClick={() => setManageOpen((current) => !current)}
+                        >
+                          <Text size="B300">{manageOpen ? '收起筛选与管理' : '展开筛选与管理'}</Text>
+                        </Button>
                       </Box>
                     </Box>
-                    <Box direction="Column" gap="100">
-                      <Text size="T200" priority="300">
-                        内容分类
-                      </Text>
-                      <Box gap="200" wrap="Wrap">
-                        {FAVORITE_VISIBLE_CATEGORIES.map((category) => (
+
+                    {manageOpen && (
+                      <>
+                        <Line size="300" />
+                        <Input
+                          size="400"
+                          variant="Secondary"
+                          radii="300"
+                          placeholder="搜索收藏内容或备注"
+                          value={searchQuery}
+                          onChange={(evt: React.ChangeEvent<HTMLInputElement>) =>
+                            setSearchQuery(evt.target.value)
+                          }
+                          before={<Icon size="200" src={Icons.Search} />}
+                        />
+                        <Box direction="Column" gap="100">
+                          <Text size="T200" priority="300">
+                            日期筛选
+                          </Text>
+                          <Box gap="200" wrap="Wrap">
+                            {DATE_FILTER_OPTIONS.map((option) => (
+                              <Button
+                                key={option.id}
+                                size="300"
+                                variant={dateFilter === option.id ? 'Primary' : 'Secondary'}
+                                fill={dateFilter === option.id ? 'Solid' : 'Soft'}
+                                radii="300"
+                                onClick={() => setDateFilter(option.id)}
+                              >
+                                <Text size="B300">{option.label}</Text>
+                              </Button>
+                            ))}
+                          </Box>
+                        </Box>
+                        <Box direction="Column" gap="100">
+                          <Text size="T200" priority="300">
+                            内容分类
+                          </Text>
+                          <Box gap="200" wrap="Wrap">
+                            {FAVORITE_VISIBLE_CATEGORIES.map((category) => (
+                              <Button
+                                key={category}
+                                size="300"
+                                variant={activeCategory === category ? 'Primary' : 'Secondary'}
+                                fill={activeCategory === category ? 'Solid' : 'Soft'}
+                                radii="300"
+                                onClick={() => setActiveCategory(category)}
+                              >
+                                <Text size="B300">
+                                  {`${getFavoriteCategoryLabel(category)} ${getCategoryCount(
+                                    searchedItems,
+                                    category
+                                  )}`}
+                                </Text>
+                              </Button>
+                            ))}
+                          </Box>
+                        </Box>
+                        <Line size="300" />
+                        <Box gap="200" wrap="Wrap">
+                          <Chip variant="SurfaceVariant" radii="Pill">
+                            <Text size="B300">{`${visibleItems.length} 条结果`}</Text>
+                          </Chip>
+                          <Chip variant="SurfaceVariant" radii="Pill">
+                            <Text size="B300">{`${selectedCount} 条已选`}</Text>
+                          </Chip>
+                          {selectedVisibleCount > 0 && selectedVisibleCount !== selectedCount && (
+                            <Chip variant="Secondary" radii="Pill">
+                              <Text size="B300">{`当前结果中已选 ${selectedVisibleCount} 条`}</Text>
+                            </Chip>
+                          )}
                           <Button
-                            key={category}
                             size="300"
-                            variant={activeCategory === category ? 'Primary' : 'Secondary'}
-                            fill={activeCategory === category ? 'Solid' : 'Soft'}
+                            variant="Secondary"
+                            fill="Soft"
                             radii="300"
-                            onClick={() => setActiveCategory(category)}
+                            onClick={handleToggleSelectVisible}
+                            disabled={visibleItems.length === 0}
                           >
                             <Text size="B300">
-                              {`${getFavoriteCategoryLabel(category)} ${getCategoryCount(
-                                searchedItems,
-                                category
-                              )}`}
+                              {allVisibleSelected ? '取消全选当前结果' : '全选当前结果'}
                             </Text>
                           </Button>
-                        ))}
-                      </Box>
-                    </Box>
-                    <Line size="300" />
-                    <Box gap="200" wrap="Wrap">
-                      <Chip variant="SurfaceVariant" radii="Pill">
-                        <Text size="B300">{`${visibleItems.length} 条结果`}</Text>
-                      </Chip>
-                      <Chip variant="SurfaceVariant" radii="Pill">
-                        <Text size="B300">{`${selectedCount} 条已选`}</Text>
-                      </Chip>
-                      {selectedVisibleCount > 0 && selectedVisibleCount !== selectedCount && (
-                        <Chip variant="Secondary" radii="Pill">
-                          <Text size="B300">{`当前结果中已选 ${selectedVisibleCount} 条`}</Text>
-                        </Chip>
-                      )}
-                      <Button
-                        size="300"
-                        variant="Secondary"
-                        fill="Soft"
-                        radii="300"
-                        onClick={handleToggleSelectVisible}
-                        disabled={visibleItems.length === 0}
-                      >
-                        <Text size="B300">
-                          {allVisibleSelected ? '取消全选当前结果' : '全选当前结果'}
-                        </Text>
-                      </Button>
-                      <Button
-                        size="300"
-                        variant="Secondary"
-                        fill="Soft"
-                        radii="300"
-                        onClick={handleClearSelection}
-                        disabled={selectedCount === 0}
-                      >
-                        <Text size="B300">清空选择</Text>
-                      </Button>
-                      <Button
-                        size="300"
-                        variant="Critical"
-                        fill="Soft"
-                        radii="300"
-                        onClick={handleBatchRemove}
-                        disabled={selectedCount === 0 || batchRemoveState.status === AsyncStatus.Loading}
-                      >
-                        {batchRemoveState.status === AsyncStatus.Loading && (
-                          <Spinner size="200" variant="Secondary" />
-                        )}
-                        <Text size="B300">
-                          {batchRemoveState.status === AsyncStatus.Loading
-                            ? '批量取消中...'
-                            : '批量取消收藏'}
-                        </Text>
-                      </Button>
-                    </Box>
+                          <Button
+                            size="300"
+                            variant="Secondary"
+                            fill="Soft"
+                            radii="300"
+                            onClick={handleClearSelection}
+                            disabled={selectedCount === 0}
+                          >
+                            <Text size="B300">清空选择</Text>
+                          </Button>
+                          <Button
+                            size="300"
+                            variant="Critical"
+                            fill="Soft"
+                            radii="300"
+                            onClick={handleBatchRemove}
+                            disabled={
+                              selectedCount === 0 || batchRemoveState.status === AsyncStatus.Loading
+                            }
+                          >
+                            {batchRemoveState.status === AsyncStatus.Loading && (
+                              <Spinner size="200" variant="Secondary" />
+                            )}
+                            <Text size="B300">
+                              {batchRemoveState.status === AsyncStatus.Loading
+                                ? '批量取消中...'
+                                : '批量取消收藏'}
+                            </Text>
+                          </Button>
+                        </Box>
+                      </>
+                    )}
                   </SequenceCard>
                 )}
 
@@ -1131,6 +1221,7 @@ export function Favorites() {
                               )}
                               hour24Clock={hour24Clock}
                               dateFormatString={dateFormatString}
+                              showSelection={manageOpen}
                               selected={selectedFavoriteIds.has(getFavoriteItemId(item))}
                               note={favoriteNotes[item.referenceId]}
                               onToggleSelect={() => handleToggleSelect(getFavoriteItemId(item))}
