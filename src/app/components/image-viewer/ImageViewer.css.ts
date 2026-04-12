@@ -49,6 +49,7 @@ export const ImageViewerStage = style([
 export const ImageViewerViewport = style([
   DefaultReset,
   {
+    position: 'relative',
     width: '100%',
     height: '100%',
     minHeight: 0,
@@ -61,6 +62,8 @@ export const ImageViewerViewport = style([
 export const ImageViewerImg = style([
   DefaultReset,
   {
+    position: 'relative',
+    zIndex: 1,
     display: 'block',
     width: 'auto',
     height: 'auto',
@@ -72,6 +75,36 @@ export const ImageViewerImg = style([
     transition: 'transform 140ms ease',
     userSelect: 'none',
     WebkitUserDrag: 'none',
+  },
+]);
+
+export const ImageViewerImgFading = style({
+  opacity: 0.22,
+});
+
+export const ImageViewerImgOverlay = style({
+  position: 'absolute',
+  inset: 0,
+  margin: 'auto',
+  opacity: 0,
+  zIndex: 2,
+  transition: 'opacity 180ms ease',
+  pointerEvents: 'none',
+});
+
+export const ImageViewerImgOverlayVisible = style({
+  opacity: 1,
+});
+
+export const ImageViewerLoading = style([
+  DefaultReset,
+  {
+    position: 'absolute',
+    inset: 0,
+    zIndex: 3,
+    pointerEvents: 'none',
+    background:
+      'linear-gradient(180deg, rgba(7, 10, 16, 0.04), rgba(7, 10, 16, 0.18))',
   },
 ]);
 

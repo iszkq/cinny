@@ -16,6 +16,7 @@ export type ImageViewerItem = {
 export type ImageViewerProps = {
   alt: string;
   src: string;
+  loading?: boolean;
   requestClose: () => void;
   canPrev?: boolean;
   canNext?: boolean;
@@ -38,6 +39,7 @@ export const ImageViewer = as<'div', ImageViewerProps>(
       className,
       alt,
       src,
+      loading,
       requestClose,
       canPrev,
       canNext,
@@ -63,8 +65,12 @@ export const ImageViewer = as<'div', ImageViewerProps>(
     const thumbnailRefs = useRef<Record<string, HTMLButtonElement | null>>({});
     const swipeDeltaRef = useRef({ x: 0, y: 0 });
     const swipeCleanupRef = useRef<(() => void) | null>(null);
+    const transitionTimerRef = useRef<number | null>(null);
     const hasThumbnailRail = !!items && items.length > 1;
     const swipeEnabled = !panEnabled && Boolean(onPrev || onNext);
+    const [displaySrc, setDisplaySrc] = useState(src);
+    const [transitionSrc, setTransitionSrc] = useState<string>();
+    const [transitionVisible, setTransitionVisible] = useState(false);
 
     const handleDownload = async () => {
       const response = await fetch(src);
@@ -177,9 +183,24 @@ export const ImageViewer = as<'div', ImageViewerProps>(
     useEffect(
       () => () => {
         clearSwipeListeners();
+        if (transitionTimerRef.current) {
+          window.clearTimeout(transitionTimerRef.current);
+        }
       },
       [clearSwipeListeners]
     );
+
+    useEffect(() => {
+      if (src === displaySrc) return;
+
+      if (transitionTimerRef.current) {
+        window.clearTimeout(transitionTimerRef.current);
+        transitionTimerRef.current = null;
+      }
+
+      setTransitionSrc(src);
+      setTransitionVisible(false);
+    }, [displaySrc, src]);
 
     useLayoutEffect(() => {
       clearSwipeListeners();
@@ -190,6 +211,21 @@ export const ImageViewer = as<'div', ImageViewerProps>(
       setRotation(0);
       setViewMode('fit');
     }, [clearSwipeListeners, setZoom, src]);
+
+    const handleTransitionImageLoad = () => {
+      if (!transitionSrc) return;
+
+      setTransitionVisible(true);
+      if (transitionTimerRef.current) {
+        window.clearTimeout(transitionTimerRef.current);
+      }
+      transitionTimerRef.current = window.setTimeout(() => {
+        setDisplaySrc(transitionSrc);
+        setTransitionSrc(undefined);
+        setTransitionVisible(false);
+        transitionTimerRef.current = null;
+      }, 180);
+    };
 
     const imageCursor = panEnabled ? cursor : swipeEnabled ? (swiping ? 'grabbing' : 'grab') : 'default';
     const handleImageMouseDown = (
@@ -310,7 +346,10 @@ export const ImageViewer = as<'div', ImageViewerProps>(
               onWheel={handleWheel}
             >
               <img
-                className={css.ImageViewerImg}
+                className={classNames(
+                  css.ImageViewerImg,
+                  transitionSrc && transitionVisible && css.ImageViewerImgFading
+                )}
                 style={{
                   cursor: imageCursor,
                   maxWidth: viewMode === 'fit' ? '100%' : 'none',
@@ -318,12 +357,49 @@ export const ImageViewer = as<'div', ImageViewerProps>(
                   transform: `translate(${pan.translateX + swipeOffsetX}px, ${pan.translateY}px) rotate(${rotation}deg) scale(${zoom})`,
                   transition: swiping || cursor === 'grabbing' ? 'none' : undefined,
                 }}
-                src={src}
+                src={displaySrc}
                 alt={alt}
                 onMouseDown={handleImageMouseDown}
                 onDoubleClick={toggleViewMode}
                 draggable={false}
               />
+
+              {transitionSrc && (
+                <img
+                  className={classNames(
+                    css.ImageViewerImg,
+                    css.ImageViewerImgOverlay,
+                    transitionVisible && css.ImageViewerImgOverlayVisible
+                  )}
+                  style={{
+                    cursor: imageCursor,
+                    maxWidth: viewMode === 'fit' ? '100%' : 'none',
+                    maxHeight: viewMode === 'fit' ? '100%' : 'none',
+                    transform: `translate(${pan.translateX + swipeOffsetX}px, ${pan.translateY}px) rotate(${rotation}deg) scale(${zoom})`,
+                    transition: swiping || cursor === 'grabbing' ? 'none' : undefined,
+                  }}
+                  src={transitionSrc}
+                  alt={alt}
+                  onLoad={handleTransitionImageLoad}
+                  onMouseDown={handleImageMouseDown}
+                  onDoubleClick={toggleViewMode}
+                  draggable={false}
+                />
+              )}
+
+              {loading && (
+                <Box
+                  className={css.ImageViewerLoading}
+                  alignItems="Center"
+                  justifyContent="Center"
+                  direction="Column"
+                  gap="200"
+                >
+                  <Text size="T200" priority="300">
+                    {'正在切换图片...'}
+                  </Text>
+                </Box>
+              )}
             </Box>
 
             {onNext && (
