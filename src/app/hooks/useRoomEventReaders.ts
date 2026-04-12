@@ -1,7 +1,31 @@
 import { Room, RoomEvent, RoomEventHandlerMap } from 'matrix-js-sdk';
 import { useEffect, useState } from 'react';
 
-const getEventReaders = (room: Room, evtId?: string) => {
+export type RoomEventReaderInfo = {
+  userId: string;
+  ts?: number;
+};
+
+type ReceiptWithTs = {
+  data?: {
+    ts?: number;
+  };
+  ts?: number;
+};
+
+const getReceiptTimestamp = (room: Room, userId: string): number | undefined => {
+  const receipt = room.getReadReceiptForUserId(userId) as ReceiptWithTs | null;
+  if (typeof receipt?.data?.ts === 'number') return receipt.data.ts;
+  if (typeof receipt?.ts === 'number') return receipt.ts;
+
+  const unthreadedReceipt = room.getLastUnthreadedReceiptFor(userId) as ReceiptWithTs | undefined;
+  if (typeof unthreadedReceipt?.data?.ts === 'number') return unthreadedReceipt.data.ts;
+  if (typeof unthreadedReceipt?.ts === 'number') return unthreadedReceipt.ts;
+
+  return undefined;
+};
+
+const getEventReaderIds = (room: Room, evtId?: string) => {
   if (!evtId) return [];
 
   // if eventId is locally generated
@@ -19,15 +43,34 @@ const getEventReaders = (room: Room, evtId?: string) => {
   return [...new Set(userIds)];
 };
 
+const getEventReadersInfo = (room: Room, evtId?: string): RoomEventReaderInfo[] =>
+  getEventReaderIds(room, evtId)
+    .map((userId, index) => ({
+      userId,
+      ts: getReceiptTimestamp(room, userId),
+      index,
+    }))
+    .sort((a, b) => {
+      if (typeof a.ts === 'number' && typeof b.ts === 'number') {
+        return b.ts - a.ts;
+      }
+      if (typeof a.ts === 'number') return -1;
+      if (typeof b.ts === 'number') return 1;
+      return a.index - b.index;
+    })
+    .map(({ index, ...reader }) => reader);
+
 export const useRoomEventReaders = (room: Room, eventId?: string): string[] => {
-  const [readers, setReaders] = useState<string[]>(() => getEventReaders(room, eventId));
+  const [readers, setReaders] = useState<string[]>(() =>
+    getEventReadersInfo(room, eventId).map((reader) => reader.userId)
+  );
 
   useEffect(() => {
-    setReaders(getEventReaders(room, eventId));
+    setReaders(getEventReadersInfo(room, eventId).map((reader) => reader.userId));
 
     const handleReceipt: RoomEventHandlerMap[RoomEvent.Receipt] = (event, r) => {
       if (r.roomId !== room.roomId) return;
-      setReaders(getEventReaders(room, eventId));
+      setReaders(getEventReadersInfo(room, eventId).map((reader) => reader.userId));
     };
 
     const handleLocalEcho: RoomEventHandlerMap[RoomEvent.LocalEchoUpdated] = (
@@ -41,7 +84,46 @@ export const useRoomEventReaders = (room: Room, eventId?: string): string[] => {
       if (oldEventId.startsWith('$')) return;
       if (oldEventId !== eventId) return;
 
-      setReaders(getEventReaders(room, event.getId()));
+      setReaders(getEventReadersInfo(room, event.getId()).map((reader) => reader.userId));
+    };
+
+    room.on(RoomEvent.Receipt, handleReceipt);
+    room.on(RoomEvent.LocalEchoUpdated, handleLocalEcho);
+    return () => {
+      room.removeListener(RoomEvent.Receipt, handleReceipt);
+      room.removeListener(RoomEvent.LocalEchoUpdated, handleLocalEcho);
+    };
+  }, [room, eventId]);
+
+  return readers;
+};
+
+export const useRoomEventReadersInfo = (
+  room: Room,
+  eventId?: string
+): RoomEventReaderInfo[] => {
+  const [readers, setReaders] = useState<RoomEventReaderInfo[]>(() =>
+    getEventReadersInfo(room, eventId)
+  );
+
+  useEffect(() => {
+    setReaders(getEventReadersInfo(room, eventId));
+
+    const handleReceipt: RoomEventHandlerMap[RoomEvent.Receipt] = (event, r) => {
+      if (r.roomId !== room.roomId) return;
+      setReaders(getEventReadersInfo(room, eventId));
+    };
+
+    const handleLocalEcho: RoomEventHandlerMap[RoomEvent.LocalEchoUpdated] = (
+      event,
+      r,
+      oldEventId
+    ) => {
+      if (r.roomId !== room.roomId || !oldEventId) return;
+      if (oldEventId.startsWith('$')) return;
+      if (oldEventId !== eventId) return;
+
+      setReaders(getEventReadersInfo(room, event.getId()));
     };
 
     room.on(RoomEvent.Receipt, handleReceipt);
