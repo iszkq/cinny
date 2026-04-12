@@ -117,7 +117,7 @@ export const ImageContent = as<'div', ImageContentProps>(
       markedAsSpoiler,
       spoilerReason,
       viewerItems,
-      viewerItemId,
+      viewerItemId: initialViewerItemKey,
       renderViewer,
       renderImage,
       ...props
@@ -142,13 +142,13 @@ export const ImageContent = as<'div', ImageContentProps>(
 
     const baseViewerItem = useMemo<ViewerImageItem>(
       () => ({
-        id: viewerItemId ?? url,
+        id: initialViewerItemKey ?? url,
         body,
         mimeType,
         url,
         encInfo,
       }),
-      [body, encInfo, mimeType, url, viewerItemId]
+      [body, encInfo, initialViewerItemKey, mimeType, url]
     );
 
     const galleryItems = useMemo(() => {
