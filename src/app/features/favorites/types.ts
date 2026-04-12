@@ -1,0 +1,93 @@
+import { IContent, MatrixEvent, MsgType } from 'matrix-js-sdk';
+import { CinnyFavoritesContent } from '../../../types/matrix/accountData';
+import { MessageEvent } from '../../../types/matrix/room';
+
+export const CINNY_FAVORITE_CONTENT_KEY = 'in.cinny.favorite';
+
+export const FAVORITE_CATEGORIES = ['text', 'image', 'video', 'audio', 'file', 'other'] as const;
+export type FavoriteCategory = (typeof FAVORITE_CATEGORIES)[number];
+
+export type FavoriteVisibleCategory = FavoriteCategory | 'all';
+export const FAVORITE_VISIBLE_CATEGORIES: FavoriteVisibleCategory[] = [
+  'all',
+  ...FAVORITE_CATEGORIES,
+];
+
+export type FavoriteMessageMetadata = {
+  version: 1;
+  sourceRoomId: string;
+  sourceRoomName: string;
+  sourceRoomAvatarMxc?: string;
+  sourceEventId: string;
+  sourceSenderId?: string;
+  sourceSenderName: string;
+  sourceSenderAvatarMxc?: string;
+  sourceTimestamp: number;
+  favoritedAt: number;
+};
+
+export type FavoriteMessageContent = IContent & {
+  [CINNY_FAVORITE_CONTENT_KEY]?: FavoriteMessageMetadata;
+};
+
+export const getFavoritesRoomIdFromAccountData = (
+  content?: CinnyFavoritesContent
+): string | undefined => {
+  if (typeof content?.roomId !== 'string') return undefined;
+
+  const roomId = content.roomId.trim();
+  return roomId.length > 0 ? roomId : undefined;
+};
+
+export const getFavoriteMessageMetadata = (
+  content: IContent | undefined
+): FavoriteMessageMetadata | undefined => {
+  if (!content || typeof content !== 'object') return undefined;
+
+  const metadata = (content as FavoriteMessageContent)[CINNY_FAVORITE_CONTENT_KEY];
+  if (!metadata || typeof metadata !== 'object') return undefined;
+  if (
+    metadata.version !== 1 ||
+    typeof metadata.sourceRoomId !== 'string' ||
+    typeof metadata.sourceRoomName !== 'string' ||
+    typeof metadata.sourceEventId !== 'string' ||
+    typeof metadata.sourceSenderName !== 'string' ||
+    typeof metadata.sourceTimestamp !== 'number' ||
+    typeof metadata.favoritedAt !== 'number'
+  ) {
+    return undefined;
+  }
+
+  return metadata;
+};
+
+export const getFavoriteMessageMetadataFromEvent = (
+  mEvent: MatrixEvent
+): FavoriteMessageMetadata | undefined => getFavoriteMessageMetadata(mEvent.getContent());
+
+export const getFavoriteCategory = (mEvent: MatrixEvent): FavoriteCategory => {
+  if (mEvent.getType() === MessageEvent.Sticker) return 'image';
+  if (mEvent.getType() !== MessageEvent.RoomMessage) return 'other';
+
+  const msgType = mEvent.getContent().msgtype;
+  if (msgType === MsgType.Text || msgType === MsgType.Notice || msgType === MsgType.Emote) {
+    return 'text';
+  }
+  if (msgType === MsgType.Image) return 'image';
+  if (msgType === MsgType.Video) return 'video';
+  if (msgType === MsgType.Audio) return 'audio';
+  if (msgType === MsgType.File) return 'file';
+
+  return 'other';
+};
+
+export const getFavoriteCategoryLabel = (category: FavoriteVisibleCategory): string => {
+  if (category === 'all') return '\u5168\u90e8';
+  if (category === 'text') return '\u6587\u672c';
+  if (category === 'image') return '\u56fe\u7247';
+  if (category === 'video') return '\u89c6\u9891';
+  if (category === 'audio') return '\u97f3\u9891';
+  if (category === 'file') return '\u6587\u4ef6';
+
+  return '\u5176\u4ed6';
+};
