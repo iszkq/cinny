@@ -4,6 +4,7 @@ export enum AccountDataEvent {
   IgnoredUserList = 'm.ignored_user_list',
 
   CinnySpaces = 'in.cinny.spaces',
+  CinnyFavorites = 'in.cinny.favorites',
 
   ElementRecentEmoji = 'io.element.recent_emoji',
 
@@ -19,6 +20,12 @@ export enum AccountDataEvent {
 }
 
 export type MDirectContent = Record<string, string[]>;
+
+export type CinnyFavoritesContent = {
+  roomId?: string;
+  createdAt?: number;
+  version?: number;
+};
 
 export type SecretStorageDefaultKeyContent = {
   key: string;
