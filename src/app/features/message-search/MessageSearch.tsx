@@ -1,28 +1,33 @@
 import React, { RefObject, useEffect, useMemo, useRef } from 'react';
-import { Text, Box, Icon, Icons, config, Spinner, IconButton, Line, toRem } from 'folds';
+import { Box, Icon, IconButton, Icons, Line, Spinner, Text, config, toRem } from 'folds';
 import { useAtomValue } from 'jotai';
-import { useVirtualizer } from '@tanstack/react-virtual';
 import { useInfiniteQuery } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router-dom';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { SearchOrderBy } from 'matrix-js-sdk';
+import { useSearchParams } from 'react-router-dom';
 import { PageHero, PageHeroEmpty, PageHeroSection } from '../../components/page';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
-import { _SearchPathSearchParams } from '../../pages/paths';
-import { useSetting } from '../../state/hooks/settings';
-import { settingsAtom } from '../../state/settings';
 import { SequenceCard } from '../../components/sequence-card';
-import { useRoomNavigate } from '../../hooks/useRoomNavigate';
 import { ScrollTopContainer } from '../../components/scroll-top-container';
-import { ContainerColor } from '../../styles/ContainerColor.css';
-import { decodeSearchParamValueArray, encodeSearchParamValueArray } from '../../pages/pathUtils';
-import { useRooms } from '../../state/hooks/roomList';
-import { allRoomsAtom } from '../../state/room-list/roomList';
-import { mDirectAtom } from '../../state/mDirectList';
-import { MessageSearchParams, useMessageSearch } from './useMessageSearch';
-import { SearchResultGroup } from './SearchResultGroup';
-import { SearchInput } from './SearchInput';
-import { SearchFilters } from './SearchFilters';
 import { VirtualTile } from '../../components/virtualizer';
+import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { useRoomNavigate } from '../../hooks/useRoomNavigate';
+import { _SearchPathSearchParams } from '../../pages/paths';
+import { decodeSearchParamValueArray, encodeSearchParamValueArray } from '../../pages/pathUtils';
+import { ContainerColor } from '../../styles/ContainerColor.css';
+import { useRooms } from '../../state/hooks/roomList';
+import { useSetting } from '../../state/hooks/settings';
+import { mDirectAtom } from '../../state/mDirectList';
+import { allRoomsAtom } from '../../state/room-list/roomList';
+import { settingsAtom } from '../../state/settings';
+import {
+  MessageSearchParams,
+  SEARCH_MESSAGE_TYPES,
+  SearchMessageType,
+  useMessageSearch,
+} from './useMessageSearch';
+import { SearchFilters } from './SearchFilters';
+import { SearchInput } from './SearchInput';
+import { SearchResultGroup } from './SearchResultGroup';
 
 const useSearchPathSearchParams = (searchParams: URLSearchParams): _SearchPathSearchParams =>
   useMemo(
@@ -32,6 +37,11 @@ const useSearchPathSearchParams = (searchParams: URLSearchParams): _SearchPathSe
       order: searchParams.get('order') ?? undefined,
       rooms: searchParams.get('rooms') ?? undefined,
       senders: searchParams.get('senders') ?? undefined,
+      senderQuery: searchParams.get('senderQuery') ?? undefined,
+      msgTypes: searchParams.get('msgTypes') ?? undefined,
+      dateFrom: searchParams.get('dateFrom') ?? undefined,
+      dateTo: searchParams.get('dateTo') ?? undefined,
+      links: searchParams.get('links') ?? undefined,
     }),
     [searchParams]
   );
@@ -43,6 +53,7 @@ type MessageSearchProps = {
   senders?: string[];
   scrollRef: RefObject<HTMLDivElement>;
 };
+
 export function MessageSearch({
   defaultRoomsFilterName,
   allowGlobal,
@@ -56,7 +67,6 @@ export function MessageSearch({
   const [mediaAutoLoad] = useSetting(settingsAtom, 'mediaAutoLoad');
   const [urlPreview] = useSetting(settingsAtom, 'urlPreview');
   const [legacyUsernameColor] = useSetting(settingsAtom, 'legacyUsernameColor');
-
   const [hour24Clock] = useSetting(settingsAtom, 'hour24Clock');
   const [dateFormatString] = useSetting(settingsAtom, 'dateFormatString');
 
@@ -67,20 +77,27 @@ export function MessageSearch({
   const { navigateRoom } = useRoomNavigate();
 
   const searchParamRooms = useMemo(() => {
-    if (searchPathSearchParams.rooms) {
-      const joinedRoomIds = decodeSearchParamValueArray(searchPathSearchParams.rooms).filter(
-        (rId) => allRooms.includes(rId)
-      );
-      return joinedRoomIds;
-    }
-    return undefined;
+    if (!searchPathSearchParams.rooms) return undefined;
+    const joinedRoomIds = decodeSearchParamValueArray(searchPathSearchParams.rooms).filter((roomId) =>
+      allRooms.includes(roomId)
+    );
+    return joinedRoomIds.length > 0 ? joinedRoomIds : undefined;
   }, [allRooms, searchPathSearchParams.rooms]);
+
   const searchParamsSenders = useMemo(() => {
-    if (searchPathSearchParams.senders) {
-      return decodeSearchParamValueArray(searchPathSearchParams.senders);
-    }
-    return undefined;
+    if (!searchPathSearchParams.senders) return undefined;
+    const decodedSenders = decodeSearchParamValueArray(searchPathSearchParams.senders);
+    return decodedSenders.length > 0 ? decodedSenders : undefined;
   }, [searchPathSearchParams.senders]);
+
+  const searchParamsMsgTypes = useMemo(() => {
+    if (!searchPathSearchParams.msgTypes) return undefined;
+    const decodedTypes = decodeSearchParamValueArray(searchPathSearchParams.msgTypes).filter(
+      (value): value is SearchMessageType =>
+        SEARCH_MESSAGE_TYPES.includes(value as SearchMessageType)
+    );
+    return decodedTypes.length > 0 ? decodedTypes : undefined;
+  }, [searchPathSearchParams.msgTypes]);
 
   const msgSearchParams: MessageSearchParams = useMemo(() => {
     const isGlobal = searchPathSearchParams.global === 'true';
@@ -91,29 +108,47 @@ export function MessageSearch({
       order: searchPathSearchParams.order ?? SearchOrderBy.Recent,
       rooms: searchParamRooms ?? defaultRooms,
       senders: searchParamsSenders ?? senders,
+      senderQuery: searchPathSearchParams.senderQuery,
+      msgTypes: searchParamsMsgTypes,
+      dateFrom: searchPathSearchParams.dateFrom,
+      dateTo: searchPathSearchParams.dateTo,
+      onlyLinks: searchPathSearchParams.links === 'true',
     };
-  }, [searchPathSearchParams, searchParamRooms, searchParamsSenders, rooms, senders]);
+  }, [
+    rooms,
+    searchParamRooms,
+    searchParamsMsgTypes,
+    searchParamsSenders,
+    searchPathSearchParams,
+    senders,
+  ]);
 
   const searchMessages = useMessageSearch(msgSearchParams);
 
-  const { status, data, error, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
-    enabled: !!msgSearchParams.term,
-    queryKey: [
-      'search',
-      msgSearchParams.term,
-      msgSearchParams.order,
-      msgSearchParams.rooms,
-      msgSearchParams.senders,
-    ],
-    queryFn: ({ pageParam }) => searchMessages(pageParam),
-    initialPageParam: '',
-    getNextPageParam: (lastPage) => lastPage.nextToken,
-  });
+  const { status, data, error, fetchNextPage, hasNextPage, isFetchingNextPage } =
+    useInfiniteQuery({
+      enabled: !!msgSearchParams.term,
+      queryKey: [
+        'search',
+        msgSearchParams.term,
+        msgSearchParams.order,
+        msgSearchParams.rooms,
+        msgSearchParams.senders,
+        msgSearchParams.senderQuery,
+        msgSearchParams.msgTypes,
+        msgSearchParams.dateFrom,
+        msgSearchParams.dateTo,
+        msgSearchParams.onlyLinks,
+      ],
+      queryFn: ({ pageParam }) => searchMessages(pageParam),
+      initialPageParam: '',
+      getNextPageParam: (lastPage) => lastPage.nextToken,
+    });
 
   const groups = useMemo(() => data?.pages.flatMap((result) => result.groups) ?? [], [data]);
   const highlights = useMemo(() => {
-    const mixed = data?.pages.flatMap((result) => result.highlights);
-    return Array.from(new Set(mixed));
+    const mixedHighlights = data?.pages.flatMap((result) => result.highlights) ?? [];
+    return Array.from(new Set(mixedHighlights));
   }, [data]);
 
   const virtualizer = useVirtualizer({
@@ -124,60 +159,124 @@ export function MessageSearch({
   });
   const vItems = virtualizer.getVirtualItems();
 
-  const handleSearch = (term: string) => {
+  const updateSearchParams = (updater: (params: URLSearchParams) => void) => {
     setSearchParams((prevParams) => {
       const newParams = new URLSearchParams(prevParams);
-      newParams.delete('term');
-      newParams.append('term', term);
+      updater(newParams);
       return newParams;
     });
   };
+
+  const handleSearch = (term: string) => {
+    updateSearchParams((params) => {
+      params.delete('term');
+      params.append('term', term);
+    });
+  };
+
   const handleSearchClear = () => {
     if (searchInputRef.current) {
       searchInputRef.current.value = '';
     }
-    setSearchParams((prevParams) => {
-      const newParams = new URLSearchParams(prevParams);
-      newParams.delete('term');
-      return newParams;
+    updateSearchParams((params) => {
+      params.delete('term');
     });
   };
 
   const handleSelectedRoomsChange = (selectedRooms?: string[]) => {
-    setSearchParams((prevParams) => {
-      const newParams = new URLSearchParams(prevParams);
-      newParams.delete('rooms');
+    updateSearchParams((params) => {
+      params.delete('rooms');
       if (selectedRooms && selectedRooms.length > 0) {
-        newParams.append('rooms', encodeSearchParamValueArray(selectedRooms));
+        params.append('rooms', encodeSearchParamValueArray(selectedRooms));
       }
-      return newParams;
     });
   };
+
   const handleGlobalChange = (global?: boolean) => {
-    setSearchParams((prevParams) => {
-      const newParams = new URLSearchParams(prevParams);
-      newParams.delete('global');
+    updateSearchParams((params) => {
+      params.delete('global');
       if (global) {
-        newParams.append('global', 'true');
+        params.append('global', 'true');
       }
-      return newParams;
     });
   };
 
   const handleOrderChange = (order?: string) => {
-    setSearchParams((prevParams) => {
-      const newParams = new URLSearchParams(prevParams);
-      newParams.delete('order');
+    updateSearchParams((params) => {
+      params.delete('order');
       if (order) {
-        newParams.append('order', order);
+        params.append('order', order);
       }
-      return newParams;
     });
   };
+
+  const handleSenderQueryChange = (senderQuery?: string) => {
+    updateSearchParams((params) => {
+      params.delete('senderQuery');
+      if (senderQuery) {
+        params.append('senderQuery', senderQuery);
+      }
+    });
+  };
+
+  const handleSelectedTypesChange = (types?: SearchMessageType[]) => {
+    updateSearchParams((params) => {
+      params.delete('msgTypes');
+      if (types && types.length > 0) {
+        params.append('msgTypes', encodeSearchParamValueArray(types));
+      }
+    });
+  };
+
+  const handleDateFromChange = (dateFrom?: string) => {
+    updateSearchParams((params) => {
+      params.delete('dateFrom');
+      if (dateFrom) {
+        params.append('dateFrom', dateFrom);
+      }
+    });
+  };
+
+  const handleDateToChange = (dateTo?: string) => {
+    updateSearchParams((params) => {
+      params.delete('dateTo');
+      if (dateTo) {
+        params.append('dateTo', dateTo);
+      }
+    });
+  };
+
+  const handleOnlyLinksChange = (onlyLinks?: boolean) => {
+    updateSearchParams((params) => {
+      params.delete('links');
+      if (onlyLinks) {
+        params.append('links', 'true');
+      }
+    });
+  };
+
+  useEffect(() => {
+    if (!scrollRef.current) return;
+    scrollRef.current.scrollTo({ top: 0 });
+    virtualizer.scrollToOffset(0);
+  }, [
+    msgSearchParams.dateFrom,
+    msgSearchParams.dateTo,
+    msgSearchParams.msgTypes,
+    msgSearchParams.onlyLinks,
+    msgSearchParams.order,
+    msgSearchParams.rooms,
+    msgSearchParams.senderQuery,
+    msgSearchParams.senders,
+    msgSearchParams.term,
+    scrollRef,
+    virtualizer,
+  ]);
 
   const lastVItem = vItems[vItems.length - 1];
   const lastVItemIndex: number | undefined = lastVItem?.index;
   const lastGroupIndex = groups.length - 1;
+
   useEffect(() => {
     if (
       lastGroupIndex > -1 &&
@@ -187,7 +286,7 @@ export function MessageSearch({
     ) {
       fetchNextPage();
     }
-  }, [lastVItemIndex, lastGroupIndex, fetchNextPage, isFetchingNextPage, hasNextPage]);
+  }, [lastGroupIndex, lastVItemIndex, fetchNextPage, hasNextPage, isFetchingNextPage]);
 
   return (
     <Box direction="Column" gap="700">
@@ -198,11 +297,12 @@ export function MessageSearch({
           radii="Pill"
           outlined
           size="300"
-          aria-label="回到顶部"
+          aria-label={'\u56de\u5230\u9876\u90e8'}
         >
           <Icon src={Icons.ChevronTop} size="300" />
         </IconButton>
       </ScrollTopContainer>
+
       <Box ref={scrollTopAnchorRef} direction="Column" gap="300">
         <SearchInput
           active={!!msgSearchParams.term}
@@ -221,6 +321,16 @@ export function MessageSearch({
           onGlobalChange={handleGlobalChange}
           order={msgSearchParams.order}
           onOrderChange={handleOrderChange}
+          senderQuery={msgSearchParams.senderQuery}
+          onSenderQueryChange={handleSenderQueryChange}
+          selectedTypes={msgSearchParams.msgTypes}
+          onSelectedTypesChange={handleSelectedTypesChange}
+          dateFrom={msgSearchParams.dateFrom}
+          dateTo={msgSearchParams.dateTo}
+          onDateFromChange={handleDateFromChange}
+          onDateToChange={handleDateToChange}
+          onlyLinks={msgSearchParams.onlyLinks}
+          onOnlyLinksChange={handleOnlyLinksChange}
         />
       </Box>
 
@@ -229,8 +339,8 @@ export function MessageSearch({
           <PageHeroSection>
             <PageHero
               icon={<Icon size="600" src={Icons.Message} />}
-              title="搜索消息"
-              subTitle="使用关键词在当前社区中查找需要的消息。"
+              title={'\u641c\u7d22\u6d88\u606f'}
+              subTitle={'\u4f7f\u7528\u5173\u952e\u8bcd\u5728\u5f53\u524d\u4f1a\u8bdd\u8303\u56f4\u5185\u67e5\u627e\u5386\u53f2\u6d88\u606f\u3002'}
             />
           </PageHeroSection>
         </PageHeroEmpty>
@@ -265,8 +375,12 @@ export function MessageSearch({
         <Box direction="Column" gap="300">
           <Box direction="Column" gap="200">
             <Text size="H5">{`"${msgSearchParams.term}" \u7684\u641c\u7d22\u7ed3\u679c`}</Text>
+            <Text size="T300" priority="300">
+              {'\u70b9\u51fb\u7ed3\u679c\u5373\u53ef\u8df3\u8f6c\u5230\u539f\u6d88\u606f\u5e76\u9ad8\u4eae\u5b9a\u4f4d\u3002'}
+            </Text>
             <Line size="300" variant="Surface" />
           </Box>
+
           <div
             style={{
               position: 'relative',
@@ -276,6 +390,7 @@ export function MessageSearch({
             {vItems.map((vItem) => {
               const group = groups[vItem.index];
               if (!group) return null;
+
               const groupRoom = mx.getRoom(group.roomId);
               if (!groupRoom) return null;
 
@@ -301,6 +416,7 @@ export function MessageSearch({
               );
             })}
           </div>
+
           {isFetchingNextPage && (
             <Box justifyContent="Center" alignItems="Center">
               <Spinner size="600" variant="Secondary" />
