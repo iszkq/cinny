@@ -25,7 +25,7 @@ const getReceiptTimestamp = (room: Room, userId: string): number | undefined => 
   return undefined;
 };
 
-const getEventReaderIds = (room: Room, evtId?: string) => {
+export const getRoomEventReaderIds = (room: Room, evtId?: string) => {
   if (!evtId) return [];
 
   // if eventId is locally generated
@@ -43,8 +43,8 @@ const getEventReaderIds = (room: Room, evtId?: string) => {
   return [...new Set(userIds)];
 };
 
-const getEventReadersInfo = (room: Room, evtId?: string): RoomEventReaderInfo[] =>
-  getEventReaderIds(room, evtId)
+export const getRoomEventReadersInfo = (room: Room, evtId?: string): RoomEventReaderInfo[] =>
+  getRoomEventReaderIds(room, evtId)
     .map((userId, index) => ({
       userId,
       ts: getReceiptTimestamp(room, userId),
@@ -62,15 +62,15 @@ const getEventReadersInfo = (room: Room, evtId?: string): RoomEventReaderInfo[] 
 
 export const useRoomEventReaders = (room: Room, eventId?: string): string[] => {
   const [readers, setReaders] = useState<string[]>(() =>
-    getEventReadersInfo(room, eventId).map((reader) => reader.userId)
+    getRoomEventReadersInfo(room, eventId).map((reader) => reader.userId)
   );
 
   useEffect(() => {
-    setReaders(getEventReadersInfo(room, eventId).map((reader) => reader.userId));
+    setReaders(getRoomEventReadersInfo(room, eventId).map((reader) => reader.userId));
 
     const handleReceipt: RoomEventHandlerMap[RoomEvent.Receipt] = (event, r) => {
       if (r.roomId !== room.roomId) return;
-      setReaders(getEventReadersInfo(room, eventId).map((reader) => reader.userId));
+      setReaders(getRoomEventReadersInfo(room, eventId).map((reader) => reader.userId));
     };
 
     const handleLocalEcho: RoomEventHandlerMap[RoomEvent.LocalEchoUpdated] = (
@@ -84,7 +84,7 @@ export const useRoomEventReaders = (room: Room, eventId?: string): string[] => {
       if (oldEventId.startsWith('$')) return;
       if (oldEventId !== eventId) return;
 
-      setReaders(getEventReadersInfo(room, event.getId()).map((reader) => reader.userId));
+      setReaders(getRoomEventReadersInfo(room, event.getId()).map((reader) => reader.userId));
     };
 
     room.on(RoomEvent.Receipt, handleReceipt);
@@ -103,15 +103,15 @@ export const useRoomEventReadersInfo = (
   eventId?: string
 ): RoomEventReaderInfo[] => {
   const [readers, setReaders] = useState<RoomEventReaderInfo[]>(() =>
-    getEventReadersInfo(room, eventId)
+    getRoomEventReadersInfo(room, eventId)
   );
 
   useEffect(() => {
-    setReaders(getEventReadersInfo(room, eventId));
+    setReaders(getRoomEventReadersInfo(room, eventId));
 
     const handleReceipt: RoomEventHandlerMap[RoomEvent.Receipt] = (event, r) => {
       if (r.roomId !== room.roomId) return;
-      setReaders(getEventReadersInfo(room, eventId));
+      setReaders(getRoomEventReadersInfo(room, eventId));
     };
 
     const handleLocalEcho: RoomEventHandlerMap[RoomEvent.LocalEchoUpdated] = (
@@ -123,7 +123,7 @@ export const useRoomEventReadersInfo = (
       if (oldEventId.startsWith('$')) return;
       if (oldEventId !== eventId) return;
 
-      setReaders(getEventReadersInfo(room, event.getId()));
+      setReaders(getRoomEventReadersInfo(room, event.getId()));
     };
 
     room.on(RoomEvent.Receipt, handleReceipt);
