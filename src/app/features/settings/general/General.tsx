@@ -365,7 +365,7 @@ function ReadReceiptAvatarCountInput() {
       onChange={handleCountChange}
       onKeyDown={handleCountEnter}
       onBlur={(evt) => applyCount(evt.target.value)}
-      after={<Text size="T300">个</Text>}
+      after={<Text size="T300">{'\u4e2a'}</Text>}
       outlined
     />
   );
@@ -422,7 +422,7 @@ function Appearance() {
       <SequenceCard className={SequenceCardStyle} variant="SurfaceVariant" direction="Column">
         <SettingTile
           title="已读头像显示数量"
-          description={`控制底部已读头像最多显示几个，仅对当前设备生效。范围 ${MIN_READ_RECEIPT_AVATAR_COUNT}-${MAX_READ_RECEIPT_AVATAR_COUNT}，输入后回车或失焦自动保存。`}
+          description={`控制消息下方已读头像最多显示几个，仅对当前设备生效。默认显示 7 个；如果你手动设置，就按设置数量显示。范围 ${MIN_READ_RECEIPT_AVATAR_COUNT}-${MAX_READ_RECEIPT_AVATAR_COUNT}，输入后回车或失焦自动保存。`}
           after={<ReadReceiptAvatarCountInput />}
         />
       </SequenceCard>
