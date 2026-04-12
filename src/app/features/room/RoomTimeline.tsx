@@ -121,6 +121,7 @@ import { useRoomNavigate } from '../../hooks/useRoomNavigate';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 import { useIgnoredUsers } from '../../hooks/useIgnoredUsers';
 import { useImagePackRooms } from '../../hooks/useImagePackRooms';
+import { getRoomEventReadersInfo } from '../../hooks/useRoomEventReaders';
 import { useIsDirectRoom } from '../../hooks/useRoom';
 import { useOpenUserRoomProfile } from '../../state/hooks/userRoomProfile';
 import { useSpaceOptionally } from '../../hooks/useSpace';
@@ -699,8 +700,8 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
 
     for (let index = visibleTodayMessages.length - 1; index >= 0; index -= 1) {
       const target = visibleTodayMessages[index];
-      const readers = room
-        .getUsersReadUpTo(target.event)
+      const readers = getRoomEventReadersInfo(room, target.eventId)
+        .map((reader) => reader.userId)
         .filter((readerId) => readerId !== myUserId && !assignedUsers.has(readerId));
 
       if (readers.length === 0) continue;
