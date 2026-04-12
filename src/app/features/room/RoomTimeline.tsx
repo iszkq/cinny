@@ -81,6 +81,7 @@ import {
   getEventReactions,
   getLatestEditableEvt,
   getMemberDisplayName,
+  getRoomReadMarkerEventId,
   getReactionContent,
   isMembershipChanged,
   reactionOrEditEvent,
@@ -475,7 +476,7 @@ const getEmptyTimeline = () => ({
 });
 
 const getRoomUnreadInfo = (room: Room, scrollTo = false) => {
-  const readUptoEventId = room.getEventReadUpTo(room.client.getUserId() ?? '');
+  const readUptoEventId = getRoomReadMarkerEventId(room, room.client.getUserId());
   if (!readUptoEventId) return undefined;
   const evtTimeline = getEventTimeline(room, readUptoEventId);
   const latestTimeline = evtTimeline && getFirstLinkedTimeline(evtTimeline, Direction.Forward);
