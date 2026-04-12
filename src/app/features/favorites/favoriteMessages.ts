@@ -3,7 +3,12 @@ import { MessageEvent } from '../../../types/matrix/room';
 import { getMemberAvatarMxc, getMemberDisplayName } from '../../utils/room';
 import { getMxIdLocalPart } from '../../utils/matrix';
 import { isForwardableMessage } from '../room/forwardMessages';
-import { CINNY_FAVORITE_CONTENT_KEY, FavoriteMessageContent, FavoriteMessageMetadata } from './types';
+import {
+  CINNY_FAVORITE_CONTENT_KEY,
+  FavoriteMessageContent,
+  FavoriteMessageMetadata,
+  getFavoriteMessageMetadataFromEvent,
+} from './types';
 
 const cloneContent = (content: IContent): IContent => JSON.parse(JSON.stringify(content));
 
@@ -16,17 +21,48 @@ const sanitizeFavoriteContent = (content: IContent): FavoriteMessageContent => {
   return favoriteContent;
 };
 
+export const getFavoriteEventsBySource = (
+  room: Room | undefined,
+  sourceRoomId: string,
+  sourceEventId: string
+): MatrixEvent[] => {
+  if (!room || !sourceEventId) return [];
+
+  return room
+    .getLiveTimeline()
+    .getEvents()
+    .filter((event) => {
+      if (event.isRedacted()) return false;
+
+      const metadata = getFavoriteMessageMetadataFromEvent(event);
+      return (
+        metadata?.sourceRoomId === sourceRoomId && metadata.sourceEventId === sourceEventId
+      );
+    });
+};
+
 export const favoriteMessageToRoom = async (
   mx: MatrixClient,
   targetRoomId: string,
   sourceRoom: Room,
   mEvent: MatrixEvent
-): Promise<void> => {
+): Promise<string | undefined> => {
   const eventType = mEvent.getType();
   const content = mEvent.getContent();
+  const sourceEventId = mEvent.getId() ?? '';
 
   if (!isForwardableMessage(eventType, content)) {
     throw new Error('Unsupported favorite message type.');
+  }
+
+  const targetRoom = mx.getRoom(targetRoomId) ?? undefined;
+  const existingFavorite = getFavoriteEventsBySource(
+    targetRoom,
+    sourceRoom.roomId,
+    sourceEventId
+  )[0];
+  if (existingFavorite) {
+    return existingFavorite.getId() ?? undefined;
   }
 
   const senderId = mEvent.getSender();
@@ -42,7 +78,7 @@ export const favoriteMessageToRoom = async (
     sourceRoomId: sourceRoom.roomId,
     sourceRoomName: sourceRoom.name ?? sourceRoom.roomId,
     sourceRoomAvatarMxc: sourceRoom.getMxcAvatarUrl() ?? undefined,
-    sourceEventId: mEvent.getId() ?? '',
+    sourceEventId,
     sourceSenderId: senderId ?? undefined,
     sourceSenderName: senderName,
     sourceSenderAvatarMxc: senderId ? getMemberAvatarMxc(sourceRoom, senderId) : undefined,
@@ -53,11 +89,12 @@ export const favoriteMessageToRoom = async (
   favoriteContent[CINNY_FAVORITE_CONTENT_KEY] = metadata;
 
   if (eventType === MessageEvent.Sticker) {
-    await mx.sendEvent(targetRoomId, EventType.Sticker, favoriteContent);
-    return;
+    const response = await mx.sendEvent(targetRoomId, EventType.Sticker, favoriteContent);
+    return response?.event_id;
   }
 
-  await mx.sendMessage(targetRoomId, favoriteContent as never);
+  const response = await mx.sendMessage(targetRoomId, favoriteContent as never);
+  return response?.event_id;
 };
 
 export const removeFavoriteMessage = async (

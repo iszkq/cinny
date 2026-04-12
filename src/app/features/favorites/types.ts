@@ -82,12 +82,12 @@ export const getFavoriteCategory = (mEvent: MatrixEvent): FavoriteCategory => {
 };
 
 export const getFavoriteCategoryLabel = (category: FavoriteVisibleCategory): string => {
-  if (category === 'all') return '\u5168\u90e8';
-  if (category === 'text') return '\u6587\u672c';
-  if (category === 'image') return '\u56fe\u7247';
-  if (category === 'video') return '\u89c6\u9891';
-  if (category === 'audio') return '\u97f3\u9891';
-  if (category === 'file') return '\u6587\u4ef6';
+  if (category === 'all') return '全部';
+  if (category === 'text') return '文本';
+  if (category === 'image') return '图片';
+  if (category === 'video') return '视频';
+  if (category === 'audio') return '音频';
+  if (category === 'file') return '文件';
 
-  return '\u5176\u4ed6';
+  return '其他';
 };
