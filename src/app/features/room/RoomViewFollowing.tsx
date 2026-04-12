@@ -26,8 +26,11 @@ import { useRoomEventReaders } from '../../hooks/useRoomEventReaders';
 import { EventReaders } from '../../components/event-readers';
 import { UserAvatar } from '../../components/user-avatar';
 import { stopPropagation } from '../../utils/keyboard';
+import { useSetting } from '../../state/hooks/settings';
+import { settingsAtom } from '../../state/settings';
 
-const MAX_VISIBLE_READERS = 7;
+const MIN_VISIBLE_READERS = 1;
+const MAX_VISIBLE_READERS = 12;
 
 export function RoomViewFollowingPlaceholder() {
   return <div className={css.RoomViewFollowingPlaceholder} />;
@@ -40,12 +43,17 @@ export const RoomViewFollowing = as<'div', RoomViewFollowingProps>(
   ({ className, room, ...props }, ref) => {
     const mx = useMatrixClient();
     const useAuthentication = useMediaAuthentication();
+    const [readReceiptAvatarCount] = useSetting(settingsAtom, 'readReceiptAvatarCount');
     const [open, setOpen] = useState(false);
     const latestEvent = useRoomLatestRenderedEvent(room);
     const latestEventReaders = useRoomEventReaders(room, latestEvent?.getId()).filter(
       (readerId) => readerId !== mx.getUserId()
     );
-    const visibleReaders = latestEventReaders.slice(0, MAX_VISIBLE_READERS);
+    const visibleReaderCount = Math.max(
+      Math.min(readReceiptAvatarCount, MAX_VISIBLE_READERS),
+      MIN_VISIBLE_READERS
+    );
+    const visibleReaders = latestEventReaders.slice(0, visibleReaderCount);
     const overflowCount = Math.max(latestEventReaders.length - visibleReaders.length, 0);
 
     const eventId = latestEvent?.getId();
