@@ -64,9 +64,10 @@ import {
   isRoomAlias,
   mxcUrlToHttp,
 } from '../../../utils/matrix';
-import { MessageLayout, MessageSpacing } from '../../../state/settings';
+import { MessageLayout, MessageSpacing, settingsAtom } from '../../../state/settings';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { useRecentEmoji } from '../../../hooks/useRecentEmoji';
+import { useSetting } from '../../../state/hooks/settings';
 import * as css from './styles.css';
 import { EventReaders } from '../../../components/event-readers';
 import { TextViewer } from '../../../components/text-viewer';
@@ -98,6 +99,8 @@ import {
 } from '../../favorites';
 
 export type ReactionHandler = (keyOrMxc: string, shortcode: string) => void;
+const DEFAULT_INLINE_READ_RECEIPTS = 7;
+const MIN_INLINE_READ_RECEIPTS = 1;
 
 const getMessageCopyText = (mEvent: MatrixEvent): string | undefined => {
   if (mEvent.isRedacted()) return undefined;
@@ -650,8 +653,8 @@ export const MessageFavoriteItem = as<
       .catch(() => {});
   };
 
-  const favoriteLoadingLabel = favorited ? '取消中...' : '收藏中...';
-  const favoriteDefaultLabel = favorited ? '已收藏' : '收藏';
+  const favoriteLoadingLabel = favorited ? '\u53d6\u6d88\u4e2d...' : '\u6536\u85cf\u4e2d...';
+  const favoriteDefaultLabel = favorited ? '\u5df2\u6536\u85cf' : '\u6536\u85cf';
 
   return (
     <MenuItem
@@ -680,6 +683,97 @@ export const MessageFavoriteItem = as<
           : favoriteDefaultLabel}
       </Text>
     </MenuItem>
+  );
+});
+
+export const MessageInlineReadReceipts = as<
+  'button',
+  {
+    room: Room;
+    eventId: string;
+    readerIds: string[];
+  }
+>(({ room, eventId, readerIds, ...props }, ref) => {
+  const mx = useMatrixClient();
+  const useAuthentication = useMediaAuthentication();
+  const [readReceiptAvatarCount] = useSetting(settingsAtom, 'readReceiptAvatarCount');
+  const [open, setOpen] = useState(false);
+
+  const configuredVisibleCount = Number.isFinite(readReceiptAvatarCount)
+    ? Math.trunc(readReceiptAvatarCount)
+    : DEFAULT_INLINE_READ_RECEIPTS;
+  const visibleCount = Math.max(configuredVisibleCount, MIN_INLINE_READ_RECEIPTS);
+  const visibleReaderIds = readerIds.slice(0, visibleCount);
+  const overflowCount = Math.max(readerIds.length - visibleReaderIds.length, 0);
+
+  const getName = (readerId: string) =>
+    getMemberDisplayName(room, readerId) ?? getMxIdLocalPart(readerId) ?? readerId;
+
+  return (
+    <>
+      <Overlay open={open} backdrop={<OverlayBackdrop />}>
+        <OverlayCenter>
+          <FocusTrap
+            focusTrapOptions={{
+              initialFocus: false,
+              onDeactivate: () => setOpen(false),
+              clickOutsideDeactivates: true,
+              escapeDeactivates: stopPropagation,
+            }}
+          >
+            <Modal variant="Surface" size="300">
+              <EventReaders
+                room={room}
+                eventId={eventId}
+                readerIds={readerIds}
+                requestClose={() => setOpen(false)}
+              />
+            </Modal>
+          </FocusTrap>
+        </OverlayCenter>
+      </Overlay>
+      <Box className={css.MessageReadReceiptsRow}>
+        <button
+          className={css.MessageReadReceiptsButton}
+          type="button"
+          onClick={() => setOpen(true)}
+          aria-pressed={open}
+          aria-label={`\u5df2\u8bfb ${readerIds.length} \u4eba`}
+          {...props}
+          ref={ref}
+        >
+          {overflowCount > 0 && (
+            <Text className={css.MessageReadReceiptOverflow} size="T100" priority="300">
+              {`+${overflowCount}`}
+            </Text>
+          )}
+          <Box className={css.MessageReadReceiptStack}>
+            {visibleReaderIds.map((readerId) => {
+              const avatarMxcUrl = room.getMember(readerId)?.getMxcAvatarUrl();
+              const avatarUrl = avatarMxcUrl
+                ? mx.mxcUrlToHttp(avatarMxcUrl, 32, 32, 'crop', undefined, false, useAuthentication)
+                : undefined;
+
+              return (
+                <Avatar
+                  key={readerId}
+                  className={css.MessageReadReceiptAvatar}
+                  size="100"
+                  title={getName(readerId)}
+                >
+                  <UserAvatar
+                    userId={readerId}
+                    src={avatarUrl ?? undefined}
+                    alt={getName(readerId)}
+                    renderFallback={() => <Icon size="50" src={Icons.User} filled />}
+                  />
+                </Avatar>
+              );
+            })}
+          </Box>
+        </button>
+      </Box>
+    </>
   );
 });
 
@@ -979,6 +1073,7 @@ export type MessageProps = {
   legacyUsernameColor?: boolean;
   hour24Clock: boolean;
   dateFormatString: string;
+  readReceiptUserIds?: string[];
 };
 export const Message = as<'div', MessageProps>(
   (
@@ -1014,6 +1109,7 @@ export const Message = as<'div', MessageProps>(
       legacyUsernameColor,
       hour24Clock,
       dateFormatString,
+      readReceiptUserIds,
       children,
       ...props
     },
@@ -1134,6 +1230,13 @@ export const Message = as<'div', MessageProps>(
           children
         )}
         {reactions}
+        {!hideReadReceipts && readReceiptUserIds && readReceiptUserIds.length > 0 && (
+          <MessageInlineReadReceipts
+            room={room}
+            eventId={mEvent.getId() ?? ''}
+            readerIds={readReceiptUserIds}
+          />
+        )}
       </Box>
     );
 
@@ -1333,7 +1436,7 @@ export const Message = as<'div', MessageProps>(
                                 size="T300"
                                 truncate
                               >
-                                添加表情
+                                {'添加表情'}
                               </Text>
                             </MenuItem>
                           )}
@@ -1360,7 +1463,7 @@ export const Message = as<'div', MessageProps>(
                               size="T300"
                               truncate
                             >
-                              回复
+                              {'回复'}
                             </Text>
                           </MenuItem>
                           {!isThreadedMessage && (
@@ -1380,7 +1483,7 @@ export const Message = as<'div', MessageProps>(
                                 size="T300"
                                 truncate
                               >
-                                在线程中回复
+                                {'在线程中回复'}
                               </Text>
                             </MenuItem>
                           )}
@@ -1401,7 +1504,7 @@ export const Message = as<'div', MessageProps>(
                                 size="T300"
                                 truncate
                               >
-                                编辑消息
+                                {'编辑消息'}
                               </Text>
                             </MenuItem>
                           )}
