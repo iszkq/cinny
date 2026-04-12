@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import {
+  Avatar,
   Box,
   Icon,
   Icons,
@@ -19,9 +20,11 @@ import { getMemberDisplayName } from '../../utils/room';
 import { getMxIdLocalPart } from '../../utils/matrix';
 import * as css from './RoomViewFollowing.css';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 import { useRoomLatestRenderedEvent } from '../../hooks/useRoomLatestRenderedEvent';
 import { useRoomEventReaders } from '../../hooks/useRoomEventReaders';
 import { EventReaders } from '../../components/event-readers';
+import { UserAvatar } from '../../components/user-avatar';
 import { stopPropagation } from '../../utils/keyboard';
 
 export function RoomViewFollowingPlaceholder() {
@@ -34,16 +37,18 @@ export type RoomViewFollowingProps = {
 export const RoomViewFollowing = as<'div', RoomViewFollowingProps>(
   ({ className, room, ...props }, ref) => {
     const mx = useMatrixClient();
+    const useAuthentication = useMediaAuthentication();
     const [open, setOpen] = useState(false);
     const latestEvent = useRoomLatestRenderedEvent(room);
-    const latestEventReaders = useRoomEventReaders(room, latestEvent?.getId());
-    const names = latestEventReaders
-      .filter((readerId) => readerId !== mx.getUserId())
-      .map(
-        (readerId) => getMemberDisplayName(room, readerId) ?? getMxIdLocalPart(readerId) ?? readerId
-      );
+    const latestEventReaders = useRoomEventReaders(room, latestEvent?.getId()).filter(
+      (readerId) => readerId !== mx.getUserId()
+    );
+    const visibleReaders = latestEventReaders.slice(-3);
+    const overflowCount = Math.max(latestEventReaders.length - visibleReaders.length, 0);
 
     const eventId = latestEvent?.getId();
+    const getName = (readerId: string) =>
+      getMemberDisplayName(room, readerId) ?? getMxIdLocalPart(readerId) ?? readerId;
 
     return (
       <>
@@ -66,76 +71,60 @@ export const RoomViewFollowing = as<'div', RoomViewFollowingProps>(
           </Overlay>
         )}
         <Box
-          as={names.length > 0 ? 'button' : 'div'}
-          onClick={names.length > 0 ? () => setOpen(true) : undefined}
-          className={classNames(css.RoomViewFollowing({ clickable: names.length > 0 }), className)}
+          as={latestEventReaders.length > 0 ? 'button' : 'div'}
+          onClick={latestEventReaders.length > 0 ? () => setOpen(true) : undefined}
+          className={classNames(
+            css.RoomViewFollowing({ clickable: latestEventReaders.length > 0 }),
+            className
+          )}
           alignItems="Center"
           justifyContent="End"
           gap="200"
           {...props}
           ref={ref}
         >
-          {names.length > 0 && (
+          {latestEventReaders.length > 0 && (
             <>
               <Icon style={{ opacity: config.opacity.P300 }} size="100" src={Icons.CheckTwice} />
-              <Text size="T300" truncate>
-                {names.length === 1 && (
-                  <>
-                    <b>{names[0]}</b>
-                    <Text as="span" size="Inherit" priority="300">
-                      {' is following the conversation.'}
-                    </Text>
-                  </>
+              <Box className={css.ReadersSummary} alignItems="Center" gap="100">
+                {overflowCount > 0 && (
+                  <Text className={css.ReaderOverflow} size="T200">
+                    {`+${overflowCount}`}
+                  </Text>
                 )}
-                {names.length === 2 && (
-                  <>
-                    <b>{names[0]}</b>
-                    <Text as="span" size="Inherit" priority="300">
-                      {' and '}
-                    </Text>
-                    <b>{names[1]}</b>
-                    <Text as="span" size="Inherit" priority="300">
-                      {' are following the conversation.'}
-                    </Text>
-                  </>
-                )}
-                {names.length === 3 && (
-                  <>
-                    <b>{names[0]}</b>
-                    <Text as="span" size="Inherit" priority="300">
-                      {', '}
-                    </Text>
-                    <b>{names[1]}</b>
-                    <Text as="span" size="Inherit" priority="300">
-                      {' and '}
-                    </Text>
-                    <b>{names[2]}</b>
-                    <Text as="span" size="Inherit" priority="300">
-                      {' are following the conversation.'}
-                    </Text>
-                  </>
-                )}
-                {names.length > 3 && (
-                  <>
-                    <b>{names[0]}</b>
-                    <Text as="span" size="Inherit" priority="300">
-                      {', '}
-                    </Text>
-                    <b>{names[1]}</b>
-                    <Text as="span" size="Inherit" priority="300">
-                      {', '}
-                    </Text>
-                    <b>{names[2]}</b>
-                    <Text as="span" size="Inherit" priority="300">
-                      {' and '}
-                    </Text>
-                    <b>{names.length - 3} others</b>
-                    <Text as="span" size="Inherit" priority="300">
-                      {' are following the conversation.'}
-                    </Text>
-                  </>
-                )}
-              </Text>
+                <Box className={css.ReaderAvatarStack} alignItems="Center">
+                  {visibleReaders.map((readerId) => {
+                    const avatarMxcUrl = room.getMember(readerId)?.getMxcAvatarUrl();
+                    const avatarUrl = avatarMxcUrl
+                      ? mx.mxcUrlToHttp(
+                          avatarMxcUrl,
+                          48,
+                          48,
+                          'crop',
+                          undefined,
+                          false,
+                          useAuthentication
+                        )
+                      : undefined;
+
+                    return (
+                      <Avatar
+                        key={readerId}
+                        className={css.ReaderAvatar}
+                        size="200"
+                        title={getName(readerId)}
+                      >
+                        <UserAvatar
+                          userId={readerId}
+                          src={avatarUrl ?? undefined}
+                          alt={getName(readerId)}
+                          renderFallback={() => <Icon size="50" src={Icons.User} filled />}
+                        />
+                      </Avatar>
+                    );
+                  })}
+                </Box>
+              </Box>
             </>
           )}
         </Box>
