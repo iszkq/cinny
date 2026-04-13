@@ -41,8 +41,9 @@ export const MediaCard = style([
   {
     display: 'flex',
     flexDirection: 'column',
-    padding: config.space.S250,
+    padding: 0,
     height: '100%',
+    overflow: 'hidden',
   },
 ]);
 
@@ -225,21 +226,19 @@ export const DetailInfoLabel = style([
 export const MessageContentCard = style([
   DefaultReset,
   {
-    padding: config.space.S300,
-    borderRadius: config.radii.R400,
-    background: 'rgba(15, 23, 42, 0.04)',
-    border: '1px solid rgba(15, 23, 42, 0.06)',
-    overflow: 'hidden',
+    padding: 0,
+    borderRadius: 0,
+    background: 'transparent',
+    border: 'none',
+    overflow: 'visible',
   },
 ]);
 
 export const NoteCard = style([
   DefaultReset,
   {
-    padding: config.space.S250,
-    borderRadius: config.radii.R400,
-    background: 'rgba(15, 23, 42, 0.04)',
-    border: '1px solid rgba(15, 23, 42, 0.06)',
+    paddingTop: config.space.S150,
+    borderTop: '1px solid rgba(15, 23, 42, 0.08)',
   },
 ]);
 
@@ -281,9 +280,10 @@ export const ViewerShell = style([
     gap: config.space.S200,
     '@media': {
       'screen and (min-width: 1100px)': {
-        flexDirection: 'row',
+        display: 'grid',
+        gridTemplateColumns: 'minmax(0, 1fr) 360px',
         alignItems: 'stretch',
-        gap: config.space.S300,
+        gap: config.space.S150,
       },
     },
   },
@@ -293,6 +293,7 @@ export const ViewerStageCard = style([
   DefaultReset,
   {
     flex: 1,
+    display: 'flex',
     minWidth: 0,
     minHeight: 0,
     alignSelf: 'stretch',
@@ -308,13 +309,12 @@ export const ViewerDetailsCard = style([
     background: 'rgba(248, 250, 252, 0.98)',
     boxShadow: '0 18px 40px rgba(15, 23, 42, 0.18)',
     maxHeight: '100%',
-    alignSelf: 'flex-start',
+    height: '100%',
+    overflow: 'auto',
     '@media': {
       'screen and (min-width: 1100px)': {
-        width: '340px',
-        maxWidth: '28vw',
-        height: 'auto',
-        overflow: 'auto',
+        width: '360px',
+        maxWidth: '360px',
       },
     },
   },
@@ -323,6 +323,7 @@ export const ViewerDetailsCard = style([
 export const VideoViewer = style([
   DefaultReset,
   {
+    width: '100%',
     height: '100%',
     minHeight: 0,
     display: 'flex',

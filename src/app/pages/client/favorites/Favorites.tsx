@@ -378,9 +378,9 @@ function FavoriteNoteEditor({
       {!editing && hasNote && (
         <Box className={css.NoteCard} direction="Column" gap="200">
           <Box className={css.NoteHeader}>
-            <Chip variant="Secondary" radii="Pill">
-              <Text size="T200">备注</Text>
-            </Chip>
+            <Text size="T200" priority="300">
+              备注
+            </Text>
             <Button
               size="300"
               variant="Secondary"
@@ -400,9 +400,9 @@ function FavoriteNoteEditor({
       {editing && (
         <Box className={css.NoteCard} direction="Column" gap="200">
           <Box className={css.NoteHeader}>
-            <Chip variant={hasNote ? 'Secondary' : 'SurfaceVariant'} radii="Pill">
-              <Text size="T200">备注</Text>
-            </Chip>
+            <Text size="T200" priority="300">
+              备注
+            </Text>
           </Box>
           <Input
             size="300"
@@ -466,36 +466,27 @@ function FavoriteNoteEditor({
   );
 }
 
-function FavoriteInfoItem({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
-  return (
-    <Box className={css.DetailInfoCard}>
-      <Text className={css.DetailInfoLabel} size="T200" priority="300">
-        {label}
-      </Text>
-      <Text size="T300">{value}</Text>
-    </Box>
-  );
-}
-
 function FavoriteMediaDetails({
   item,
   note,
   onSaveNote,
   onOpenSource,
+  onRemoveFavorite,
 }: {
   item: FavoriteItem;
   note?: string;
   onSaveNote: FavoriteSaveNoteHandler;
   onOpenSource: FavoriteOpenSourceHandler;
+  onRemoveFavorite?: (item: FavoriteItem) => Promise<void>;
 }) {
   const mx = useMatrixClient();
   const sourceRoomAvailable = Boolean(mx.getRoom(item.metadata.sourceRoomId));
+  const [removeState, removeFavorite] = useAsyncCallback(
+    useCallback(async () => {
+      if (!onRemoveFavorite) return;
+      await onRemoveFavorite(item);
+    }, [item, onRemoveFavorite])
+  );
 
   return (
     <Box direction="Column" gap="250">
@@ -503,32 +494,27 @@ function FavoriteMediaDetails({
         <Text size="H4" style={{ wordBreak: 'break-word' }}>
           {getFavoriteDisplayTitle(item)}
         </Text>
-        <Box className={css.MediaMetaRow}>
-          <Chip variant="Secondary" radii="Pill">
-            <Text size="T200">{item.metadata.sourceRoomName}</Text>
-          </Chip>
-          <Chip variant="SurfaceVariant" radii="Pill">
-            <Text size="T200">{getFavoriteCategoryText(item.category)}</Text>
-          </Chip>
-          <Chip variant="SurfaceVariant" radii="Pill">
-            <Text size="T200">{item.metadata.sourceSenderName}</Text>
-          </Chip>
-        </Box>
+        <Text size="T200" priority="300">
+          {`${item.metadata.sourceRoomName} · ${getFavoriteCategoryText(item.category)} · ${item.metadata.sourceSenderName}`}
+        </Text>
       </Box>
 
-      <Box className={css.DetailInfoGrid}>
-        <FavoriteInfoItem
-          label="原消息时间"
-          value={getFavoriteSavedAt(item.metadata.sourceTimestamp)}
-        />
-        <FavoriteInfoItem
-          label="收藏时间"
-          value={getFavoriteSavedAt(item.metadata.favoritedAt)}
-        />
+      <Box direction="Column" gap="150">
+        <Text size="T200" priority="300">
+          原消息时间
+        </Text>
+        <Text size="T300">{getFavoriteSavedAt(item.metadata.sourceTimestamp)}</Text>
       </Box>
 
-      {sourceRoomAvailable && (
-        <Box className={css.ActionRow}>
+      <Box direction="Column" gap="150">
+        <Text size="T200" priority="300">
+          收藏时间
+        </Text>
+        <Text size="T300">{getFavoriteSavedAt(item.metadata.favoritedAt)}</Text>
+      </Box>
+
+      <Box className={css.ActionRow}>
+        {sourceRoomAvailable && (
           <Button
             size="300"
             variant="Secondary"
@@ -538,8 +524,27 @@ function FavoriteMediaDetails({
           >
             <Text size="B300">打开原消息</Text>
           </Button>
-        </Box>
-      )}
+        )}
+        {onRemoveFavorite && (
+          <Button
+            size="300"
+            variant="Secondary"
+            radii="300"
+            onClick={() => {
+              if (removeState.status === AsyncStatus.Loading) return;
+              removeFavorite().catch(() => undefined);
+            }}
+            disabled={removeState.status === AsyncStatus.Loading}
+          >
+            {removeState.status === AsyncStatus.Loading && (
+              <Spinner size="200" variant="Secondary" />
+            )}
+            <Text size="B300">
+              {removeState.status === AsyncStatus.Loading ? '取消中...' : '取消收藏'}
+            </Text>
+          </Button>
+        )}
+      </Box>
 
       <FavoriteNoteEditor note={note} onSave={(nextNote) => onSaveNote(item, nextNote)} />
     </Box>
@@ -551,12 +556,14 @@ function FavoriteImageViewerContent({
   favoriteNotes,
   onSaveNote,
   onOpenSource,
+  onRemoveFavorite,
   ...viewerProps
 }: ImageViewerProps & {
   favoriteItemsById: Map<string, FavoriteItem>;
   favoriteNotes: Record<string, string>;
   onSaveNote: FavoriteSaveNoteHandler;
   onOpenSource: FavoriteOpenSourceHandler;
+  onRemoveFavorite: (item: FavoriteItem) => Promise<void>;
 }) {
   const activeFavoriteItem = viewerProps.activeItemId
     ? favoriteItemsById.get(viewerProps.activeItemId)
@@ -574,6 +581,10 @@ function FavoriteImageViewerContent({
             note={favoriteNotes[activeFavoriteItem.referenceId]}
             onSaveNote={onSaveNote}
             onOpenSource={onOpenSource}
+            onRemoveFavorite={async (item) => {
+              await onRemoveFavorite(item);
+              viewerProps.requestClose();
+            }}
           />
         </Box>
       )}
@@ -591,6 +602,7 @@ function FavoriteVideoViewerModal({
   onNext,
   onSaveNote,
   onOpenSource,
+  onRemoveFavorite,
   requestClose,
 }: {
   open: boolean;
@@ -602,6 +614,7 @@ function FavoriteVideoViewerModal({
   onNext?: () => void;
   onSaveNote: FavoriteSaveNoteHandler;
   onOpenSource: FavoriteOpenSourceHandler;
+  onRemoveFavorite: (item: FavoriteItem) => Promise<void>;
   requestClose: () => void;
 }) {
   const content = getFavoriteVideoContent(item);
@@ -735,6 +748,10 @@ function FavoriteVideoViewerModal({
                   note={note}
                   onSaveNote={onSaveNote}
                   onOpenSource={onOpenSource}
+                  onRemoveFavorite={async (targetItem) => {
+                    await onRemoveFavorite(targetItem);
+                    requestClose();
+                  }}
                 />
               </Box>
             </Box>
@@ -745,85 +762,8 @@ function FavoriteVideoViewerModal({
   );
 }
 
-function FavoriteMediaCardInfo({
-  item,
-  note,
-  hour24Clock,
-  dateFormatString,
-  removeLoading,
-  onOpenSource,
-  onRemove,
-}: {
-  item: FavoriteItem;
-  note?: string;
-  hour24Clock: boolean;
-  dateFormatString: string;
-  removeLoading: boolean;
-  onOpenSource: () => void;
-  onRemove: () => void;
-}) {
-  const mx = useMatrixClient();
-  const sourceRoomAvailable = Boolean(mx.getRoom(item.metadata.sourceRoomId));
-
-  return (
-    <Box className={css.MediaCardBody}>
-      <Text className={css.MediaCardTitle} size="L400" truncate title={getFavoriteDisplayTitle(item)}>
-        {getFavoriteDisplayTitle(item)}
-      </Text>
-
-      <Box className={css.MediaMetaRow}>
-        <Chip variant="Secondary" radii="Pill">
-          <Text size="T200">{item.metadata.sourceRoomName}</Text>
-        </Chip>
-        <Text size="T200" priority="300">
-          {item.metadata.sourceSenderName}
-        </Text>
-        <Time
-          ts={item.metadata.sourceTimestamp}
-          hour24Clock={hour24Clock}
-          dateFormatString={dateFormatString}
-        />
-        {note && (
-          <Chip variant="SurfaceVariant" radii="Pill">
-            <Text size="T200">已备注</Text>
-          </Chip>
-        )}
-      </Box>
-
-      <Box className={css.ActionRow} style={{ marginTop: 'auto' }}>
-        {sourceRoomAvailable && (
-          <Button
-            size="300"
-            variant="Secondary"
-            fill="Soft"
-            radii="300"
-            onClick={onOpenSource}
-          >
-            <Text size="B300">打开原消息</Text>
-          </Button>
-        )}
-        <Button
-          size="300"
-          variant="Secondary"
-          radii="300"
-          onClick={onRemove}
-          disabled={removeLoading}
-        >
-          {removeLoading && <Spinner size="200" variant="Secondary" />}
-          <Text size="B300">
-            {removeLoading ? '取消中...' : '取消收藏'}
-          </Text>
-        </Button>
-      </Box>
-    </Box>
-  );
-}
-
 function FavoriteImageCard({
   item,
-  note,
-  hour24Clock,
-  dateFormatString,
   selected,
   selectionMode,
   imageViewerItems,
@@ -835,9 +775,6 @@ function FavoriteImageCard({
   onSaveNote,
 }: {
   item: FavoriteItem;
-  note?: string;
-  hour24Clock: boolean;
-  dateFormatString: string;
   selected: boolean;
   selectionMode: boolean;
   imageViewerItems: ViewerImageItem[];
@@ -857,10 +794,6 @@ function FavoriteImageCard({
         : undefined;
   const mimeType =
     typeof content?.info?.mimetype === 'string' ? content.info.mimetype : undefined;
-
-  const [removeState, removeFavorite] = useAsyncCallback(
-    useCallback(() => onRemoveFavorite(item), [item, onRemoveFavorite])
-  );
 
   if (!content || !mediaUrl) return null;
 
@@ -890,6 +823,7 @@ function FavoriteImageCard({
               favoriteNotes={favoriteNotes}
               onSaveNote={onSaveNote}
               onOpenSource={onOpenSource}
+              onRemoveFavorite={onRemoveFavorite}
             />
           )}
           renderImage={({ alt, title, src, onLoad, onError, onClick, tabIndex }) => (
@@ -924,28 +858,12 @@ function FavoriteImageCard({
           </Box>
         )}
       </Box>
-
-      <FavoriteMediaCardInfo
-        item={item}
-        note={note}
-        hour24Clock={hour24Clock}
-        dateFormatString={dateFormatString}
-        removeLoading={removeState.status === AsyncStatus.Loading}
-        onOpenSource={() => onOpenSource(item.metadata.sourceRoomId, item.metadata.sourceEventId)}
-        onRemove={() => {
-          if (removeState.status === AsyncStatus.Loading) return;
-          void removeFavorite().catch(() => undefined);
-        }}
-      />
     </SequenceCard>
   );
 }
 
 function FavoriteVideoCard({
   item,
-  note,
-  hour24Clock,
-  dateFormatString,
   selected,
   selectionMode,
   videoItems,
@@ -956,9 +874,6 @@ function FavoriteVideoCard({
   onSaveNote,
 }: {
   item: FavoriteItem;
-  note?: string;
-  hour24Clock: boolean;
-  dateFormatString: string;
   selected: boolean;
   selectionMode: boolean;
   videoItems: FavoriteItem[];
@@ -971,10 +886,6 @@ function FavoriteVideoCard({
   const content = getFavoriteVideoContent(item);
   const info = content?.info as (IVideoInfo & IThumbnailContent) | undefined;
   const [viewerItemId, setViewerItemId] = useState<string>();
-
-  const [removeState, removeFavorite] = useAsyncCallback(
-    useCallback(() => onRemoveFavorite(item), [item, onRemoveFavorite])
-  );
 
   if (!content || !info) return null;
 
@@ -1037,25 +948,12 @@ function FavoriteVideoCard({
             </Box>
           )}
         </Box>
-
-        <FavoriteMediaCardInfo
-          item={item}
-          note={note}
-          hour24Clock={hour24Clock}
-          dateFormatString={dateFormatString}
-          removeLoading={removeState.status === AsyncStatus.Loading}
-          onOpenSource={() => onOpenSource(item.metadata.sourceRoomId, item.metadata.sourceEventId)}
-          onRemove={() => {
-            if (removeState.status === AsyncStatus.Loading) return;
-            void removeFavorite().catch(() => undefined);
-          }}
-        />
       </SequenceCard>
 
       <FavoriteVideoViewerModal
         open={viewerOpen}
         item={activeViewerItem}
-        note={favoriteNotes[activeViewerItem.referenceId] ?? note}
+        note={favoriteNotes[activeViewerItem.referenceId]}
         canPrev={activeIndex > 0}
         canNext={activeIndex < videoItems.length - 1}
         onPrev={
@@ -1070,6 +968,7 @@ function FavoriteVideoCard({
         }
         onSaveNote={onSaveNote}
         onOpenSource={onOpenSource}
+        onRemoveFavorite={onRemoveFavorite}
         requestClose={() => setViewerItemId(undefined)}
       />
     </>
@@ -1155,16 +1054,11 @@ function FavoriteCard({
                   dateFormatString={dateFormatString}
                 />
               </Box>
-              <Box className={css.MediaMetaRow}>
-                <Chip variant="Secondary" radii="Pill">
-                  <Text size="T200">{item.metadata.sourceRoomName}</Text>
-                </Chip>
-                {note && (
-                  <Chip variant="SurfaceVariant" radii="Pill">
-                    <Text size="T200">已备注</Text>
-                  </Chip>
-                )}
-              </Box>
+              <Text size="T200" priority="300">
+                {note
+                  ? `${item.metadata.sourceRoomName} · 已备注`
+                  : item.metadata.sourceRoomName}
+              </Text>
             </Box>
 
             {selectionMode && (
@@ -1184,16 +1078,9 @@ function FavoriteCard({
             )}
           </Box>
 
-          <Box className={css.DetailInfoGrid}>
-            <FavoriteInfoItem
-              label="原消息时间"
-              value={getFavoriteSavedAt(item.metadata.sourceTimestamp)}
-            />
-            <FavoriteInfoItem
-              label="收藏时间"
-              value={getFavoriteSavedAt(item.metadata.favoritedAt)}
-            />
-          </Box>
+          <Text size="T200" priority="300">
+            {`原消息 ${getFavoriteSavedAt(item.metadata.sourceTimestamp)} · 收藏于 ${getFavoriteSavedAt(item.metadata.favoritedAt)}`}
+          </Text>
 
           <FavoriteNoteEditor note={note} onSave={(nextNote) => onSaveNote(item, nextNote)} />
 
@@ -1914,9 +1801,6 @@ export function Favorites() {
                         <FavoriteImageCard
                           key={getFavoriteItemId(item)}
                           item={item}
-                          note={favoriteNotes[item.referenceId]}
-                          hour24Clock={hour24Clock}
-                          dateFormatString={dateFormatString}
                           selected={selectedFavoriteIds.includes(getFavoriteItemId(item))}
                           selectionMode={filtersOpen}
                           imageViewerItems={imageViewerItems}
@@ -1955,9 +1839,6 @@ export function Favorites() {
                       <FavoriteVideoCard
                         key={getFavoriteItemId(item)}
                         item={item}
-                        note={favoriteNotes[item.referenceId]}
-                        hour24Clock={hour24Clock}
-                        dateFormatString={dateFormatString}
                         selected={selectedFavoriteIds.includes(getFavoriteItemId(item))}
                         selectionMode={filtersOpen}
                         videoItems={visibleVideoItems}
