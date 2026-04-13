@@ -175,10 +175,10 @@ export const MediaMetaRow = style([
 export const ActionRow = style([
   DefaultReset,
   {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(96px, 1fr))',
-    gap: config.space.S150,
-    alignItems: 'stretch',
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: config.space.S200,
+    alignItems: 'center',
   },
 ]);
 
@@ -196,7 +196,7 @@ export const MetaStack = style([
   {
     display: 'flex',
     flexDirection: 'column',
-    gap: config.space.S100,
+    gap: config.space.S150,
     minWidth: 0,
   },
 ]);
@@ -206,8 +206,8 @@ export const MetaLine = style([
   {
     display: 'flex',
     flexWrap: 'wrap',
-    alignItems: 'center',
-    gap: config.space.S150,
+    alignItems: 'flex-start',
+    gap: config.space.S100,
     minWidth: 0,
   },
 ]);

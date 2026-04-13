@@ -151,7 +151,7 @@ const getStartOfToday = (): number => {
 const getFavoriteItemId = (item: FavoriteItem): string => item.event.getId() ?? item.referenceId;
 
 const FAVORITE_ACTION_BUTTON_STYLE = {
-  width: '100%',
+  minWidth: '132px',
   justifyContent: 'center',
 } as const;
 
@@ -500,12 +500,14 @@ function FavoriteMediaDetails({
         </AvatarBase>
 
         <Box className={css.MetaStack} grow="Yes">
-          <Box className={css.MetaLine}>
-            <Username>
-              <Text as="span" truncate>
-                <UsernameBold>{item.metadata.sourceSenderName}</UsernameBold>
-              </Text>
-            </Username>
+          <Box direction="Column" gap="100" style={{ minWidth: 0 }}>
+            <Box className={css.MetaLine}>
+              <Username>
+                <Text as="span" truncate>
+                  <UsernameBold>{item.metadata.sourceSenderName}</UsernameBold>
+                </Text>
+              </Username>
+            </Box>
             <Text size="T200" priority="300">
               {getFavoriteTimelineText(item)}
             </Text>
@@ -1057,12 +1059,14 @@ function FavoriteCard({
         <Box className={css.CardStack} grow="Yes" style={{ minWidth: 0 }}>
           <Box gap="300" justifyContent="SpaceBetween" alignItems="Start" grow="Yes">
             <Box className={css.MetaStack} grow="Yes">
-              <Box className={css.MetaLine}>
-                <Username>
-                  <Text as="span" truncate>
-                    <UsernameBold>{item.metadata.sourceSenderName}</UsernameBold>
-                  </Text>
-                </Username>
+              <Box direction="Column" gap="100" style={{ minWidth: 0 }}>
+                <Box className={css.MetaLine}>
+                  <Username>
+                    <Text as="span" truncate>
+                      <UsernameBold>{item.metadata.sourceSenderName}</UsernameBold>
+                    </Text>
+                  </Username>
+                </Box>
                 <Text size="T200" priority="300">
                   {getFavoriteTimelineText(item)}
                 </Text>
