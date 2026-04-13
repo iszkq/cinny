@@ -352,6 +352,8 @@ export const ImageViewer = as<'div', ImageViewerProps>(
                 )}
                 style={{
                   cursor: imageCursor,
+                  width: viewMode === 'fit' ? '100%' : 'auto',
+                  height: viewMode === 'fit' ? '100%' : 'auto',
                   maxWidth: viewMode === 'fit' ? '100%' : 'none',
                   maxHeight: viewMode === 'fit' ? '100%' : 'none',
                   transform: `translate(${pan.translateX + swipeOffsetX}px, ${pan.translateY}px) rotate(${rotation}deg) scale(${zoom})`,
@@ -373,6 +375,8 @@ export const ImageViewer = as<'div', ImageViewerProps>(
                   )}
                   style={{
                     cursor: imageCursor,
+                    width: viewMode === 'fit' ? '100%' : 'auto',
+                    height: viewMode === 'fit' ? '100%' : 'auto',
                     maxWidth: viewMode === 'fit' ? '100%' : 'none',
                     maxHeight: viewMode === 'fit' ? '100%' : 'none',
                     transform: `translate(${pan.translateX + swipeOffsetX}px, ${pan.translateY}px) rotate(${rotation}deg) scale(${zoom})`,
