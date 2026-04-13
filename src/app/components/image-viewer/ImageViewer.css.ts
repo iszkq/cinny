@@ -4,6 +4,7 @@ import { DefaultReset, config } from 'folds';
 export const ImageViewer = style([
   DefaultReset,
   {
+    width: '100%',
     height: '100%',
     minHeight: 0,
     borderRadius: config.radii.R500,
@@ -29,6 +30,7 @@ export const ImageViewerHeader = style([
 export const ImageViewerContent = style([
   DefaultReset,
   {
+    width: '100%',
     minHeight: 0,
     overflow: 'hidden',
     padding: config.space.S300,
@@ -40,6 +42,8 @@ export const ImageViewerContent = style([
 export const ImageViewerStage = style([
   DefaultReset,
   {
+    width: '100%',
+    flex: 1,
     position: 'relative',
     minHeight: 0,
     overflow: 'hidden',
