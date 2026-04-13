@@ -1625,7 +1625,7 @@ export function Favorites() {
               {'\u5185\u5bb9\u5206\u7c7b'}
             </Text>
             <Box className={css.FilterCardActions}>
-              {FAVORITE_VISIBLE_CATEGORIES.map((category) => {
+              {FAVORITE_CATEGORIES.map((category) => {
                 const active = activeCategory === category;
                 return (
                   <Chip
