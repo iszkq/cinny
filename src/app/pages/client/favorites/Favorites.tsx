@@ -138,6 +138,9 @@ const getPreferredCategory = (items: FavoriteItem[]): FavoriteCategory =>
   FAVORITE_CATEGORIES.find((category) => items.some((item) => item.category === category)) ??
   FAVORITE_CATEGORIES[0];
 
+const ESCAPED_UNICODE_RE = /\\u[0-9a-f]{4}/i;
+const hasEscapedUnicode = (value: string): boolean => ESCAPED_UNICODE_RE.test(value);
+
 const getDateFilterLabel = (dateFilter: FavoriteDateFilter): string =>
   DATE_FILTER_OPTIONS.find((option) => option.id === dateFilter)?.label ?? '\u5168\u90e8\u65f6\u95f4';
 
@@ -252,12 +255,6 @@ const getFavoriteDisplayTitle = (item: FavoriteItem): string => {
   return getFavoriteCategoryText(item.category);
 };
 
-const getFavoriteDisplayPreview = (item: FavoriteItem): string => {
-  const preview = getFavoriteItemBody(item.event);
-  if (preview) return preview;
-  return getFavoriteDisplayTitle(item);
-};
-
 const getFavoriteSavedAt = (timestamp: number): string => new Date(timestamp).toLocaleString();
 
 function getFavoriteImageContent(item: FavoriteItem): IImageContent | undefined {
@@ -363,17 +360,10 @@ function FavoriteNoteEditor({
 
   return (
     <Box direction="Column" gap="200">
-      <Box gap="200" alignItems="Center" wrap="Wrap">
+      <Box justifyContent="SpaceBetween" alignItems="Center" wrap="Wrap" gap="200">
         <Chip variant={hasNote ? 'Secondary' : 'SurfaceVariant'} radii="Pill">
-          <Text size="T200">{'\u5907\u6ce8'}</Text>
+          <Text size="T200">备注</Text>
         </Chip>
-        {hasNote ? (
-          <Text size="T300">{note}</Text>
-        ) : (
-          <Text size="T200" priority="300">
-            {'\u6682\u65e0\u5907\u6ce8\uff0c\u53ef\u7528\u4e8e\u540e\u7eed\u641c\u7d22\u6216\u7ba1\u7406\u3002'}
-          </Text>
-        )}
         {!editing && (
           <Button
             size="300"
@@ -382,12 +372,18 @@ function FavoriteNoteEditor({
             radii="300"
             onClick={() => setEditing(true)}
           >
-            <Text size="B300">
-              {hasNote ? '\u7f16\u8f91\u5907\u6ce8' : '\u6dfb\u52a0\u5907\u6ce8'}
-            </Text>
+            <Text size="B300">{hasNote ? '编辑备注' : '添加备注'}</Text>
           </Button>
         )}
       </Box>
+
+      {!editing && hasNote && (
+        <Box className={css.MediaNotePreview}>
+          <Text size="T200" priority="300">
+            {note}
+          </Text>
+        </Box>
+      )}
 
       {editing && (
         <Box direction="Column" gap="200">
@@ -395,7 +391,7 @@ function FavoriteNoteEditor({
             size="300"
             variant="Secondary"
             radii="300"
-            placeholder="\u8f93\u5165\u5907\u6ce8\uff0c\u53ef\u540c\u65f6\u641c\u7d22\u5230\u6536\u85cf\u5185\u5bb9\u548c\u5907\u6ce8"
+            placeholder="输入备注，可同时搜索到收藏内容和备注"
             value={draftNote}
             onChange={(evt: React.ChangeEvent<HTMLInputElement>) => setDraftNote(evt.target.value)}
             onKeyDown={(evt: React.KeyboardEvent<HTMLInputElement>) => {
@@ -415,11 +411,7 @@ function FavoriteNoteEditor({
               {saveState.status === AsyncStatus.Loading && (
                 <Spinner size="200" variant="Secondary" />
               )}
-              <Text size="B300">
-                {saveState.status === AsyncStatus.Loading
-                  ? '\u4fdd\u5b58\u4e2d...'
-                  : '\u4fdd\u5b58\u5907\u6ce8'}
-              </Text>
+              <Text size="B300">{saveState.status === AsyncStatus.Loading ? '保存中...' : '保存备注'}</Text>
             </Button>
             <Button
               size="300"
@@ -431,7 +423,7 @@ function FavoriteNoteEditor({
                 setEditing(false);
               }}
             >
-              <Text size="B300">{'\u53d6\u6d88'}</Text>
+              <Text size="B300">取消</Text>
             </Button>
             {hasNote && (
               <Button
@@ -447,7 +439,7 @@ function FavoriteNoteEditor({
                 }}
                 disabled={saveState.status === AsyncStatus.Loading}
               >
-                <Text size="B300">{'\u6e05\u7a7a\u5907\u6ce8'}</Text>
+                <Text size="B300">清空备注</Text>
               </Button>
             )}
           </Box>
@@ -473,7 +465,7 @@ function FavoriteMediaDetails({
 
   return (
     <Box direction="Column" gap="300">
-      <Box direction="Column" gap="150">
+      <Box direction="Column" gap="200">
         <Text size="H4">{getFavoriteDisplayTitle(item)}</Text>
         <Box className={css.MediaMetaRow}>
           <Chip variant="Secondary" radii="Pill">
@@ -482,15 +474,24 @@ function FavoriteMediaDetails({
           <Chip variant="SurfaceVariant" radii="Pill">
             <Text size="T200">{getFavoriteCategoryText(item.category)}</Text>
           </Chip>
-          <Text size="T200" priority="300">
-            {item.metadata.sourceSenderName}
+          <Chip variant="SurfaceVariant" radii="Pill">
+            <Text size="T200">{item.metadata.sourceSenderName}</Text>
+          </Chip>
+        </Box>
+      </Box>
+
+      <Box className={css.DetailInfoGrid}>
+        <Box className={css.DetailInfoCard}>
+          <Text className={css.DetailInfoLabel} size="T200" priority="300">
+            原消息时间
           </Text>
-          <Text size="T200" priority="300">
-            {`\u539f\u6d88\u606f\uff1a${getFavoriteSavedAt(item.metadata.sourceTimestamp)}`}
+          <Text size="T300">{getFavoriteSavedAt(item.metadata.sourceTimestamp)}</Text>
+        </Box>
+        <Box className={css.DetailInfoCard}>
+          <Text className={css.DetailInfoLabel} size="T200" priority="300">
+            收藏时间
           </Text>
-          <Text size="T200" priority="300">
-            {`\u6536\u85cf\u65f6\u95f4\uff1a${getFavoriteSavedAt(item.metadata.favoritedAt)}`}
-          </Text>
+          <Text size="T300">{getFavoriteSavedAt(item.metadata.favoritedAt)}</Text>
         </Box>
       </Box>
 
@@ -503,7 +504,7 @@ function FavoriteMediaDetails({
             radii="300"
             onClick={() => onOpenSource(item.metadata.sourceRoomId, item.metadata.sourceEventId)}
           >
-            <Text size="B300">{'\u6253\u5f00\u539f\u6d88\u606f'}</Text>
+            <Text size="B300">打开原消息</Text>
           </Button>
         )}
       </Box>
@@ -731,28 +732,9 @@ function FavoriteMediaCardInfo({
 }) {
   const mx = useMatrixClient();
   const sourceRoomAvailable = Boolean(mx.getRoom(item.metadata.sourceRoomId));
-  const title = getFavoriteDisplayTitle(item);
-  const preview = getFavoriteDisplayPreview(item);
 
   return (
-    <Box direction="Column" gap="250" className={css.MediaCardBody}>
-      <Box gap="200" alignItems="Center" justifyContent="SpaceBetween">
-        <Text size="T300" truncate grow="Yes">
-          <b>{title}</b>
-        </Text>
-        <Time
-          ts={item.metadata.sourceTimestamp}
-          hour24Clock={hour24Clock}
-          dateFormatString={dateFormatString}
-        />
-      </Box>
-
-      {preview && preview !== title && (
-        <Text size="T200" priority="300">
-          {preview}
-        </Text>
-      )}
-
+    <Box direction="Column" gap="200" className={css.MediaCardBody}>
       <Box className={css.MediaMetaRow}>
         <Chip variant="Secondary" radii="Pill">
           <Text size="T200">{item.metadata.sourceRoomName}</Text>
@@ -760,18 +742,17 @@ function FavoriteMediaCardInfo({
         <Text size="T200" priority="300">
           {item.metadata.sourceSenderName}
         </Text>
-        <Text size="T200" priority="300">
-          {`\u6536\u85cf\u4e8e ${getFavoriteSavedAt(item.metadata.favoritedAt)}`}
-        </Text>
+        <Time
+          ts={item.metadata.sourceTimestamp}
+          hour24Clock={hour24Clock}
+          dateFormatString={dateFormatString}
+        />
+        {note && (
+          <Chip variant="SurfaceVariant" radii="Pill">
+            <Text size="T200">已备注</Text>
+          </Chip>
+        )}
       </Box>
-
-      {note && (
-        <Box className={css.MediaNotePreview}>
-          <Text size="T200" priority="300">
-            {note}
-          </Text>
-        </Box>
-      )}
 
       <Box className={css.FilterCardActions}>
         {sourceRoomAvailable && (
@@ -782,7 +763,7 @@ function FavoriteMediaCardInfo({
             radii="300"
             onClick={onOpenSource}
           >
-            <Text size="B300">{'\u6253\u5f00\u539f\u6d88\u606f'}</Text>
+            <Text size="B300">打开原消息</Text>
           </Button>
         )}
         <Button
@@ -794,7 +775,7 @@ function FavoriteMediaCardInfo({
         >
           {removeLoading && <Spinner size="200" variant="Secondary" />}
           <Text size="B300">
-            {removeLoading ? '\u53d6\u6d88\u4e2d...' : '\u53d6\u6d88\u6536\u85cf'}
+            {removeLoading ? '取消中...' : '取消收藏'}
           </Text>
         </Button>
       </Box>
@@ -808,6 +789,7 @@ function FavoriteImageCard({
   hour24Clock,
   dateFormatString,
   selected,
+  selectionMode,
   imageViewerItems,
   favoriteItemsById,
   favoriteNotes,
@@ -821,6 +803,7 @@ function FavoriteImageCard({
   hour24Clock: boolean;
   dateFormatString: string;
   selected: boolean;
+  selectionMode: boolean;
   imageViewerItems: ViewerImageItem[];
   favoriteItemsById: Map<string, FavoriteItem>;
   favoriteNotes: Record<string, string>;
@@ -847,7 +830,7 @@ function FavoriteImageCard({
 
   return (
     <SequenceCard
-      variant={selected ? 'Secondary' : 'SurfaceVariant'}
+      variant={selectionMode && selected ? 'Secondary' : 'SurfaceVariant'}
       direction="Column"
       gap="300"
       className={css.MediaCard}
@@ -893,15 +876,17 @@ function FavoriteImageCard({
             </button>
           )}
         />
-        <Box
-          className={css.MediaCheckbox}
-          onClick={(evt: React.MouseEvent) => {
-            evt.stopPropagation();
-            onToggleSelect();
-          }}
-        >
-          <Checkbox checked={selected} size="50" variant="Primary" />
-        </Box>
+        {selectionMode && (
+          <Box
+            className={css.MediaCheckbox}
+            onClick={(evt: React.MouseEvent) => {
+              evt.stopPropagation();
+              onToggleSelect();
+            }}
+          >
+            <Checkbox checked={selected} size="50" variant="Primary" />
+          </Box>
+        )}
       </Box>
 
       <FavoriteMediaCardInfo
@@ -926,6 +911,7 @@ function FavoriteVideoCard({
   hour24Clock,
   dateFormatString,
   selected,
+  selectionMode,
   videoItems,
   favoriteNotes,
   onToggleSelect,
@@ -938,6 +924,7 @@ function FavoriteVideoCard({
   hour24Clock: boolean;
   dateFormatString: string;
   selected: boolean;
+  selectionMode: boolean;
   videoItems: FavoriteItem[];
   favoriteNotes: Record<string, string>;
   onToggleSelect: () => void;
@@ -972,7 +959,7 @@ function FavoriteVideoCard({
   return (
     <>
       <SequenceCard
-        variant={selected ? 'Secondary' : 'SurfaceVariant'}
+        variant={selectionMode && selected ? 'Secondary' : 'SurfaceVariant'}
         direction="Column"
         gap="300"
         className={css.MediaCard}
@@ -1002,15 +989,17 @@ function FavoriteVideoCard({
               </Box>
             </Box>
           </button>
-          <Box
-            className={css.MediaCheckbox}
-            onClick={(evt: React.MouseEvent) => {
-              evt.stopPropagation();
-              onToggleSelect();
-            }}
-          >
-            <Checkbox checked={selected} size="50" variant="Primary" />
-          </Box>
+          {selectionMode && (
+            <Box
+              className={css.MediaCheckbox}
+              onClick={(evt: React.MouseEvent) => {
+                evt.stopPropagation();
+                onToggleSelect();
+              }}
+            >
+              <Checkbox checked={selected} size="50" variant="Primary" />
+            </Box>
+          )}
         </Box>
 
         <FavoriteMediaCardInfo
@@ -1057,6 +1046,7 @@ function FavoriteCard({
   hour24Clock,
   dateFormatString,
   selected,
+  selectionMode,
   renderMatrixEvent,
   onToggleSelect,
   onOpenSource,
@@ -1068,6 +1058,7 @@ function FavoriteCard({
   hour24Clock: boolean;
   dateFormatString: string;
   selected: boolean;
+  selectionMode: boolean;
   renderMatrixEvent: (
     eventType: string,
     isStateEvent: boolean,
@@ -1096,7 +1087,7 @@ function FavoriteCard({
 
   return (
     <SequenceCard
-      variant={selected ? 'Secondary' : 'SurfaceVariant'}
+      variant={selectionMode && selected ? 'Secondary' : 'SurfaceVariant'}
       direction="Column"
       gap="300"
       style={{ padding: config.space.S400 }}
@@ -1115,77 +1106,84 @@ function FavoriteCard({
           </AvatarBase>
         }
       >
-        <Box gap="300" justifyContent="SpaceBetween" alignItems="Center" grow="Yes">
-          <Box gap="200" alignItems="Baseline" wrap="Wrap">
-            <Box alignItems="Center" gap="200" wrap="Wrap">
-              <Username>
-                <Text as="span" truncate>
-                  <UsernameBold>{item.metadata.sourceSenderName}</UsernameBold>
-                </Text>
-              </Username>
-              <Chip variant="Secondary" radii="Pill">
-                <Text size="T200">{item.metadata.sourceRoomName}</Text>
-              </Chip>
-              <Chip variant="SurfaceVariant" radii="Pill">
-                <Text size="T200">{getFavoriteCategoryText(item.category)}</Text>
-              </Chip>
+        <Box className={css.CardStack}>
+          <Box gap="300" justifyContent="SpaceBetween" alignItems="Start" grow="Yes">
+            <Box direction="Column" gap="150" grow="Yes" style={{ minWidth: 0 }}>
+              <Box gap="200" alignItems="Center" wrap="Wrap">
+                <Username>
+                  <Text as="span" truncate>
+                    <UsernameBold>{item.metadata.sourceSenderName}</UsernameBold>
+                  </Text>
+                </Username>
+                <Time
+                  ts={item.metadata.sourceTimestamp}
+                  hour24Clock={hour24Clock}
+                  dateFormatString={dateFormatString}
+                />
+              </Box>
+              <Box className={css.MediaMetaRow}>
+                <Chip variant="Secondary" radii="Pill">
+                  <Text size="T200">{item.metadata.sourceRoomName}</Text>
+                </Chip>
+              </Box>
             </Box>
-            <Time
-              ts={item.metadata.sourceTimestamp}
-              hour24Clock={hour24Clock}
-              dateFormatString={dateFormatString}
-            />
+
+            {selectionMode && (
+              <Box shrink="No">
+                <Checkbox checked={selected} onClick={onToggleSelect} size="50" variant="Primary" />
+              </Box>
+            )}
           </Box>
 
-          <Box shrink="No">
-            <Checkbox checked={selected} onClick={onToggleSelect} size="50" variant="Primary" />
+          {renderMatrixEvent(item.event.getType(), false, item.event, item.metadata.sourceSenderName, getContent)}
+
+          <Box className={css.DetailInfoGrid}>
+            <Box className={css.DetailInfoCard}>
+              <Text className={css.DetailInfoLabel} size="T200" priority="300">
+                原消息时间
+              </Text>
+              <Text size="T300">{getFavoriteSavedAt(item.metadata.sourceTimestamp)}</Text>
+            </Box>
+            <Box className={css.DetailInfoCard}>
+              <Text className={css.DetailInfoLabel} size="T200" priority="300">
+                收藏时间
+              </Text>
+              <Text size="T300">{getFavoriteSavedAt(item.metadata.favoritedAt)}</Text>
+            </Box>
           </Box>
-        </Box>
 
-        {renderMatrixEvent(item.event.getType(), false, item.event, item.metadata.sourceSenderName, getContent)}
+          <FavoriteNoteEditor note={note} onSave={(nextNote) => onSaveNote(item, nextNote)} />
 
-        <Box className={css.MediaMetaRow}>
-          <Text size="T200" priority="300">
-            {`\u539f\u6d88\u606f\uff1a${getFavoriteSavedAt(item.metadata.sourceTimestamp)}`}
-          </Text>
-          <Text size="T200" priority="300">
-            {`\u6536\u85cf\u65f6\u95f4\uff1a${getFavoriteSavedAt(item.metadata.favoritedAt)}`}
-          </Text>
-        </Box>
-
-        <FavoriteNoteEditor note={note} onSave={(nextNote) => onSaveNote(item, nextNote)} />
-
-        <Box className={css.FilterCardActions}>
-          {sourceRoomAvailable && (
+          <Box className={css.FilterCardActions}>
+            {sourceRoomAvailable && (
+              <Button
+                size="300"
+                variant="Secondary"
+                fill="Soft"
+                radii="300"
+                onClick={() => onOpenSource(item.metadata.sourceRoomId, item.metadata.sourceEventId)}
+              >
+                <Text size="B300">打开原消息</Text>
+              </Button>
+            )}
             <Button
               size="300"
               variant="Secondary"
-              fill="Soft"
               radii="300"
-              onClick={() => onOpenSource(item.metadata.sourceRoomId, item.metadata.sourceEventId)}
+              onClick={() => {
+                if (removeState.status === AsyncStatus.Loading) return;
+                void removeFavorite().catch(() => undefined);
+              }}
+              disabled={removeState.status === AsyncStatus.Loading}
             >
-              <Text size="B300">{'\u6253\u5f00\u539f\u6d88\u606f'}</Text>
+              {removeState.status === AsyncStatus.Loading && (
+                <Spinner size="200" variant="Secondary" />
+              )}
+              <Text size="B300">
+                {removeState.status === AsyncStatus.Loading ? '取消中...' : '取消收藏'}
+              </Text>
             </Button>
-          )}
-          <Button
-            size="300"
-            variant="Secondary"
-            radii="300"
-            onClick={() => {
-              if (removeState.status === AsyncStatus.Loading) return;
-              void removeFavorite().catch(() => undefined);
-            }}
-            disabled={removeState.status === AsyncStatus.Loading}
-          >
-            {removeState.status === AsyncStatus.Loading && (
-              <Spinner size="200" variant="Secondary" />
-            )}
-            <Text size="B300">
-              {removeState.status === AsyncStatus.Loading
-                ? '\u53d6\u6d88\u4e2d...'
-                : '\u53d6\u6d88\u6536\u85cf'}
-            </Text>
-          </Button>
+          </Box>
         </Box>
       </ModernLayout>
     </SequenceCard>
@@ -1259,6 +1257,13 @@ export function Favorites() {
     setActiveCategory(getPreferredCategory(favoriteItems));
     setDidInitCategory(true);
   }, [didInitCategory, favoriteItems]);
+
+  useEffect(() => {
+    if (!filtersOpen) return;
+    if (!hasEscapedUnicode(searchQuery)) return;
+
+    setSearchQuery('');
+  }, [filtersOpen, searchQuery]);
 
   const mentionRoomId = favoritesRoom?.roomId ?? '';
   const mentionClickHandler = useMentionClickHandler(mentionRoomId);
@@ -1487,6 +1492,19 @@ export function Favorites() {
     setSelectedFavoriteIds([]);
   }, []);
 
+  const handleToggleAdvanced = useCallback(() => {
+    if (filtersOpen) {
+      setSelectedFavoriteIds([]);
+      setFiltersOpen(false);
+      return;
+    }
+
+    if (hasEscapedUnicode(searchQuery)) {
+      setSearchQuery('');
+    }
+    setFiltersOpen(true);
+  }, [filtersOpen, searchQuery]);
+
   const handleResetFilters = useCallback(() => {
     setActiveCategory(getPreferredCategory(favoriteItems));
     setDateFilter('all');
@@ -1581,12 +1599,13 @@ export function Favorites() {
     void createFavoritesRoom().catch(() => undefined);
   };
 
+  const normalizedSearchQuery = searchQuery.trim();
   const filterSummary = [
-    `${visibleItems.length}\u6761\u7ed3\u679c`,
-    `${selectedFavoriteIds.length}\u6761\u5df2\u9009`,
-    `\u5206\u7c7b\uff1a${getFavoriteCategoryText(activeCategory)}`,
-    `\u65f6\u95f4\uff1a${getDateFilterLabel(dateFilter)}`,
-    searchQuery.trim() ? `\u5173\u952e\u8bcd\uff1a${searchQuery.trim()}` : undefined,
+    `${visibleItems.length}条结果`,
+    filtersOpen && hasSelection ? `${selectedFavoriteIds.length}条已选` : undefined,
+    `分类：${getFavoriteCategoryText(activeCategory)}`,
+    dateFilter !== 'all' ? `时间：${getDateFilterLabel(dateFilter)}` : undefined,
+    normalizedSearchQuery ? `关键词：${normalizedSearchQuery}` : undefined,
   ]
     .filter(Boolean)
     .join(' \xb7 ');
@@ -1652,50 +1671,54 @@ export function Favorites() {
                 {visibleItems.length > 0
                   ? `\u5171 ${visibleItems.length} \u6761\u7ed3\u679c`
                   : '\u6ca1\u6709\u5339\u914d\u7ed3\u679c'}
-                {hasSelection ? ` \xb7 \u5df2\u9009\u62e9 ${selectedFavoriteIds.length} \u6761` : ''}
+                {filtersOpen && hasSelection
+                  ? ` \xb7 \u5df2\u9009\u62e9 ${selectedFavoriteIds.length} \u6761`
+                  : ''}
               </Text>
 
               <Box className={css.FilterCardActions}>
-                <Button
-                  size="300"
-                  variant="Secondary"
-                  fill="Soft"
-                  radii="300"
-                  onClick={handleToggleSelectVisible}
-                  disabled={visibleItemIds.length === 0}
-                >
-                  <Text size="B300">
-                    {allVisibleSelected
-                      ? '\u53d6\u6d88\u9009\u62e9\u5f53\u524d\u7ed3\u679c'
-                      : '\u5168\u9009\u5f53\u524d\u7ed3\u679c'}
-                  </Text>
-                </Button>
-                <Button
-                  size="300"
-                  variant="Secondary"
-                  fill="Soft"
-                  radii="300"
-                  onClick={handleClearSelection}
-                  disabled={!hasSelection}
-                >
-                  <Text size="B300">{'\u6e05\u7a7a\u9009\u62e9'}</Text>
-                </Button>
-                <Button
-                  size="300"
-                  variant="Critical"
-                  radii="300"
-                  onClick={handleBatchRemove}
-                  disabled={!hasSelection || batchRemoveState.status === AsyncStatus.Loading}
-                >
-                  {batchRemoveState.status === AsyncStatus.Loading && (
-                    <Spinner size="200" variant="Secondary" />
-                  )}
-                  <Text size="B300">
-                    {batchRemoveState.status === AsyncStatus.Loading
-                      ? '\u53d6\u6d88\u4e2d...'
-                      : '\u6279\u91cf\u53d6\u6d88\u6536\u85cf'}
-                  </Text>
-                </Button>
+                {filtersOpen && (
+                  <>
+                    <Button
+                      size="300"
+                      variant="Secondary"
+                      fill="Soft"
+                      radii="300"
+                      onClick={handleToggleSelectVisible}
+                      disabled={visibleItemIds.length === 0}
+                    >
+                      <Text size="B300">
+                        {allVisibleSelected ? '取消选择当前结果' : '全选当前结果'}
+                      </Text>
+                    </Button>
+                    <Button
+                      size="300"
+                      variant="Secondary"
+                      fill="Soft"
+                      radii="300"
+                      onClick={handleClearSelection}
+                      disabled={!hasSelection}
+                    >
+                      <Text size="B300">清空选择</Text>
+                    </Button>
+                    <Button
+                      size="300"
+                      variant="Critical"
+                      radii="300"
+                      onClick={handleBatchRemove}
+                      disabled={!hasSelection || batchRemoveState.status === AsyncStatus.Loading}
+                    >
+                      {batchRemoveState.status === AsyncStatus.Loading && (
+                        <Spinner size="200" variant="Secondary" />
+                      )}
+                      <Text size="B300">
+                        {batchRemoveState.status === AsyncStatus.Loading
+                          ? '取消中...'
+                          : '批量取消收藏'}
+                      </Text>
+                    </Button>
+                  </>
+                )}
                 {hasActiveFilters && (
                   <Button
                     size="300"
@@ -1704,7 +1727,7 @@ export function Favorites() {
                     radii="300"
                     onClick={handleResetFilters}
                   >
-                    <Text size="B300">{'\u91cd\u7f6e\u7b5b\u9009'}</Text>
+                    <Text size="B300">重置筛选</Text>
                   </Button>
                 )}
                 <Button
@@ -1712,11 +1735,9 @@ export function Favorites() {
                   variant="Secondary"
                   fill="Soft"
                   radii="300"
-                  onClick={() => setFiltersOpen((open) => !open)}
+                  onClick={handleToggleAdvanced}
                 >
-                  <Text size="B300">
-                    {filtersOpen ? '\u6536\u8d77\u9ad8\u7ea7\u7b5b\u9009' : '\u9ad8\u7ea7\u7b5b\u9009'}
-                  </Text>
+                  <Text size="B300">{filtersOpen ? '收起高级' : '高级'}</Text>
                 </Button>
               </Box>
             </Box>
@@ -1733,14 +1754,15 @@ export function Favorites() {
               <Box direction="Column" gap="300">
                 <Box className={css.FilterCardSection} direction="Column">
                   <Text className={css.FilterCardLabel} size="T200" priority="300">
-                    {'\u641c\u7d22'}
+                    搜索
                   </Text>
                   <Input
                     size="300"
                     variant="Secondary"
                     radii="300"
                     value={searchQuery}
-                    placeholder="\u641c\u7d22\u6d88\u606f\u5185\u5bb9\u3001\u5907\u6ce8\u3001\u53d1\u9001\u8005\u6216\u623f\u95f4"
+                    placeholder="搜索消息内容、备注、发送者或房间"
+                    autoComplete="off"
                     onChange={(evt: React.ChangeEvent<HTMLInputElement>) =>
                       setSearchQuery(evt.target.value)
                     }
@@ -1749,7 +1771,7 @@ export function Favorites() {
 
                 <Box className={css.FilterCardSection} direction="Column">
                   <Text className={css.FilterCardLabel} size="T200" priority="300">
-                    {'\u6309\u6536\u85cf\u65f6\u95f4\u7b5b\u9009'}
+                    按收藏时间筛选
                   </Text>
                   <Box className={css.FilterCardActions}>
                     {DATE_FILTER_OPTIONS.map((option) => {
@@ -1770,7 +1792,7 @@ export function Favorites() {
                 </Box>
 
                 <Text size="T200" priority="300">
-                  {'\u641c\u7d22\u548c\u65f6\u95f4\u6761\u4ef6\u4f1a\u5f71\u54cd\u9876\u90e8\u5404\u5206\u7c7b\u7684\u6570\u91cf\u7edf\u8ba1\u3002'}
+                  搜索和时间条件会影响顶部各分类的数量统计。
                 </Text>
               </Box>
             </>
@@ -1834,6 +1856,7 @@ export function Favorites() {
                               hour24Clock={hour24Clock}
                               dateFormatString={dateFormatString}
                               selected={selectedFavoriteIds.includes(getFavoriteItemId(item))}
+                              selectionMode={filtersOpen}
                               renderMatrixEvent={renderMatrixEvent}
                               onToggleSelect={() => handleToggleSelect(item)}
                               onOpenSource={handleOpenSource}
@@ -1852,6 +1875,7 @@ export function Favorites() {
                           hour24Clock={hour24Clock}
                           dateFormatString={dateFormatString}
                           selected={selectedFavoriteIds.includes(getFavoriteItemId(item))}
+                          selectionMode={filtersOpen}
                           imageViewerItems={imageViewerItems}
                           favoriteItemsById={favoriteItemsById}
                           favoriteNotes={favoriteNotes}
@@ -1873,6 +1897,7 @@ export function Favorites() {
                             hour24Clock={hour24Clock}
                             dateFormatString={dateFormatString}
                             selected={selectedFavoriteIds.includes(getFavoriteItemId(item))}
+                            selectionMode={filtersOpen}
                             renderMatrixEvent={renderMatrixEvent}
                             onToggleSelect={() => handleToggleSelect(item)}
                             onOpenSource={handleOpenSource}
@@ -1891,6 +1916,7 @@ export function Favorites() {
                         hour24Clock={hour24Clock}
                         dateFormatString={dateFormatString}
                         selected={selectedFavoriteIds.includes(getFavoriteItemId(item))}
+                        selectionMode={filtersOpen}
                         videoItems={visibleVideoItems}
                         favoriteNotes={favoriteNotes}
                         onToggleSelect={() => handleToggleSelect(item)}
@@ -1911,6 +1937,7 @@ export function Favorites() {
                       hour24Clock={hour24Clock}
                       dateFormatString={dateFormatString}
                       selected={selectedFavoriteIds.includes(getFavoriteItemId(item))}
+                      selectionMode={filtersOpen}
                       renderMatrixEvent={renderMatrixEvent}
                       onToggleSelect={() => handleToggleSelect(item)}
                       onOpenSource={handleOpenSource}

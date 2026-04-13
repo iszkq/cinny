@@ -39,6 +39,7 @@ export const MediaCard = style([
   DefaultReset,
   {
     padding: config.space.S300,
+    height: '100%',
   },
 ]);
 
@@ -47,7 +48,7 @@ export const MediaPreview = style([
   {
     position: 'relative',
     width: '100%',
-    aspectRatio: '4 / 3',
+    aspectRatio: '1 / 1',
     borderRadius: config.radii.R400,
     overflow: 'hidden',
     background:
@@ -135,6 +136,7 @@ export const MediaCardBody = style([
   DefaultReset,
   {
     minWidth: 0,
+    flex: 1,
   },
 ]);
 
@@ -145,6 +147,42 @@ export const MediaMetaRow = style([
     flexWrap: 'wrap',
     gap: config.space.S200,
     alignItems: 'center',
+  },
+]);
+
+export const CardStack = style([
+  DefaultReset,
+  {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: config.space.S300,
+  },
+]);
+
+export const DetailInfoGrid = style([
+  DefaultReset,
+  {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+    gap: config.space.S200,
+  },
+]);
+
+export const DetailInfoCard = style([
+  DefaultReset,
+  {
+    padding: config.space.S250,
+    borderRadius: config.radii.R300,
+    background: 'rgba(15, 23, 42, 0.04)',
+    border: '1px solid rgba(15, 23, 42, 0.06)',
+  },
+]);
+
+export const DetailInfoLabel = style([
+  DefaultReset,
+  {
+    display: 'block',
+    marginBottom: config.space.S100,
   },
 ]);
 
