@@ -27,7 +27,6 @@ import {
   ImageContent,
   MSticker,
   ThumbnailContent,
-  Time,
   Username,
   UsernameBold,
   VideoContent,
@@ -151,6 +150,11 @@ const getStartOfToday = (): number => {
 
 const getFavoriteItemId = (item: FavoriteItem): string => item.event.getId() ?? item.referenceId;
 
+const FAVORITE_ACTION_BUTTON_STYLE = {
+  width: '100%',
+  justifyContent: 'center',
+} as const;
+
 const getFavoriteItemBody = (event: MatrixEvent): string => {
   if (event.isRedacted()) return '';
 
@@ -256,6 +260,9 @@ const getFavoriteDisplayTitle = (item: FavoriteItem): string => {
 
 const getFavoriteSavedAt = (timestamp: number): string => new Date(timestamp).toLocaleString();
 
+const getFavoriteTimelineText = (item: FavoriteItem): string =>
+  `原消息 ${getFavoriteSavedAt(item.metadata.sourceTimestamp)} · 收藏于 ${getFavoriteSavedAt(item.metadata.favoritedAt)}`;
+
 function getFavoriteImageContent(item: FavoriteItem): IImageContent | undefined {
   const content = item.event.getContent() as Partial<IImageContent>;
   const mediaUrl =
@@ -332,9 +339,11 @@ function FavoritesEmpty({
 function FavoriteNoteEditor({
   note,
   onSave,
+  children,
 }: {
   note?: string;
   onSave: (note: string) => Promise<void>;
+  children: (props: { content: ReactNode; trigger: ReactNode | null }) => ReactNode;
 }) {
   const [editing, setEditing] = useState(false);
   const [draftNote, setDraftNote] = useState(note ?? '');
@@ -356,114 +365,96 @@ function FavoriteNoteEditor({
   };
 
   const hasNote = Boolean(note?.trim());
+  const trigger = !editing ? (
+    <Button
+      size="300"
+      variant="Secondary"
+      fill="Soft"
+      radii="Pill"
+      style={FAVORITE_ACTION_BUTTON_STYLE}
+      onClick={() => setEditing(true)}
+    >
+      <Text size="B300">{hasNote ? '编辑备注' : '添加备注'}</Text>
+    </Button>
+  ) : null;
 
-  if (!editing && !hasNote) {
-    return (
-      <Box className={css.NoteActionOnly}>
+  const content = editing ? (
+    <Box className={css.NoteCard} direction="Column" gap="200">
+      <Text size="T200" priority="300">
+        备注
+      </Text>
+      <Input
+        size="300"
+        variant="Secondary"
+        radii="300"
+        placeholder="输入备注，可同时搜索到收藏内容和备注"
+        value={draftNote}
+        onChange={(evt: React.ChangeEvent<HTMLInputElement>) => setDraftNote(evt.target.value)}
+        onKeyDown={(evt: React.KeyboardEvent<HTMLInputElement>) => {
+          if (evt.key !== 'Enter') return;
+          evt.preventDefault();
+          handleSave();
+        }}
+      />
+      <Box className={css.ActionRow}>
+        <Button
+          size="300"
+          variant="Primary"
+          radii="Pill"
+          style={FAVORITE_ACTION_BUTTON_STYLE}
+          onClick={handleSave}
+          disabled={saveState.status === AsyncStatus.Loading}
+        >
+          {saveState.status === AsyncStatus.Loading && (
+            <Spinner size="200" variant="Secondary" />
+          )}
+          <Text size="B300">{saveState.status === AsyncStatus.Loading ? '保存中...' : '保存备注'}</Text>
+        </Button>
         <Button
           size="300"
           variant="Secondary"
           fill="Soft"
-          radii="300"
-          onClick={() => setEditing(true)}
+          radii="Pill"
+          style={FAVORITE_ACTION_BUTTON_STYLE}
+          onClick={() => {
+            setDraftNote(note ?? '');
+            setEditing(false);
+          }}
         >
-          <Text size="B300">添加备注</Text>
+          <Text size="B300">取消</Text>
         </Button>
-      </Box>
-    );
-  }
-
-  return (
-    <Box direction="Column" gap="200">
-      {!editing && hasNote && (
-        <Box className={css.NoteCard} direction="Column" gap="200">
-          <Box className={css.NoteHeader}>
-            <Text size="T200" priority="300">
-              备注
-            </Text>
-            <Button
-              size="300"
-              variant="Secondary"
-              fill="Soft"
-              radii="300"
-              onClick={() => setEditing(true)}
-            >
-              <Text size="B300">编辑备注</Text>
-            </Button>
-          </Box>
-          <Text className={css.NoteText} size="T300">
-            {note}
-          </Text>
-        </Box>
-      )}
-
-      {editing && (
-        <Box className={css.NoteCard} direction="Column" gap="200">
-          <Box className={css.NoteHeader}>
-            <Text size="T200" priority="300">
-              备注
-            </Text>
-          </Box>
-          <Input
+        {hasNote && (
+          <Button
             size="300"
-            variant="Secondary"
-            radii="300"
-            placeholder="输入备注，可同时搜索到收藏内容和备注"
-            value={draftNote}
-            onChange={(evt: React.ChangeEvent<HTMLInputElement>) => setDraftNote(evt.target.value)}
-            onKeyDown={(evt: React.KeyboardEvent<HTMLInputElement>) => {
-              if (evt.key !== 'Enter') return;
-              evt.preventDefault();
-              handleSave();
+            variant="Critical"
+            fill="Soft"
+            radii="Pill"
+            style={FAVORITE_ACTION_BUTTON_STYLE}
+            onClick={() => {
+              setDraftNote('');
+              saveNote('')
+                .then(() => setEditing(false))
+                .catch(() => undefined);
             }}
-          />
-          <Box className={css.ActionRow}>
-            <Button
-              size="300"
-              variant="Primary"
-              radii="300"
-              onClick={handleSave}
-              disabled={saveState.status === AsyncStatus.Loading}
-            >
-              {saveState.status === AsyncStatus.Loading && (
-                <Spinner size="200" variant="Secondary" />
-              )}
-              <Text size="B300">{saveState.status === AsyncStatus.Loading ? '保存中...' : '保存备注'}</Text>
-            </Button>
-            <Button
-              size="300"
-              variant="Secondary"
-              fill="Soft"
-              radii="300"
-              onClick={() => {
-                setDraftNote(note ?? '');
-                setEditing(false);
-              }}
-            >
-              <Text size="B300">取消</Text>
-            </Button>
-            {hasNote && (
-              <Button
-                size="300"
-                variant="Critical"
-                fill="Soft"
-                radii="300"
-                onClick={() => {
-                  setDraftNote('');
-                  saveNote('')
-                    .then(() => setEditing(false))
-                    .catch(() => undefined);
-                }}
-                disabled={saveState.status === AsyncStatus.Loading}
-              >
-                <Text size="B300">清空备注</Text>
-              </Button>
-            )}
-          </Box>
-        </Box>
-      )}
+            disabled={saveState.status === AsyncStatus.Loading}
+          >
+            <Text size="B300">清空备注</Text>
+          </Button>
+        )}
+      </Box>
     </Box>
-  );
+  ) : hasNote ? (
+    <Box className={css.NoteCard} direction="Column" gap="150">
+      <Text size="T200" priority="300">
+        备注
+      </Text>
+      <Text className={css.NoteText} size="T300">
+        {note}
+      </Text>
+    </Box>
+  ) : null;
+
+  return <>{children({ content, trigger })}</>;
 }
 
 function FavoriteMediaDetails({
@@ -480,7 +471,13 @@ function FavoriteMediaDetails({
   onRemoveFavorite?: (item: FavoriteItem) => Promise<void>;
 }) {
   const mx = useMatrixClient();
+  const useAuthentication = useMediaAuthentication();
   const sourceRoomAvailable = Boolean(mx.getRoom(item.metadata.sourceRoomId));
+  const senderId = item.metadata.sourceSenderId ?? item.event.getSender() ?? item.metadata.sourceRoomId;
+  const avatarUrl = item.metadata.sourceSenderAvatarMxc
+    ? mxcUrlToHttp(mx, item.metadata.sourceSenderAvatarMxc, useAuthentication, 40, 40, 'crop') ??
+      undefined
+    : undefined;
   const [removeState, removeFavorite] = useAsyncCallback(
     useCallback(async () => {
       if (!onRemoveFavorite) return;
@@ -489,64 +486,82 @@ function FavoriteMediaDetails({
   );
 
   return (
-    <Box direction="Column" gap="250">
-      <Box direction="Column" gap="200">
-        <Text size="H4" style={{ wordBreak: 'break-word' }}>
-          {getFavoriteDisplayTitle(item)}
-        </Text>
-        <Text size="T200" priority="300">
-          {`${item.metadata.sourceRoomName} · ${getFavoriteCategoryText(item.category)} · ${item.metadata.sourceSenderName}`}
-        </Text>
-      </Box>
+    <Box direction="Column" gap="300">
+      <Box gap="250" alignItems="Start">
+        <AvatarBase>
+          <Avatar size="300">
+            <UserAvatar
+              userId={senderId}
+              src={avatarUrl}
+              alt={item.metadata.sourceSenderName}
+              renderFallback={() => <Icon size="200" src={Icons.User} filled />}
+            />
+          </Avatar>
+        </AvatarBase>
 
-      <Box direction="Column" gap="150">
-        <Text size="T200" priority="300">
-          原消息时间
-        </Text>
-        <Text size="T300">{getFavoriteSavedAt(item.metadata.sourceTimestamp)}</Text>
-      </Box>
-
-      <Box direction="Column" gap="150">
-        <Text size="T200" priority="300">
-          收藏时间
-        </Text>
-        <Text size="T300">{getFavoriteSavedAt(item.metadata.favoritedAt)}</Text>
-      </Box>
-
-      <Box className={css.ActionRow}>
-        {sourceRoomAvailable && (
-          <Button
-            size="300"
-            variant="Secondary"
-            fill="Soft"
-            radii="300"
-            onClick={() => onOpenSource(item.metadata.sourceRoomId, item.metadata.sourceEventId)}
-          >
-            <Text size="B300">打开原消息</Text>
-          </Button>
-        )}
-        {onRemoveFavorite && (
-          <Button
-            size="300"
-            variant="Secondary"
-            radii="300"
-            onClick={() => {
-              if (removeState.status === AsyncStatus.Loading) return;
-              removeFavorite().catch(() => undefined);
-            }}
-            disabled={removeState.status === AsyncStatus.Loading}
-          >
-            {removeState.status === AsyncStatus.Loading && (
-              <Spinner size="200" variant="Secondary" />
-            )}
-            <Text size="B300">
-              {removeState.status === AsyncStatus.Loading ? '取消中...' : '取消收藏'}
+        <Box className={css.MetaStack} grow="Yes">
+          <Box className={css.MetaLine}>
+            <Username>
+              <Text as="span" truncate>
+                <UsernameBold>{item.metadata.sourceSenderName}</UsernameBold>
+              </Text>
+            </Username>
+            <Text size="T200" priority="300">
+              {getFavoriteTimelineText(item)}
             </Text>
-          </Button>
-        )}
+          </Box>
+          <Text size="T200" priority="300">
+            {`${item.metadata.sourceRoomName} · ${getFavoriteCategoryText(item.category)}`}
+          </Text>
+          <Text size="H4" style={{ wordBreak: 'break-word' }}>
+            {getFavoriteDisplayTitle(item)}
+          </Text>
+        </Box>
       </Box>
 
-      <FavoriteNoteEditor note={note} onSave={(nextNote) => onSaveNote(item, nextNote)} />
+      <FavoriteNoteEditor note={note} onSave={(nextNote) => onSaveNote(item, nextNote)}>
+        {({ content, trigger }) => (
+          <>
+            <Box className={css.ActionRow}>
+              {trigger}
+              {sourceRoomAvailable && (
+                <Button
+                  size="300"
+                  variant="Secondary"
+                  fill="Soft"
+                  radii="Pill"
+                  style={FAVORITE_ACTION_BUTTON_STYLE}
+                  onClick={() => onOpenSource(item.metadata.sourceRoomId, item.metadata.sourceEventId)}
+                >
+                  <Text size="B300">原消息</Text>
+                </Button>
+              )}
+              {onRemoveFavorite && (
+                <Button
+                  size="300"
+                  variant="Secondary"
+                  fill="Soft"
+                  radii="Pill"
+                  style={FAVORITE_ACTION_BUTTON_STYLE}
+                  onClick={() => {
+                    if (removeState.status === AsyncStatus.Loading) return;
+                    removeFavorite().catch(() => undefined);
+                  }}
+                  disabled={removeState.status === AsyncStatus.Loading}
+                >
+                  {removeState.status === AsyncStatus.Loading && (
+                    <Spinner size="200" variant="Secondary" />
+                  )}
+                  <Text size="B300">
+                    {removeState.status === AsyncStatus.Loading ? '取消中...' : '取消收藏'}
+                  </Text>
+                </Button>
+              )}
+            </Box>
+            {content}
+          </>
+        )}
+      </FavoriteNoteEditor>
     </Box>
   );
 }
@@ -798,13 +813,15 @@ function FavoriteImageCard({
   if (!content || !mediaUrl) return null;
 
   return (
-    <SequenceCard
-      variant={selectionMode && selected ? 'Secondary' : 'SurfaceVariant'}
-      direction="Column"
-      gap="250"
-      className={css.MediaCard}
-    >
-      <Box className={css.MediaPreview}>
+    <Box direction="Column" gap="250" className={css.MediaCard}>
+      <Box
+        className={css.MediaPreview}
+        style={
+          selectionMode && selected
+            ? { boxShadow: '0 0 0 2px rgba(59, 130, 246, 0.42)' }
+            : undefined
+        }
+      >
         <ImageContent
           body={getFavoriteDisplayTitle(item)}
           info={content.info}
@@ -858,7 +875,7 @@ function FavoriteImageCard({
           </Box>
         )}
       </Box>
-    </SequenceCard>
+    </Box>
   );
 }
 
@@ -905,13 +922,15 @@ function FavoriteVideoCard({
 
   return (
     <>
-      <SequenceCard
-        variant={selectionMode && selected ? 'Secondary' : 'SurfaceVariant'}
-        direction="Column"
-        gap="250"
-        className={css.MediaCard}
-      >
-        <Box className={css.MediaPreview}>
+      <Box direction="Column" gap="250" className={css.MediaCard}>
+        <Box
+          className={css.MediaPreview}
+          style={
+            selectionMode && selected
+              ? { boxShadow: '0 0 0 2px rgba(59, 130, 246, 0.42)' }
+              : undefined
+          }
+        >
           <button
             type="button"
             className={css.MediaPreviewButton}
@@ -948,7 +967,7 @@ function FavoriteVideoCard({
             </Box>
           )}
         </Box>
-      </SequenceCard>
+      </Box>
 
       <FavoriteVideoViewerModal
         open={viewerOpen}
@@ -978,8 +997,6 @@ function FavoriteVideoCard({
 function FavoriteCard({
   item,
   note,
-  hour24Clock,
-  dateFormatString,
   selected,
   selectionMode,
   renderMatrixEvent,
@@ -990,8 +1007,6 @@ function FavoriteCard({
 }: {
   item: FavoriteItem;
   note?: string;
-  hour24Clock: boolean;
-  dateFormatString: string;
   selected: boolean;
   selectionMode: boolean;
   renderMatrixEvent: (
@@ -1041,18 +1056,16 @@ function FavoriteCard({
 
         <Box className={css.CardStack} grow="Yes" style={{ minWidth: 0 }}>
           <Box gap="300" justifyContent="SpaceBetween" alignItems="Start" grow="Yes">
-            <Box direction="Column" gap="200" grow="Yes" style={{ minWidth: 0 }}>
-              <Box gap="200" alignItems="Center" wrap="Wrap">
+            <Box className={css.MetaStack} grow="Yes">
+              <Box className={css.MetaLine}>
                 <Username>
                   <Text as="span" truncate>
                     <UsernameBold>{item.metadata.sourceSenderName}</UsernameBold>
                   </Text>
                 </Username>
-                <Time
-                  ts={item.metadata.sourceTimestamp}
-                  hour24Clock={hour24Clock}
-                  dateFormatString={dateFormatString}
-                />
+                <Text size="T200" priority="300">
+                  {getFavoriteTimelineText(item)}
+                </Text>
               </Box>
               <Text size="T200" priority="300">
                 {note
@@ -1077,43 +1090,49 @@ function FavoriteCard({
               getContent
             )}
           </Box>
-
-          <Text size="T200" priority="300">
-            {`原消息 ${getFavoriteSavedAt(item.metadata.sourceTimestamp)} · 收藏于 ${getFavoriteSavedAt(item.metadata.favoritedAt)}`}
-          </Text>
-
-          <FavoriteNoteEditor note={note} onSave={(nextNote) => onSaveNote(item, nextNote)} />
-
-          <Box className={css.ActionRow}>
-            {sourceRoomAvailable && (
-              <Button
-                size="300"
-                variant="Secondary"
-                fill="Soft"
-                radii="300"
-                onClick={() => onOpenSource(item.metadata.sourceRoomId, item.metadata.sourceEventId)}
-              >
-                <Text size="B300">打开原消息</Text>
-              </Button>
+          <FavoriteNoteEditor note={note} onSave={(nextNote) => onSaveNote(item, nextNote)}>
+            {({ content, trigger }) => (
+              <>
+                <Box className={css.ActionRow}>
+                  {trigger}
+                  {sourceRoomAvailable && (
+                    <Button
+                      size="300"
+                      variant="Secondary"
+                      fill="Soft"
+                      radii="Pill"
+                      style={FAVORITE_ACTION_BUTTON_STYLE}
+                      onClick={() =>
+                        onOpenSource(item.metadata.sourceRoomId, item.metadata.sourceEventId)
+                      }
+                    >
+                      <Text size="B300">原消息</Text>
+                    </Button>
+                  )}
+                  <Button
+                    size="300"
+                    variant="Secondary"
+                    fill="Soft"
+                    radii="Pill"
+                    style={FAVORITE_ACTION_BUTTON_STYLE}
+                    onClick={() => {
+                      if (removeState.status === AsyncStatus.Loading) return;
+                      void removeFavorite().catch(() => undefined);
+                    }}
+                    disabled={removeState.status === AsyncStatus.Loading}
+                  >
+                    {removeState.status === AsyncStatus.Loading && (
+                      <Spinner size="200" variant="Secondary" />
+                    )}
+                    <Text size="B300">
+                      {removeState.status === AsyncStatus.Loading ? '取消中...' : '取消收藏'}
+                    </Text>
+                  </Button>
+                </Box>
+                {content}
+              </>
             )}
-            <Button
-              size="300"
-              variant="Secondary"
-              radii="300"
-              onClick={() => {
-                if (removeState.status === AsyncStatus.Loading) return;
-                void removeFavorite().catch(() => undefined);
-              }}
-              disabled={removeState.status === AsyncStatus.Loading}
-            >
-              {removeState.status === AsyncStatus.Loading && (
-                <Spinner size="200" variant="Secondary" />
-              )}
-              <Text size="B300">
-                {removeState.status === AsyncStatus.Loading ? '取消中...' : '取消收藏'}
-              </Text>
-            </Button>
-          </Box>
+          </FavoriteNoteEditor>
         </Box>
       </Box>
     </SequenceCard>
@@ -1129,8 +1148,6 @@ export function Favorites() {
 
   const [mediaAutoLoad] = useSetting(settingsAtom, 'mediaAutoLoad');
   const [urlPreview] = useSetting(settingsAtom, 'urlPreview');
-  const [hour24Clock] = useSetting(settingsAtom, 'hour24Clock');
-  const [dateFormatString] = useSetting(settingsAtom, 'dateFormatString');
 
   const [activeCategory, setActiveCategory] = useState<FavoriteCategory>(FAVORITE_CATEGORIES[0]);
   const [dateFilter, setDateFilter] = useState<FavoriteDateFilter>('all');
@@ -1783,8 +1800,6 @@ export function Favorites() {
                             <FavoriteCard
                               item={item}
                               note={favoriteNotes[item.referenceId]}
-                              hour24Clock={hour24Clock}
-                              dateFormatString={dateFormatString}
                               selected={selectedFavoriteIds.includes(getFavoriteItemId(item))}
                               selectionMode={filtersOpen}
                               renderMatrixEvent={renderMatrixEvent}
@@ -1821,8 +1836,6 @@ export function Favorites() {
                           <FavoriteCard
                             item={item}
                             note={favoriteNotes[item.referenceId]}
-                            hour24Clock={hour24Clock}
-                            dateFormatString={dateFormatString}
                             selected={selectedFavoriteIds.includes(getFavoriteItemId(item))}
                             selectionMode={filtersOpen}
                             renderMatrixEvent={renderMatrixEvent}
@@ -1858,8 +1871,6 @@ export function Favorites() {
                       key={getFavoriteItemId(item)}
                       item={item}
                       note={favoriteNotes[item.referenceId]}
-                      hour24Clock={hour24Clock}
-                      dateFormatString={dateFormatString}
                       selected={selectedFavoriteIds.includes(getFavoriteItemId(item))}
                       selectionMode={filtersOpen}
                       renderMatrixEvent={renderMatrixEvent}

@@ -175,10 +175,10 @@ export const MediaMetaRow = style([
 export const ActionRow = style([
   DefaultReset,
   {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: config.space.S200,
-    alignItems: 'center',
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(96px, 1fr))',
+    gap: config.space.S150,
+    alignItems: 'stretch',
   },
 ]);
 
@@ -187,7 +187,28 @@ export const CardStack = style([
   {
     display: 'flex',
     flexDirection: 'column',
-    gap: config.space.S250,
+    gap: config.space.S300,
+  },
+]);
+
+export const MetaStack = style([
+  DefaultReset,
+  {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: config.space.S100,
+    minWidth: 0,
+  },
+]);
+
+export const MetaLine = style([
+  DefaultReset,
+  {
+    display: 'flex',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: config.space.S150,
+    minWidth: 0,
   },
 ]);
 
@@ -306,8 +327,12 @@ export const ViewerDetailsCard = style([
     flexShrink: 0,
     borderRadius: config.radii.R500,
     padding: config.space.S300,
-    background: 'rgba(248, 250, 252, 0.98)',
-    boxShadow: '0 18px 40px rgba(15, 23, 42, 0.18)',
+    display: 'flex',
+    flexDirection: 'column',
+    background: 'rgba(248, 250, 252, 0.94)',
+    border: '1px solid rgba(148, 163, 184, 0.18)',
+    boxShadow: '0 18px 40px rgba(15, 23, 42, 0.14)',
+    backdropFilter: 'blur(20px)',
     maxHeight: '100%',
     height: '100%',
     overflow: 'auto',
@@ -367,6 +392,9 @@ export const VideoViewerViewport = style([
     width: '100%',
     height: '100%',
     minHeight: '320px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
     borderRadius: config.radii.R400,
     overflow: 'hidden',
     background: 'rgba(255, 255, 255, 0.02)',
