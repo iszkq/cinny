@@ -26,7 +26,6 @@ import {
   AvatarBase,
   ImageContent,
   MSticker,
-  ModernLayout,
   ThumbnailContent,
   Time,
   Username,
@@ -356,37 +355,55 @@ function FavoriteNoteEditor({
       .catch(() => undefined);
   };
 
-  const hasNote = Boolean(note);
+  const hasNote = Boolean(note?.trim());
+
+  if (!editing && !hasNote) {
+    return (
+      <Box className={css.NoteActionOnly}>
+        <Button
+          size="300"
+          variant="Secondary"
+          fill="Soft"
+          radii="300"
+          onClick={() => setEditing(true)}
+        >
+          <Text size="B300">添加备注</Text>
+        </Button>
+      </Box>
+    );
+  }
 
   return (
     <Box direction="Column" gap="200">
-      <Box justifyContent="SpaceBetween" alignItems="Center" wrap="Wrap" gap="200">
-        <Chip variant={hasNote ? 'Secondary' : 'SurfaceVariant'} radii="Pill">
-          <Text size="T200">备注</Text>
-        </Chip>
-        {!editing && (
-          <Button
-            size="300"
-            variant="Secondary"
-            fill="Soft"
-            radii="300"
-            onClick={() => setEditing(true)}
-          >
-            <Text size="B300">{hasNote ? '编辑备注' : '添加备注'}</Text>
-          </Button>
-        )}
-      </Box>
-
       {!editing && hasNote && (
-        <Box className={css.MediaNotePreview}>
-          <Text size="T200" priority="300">
+        <Box className={css.NoteCard} direction="Column" gap="200">
+          <Box className={css.NoteHeader}>
+            <Chip variant="Secondary" radii="Pill">
+              <Text size="T200">备注</Text>
+            </Chip>
+            <Button
+              size="300"
+              variant="Secondary"
+              fill="Soft"
+              radii="300"
+              onClick={() => setEditing(true)}
+            >
+              <Text size="B300">编辑备注</Text>
+            </Button>
+          </Box>
+          <Text className={css.NoteText} size="T300">
             {note}
           </Text>
         </Box>
       )}
 
       {editing && (
-        <Box direction="Column" gap="200">
+        <Box className={css.NoteCard} direction="Column" gap="200">
+          <Box className={css.NoteHeader}>
+            <Chip variant={hasNote ? 'Secondary' : 'SurfaceVariant'} radii="Pill">
+              <Text size="T200">备注</Text>
+            </Chip>
+          </Box>
           <Input
             size="300"
             variant="Secondary"
@@ -400,7 +417,7 @@ function FavoriteNoteEditor({
               handleSave();
             }}
           />
-          <Box gap="200" wrap="Wrap">
+          <Box className={css.ActionRow}>
             <Button
               size="300"
               variant="Primary"
@@ -449,6 +466,23 @@ function FavoriteNoteEditor({
   );
 }
 
+function FavoriteInfoItem({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <Box className={css.DetailInfoCard}>
+      <Text className={css.DetailInfoLabel} size="T200" priority="300">
+        {label}
+      </Text>
+      <Text size="T300">{value}</Text>
+    </Box>
+  );
+}
+
 function FavoriteMediaDetails({
   item,
   note,
@@ -464,9 +498,11 @@ function FavoriteMediaDetails({
   const sourceRoomAvailable = Boolean(mx.getRoom(item.metadata.sourceRoomId));
 
   return (
-    <Box direction="Column" gap="300">
+    <Box direction="Column" gap="250">
       <Box direction="Column" gap="200">
-        <Text size="H4">{getFavoriteDisplayTitle(item)}</Text>
+        <Text size="H4" style={{ wordBreak: 'break-word' }}>
+          {getFavoriteDisplayTitle(item)}
+        </Text>
         <Box className={css.MediaMetaRow}>
           <Chip variant="Secondary" radii="Pill">
             <Text size="T200">{item.metadata.sourceRoomName}</Text>
@@ -481,22 +517,18 @@ function FavoriteMediaDetails({
       </Box>
 
       <Box className={css.DetailInfoGrid}>
-        <Box className={css.DetailInfoCard}>
-          <Text className={css.DetailInfoLabel} size="T200" priority="300">
-            原消息时间
-          </Text>
-          <Text size="T300">{getFavoriteSavedAt(item.metadata.sourceTimestamp)}</Text>
-        </Box>
-        <Box className={css.DetailInfoCard}>
-          <Text className={css.DetailInfoLabel} size="T200" priority="300">
-            收藏时间
-          </Text>
-          <Text size="T300">{getFavoriteSavedAt(item.metadata.favoritedAt)}</Text>
-        </Box>
+        <FavoriteInfoItem
+          label="原消息时间"
+          value={getFavoriteSavedAt(item.metadata.sourceTimestamp)}
+        />
+        <FavoriteInfoItem
+          label="收藏时间"
+          value={getFavoriteSavedAt(item.metadata.favoritedAt)}
+        />
       </Box>
 
-      <Box gap="200" wrap="Wrap">
-        {sourceRoomAvailable && (
+      {sourceRoomAvailable && (
+        <Box className={css.ActionRow}>
           <Button
             size="300"
             variant="Secondary"
@@ -506,8 +538,8 @@ function FavoriteMediaDetails({
           >
             <Text size="B300">打开原消息</Text>
           </Button>
-        )}
-      </Box>
+        </Box>
+      )}
 
       <FavoriteNoteEditor note={note} onSave={(nextNote) => onSaveNote(item, nextNote)} />
     </Box>
@@ -734,7 +766,11 @@ function FavoriteMediaCardInfo({
   const sourceRoomAvailable = Boolean(mx.getRoom(item.metadata.sourceRoomId));
 
   return (
-    <Box direction="Column" gap="200" className={css.MediaCardBody}>
+    <Box className={css.MediaCardBody}>
+      <Text className={css.MediaCardTitle} size="L400" truncate title={getFavoriteDisplayTitle(item)}>
+        {getFavoriteDisplayTitle(item)}
+      </Text>
+
       <Box className={css.MediaMetaRow}>
         <Chip variant="Secondary" radii="Pill">
           <Text size="T200">{item.metadata.sourceRoomName}</Text>
@@ -754,7 +790,7 @@ function FavoriteMediaCardInfo({
         )}
       </Box>
 
-      <Box className={css.FilterCardActions}>
+      <Box className={css.ActionRow} style={{ marginTop: 'auto' }}>
         {sourceRoomAvailable && (
           <Button
             size="300"
@@ -832,7 +868,7 @@ function FavoriteImageCard({
     <SequenceCard
       variant={selectionMode && selected ? 'Secondary' : 'SurfaceVariant'}
       direction="Column"
-      gap="300"
+      gap="250"
       className={css.MediaCard}
     >
       <Box className={css.MediaPreview}>
@@ -961,7 +997,7 @@ function FavoriteVideoCard({
       <SequenceCard
         variant={selectionMode && selected ? 'Secondary' : 'SurfaceVariant'}
         direction="Column"
-        gap="300"
+        gap="250"
         className={css.MediaCard}
       >
         <Box className={css.MediaPreview}>
@@ -1089,26 +1125,24 @@ function FavoriteCard({
     <SequenceCard
       variant={selectionMode && selected ? 'Secondary' : 'SurfaceVariant'}
       direction="Column"
-      gap="300"
+      gap="250"
       style={{ padding: config.space.S400 }}
     >
-      <ModernLayout
-        before={
-          <AvatarBase>
-            <Avatar size="300">
-              <UserAvatar
-                userId={senderId}
-                src={avatarUrl}
-                alt={item.metadata.sourceSenderName}
-                renderFallback={() => <Icon size="200" src={Icons.User} filled />}
-              />
-            </Avatar>
-          </AvatarBase>
-        }
-      >
-        <Box className={css.CardStack}>
+      <Box gap="300" alignItems="Start">
+        <AvatarBase>
+          <Avatar size="300">
+            <UserAvatar
+              userId={senderId}
+              src={avatarUrl}
+              alt={item.metadata.sourceSenderName}
+              renderFallback={() => <Icon size="200" src={Icons.User} filled />}
+            />
+          </Avatar>
+        </AvatarBase>
+
+        <Box className={css.CardStack} grow="Yes" style={{ minWidth: 0 }}>
           <Box gap="300" justifyContent="SpaceBetween" alignItems="Start" grow="Yes">
-            <Box direction="Column" gap="150" grow="Yes" style={{ minWidth: 0 }}>
+            <Box direction="Column" gap="200" grow="Yes" style={{ minWidth: 0 }}>
               <Box gap="200" alignItems="Center" wrap="Wrap">
                 <Username>
                   <Text as="span" truncate>
@@ -1125,6 +1159,11 @@ function FavoriteCard({
                 <Chip variant="Secondary" radii="Pill">
                   <Text size="T200">{item.metadata.sourceRoomName}</Text>
                 </Chip>
+                {note && (
+                  <Chip variant="SurfaceVariant" radii="Pill">
+                    <Text size="T200">已备注</Text>
+                  </Chip>
+                )}
               </Box>
             </Box>
 
@@ -1135,26 +1174,30 @@ function FavoriteCard({
             )}
           </Box>
 
-          {renderMatrixEvent(item.event.getType(), false, item.event, item.metadata.sourceSenderName, getContent)}
+          <Box className={css.MessageContentCard}>
+            {renderMatrixEvent(
+              item.event.getType(),
+              false,
+              item.event,
+              item.metadata.sourceSenderName,
+              getContent
+            )}
+          </Box>
 
           <Box className={css.DetailInfoGrid}>
-            <Box className={css.DetailInfoCard}>
-              <Text className={css.DetailInfoLabel} size="T200" priority="300">
-                原消息时间
-              </Text>
-              <Text size="T300">{getFavoriteSavedAt(item.metadata.sourceTimestamp)}</Text>
-            </Box>
-            <Box className={css.DetailInfoCard}>
-              <Text className={css.DetailInfoLabel} size="T200" priority="300">
-                收藏时间
-              </Text>
-              <Text size="T300">{getFavoriteSavedAt(item.metadata.favoritedAt)}</Text>
-            </Box>
+            <FavoriteInfoItem
+              label="原消息时间"
+              value={getFavoriteSavedAt(item.metadata.sourceTimestamp)}
+            />
+            <FavoriteInfoItem
+              label="收藏时间"
+              value={getFavoriteSavedAt(item.metadata.favoritedAt)}
+            />
           </Box>
 
           <FavoriteNoteEditor note={note} onSave={(nextNote) => onSaveNote(item, nextNote)} />
 
-          <Box className={css.FilterCardActions}>
+          <Box className={css.ActionRow}>
             {sourceRoomAvailable && (
               <Button
                 size="300"
@@ -1185,7 +1228,7 @@ function FavoriteCard({
             </Button>
           </Box>
         </Box>
-      </ModernLayout>
+      </Box>
     </SequenceCard>
   );
 }

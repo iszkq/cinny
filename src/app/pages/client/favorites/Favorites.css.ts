@@ -30,15 +30,18 @@ export const MediaGrid = style([
   DefaultReset,
   {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
     gap: config.space.S300,
+    alignItems: 'stretch',
   },
 ]);
 
 export const MediaCard = style([
   DefaultReset,
   {
-    padding: config.space.S300,
+    display: 'flex',
+    flexDirection: 'column',
+    padding: config.space.S250,
     height: '100%',
   },
 ]);
@@ -47,12 +50,16 @@ export const MediaPreview = style([
   DefaultReset,
   {
     position: 'relative',
+    display: 'flex',
+    alignItems: 'stretch',
+    justifyContent: 'stretch',
     width: '100%',
     aspectRatio: '1 / 1',
+    minHeight: '220px',
     borderRadius: config.radii.R400,
     overflow: 'hidden',
     background:
-      'linear-gradient(180deg, rgba(15, 23, 42, 0.08), rgba(15, 23, 42, 0.14))',
+      'radial-gradient(circle at top, rgba(59, 130, 246, 0.12), transparent 36%), rgba(15, 23, 42, 0.12)',
   },
 ]);
 
@@ -61,7 +68,9 @@ export const MediaPreviewButton = style([
   {
     width: '100%',
     height: '100%',
-    display: 'block',
+    display: 'flex',
+    alignItems: 'stretch',
+    justifyContent: 'stretch',
     padding: 0,
     margin: 0,
     border: 'none',
@@ -137,10 +146,32 @@ export const MediaCardBody = style([
   {
     minWidth: 0,
     flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: config.space.S200,
+  },
+]);
+
+export const MediaCardTitle = style([
+  DefaultReset,
+  {
+    display: 'block',
+    wordBreak: 'break-word',
+    lineHeight: 1.4,
   },
 ]);
 
 export const MediaMetaRow = style([
+  DefaultReset,
+  {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: config.space.S150,
+    alignItems: 'center',
+  },
+]);
+
+export const ActionRow = style([
   DefaultReset,
   {
     display: 'flex',
@@ -155,15 +186,15 @@ export const CardStack = style([
   {
     display: 'flex',
     flexDirection: 'column',
-    gap: config.space.S300,
+    gap: config.space.S250,
   },
 ]);
 
 export const DetailInfoGrid = style([
   DefaultReset,
   {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+    display: 'flex',
+    flexWrap: 'wrap',
     gap: config.space.S200,
   },
 ]);
@@ -171,6 +202,12 @@ export const DetailInfoGrid = style([
 export const DetailInfoCard = style([
   DefaultReset,
   {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: config.space.S100,
+    flex: '1 1 220px',
+    minWidth: '220px',
+    maxWidth: '320px',
     padding: config.space.S250,
     borderRadius: config.radii.R300,
     background: 'rgba(15, 23, 42, 0.04)',
@@ -182,17 +219,55 @@ export const DetailInfoLabel = style([
   DefaultReset,
   {
     display: 'block',
-    marginBottom: config.space.S100,
   },
 ]);
 
-export const MediaNotePreview = style([
+export const MessageContentCard = style([
   DefaultReset,
   {
-    padding: `${config.space.S200} ${config.space.S300}`,
-    borderRadius: config.radii.R300,
+    padding: config.space.S300,
+    borderRadius: config.radii.R400,
     background: 'rgba(15, 23, 42, 0.04)',
     border: '1px solid rgba(15, 23, 42, 0.06)',
+    overflow: 'hidden',
+  },
+]);
+
+export const NoteCard = style([
+  DefaultReset,
+  {
+    padding: config.space.S250,
+    borderRadius: config.radii.R400,
+    background: 'rgba(15, 23, 42, 0.04)',
+    border: '1px solid rgba(15, 23, 42, 0.06)',
+  },
+]);
+
+export const NoteHeader = style([
+  DefaultReset,
+  {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: config.space.S200,
+    flexWrap: 'wrap',
+  },
+]);
+
+export const NoteText = style([
+  DefaultReset,
+  {
+    whiteSpace: 'pre-wrap',
+    wordBreak: 'break-word',
+    lineHeight: 1.5,
+  },
+]);
+
+export const NoteActionOnly = style([
+  DefaultReset,
+  {
+    display: 'flex',
+    justifyContent: 'flex-start',
   },
 ]);
 
@@ -208,6 +283,7 @@ export const ViewerShell = style([
       'screen and (min-width: 1100px)': {
         flexDirection: 'row',
         alignItems: 'stretch',
+        gap: config.space.S300,
       },
     },
   },
@@ -217,7 +293,9 @@ export const ViewerStageCard = style([
   DefaultReset,
   {
     flex: 1,
+    minWidth: 0,
     minHeight: 0,
+    alignSelf: 'stretch',
   },
 ]);
 
@@ -229,10 +307,13 @@ export const ViewerDetailsCard = style([
     padding: config.space.S300,
     background: 'rgba(248, 250, 252, 0.98)',
     boxShadow: '0 18px 40px rgba(15, 23, 42, 0.18)',
+    maxHeight: '100%',
+    alignSelf: 'flex-start',
     '@media': {
       'screen and (min-width: 1100px)': {
-        width: '360px',
-        maxWidth: '30vw',
+        width: '340px',
+        maxWidth: '28vw',
+        height: 'auto',
         overflow: 'auto',
       },
     },
