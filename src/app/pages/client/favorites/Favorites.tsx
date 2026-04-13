@@ -1,4 +1,5 @@
-import React, { MouseEventHandler, ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
+import FocusTrap from 'focus-trap-react';
 import { HTMLReactParserOptions } from 'html-react-parser';
 import { MatrixEvent, MsgType, Room, RoomEvent } from 'matrix-js-sdk';
 import { Opts as LinkifyOpts } from 'linkifyjs';
@@ -12,6 +13,10 @@ import {
   Icons,
   Input,
   Line,
+  Modal,
+  Overlay,
+  OverlayBackdrop,
+  OverlayCenter,
   Scroll,
   Spinner,
   Text,
@@ -22,9 +27,11 @@ import {
   ImageContent,
   MSticker,
   ModernLayout,
+  ThumbnailContent,
   Time,
   Username,
   UsernameBold,
+  VideoContent,
 } from '../../../components/message';
 import {
   Page,
@@ -35,8 +42,8 @@ import {
   PageHeroEmpty,
   PageHeroSection,
 } from '../../../components/page';
-import { Image } from '../../../components/media';
-import { ImageViewer } from '../../../components/image-viewer';
+import { Image, Video } from '../../../components/media';
+import { ImageViewer, type ImageViewerProps } from '../../../components/image-viewer';
 import { SequenceCard } from '../../../components/sequence-card';
 import { UserAvatar } from '../../../components/user-avatar';
 import { RenderMessageContent } from '../../../components/RenderMessageContent';
@@ -48,6 +55,7 @@ import { useMatrixEventRenderer } from '../../../hooks/useMatrixEventRenderer';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { useMentionClickHandler } from '../../../hooks/useMentionClickHandler';
 import { useRoomNavigate } from '../../../hooks/useRoomNavigate';
+import { useSpoilerClickHandler } from '../../../hooks/useSpoilerClickHandler';
 import { useSetting } from '../../../state/hooks/settings';
 import { settingsAtom } from '../../../state/settings';
 import {
@@ -57,21 +65,27 @@ import {
   makeMentionCustomProps,
   renderMatrixMention,
 } from '../../../plugins/react-custom-html-parser';
-import { useSpoilerClickHandler } from '../../../hooks/useSpoilerClickHandler';
 import { AccountDataEvent, CinnyFavoriteNotesContent } from '../../../../types/matrix/accountData';
-import { MessageEvent } from '../../../../types/matrix/room';
+import {
+  IImageContent,
+  IThumbnailContent,
+  IVideoContent,
+  IVideoInfo,
+  MATRIX_SPOILER_PROPERTY_NAME,
+  MATRIX_SPOILER_REASON_PROPERTY_NAME,
+} from '../../../../types/matrix/common';
+import { GetContentCallback, MessageEvent } from '../../../../types/matrix/room';
 import { mxcUrlToHttp } from '../../../utils/matrix';
 import { trimReplyFromBody } from '../../../utils/room';
+import { ModalWide } from '../../../styles/Modal.css';
+import { stopPropagation } from '../../../utils/keyboard';
 import type { ViewerImageItem } from '../../../components/message/content/ImageContent';
 import {
   ensureFavoritesRoom,
   FavoriteCategory,
   FavoriteMessageMetadata,
-  FavoriteVisibleCategory,
   FAVORITE_CATEGORIES,
-  FAVORITE_VISIBLE_CATEGORIES,
   getFavoriteCategory,
-  getFavoriteCategoryLabel,
   getFavoriteMessageMetadataFromEvent,
   getFavoriteNotes,
   getFavoriteReferenceId,
@@ -80,6 +94,7 @@ import {
   removeFavoriteNotes,
   setFavoriteNote,
 } from '../../../features/favorites';
+import * as css from './Favorites.css';
 
 type FavoriteDateFilter = 'all' | 'today' | '7d' | '30d' | '90d';
 
@@ -96,18 +111,35 @@ type FavoriteGroup = {
   items: FavoriteItem[];
 };
 
+type FavoriteOpenSourceHandler = (sourceRoomId: string, sourceEventId?: string) => void;
+type FavoriteSaveNoteHandler = (item: FavoriteItem, note: string) => Promise<void>;
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const DATE_FILTER_OPTIONS: Array<{ id: FavoriteDateFilter; label: string }> = [
-  { id: 'all', label: '全部时间' },
-  { id: 'today', label: '今天' },
-  { id: '7d', label: '近 7 天' },
-  { id: '30d', label: '近 30 天' },
-  { id: '90d', label: '近 90 天' },
+  { id: 'all', label: '\u5168\u90e8\u65f6\u95f4' },
+  { id: 'today', label: '\u4eca\u5929' },
+  { id: '7d', label: '\u8fd1 7 \u5929' },
+  { id: '30d', label: '\u8fd1 30 \u5929' },
+  { id: '90d', label: '\u8fd1 90 \u5929' },
 ];
 
+const getFavoriteCategoryText = (category: FavoriteCategory): string => {
+  if (category === 'text') return '\u6587\u672c';
+  if (category === 'image') return '\u56fe\u7247';
+  if (category === 'video') return '\u89c6\u9891';
+  if (category === 'audio') return '\u97f3\u9891';
+  if (category === 'file') return '\u6587\u4ef6';
+
+  return '\u5176\u4ed6';
+};
+
+const getPreferredCategory = (items: FavoriteItem[]): FavoriteCategory =>
+  FAVORITE_CATEGORIES.find((category) => items.some((item) => item.category === category)) ??
+  FAVORITE_CATEGORIES[0];
+
 const getDateFilterLabel = (dateFilter: FavoriteDateFilter): string =>
-  DATE_FILTER_OPTIONS.find((option) => option.id === dateFilter)?.label ?? '全部时间';
+  DATE_FILTER_OPTIONS.find((option) => option.id === dateFilter)?.label ?? '\u5168\u90e8\u65f6\u95f4';
 
 const getStartOfToday = (): number => {
   const now = new Date();
@@ -134,17 +166,9 @@ const matchesDateFilter = (timestamp: number, dateFilter: FavoriteDateFilter): b
   if (dateFilter === 'all') return true;
 
   const now = Date.now();
-  if (dateFilter === 'today') {
-    return timestamp >= getStartOfToday();
-  }
-
-  if (dateFilter === '7d') {
-    return timestamp >= now - DAY_MS * 7;
-  }
-
-  if (dateFilter === '30d') {
-    return timestamp >= now - DAY_MS * 30;
-  }
+  if (dateFilter === 'today') return timestamp >= getStartOfToday();
+  if (dateFilter === '7d') return timestamp >= now - DAY_MS * 7;
+  if (dateFilter === '30d') return timestamp >= now - DAY_MS * 30;
 
   return timestamp >= now - DAY_MS * 90;
 };
@@ -176,65 +200,95 @@ const getFavoriteEvents = (room?: Room): FavoriteItem[] => {
 
 const getFavoriteImageViewerItems = (items: FavoriteItem[]): ViewerImageItem[] =>
   items.reduce<ViewerImageItem[]>((viewerItems, item) => {
-    const eventType = item.event.getType();
-    const content = item.event.getContent();
-    const isImageMessage =
-      eventType === MessageEvent.Sticker || content.msgtype === MsgType.Image;
-
-    if (!isImageMessage) return viewerItems;
-
-    const url =
-      typeof content.file?.url === 'string'
+    const content = getFavoriteImageContent(item);
+    const mediaUrl =
+      typeof content?.file?.url === 'string'
         ? content.file.url
-        : typeof content.url === 'string'
+        : typeof content?.url === 'string'
           ? content.url
           : undefined;
 
-    if (!url) return viewerItems;
-
-    const mimeType =
-      typeof content.info?.mimetype === 'string' ? content.info.mimetype : undefined;
+    if (!content || !mediaUrl) return viewerItems;
 
     viewerItems.push({
       id: getFavoriteItemId(item),
-      body: typeof content.body === 'string' ? content.body : '图片',
-      mimeType,
-      url,
+      body: getFavoriteDisplayTitle(item),
+      mimeType: typeof content.info?.mimetype === 'string' ? content.info.mimetype : undefined,
+      url: mediaUrl,
       encInfo: content.file,
     });
 
     return viewerItems;
   }, []);
 
-const getCategoryCount = (items: FavoriteItem[], category: FavoriteVisibleCategory): number => {
-  if (category === 'all') return items.length;
-  return items.filter((item) => item.category === category).length;
-};
+const getCategoryCount = (items: FavoriteItem[], category: FavoriteCategory): number =>
+  items.filter((item) => item.category === category).length;
 
 const getFavoriteGroups = (
   items: FavoriteItem[],
-  activeCategory: FavoriteVisibleCategory
+  activeCategory: FavoriteCategory
 ): FavoriteGroup[] => {
-  if (activeCategory !== 'all') {
-    return [
-      {
-        category: activeCategory,
-        items: items.filter((item) => item.category === activeCategory),
-      },
-    ];
+  return [
+    {
+      category: activeCategory,
+      items: items.filter((item) => item.category === activeCategory),
+    },
+  ];
+};
+
+const isGalleryCategory = (
+  category: FavoriteCategory
+): category is Extract<FavoriteCategory, 'image' | 'video'> =>
+  category === 'image' || category === 'video';
+
+const getFavoriteDisplayTitle = (item: FavoriteItem): string => {
+  const content = item.event.getContent();
+  const filename = typeof content.filename === 'string' ? content.filename.trim() : '';
+  if (filename) return filename;
+
+  const body = typeof content.body === 'string' ? trimReplyFromBody(content.body).trim() : '';
+  if (body) return body;
+
+  return getFavoriteCategoryText(item.category);
+};
+
+const getFavoriteDisplayPreview = (item: FavoriteItem): string => {
+  const preview = getFavoriteItemBody(item.event);
+  if (preview) return preview;
+  return getFavoriteDisplayTitle(item);
+};
+
+const getFavoriteSavedAt = (timestamp: number): string => new Date(timestamp).toLocaleString();
+
+function getFavoriteImageContent(item: FavoriteItem): IImageContent | undefined {
+  const content = item.event.getContent() as Partial<IImageContent>;
+  const mediaUrl =
+    typeof content.file?.url === 'string'
+      ? content.file.url
+      : typeof content.url === 'string'
+        ? content.url
+        : undefined;
+
+  if (!mediaUrl) return undefined;
+  if (item.event.getType() !== MessageEvent.Sticker && content.msgtype !== MsgType.Image) {
+    return undefined;
   }
 
-  return FAVORITE_CATEGORIES.reduce<FavoriteGroup[]>((groups, category) => {
-    const categoryItems = items.filter((item) => item.category === category);
-    if (categoryItems.length > 0) {
-      groups.push({
-        category,
-        items: categoryItems,
-      });
-    }
-    return groups;
-  }, []);
-};
+  return content as IImageContent;
+}
+
+function getFavoriteVideoContent(item: FavoriteItem): IVideoContent | undefined {
+  const content = item.event.getContent() as Partial<IVideoContent>;
+  const mediaUrl =
+    typeof content.file?.url === 'string'
+      ? content.file.url
+      : typeof content.url === 'string'
+        ? content.url
+        : undefined;
+
+  if (!mediaUrl || content.msgtype !== MsgType.Video) return undefined;
+  return content as IVideoContent;
+}
 
 function FavoritesEmpty({
   loading,
@@ -250,20 +304,26 @@ function FavoritesEmpty({
       <PageHeroSection>
         <PageHero
           icon={
-            loading ? <Spinner size="600" variant="Secondary" /> : <Icon size="600" src={Icons.Heart} />
+            loading ? (
+              <Spinner size="600" variant="Secondary" />
+            ) : (
+              <Icon size="600" src={Icons.Heart} filled />
+            )
           }
-          title={hasRoom ? '还没有收藏内容' : '创建默认收藏'}
+          title={hasRoom ? '\u8fd8\u6ca1\u6709\u6536\u85cf\u5185\u5bb9' : '\u5148\u521b\u5efa\u4f60\u7684\u6536\u85cf\u7a7a\u95f4'}
           subTitle={
             hasRoom
-              ? '右键消息后点击“收藏”，内容就会出现在这里。'
-              : '默认收藏会自动使用一个专属私密房间来保存你收藏的消息副本。'
+              ? '\u5728\u6d88\u606f\u4e0a\u6267\u884c\u6536\u85cf\u540e\uff0c\u5185\u5bb9\u4f1a\u540c\u6b65\u51fa\u73b0\u5728\u8fd9\u91cc\u3002'
+              : '\u7cfb\u7edf\u4f1a\u4e3a\u4f60\u521b\u5efa\u4e00\u4e2a\u4ec5\u81ea\u5df1\u53ef\u89c1\u7684\u6536\u85cf\u623f\u95f4\uff0c\u7528\u6765\u4fdd\u5b58\u6536\u85cf\u6d88\u606f\u7684\u526f\u672c\u3002'
           }
         >
           {!hasRoom && (
             <Box justifyContent="Center">
               <Button onClick={onCreate} disabled={loading}>
                 {loading && <Spinner size="200" variant="Secondary" />}
-                <Text size="B400">{loading ? '创建中...' : '创建收藏房间'}</Text>
+                <Text size="B400">
+                  {loading ? '\u521b\u5efa\u4e2d...' : '\u521b\u5efa\u6536\u85cf\u7a7a\u95f4'}
+                </Text>
               </Button>
             </Box>
           )}
@@ -295,10 +355,8 @@ function FavoriteNoteEditor({
     if (saveState.status === AsyncStatus.Loading) return;
 
     saveNote()
-      .then(() => {
-        setEditing(false);
-      })
-      .catch(() => {});
+      .then(() => setEditing(false))
+      .catch(() => undefined);
   };
 
   const hasNote = Boolean(note);
@@ -307,13 +365,13 @@ function FavoriteNoteEditor({
     <Box direction="Column" gap="200">
       <Box gap="200" alignItems="Center" wrap="Wrap">
         <Chip variant={hasNote ? 'Secondary' : 'SurfaceVariant'} radii="Pill">
-          <Text size="T200">备注</Text>
+          <Text size="T200">{'\u5907\u6ce8'}</Text>
         </Chip>
         {hasNote ? (
           <Text size="T300">{note}</Text>
         ) : (
           <Text size="T200" priority="300">
-            暂无备注，可用于收藏内搜索。
+            {'\u6682\u65e0\u5907\u6ce8\uff0c\u53ef\u7528\u4e8e\u540e\u7eed\u641c\u7d22\u6216\u7ba1\u7406\u3002'}
           </Text>
         )}
         {!editing && (
@@ -324,7 +382,9 @@ function FavoriteNoteEditor({
             radii="300"
             onClick={() => setEditing(true)}
           >
-            <Text size="B300">{hasNote ? '编辑备注' : '添加备注'}</Text>
+            <Text size="B300">
+              {hasNote ? '\u7f16\u8f91\u5907\u6ce8' : '\u6dfb\u52a0\u5907\u6ce8'}
+            </Text>
           </Button>
         )}
       </Box>
@@ -335,7 +395,7 @@ function FavoriteNoteEditor({
             size="300"
             variant="Secondary"
             radii="300"
-            placeholder="输入备注，支持收藏内容与备注搜索"
+            placeholder="\u8f93\u5165\u5907\u6ce8\uff0c\u53ef\u540c\u65f6\u641c\u7d22\u5230\u6536\u85cf\u5185\u5bb9\u548c\u5907\u6ce8"
             value={draftNote}
             onChange={(evt: React.ChangeEvent<HTMLInputElement>) => setDraftNote(evt.target.value)}
             onKeyDown={(evt: React.KeyboardEvent<HTMLInputElement>) => {
@@ -355,7 +415,11 @@ function FavoriteNoteEditor({
               {saveState.status === AsyncStatus.Loading && (
                 <Spinner size="200" variant="Secondary" />
               )}
-              <Text size="B300">{saveState.status === AsyncStatus.Loading ? '保存中...' : '保存备注'}</Text>
+              <Text size="B300">
+                {saveState.status === AsyncStatus.Loading
+                  ? '\u4fdd\u5b58\u4e2d...'
+                  : '\u4fdd\u5b58\u5907\u6ce8'}
+              </Text>
             </Button>
             <Button
               size="300"
@@ -367,7 +431,7 @@ function FavoriteNoteEditor({
                 setEditing(false);
               }}
             >
-              <Text size="B300">取消</Text>
+              <Text size="B300">{'\u53d6\u6d88'}</Text>
             </Button>
             {hasNote && (
               <Button
@@ -378,14 +442,12 @@ function FavoriteNoteEditor({
                 onClick={() => {
                   setDraftNote('');
                   saveNote('')
-                    .then(() => {
-                      setEditing(false);
-                    })
-                    .catch(() => {});
+                    .then(() => setEditing(false))
+                    .catch(() => undefined);
                 }}
                 disabled={saveState.status === AsyncStatus.Loading}
               >
-                <Text size="B300">清空备注</Text>
+                <Text size="B300">{'\u6e05\u7a7a\u5907\u6ce8'}</Text>
               </Button>
             )}
           </Box>
@@ -395,169 +457,735 @@ function FavoriteNoteEditor({
   );
 }
 
-function FavoriteCard({
-  favoritesRoom,
+function FavoriteMediaDetails({
   item,
-  content,
-  hour24Clock,
-  dateFormatString,
-  showSelection,
-  selected,
   note,
-  onToggleSelect,
-  onOpenSource,
-  onRemoved,
   onSaveNote,
+  onOpenSource,
 }: {
-  favoritesRoom: Room;
   item: FavoriteItem;
-  content: ReactNode;
-  hour24Clock: boolean;
-  dateFormatString: string;
-  showSelection: boolean;
-  selected: boolean;
   note?: string;
-  onToggleSelect: () => void;
-  onOpenSource: MouseEventHandler<HTMLButtonElement>;
-  onRemoved: (item: FavoriteItem) => void;
-  onSaveNote: (note: string) => Promise<void>;
+  onSaveNote: FavoriteSaveNoteHandler;
+  onOpenSource: FavoriteOpenSourceHandler;
 }) {
   const mx = useMatrixClient();
-  const useAuthentication = useMediaAuthentication();
-  const { event, metadata, category } = item;
-  const sourceRoomAvailable = !!mx.getRoom(metadata.sourceRoomId);
+  const sourceRoomAvailable = Boolean(mx.getRoom(item.metadata.sourceRoomId));
 
-  const [removeState, remove] = useAsyncCallback(
-    useCallback(async () => {
-      const eventId = event.getId();
-      if (!eventId) throw new Error('Missing favorite event id.');
-      await removeFavoriteMessage(mx, favoritesRoom.roomId, eventId);
-      return eventId;
-    }, [mx, favoritesRoom.roomId, event])
+  return (
+    <Box direction="Column" gap="300">
+      <Box direction="Column" gap="150">
+        <Text size="H4">{getFavoriteDisplayTitle(item)}</Text>
+        <Box className={css.MediaMetaRow}>
+          <Chip variant="Secondary" radii="Pill">
+            <Text size="T200">{item.metadata.sourceRoomName}</Text>
+          </Chip>
+          <Chip variant="SurfaceVariant" radii="Pill">
+            <Text size="T200">{getFavoriteCategoryText(item.category)}</Text>
+          </Chip>
+          <Text size="T200" priority="300">
+            {item.metadata.sourceSenderName}
+          </Text>
+          <Text size="T200" priority="300">
+            {`\u539f\u6d88\u606f\uff1a${getFavoriteSavedAt(item.metadata.sourceTimestamp)}`}
+          </Text>
+          <Text size="T200" priority="300">
+            {`\u6536\u85cf\u65f6\u95f4\uff1a${getFavoriteSavedAt(item.metadata.favoritedAt)}`}
+          </Text>
+        </Box>
+      </Box>
+
+      <Box gap="200" wrap="Wrap">
+        {sourceRoomAvailable && (
+          <Button
+            size="300"
+            variant="Secondary"
+            fill="Soft"
+            radii="300"
+            onClick={() => onOpenSource(item.metadata.sourceRoomId, item.metadata.sourceEventId)}
+          >
+            <Text size="B300">{'\u6253\u5f00\u539f\u6d88\u606f'}</Text>
+          </Button>
+        )}
+      </Box>
+
+      <FavoriteNoteEditor note={note} onSave={(nextNote) => onSaveNote(item, nextNote)} />
+    </Box>
+  );
+}
+
+function FavoriteImageViewerContent({
+  favoriteItemsById,
+  favoriteNotes,
+  onSaveNote,
+  onOpenSource,
+  ...viewerProps
+}: ImageViewerProps & {
+  favoriteItemsById: Map<string, FavoriteItem>;
+  favoriteNotes: Record<string, string>;
+  onSaveNote: FavoriteSaveNoteHandler;
+  onOpenSource: FavoriteOpenSourceHandler;
+}) {
+  const activeFavoriteItem = viewerProps.activeItemId
+    ? favoriteItemsById.get(viewerProps.activeItemId)
+    : undefined;
+
+  return (
+    <Box className={css.ViewerShell}>
+      <Box className={css.ViewerStageCard}>
+        <ImageViewer {...viewerProps} />
+      </Box>
+      {activeFavoriteItem && (
+        <Box className={css.ViewerDetailsCard}>
+          <FavoriteMediaDetails
+            item={activeFavoriteItem}
+            note={favoriteNotes[activeFavoriteItem.referenceId]}
+            onSaveNote={onSaveNote}
+            onOpenSource={onOpenSource}
+          />
+        </Box>
+      )}
+    </Box>
+  );
+}
+
+function FavoriteVideoViewerModal({
+  open,
+  item,
+  note,
+  canPrev,
+  canNext,
+  onPrev,
+  onNext,
+  onSaveNote,
+  onOpenSource,
+  requestClose,
+}: {
+  open: boolean;
+  item: FavoriteItem;
+  note?: string;
+  canPrev?: boolean;
+  canNext?: boolean;
+  onPrev?: () => void;
+  onNext?: () => void;
+  onSaveNote: FavoriteSaveNoteHandler;
+  onOpenSource: FavoriteOpenSourceHandler;
+  requestClose: () => void;
+}) {
+  const content = getFavoriteVideoContent(item);
+  const info = content?.info as (IVideoInfo & IThumbnailContent) | undefined;
+  const mediaUrl =
+    typeof content?.file?.url === 'string'
+      ? content.file.url
+      : typeof content?.url === 'string'
+        ? content.url
+        : undefined;
+  const mimeType = typeof info?.mimetype === 'string' ? info.mimetype : '';
+
+  if (!content || !info || !mediaUrl || !mimeType) return null;
+
+  return (
+    <Overlay open={open} backdrop={<OverlayBackdrop />}>
+      <OverlayCenter>
+        <FocusTrap
+          focusTrapOptions={{
+            initialFocus: false,
+            fallbackFocus: () => document.body,
+            onDeactivate: requestClose,
+            clickOutsideDeactivates: true,
+            escapeDeactivates: stopPropagation,
+          }}
+        >
+          <Modal
+            className={ModalWide}
+            size="500"
+            variant="Background"
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              width: 'min(96vw, 1320px)',
+              minWidth: 'min(96vw, 1320px)',
+              height: 'min(92vh, 920px)',
+              minHeight: 'min(92vh, 920px)',
+              maxHeight: 'min(92vh, 920px)',
+              padding: 0,
+              background: 'transparent',
+              boxShadow: 'none',
+              border: 'none',
+              overflow: 'hidden',
+            }}
+          >
+            <Box className={css.ViewerShell}>
+              <Box className={css.ViewerStageCard}>
+                <Box className={css.VideoViewer}>
+                  <Box className={css.VideoViewerHeader}>
+                    <Box direction="Column" gap="100" grow="Yes" style={{ minWidth: 0 }}>
+                      <Text size="H4" truncate>
+                        {getFavoriteDisplayTitle(item)}
+                      </Text>
+                      <Text size="T200" priority="300">
+                        {item.metadata.sourceSenderName}
+                      </Text>
+                    </Box>
+
+                    <Box shrink="No" gap="200" wrap="Wrap">
+                      {onPrev && (
+                        <Button
+                          size="300"
+                          variant="Secondary"
+                          fill="Soft"
+                          radii="300"
+                          onClick={onPrev}
+                          disabled={!canPrev}
+                        >
+                          <Text size="B300">{'\u4e0a\u4e00\u6761'}</Text>
+                        </Button>
+                      )}
+                      {onNext && (
+                        <Button
+                          size="300"
+                          variant="Secondary"
+                          fill="Soft"
+                          radii="300"
+                          onClick={onNext}
+                          disabled={!canNext}
+                        >
+                          <Text size="B300">{'\u4e0b\u4e00\u6761'}</Text>
+                        </Button>
+                      )}
+                      <Button
+                        size="300"
+                        variant="Secondary"
+                        fill="Soft"
+                        radii="300"
+                        onClick={requestClose}
+                      >
+                        <Text size="B300">{'\u5173\u95ed'}</Text>
+                      </Button>
+                    </Box>
+                  </Box>
+
+                  <Box className={css.VideoViewerStage}>
+                    <Box className={css.VideoViewerViewport}>
+                      <VideoContent
+                        body={getFavoriteDisplayTitle(item)}
+                        info={info}
+                        mimeType={mimeType}
+                        url={mediaUrl}
+                        encInfo={content.file}
+                        autoPlay
+                        markedAsSpoiler={content[MATRIX_SPOILER_PROPERTY_NAME]}
+                        spoilerReason={content[MATRIX_SPOILER_REASON_PROPERTY_NAME]}
+                        renderThumbnail={() => (
+                          <ThumbnailContent
+                            info={info}
+                            renderImage={(src) => (
+                              <Image
+                                alt={getFavoriteDisplayTitle(item)}
+                                title={getFavoriteDisplayTitle(item)}
+                                src={src}
+                                loading="lazy"
+                                className={css.MediaPreviewImage}
+                              />
+                            )}
+                          />
+                        )}
+                        renderVideo={(props) => <Video {...props} />}
+                      />
+                    </Box>
+                  </Box>
+                </Box>
+              </Box>
+
+              <Box className={css.ViewerDetailsCard}>
+                <FavoriteMediaDetails
+                  item={item}
+                  note={note}
+                  onSaveNote={onSaveNote}
+                  onOpenSource={onOpenSource}
+                />
+              </Box>
+            </Box>
+          </Modal>
+        </FocusTrap>
+      </OverlayCenter>
+    </Overlay>
+  );
+}
+
+function FavoriteMediaCardInfo({
+  item,
+  note,
+  hour24Clock,
+  dateFormatString,
+  removeLoading,
+  onOpenSource,
+  onRemove,
+}: {
+  item: FavoriteItem;
+  note?: string;
+  hour24Clock: boolean;
+  dateFormatString: string;
+  removeLoading: boolean;
+  onOpenSource: () => void;
+  onRemove: () => void;
+}) {
+  const mx = useMatrixClient();
+  const sourceRoomAvailable = Boolean(mx.getRoom(item.metadata.sourceRoomId));
+  const title = getFavoriteDisplayTitle(item);
+  const preview = getFavoriteDisplayPreview(item);
+
+  return (
+    <Box direction="Column" gap="250" className={css.MediaCardBody}>
+      <Box gap="200" alignItems="Center" justifyContent="SpaceBetween">
+        <Text size="T300" truncate grow="Yes">
+          <b>{title}</b>
+        </Text>
+        <Time
+          ts={item.metadata.sourceTimestamp}
+          hour24Clock={hour24Clock}
+          dateFormatString={dateFormatString}
+        />
+      </Box>
+
+      {preview && preview !== title && (
+        <Text size="T200" priority="300">
+          {preview}
+        </Text>
+      )}
+
+      <Box className={css.MediaMetaRow}>
+        <Chip variant="Secondary" radii="Pill">
+          <Text size="T200">{item.metadata.sourceRoomName}</Text>
+        </Chip>
+        <Text size="T200" priority="300">
+          {item.metadata.sourceSenderName}
+        </Text>
+        <Text size="T200" priority="300">
+          {`\u6536\u85cf\u4e8e ${getFavoriteSavedAt(item.metadata.favoritedAt)}`}
+        </Text>
+      </Box>
+
+      {note && (
+        <Box className={css.MediaNotePreview}>
+          <Text size="T200" priority="300">
+            {note}
+          </Text>
+        </Box>
+      )}
+
+      <Box className={css.FilterCardActions}>
+        {sourceRoomAvailable && (
+          <Button
+            size="300"
+            variant="Secondary"
+            fill="Soft"
+            radii="300"
+            onClick={onOpenSource}
+          >
+            <Text size="B300">{'\u6253\u5f00\u539f\u6d88\u606f'}</Text>
+          </Button>
+        )}
+        <Button
+          size="300"
+          variant="Secondary"
+          radii="300"
+          onClick={onRemove}
+          disabled={removeLoading}
+        >
+          {removeLoading && <Spinner size="200" variant="Secondary" />}
+          <Text size="B300">
+            {removeLoading ? '\u53d6\u6d88\u4e2d...' : '\u53d6\u6d88\u6536\u85cf'}
+          </Text>
+        </Button>
+      </Box>
+    </Box>
+  );
+}
+
+function FavoriteImageCard({
+  item,
+  note,
+  hour24Clock,
+  dateFormatString,
+  selected,
+  imageViewerItems,
+  favoriteItemsById,
+  favoriteNotes,
+  onToggleSelect,
+  onOpenSource,
+  onRemoveFavorite,
+  onSaveNote,
+}: {
+  item: FavoriteItem;
+  note?: string;
+  hour24Clock: boolean;
+  dateFormatString: string;
+  selected: boolean;
+  imageViewerItems: ViewerImageItem[];
+  favoriteItemsById: Map<string, FavoriteItem>;
+  favoriteNotes: Record<string, string>;
+  onToggleSelect: () => void;
+  onOpenSource: FavoriteOpenSourceHandler;
+  onRemoveFavorite: (item: FavoriteItem) => Promise<void>;
+  onSaveNote: FavoriteSaveNoteHandler;
+}) {
+  const content = getFavoriteImageContent(item);
+  const mediaUrl =
+    typeof content?.file?.url === 'string'
+      ? content.file.url
+      : typeof content?.url === 'string'
+        ? content.url
+        : undefined;
+  const mimeType =
+    typeof content?.info?.mimetype === 'string' ? content.info.mimetype : undefined;
+
+  const [removeState, removeFavorite] = useAsyncCallback(
+    useCallback(() => onRemoveFavorite(item), [item, onRemoveFavorite])
   );
 
-  const handleRemove = () => {
-    if (removeState.status === AsyncStatus.Loading) return;
-
-    remove()
-      .then((eventId) => {
-        if (eventId) onRemoved(item);
-      })
-      .catch(() => {});
-  };
+  if (!content || !mediaUrl) return null;
 
   return (
     <SequenceCard
-      style={{ padding: config.space.S400 }}
-      variant="SurfaceVariant"
+      variant={selected ? 'Secondary' : 'SurfaceVariant'}
       direction="Column"
       gap="300"
+      className={css.MediaCard}
+    >
+      <Box className={css.MediaPreview}>
+        <ImageContent
+          body={getFavoriteDisplayTitle(item)}
+          info={content.info}
+          mimeType={mimeType}
+          url={mediaUrl}
+          encInfo={content.file}
+          autoPlay
+          viewerItems={imageViewerItems}
+          viewerItemId={getFavoriteItemId(item)}
+          markedAsSpoiler={content[MATRIX_SPOILER_PROPERTY_NAME]}
+          spoilerReason={content[MATRIX_SPOILER_REASON_PROPERTY_NAME]}
+          renderViewer={(viewerProps) => (
+            <FavoriteImageViewerContent
+              {...viewerProps}
+              favoriteItemsById={favoriteItemsById}
+              favoriteNotes={favoriteNotes}
+              onSaveNote={onSaveNote}
+              onOpenSource={onOpenSource}
+            />
+          )}
+          renderImage={({ alt, title, src, onLoad, onError, onClick, tabIndex }) => (
+            <button
+              type="button"
+              className={css.MediaPreviewButton}
+              onClick={onClick}
+              tabIndex={tabIndex}
+            >
+              <Image
+                alt={alt}
+                title={title}
+                src={src}
+                loading="lazy"
+                className={css.MediaPreviewImage}
+                onLoad={onLoad}
+                onError={onError}
+              />
+              <Box className={css.MediaPreviewOverlay} />
+            </button>
+          )}
+        />
+        <Box
+          className={css.MediaCheckbox}
+          onClick={(evt: React.MouseEvent) => {
+            evt.stopPropagation();
+            onToggleSelect();
+          }}
+        >
+          <Checkbox checked={selected} size="50" variant="Primary" />
+        </Box>
+      </Box>
+
+      <FavoriteMediaCardInfo
+        item={item}
+        note={note}
+        hour24Clock={hour24Clock}
+        dateFormatString={dateFormatString}
+        removeLoading={removeState.status === AsyncStatus.Loading}
+        onOpenSource={() => onOpenSource(item.metadata.sourceRoomId, item.metadata.sourceEventId)}
+        onRemove={() => {
+          if (removeState.status === AsyncStatus.Loading) return;
+          void removeFavorite().catch(() => undefined);
+        }}
+      />
+    </SequenceCard>
+  );
+}
+
+function FavoriteVideoCard({
+  item,
+  note,
+  hour24Clock,
+  dateFormatString,
+  selected,
+  videoItems,
+  favoriteNotes,
+  onToggleSelect,
+  onOpenSource,
+  onRemoveFavorite,
+  onSaveNote,
+}: {
+  item: FavoriteItem;
+  note?: string;
+  hour24Clock: boolean;
+  dateFormatString: string;
+  selected: boolean;
+  videoItems: FavoriteItem[];
+  favoriteNotes: Record<string, string>;
+  onToggleSelect: () => void;
+  onOpenSource: FavoriteOpenSourceHandler;
+  onRemoveFavorite: (item: FavoriteItem) => Promise<void>;
+  onSaveNote: FavoriteSaveNoteHandler;
+}) {
+  const content = getFavoriteVideoContent(item);
+  const info = content?.info as (IVideoInfo & IThumbnailContent) | undefined;
+  const [viewerItemId, setViewerItemId] = useState<string>();
+
+  const [removeState, removeFavorite] = useAsyncCallback(
+    useCallback(() => onRemoveFavorite(item), [item, onRemoveFavorite])
+  );
+
+  if (!content || !info) return null;
+
+  const currentItemId = getFavoriteItemId(item);
+  const defaultIndex = Math.max(
+    videoItems.findIndex((entry) => getFavoriteItemId(entry) === currentItemId),
+    0
+  );
+  const activeIndex = viewerItemId
+    ? Math.max(
+        videoItems.findIndex((entry) => getFavoriteItemId(entry) === viewerItemId),
+        defaultIndex
+      )
+    : defaultIndex;
+  const activeViewerItem = videoItems[activeIndex] ?? item;
+  const viewerOpen = typeof viewerItemId === 'string';
+
+  return (
+    <>
+      <SequenceCard
+        variant={selected ? 'Secondary' : 'SurfaceVariant'}
+        direction="Column"
+        gap="300"
+        className={css.MediaCard}
+      >
+        <Box className={css.MediaPreview}>
+          <button
+            type="button"
+            className={css.MediaPreviewButton}
+            onClick={() => setViewerItemId(currentItemId)}
+          >
+            <ThumbnailContent
+              info={info}
+              renderImage={(src) => (
+                <Image
+                  alt={getFavoriteDisplayTitle(item)}
+                  title={getFavoriteDisplayTitle(item)}
+                  src={src}
+                  loading="lazy"
+                  className={css.MediaPreviewImage}
+                />
+              )}
+            />
+            <Box className={css.MediaPreviewOverlay} />
+            <Box className={css.MediaPlayBadge}>
+              <Box className={css.MediaPlayBadgeInner}>
+                <Icon size="400" src={Icons.Play} filled />
+              </Box>
+            </Box>
+          </button>
+          <Box
+            className={css.MediaCheckbox}
+            onClick={(evt: React.MouseEvent) => {
+              evt.stopPropagation();
+              onToggleSelect();
+            }}
+          >
+            <Checkbox checked={selected} size="50" variant="Primary" />
+          </Box>
+        </Box>
+
+        <FavoriteMediaCardInfo
+          item={item}
+          note={note}
+          hour24Clock={hour24Clock}
+          dateFormatString={dateFormatString}
+          removeLoading={removeState.status === AsyncStatus.Loading}
+          onOpenSource={() => onOpenSource(item.metadata.sourceRoomId, item.metadata.sourceEventId)}
+          onRemove={() => {
+            if (removeState.status === AsyncStatus.Loading) return;
+            void removeFavorite().catch(() => undefined);
+          }}
+        />
+      </SequenceCard>
+
+      <FavoriteVideoViewerModal
+        open={viewerOpen}
+        item={activeViewerItem}
+        note={favoriteNotes[activeViewerItem.referenceId] ?? note}
+        canPrev={activeIndex > 0}
+        canNext={activeIndex < videoItems.length - 1}
+        onPrev={
+          activeIndex > 0
+            ? () => setViewerItemId(getFavoriteItemId(videoItems[activeIndex - 1]))
+            : undefined
+        }
+        onNext={
+          activeIndex < videoItems.length - 1
+            ? () => setViewerItemId(getFavoriteItemId(videoItems[activeIndex + 1]))
+            : undefined
+        }
+        onSaveNote={onSaveNote}
+        onOpenSource={onOpenSource}
+        requestClose={() => setViewerItemId(undefined)}
+      />
+    </>
+  );
+}
+
+function FavoriteCard({
+  item,
+  note,
+  hour24Clock,
+  dateFormatString,
+  selected,
+  renderMatrixEvent,
+  onToggleSelect,
+  onOpenSource,
+  onRemoveFavorite,
+  onSaveNote,
+}: {
+  item: FavoriteItem;
+  note?: string;
+  hour24Clock: boolean;
+  dateFormatString: string;
+  selected: boolean;
+  renderMatrixEvent: (
+    eventType: string,
+    isStateEvent: boolean,
+    event: MatrixEvent,
+    displayName: string,
+    getContent: GetContentCallback
+  ) => ReactNode;
+  onToggleSelect: () => void;
+  onOpenSource: FavoriteOpenSourceHandler;
+  onRemoveFavorite: (item: FavoriteItem) => Promise<void>;
+  onSaveNote: FavoriteSaveNoteHandler;
+}) {
+  const mx = useMatrixClient();
+  const useAuthentication = useMediaAuthentication();
+  const sourceRoomAvailable = Boolean(mx.getRoom(item.metadata.sourceRoomId));
+  const senderId = item.metadata.sourceSenderId ?? item.event.getSender() ?? item.metadata.sourceRoomId;
+  const avatarUrl = item.metadata.sourceSenderAvatarMxc
+    ? mxcUrlToHttp(mx, item.metadata.sourceSenderAvatarMxc, useAuthentication, 48, 48, 'crop') ??
+      undefined
+    : undefined;
+  const getContent = (() => item.event.getContent()) as GetContentCallback;
+
+  const [removeState, removeFavorite] = useAsyncCallback(
+    useCallback(() => onRemoveFavorite(item), [item, onRemoveFavorite])
+  );
+
+  return (
+    <SequenceCard
+      variant={selected ? 'Secondary' : 'SurfaceVariant'}
+      direction="Column"
+      gap="300"
+      style={{ padding: config.space.S400 }}
     >
       <ModernLayout
         before={
           <AvatarBase>
             <Avatar size="300">
               <UserAvatar
-                userId={metadata.sourceSenderId ?? metadata.sourceSenderName}
-                src={
-                  metadata.sourceSenderAvatarMxc
-                    ? mxcUrlToHttp(
-                        mx,
-                        metadata.sourceSenderAvatarMxc,
-                        useAuthentication,
-                        48,
-                        48,
-                        'crop'
-                      ) ?? undefined
-                    : undefined
-                }
-                alt={metadata.sourceSenderName}
+                userId={senderId}
+                src={avatarUrl}
+                alt={item.metadata.sourceSenderName}
                 renderFallback={() => <Icon size="200" src={Icons.User} filled />}
               />
             </Avatar>
           </AvatarBase>
         }
       >
-        <Box direction="Column" gap="300" style={{ minWidth: 0 }}>
-          <Box
-            gap="300"
-            justifyContent="SpaceBetween"
-            alignItems="Start"
-            grow="Yes"
-            wrap="Wrap"
-          >
-            <Box gap="300" alignItems="Start" grow="Yes" style={{ minWidth: 0 }}>
-              {showSelection && (
-                <Box shrink="No" style={{ paddingTop: config.space.S100 }}>
-                  <Checkbox
-                    checked={selected}
-                    onClick={onToggleSelect}
-                    size="50"
-                    variant="Primary"
-                  />
-                </Box>
-              )}
-              <Box direction="Column" gap="100" grow="Yes" style={{ minWidth: 0 }}>
-                <Box gap="200" alignItems="Center" wrap="Wrap">
-                  <Username>
-                    <Text as="span" truncate>
-                      <UsernameBold>{metadata.sourceSenderName}</UsernameBold>
-                    </Text>
-                  </Username>
-                  <Time
-                    ts={metadata.sourceTimestamp}
-                    hour24Clock={hour24Clock}
-                    dateFormatString={dateFormatString}
-                  />
-                </Box>
-                <Box gap="200" alignItems="Center" wrap="Wrap">
-                  <Chip variant="Secondary" radii="Pill">
-                    <Text size="T200">{metadata.sourceRoomName}</Text>
-                  </Chip>
-                  <Chip variant="SurfaceVariant" radii="Pill">
-                    <Text size="T200">{getFavoriteCategoryLabel(category)}</Text>
-                  </Chip>
-                  <Text size="T200" priority="300">
-                    {`收藏于 ${new Date(metadata.favoritedAt).toLocaleString()}`}
-                  </Text>
-                </Box>
-              </Box>
-            </Box>
-
-            <Box shrink="No" gap="200" alignItems="Center" wrap="Wrap">
-              {sourceRoomAvailable && metadata.sourceEventId && (
-                <Button
-                  size="300"
-                  variant="Secondary"
-                  fill="Soft"
-                  radii="300"
-                  data-room-id={metadata.sourceRoomId}
-                  data-event-id={metadata.sourceEventId}
-                  onClick={onOpenSource}
-                >
-                  <Text size="B300">跳转到原消息</Text>
-                </Button>
-              )}
-              <Button
-                size="300"
-                variant="Secondary"
-                radii="300"
-                onClick={handleRemove}
-                disabled={removeState.status === AsyncStatus.Loading}
-              >
-                {removeState.status === AsyncStatus.Loading && (
-                  <Spinner size="200" variant="Secondary" />
-                )}
-                <Text size="B300">
-                  {removeState.status === AsyncStatus.Loading ? '取消中...' : '取消收藏'}
+        <Box gap="300" justifyContent="SpaceBetween" alignItems="Center" grow="Yes">
+          <Box gap="200" alignItems="Baseline" wrap="Wrap">
+            <Box alignItems="Center" gap="200" wrap="Wrap">
+              <Username>
+                <Text as="span" truncate>
+                  <UsernameBold>{item.metadata.sourceSenderName}</UsernameBold>
                 </Text>
-              </Button>
+              </Username>
+              <Chip variant="Secondary" radii="Pill">
+                <Text size="T200">{item.metadata.sourceRoomName}</Text>
+              </Chip>
+              <Chip variant="SurfaceVariant" radii="Pill">
+                <Text size="T200">{getFavoriteCategoryText(item.category)}</Text>
+              </Chip>
             </Box>
+            <Time
+              ts={item.metadata.sourceTimestamp}
+              hour24Clock={hour24Clock}
+              dateFormatString={dateFormatString}
+            />
           </Box>
 
-          <FavoriteNoteEditor note={note} onSave={onSaveNote} />
+          <Box shrink="No">
+            <Checkbox checked={selected} onClick={onToggleSelect} size="50" variant="Primary" />
+          </Box>
+        </Box>
 
-          {content}
+        {renderMatrixEvent(item.event.getType(), false, item.event, item.metadata.sourceSenderName, getContent)}
+
+        <Box className={css.MediaMetaRow}>
+          <Text size="T200" priority="300">
+            {`\u539f\u6d88\u606f\uff1a${getFavoriteSavedAt(item.metadata.sourceTimestamp)}`}
+          </Text>
+          <Text size="T200" priority="300">
+            {`\u6536\u85cf\u65f6\u95f4\uff1a${getFavoriteSavedAt(item.metadata.favoritedAt)}`}
+          </Text>
+        </Box>
+
+        <FavoriteNoteEditor note={note} onSave={(nextNote) => onSaveNote(item, nextNote)} />
+
+        <Box className={css.FilterCardActions}>
+          {sourceRoomAvailable && (
+            <Button
+              size="300"
+              variant="Secondary"
+              fill="Soft"
+              radii="300"
+              onClick={() => onOpenSource(item.metadata.sourceRoomId, item.metadata.sourceEventId)}
+            >
+              <Text size="B300">{'\u6253\u5f00\u539f\u6d88\u606f'}</Text>
+            </Button>
+          )}
+          <Button
+            size="300"
+            variant="Secondary"
+            radii="300"
+            onClick={() => {
+              if (removeState.status === AsyncStatus.Loading) return;
+              void removeFavorite().catch(() => undefined);
+            }}
+            disabled={removeState.status === AsyncStatus.Loading}
+          >
+            {removeState.status === AsyncStatus.Loading && (
+              <Spinner size="200" variant="Secondary" />
+            )}
+            <Text size="B300">
+              {removeState.status === AsyncStatus.Loading
+                ? '\u53d6\u6d88\u4e2d...'
+                : '\u53d6\u6d88\u6536\u85cf'}
+            </Text>
+          </Button>
         </Box>
       </ModernLayout>
     </SequenceCard>
@@ -570,26 +1198,26 @@ export function Favorites() {
   const { navigateRoom } = useRoomNavigate();
   const favoritesRoom = useFavoritesRoom();
   const favoriteNotesEvent = useAccountData(AccountDataEvent.CinnyFavoriteNotes);
+
   const [mediaAutoLoad] = useSetting(settingsAtom, 'mediaAutoLoad');
   const [urlPreview] = useSetting(settingsAtom, 'urlPreview');
   const [hour24Clock] = useSetting(settingsAtom, 'hour24Clock');
   const [dateFormatString] = useSetting(settingsAtom, 'dateFormatString');
-  const [activeCategory, setActiveCategory] = useState<FavoriteVisibleCategory>('all');
-  const [dateFilter, setDateFilter] = useState<FavoriteDateFilter>('all');
-  const [manageOpen, setManageOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedFavoriteIds, setSelectedFavoriteIds] = useState<Set<string>>(new Set());
 
-  const [favoriteItems, setFavoriteItems] = useState<FavoriteItem[]>(() =>
-    getFavoriteEvents(favoritesRoom)
-  );
+  const [activeCategory, setActiveCategory] = useState<FavoriteCategory>(FAVORITE_CATEGORIES[0]);
+  const [dateFilter, setDateFilter] = useState<FavoriteDateFilter>('all');
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedFavoriteIds, setSelectedFavoriteIds] = useState<string[]>([]);
+  const [favoriteItems, setFavoriteItems] = useState<FavoriteItem[]>([]);
+  const [didInitCategory, setDidInitCategory] = useState(false);
   const [favoriteNotes, setFavoriteNotesState] = useState<Record<string, string>>(() =>
     getFavoriteNotes(favoriteNotesEvent?.getContent<CinnyFavoriteNotesContent>())
   );
 
-  useEffect(() => {
-    setFavoriteItems(getFavoriteEvents(favoritesRoom));
-  }, [favoritesRoom]);
+  const [createFavoritesState, createFavoritesRoom] = useAsyncCallback(
+    useCallback(() => ensureFavoritesRoom(mx), [mx])
+  );
 
   useEffect(() => {
     setFavoriteNotesState(
@@ -598,101 +1226,57 @@ export function Favorites() {
   }, [favoriteNotesEvent]);
 
   useEffect(() => {
-    if (!favoritesRoom) return undefined;
+    if (!favoritesRoom) {
+      setFavoriteItems([]);
+      return undefined;
+    }
 
-    const refresh = () => setFavoriteItems(getFavoriteEvents(favoritesRoom));
+    const refresh = () => {
+      setFavoriteItems(getFavoriteEvents(favoritesRoom));
+    };
 
+    refresh();
     favoritesRoom.on(RoomEvent.Timeline, refresh);
     favoritesRoom.on(RoomEvent.TimelineRefresh, refresh);
+    favoritesRoom.on(RoomEvent.Redaction, refresh);
 
     return () => {
       favoritesRoom.removeListener(RoomEvent.Timeline, refresh);
       favoritesRoom.removeListener(RoomEvent.TimelineRefresh, refresh);
+      favoritesRoom.removeListener(RoomEvent.Redaction, refresh);
     };
   }, [favoritesRoom]);
 
   useEffect(() => {
-    const availableIds = new Set(favoriteItems.map((item) => getFavoriteItemId(item)));
-    setSelectedFavoriteIds((current) => {
-      const next = new Set(Array.from(current).filter((itemId) => availableIds.has(itemId)));
-      return next.size === current.size ? current : next;
-    });
+    const availableIds = new Set(favoriteItems.map(getFavoriteItemId));
+    setSelectedFavoriteIds((currentIds) => currentIds.filter((id) => availableIds.has(id)));
   }, [favoriteItems]);
 
   useEffect(() => {
-    if (
-      activeCategory !== 'all' &&
-      !favoriteItems.some((item) => item.category === activeCategory)
-    ) {
-      setActiveCategory('all');
-    }
-  }, [activeCategory, favoriteItems]);
+    if (didInitCategory) return;
+    if (favoriteItems.length === 0) return;
 
-  const searchedItems = useMemo(() => {
-    const normalizedQuery = searchQuery.trim().toLowerCase();
+    setActiveCategory(getPreferredCategory(favoriteItems));
+    setDidInitCategory(true);
+  }, [didInitCategory, favoriteItems]);
 
-    return favoriteItems.filter((item) => {
-      if (!matchesDateFilter(item.metadata.favoritedAt, dateFilter)) {
-        return false;
-      }
-
-      if (!normalizedQuery) return true;
-
-      const note = favoriteNotes[item.referenceId] ?? '';
-      return `${item.searchBody}\n${note}`.toLowerCase().includes(normalizedQuery);
-    });
-  }, [dateFilter, favoriteItems, favoriteNotes, searchQuery]);
-
-  const favoriteGroups = useMemo(
-    () => getFavoriteGroups(searchedItems, activeCategory),
-    [searchedItems, activeCategory]
-  );
-
-  const visibleItems = useMemo(
-    () => favoriteGroups.flatMap((group) => group.items),
-    [favoriteGroups]
-  );
-
-  const imageViewerItems = useMemo(
-    () => getFavoriteImageViewerItems(visibleItems),
-    [visibleItems]
-  );
-
-  const visibleItemIds = useMemo(
-    () => visibleItems.map((item) => getFavoriteItemId(item)),
-    [visibleItems]
-  );
-
-  const selectedCount = selectedFavoriteIds.size;
-  const selectedVisibleCount = useMemo(
-    () => visibleItemIds.filter((itemId) => selectedFavoriteIds.has(itemId)).length,
-    [selectedFavoriteIds, visibleItemIds]
-  );
-
-  const allVisibleSelected =
-    visibleItemIds.length > 0 && visibleItemIds.every((itemId) => selectedFavoriteIds.has(itemId));
-
-  const mentionClickHandler = useMentionClickHandler(favoritesRoom?.roomId ?? '');
+  const mentionRoomId = favoritesRoom?.roomId ?? '';
+  const mentionClickHandler = useMentionClickHandler(mentionRoomId);
   const spoilerClickHandler = useSpoilerClickHandler();
 
   const linkifyOpts = useMemo<LinkifyOpts>(
     () => ({
       ...LINKIFY_OPTS,
       render: factoryRenderLinkifyWithMention((href) =>
-        renderMatrixMention(
-          mx,
-          favoritesRoom?.roomId ?? '',
-          href,
-          makeMentionCustomProps(mentionClickHandler)
-        )
+        renderMatrixMention(mx, mentionRoomId, href, makeMentionCustomProps(mentionClickHandler))
       ),
     }),
-    [mx, favoritesRoom?.roomId, mentionClickHandler]
+    [mx, mentionRoomId, mentionClickHandler]
   );
 
   const htmlReactParserOptions = useMemo<HTMLReactParserOptions>(
     () =>
-      getReactCustomHtmlParser(mx, favoritesRoom?.roomId ?? '', {
+      getReactCustomHtmlParser(mx, mentionRoomId, {
         linkifyOpts,
         useAuthentication,
         handleSpoilerClick: spoilerClickHandler,
@@ -700,549 +1284,664 @@ export function Favorites() {
       }),
     [
       mx,
-      favoritesRoom?.roomId,
+      mentionRoomId,
       linkifyOpts,
+      useAuthentication,
       mentionClickHandler,
       spoilerClickHandler,
-      useAuthentication,
     ]
   );
 
-  const renderMatrixEvent = useMatrixEventRenderer<[MatrixEvent, FavoriteMessageMetadata]>({
-    [MessageEvent.RoomMessage]: (event, metadata) => (
-      <RenderMessageContent
-        displayName={metadata.sourceSenderName}
-        msgType={event.getContent().msgtype ?? MsgType.Text}
-        ts={event.getTs()}
-        getContent={() => event.getContent()}
-        mediaAutoLoad={mediaAutoLoad}
-        urlPreview={urlPreview}
-        htmlReactParserOptions={htmlReactParserOptions}
-        linkifyOpts={linkifyOpts}
-        outlineAttachment
-        room={favoritesRoom}
-        eventId={event.getId() ?? undefined}
-        imageViewerItems={imageViewerItems}
-      />
-    ),
-    [MessageEvent.Sticker]: (event) => (
-      <MSticker
-        content={event.getContent()}
-        renderImageContent={(props) => (
-          <ImageContent
-            {...props}
-            autoPlay={mediaAutoLoad}
-            viewerItems={imageViewerItems}
-            viewerItemId={event.getId() ?? undefined}
-            renderImage={(imageProps) => <Image {...imageProps} loading="lazy" />}
-            renderViewer={(viewerProps) => <ImageViewer {...viewerProps} />}
-          />
-        )}
-      />
-    ),
-  });
+  const filteredBySearchAndDate = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase();
 
-  const [createState, createFavoritesRoom] = useAsyncCallback(
-    useCallback(() => ensureFavoritesRoom(mx), [mx])
-  );
-  const [batchRemoveState, batchRemoveFavorites] = useAsyncCallback(
-    useCallback(async () => {
-      if (!favoritesRoom || selectedFavoriteIds.size === 0) {
-        return {
-          removedItemIds: [] as string[],
-          removedReferenceIds: [] as string[],
-        };
+    return favoriteItems.filter((item) => {
+      if (!matchesDateFilter(item.metadata.favoritedAt, dateFilter)) {
+        return false;
       }
 
-      const selectedItems = favoriteItems.filter((item) =>
-        selectedFavoriteIds.has(getFavoriteItemId(item))
-      );
-      const removableItems = selectedItems.filter((item) => typeof item.event.getId() === 'string');
-
-      if (removableItems.length === 0) {
-        return {
-          removedItemIds: [] as string[],
-          removedReferenceIds: [] as string[],
-        };
+      if (!normalizedQuery) {
+        return true;
       }
 
-      await Promise.all(
-        removableItems.map((item) =>
-          removeFavoriteMessage(mx, favoritesRoom.roomId, item.event.getId() as string)
-        )
-      );
+      const note = favoriteNotes[item.referenceId] ?? '';
+      const searchableText = [
+        getFavoriteDisplayTitle(item),
+        item.searchBody,
+        note,
+        item.metadata.sourceRoomName,
+        item.metadata.sourceSenderName,
+      ]
+        .join(' ')
+        .toLowerCase();
 
-      await removeFavoriteNotes(
-        mx,
-        removableItems.map((item) => ({
-          sourceRoomId: item.metadata.sourceRoomId,
-          sourceEventId: item.metadata.sourceEventId,
-        }))
-      );
+      return searchableText.includes(normalizedQuery);
+    });
+  }, [favoriteItems, favoriteNotes, searchQuery, dateFilter]);
 
-      return {
-        removedItemIds: removableItems.map((item) => getFavoriteItemId(item)),
-        removedReferenceIds: removableItems.map((item) => item.referenceId),
-      };
-    }, [favoriteItems, favoritesRoom, mx, selectedFavoriteIds])
+  const categoryCounts = useMemo(() => {
+    const counts = {} as Record<FavoriteCategory, number>;
+    FAVORITE_CATEGORIES.forEach((category) => {
+      counts[category] = getCategoryCount(filteredBySearchAndDate, category);
+    });
+    return counts;
+  }, [filteredBySearchAndDate]);
+
+  const favoriteGroups = useMemo(
+    () => getFavoriteGroups(filteredBySearchAndDate, activeCategory),
+    [filteredBySearchAndDate, activeCategory]
   );
 
-  const handleCreateFavoritesRoom = useCallback(() => {
-    if (createState.status === AsyncStatus.Loading) return;
-    createFavoritesRoom().catch(() => {});
-  }, [createFavoritesRoom, createState.status]);
+  const visibleItems = useMemo(
+    () => favoriteGroups.flatMap((group) => group.items),
+    [favoriteGroups]
+  );
 
-  const handleOpenSource: MouseEventHandler<HTMLButtonElement> = (evt) => {
-    const roomId = evt.currentTarget.getAttribute('data-room-id');
-    const eventId = evt.currentTarget.getAttribute('data-event-id') || undefined;
-    if (!roomId) return;
+  const favoriteItemsMap = useMemo(
+    () => new Map(favoriteItems.map((item) => [getFavoriteItemId(item), item])),
+    [favoriteItems]
+  );
 
-    navigateRoom(roomId, eventId);
-  };
+  const favoriteItemsById = useMemo(
+    () => new Map(visibleItems.map((item) => [getFavoriteItemId(item), item])),
+    [visibleItems]
+  );
 
-  const handleToggleSelect = useCallback((itemId: string) => {
-    setSelectedFavoriteIds((current) => {
-      const next = new Set(current);
-      if (next.has(itemId)) {
-        next.delete(itemId);
-      } else {
-        next.add(itemId);
+  const imageViewerItems = useMemo(
+    () => getFavoriteImageViewerItems(visibleItems.filter((item) => item.category === 'image')),
+    [visibleItems]
+  );
+
+  const visibleVideoItems = useMemo(
+    () => visibleItems.filter((item) => item.category === 'video'),
+    [visibleItems]
+  );
+
+  const visibleItemIds = useMemo(() => visibleItems.map(getFavoriteItemId), [visibleItems]);
+  const visibleItemIdSet = useMemo(() => new Set(visibleItemIds), [visibleItemIds]);
+
+  const selectedItems = useMemo(
+    () =>
+      selectedFavoriteIds
+        .map((itemId) => favoriteItemsMap.get(itemId))
+        .filter((item): item is FavoriteItem => item !== undefined),
+    [favoriteItemsMap, selectedFavoriteIds]
+  );
+
+  const visibleSelectedCount = useMemo(
+    () => selectedFavoriteIds.filter((itemId) => visibleItemIdSet.has(itemId)).length,
+    [selectedFavoriteIds, visibleItemIdSet]
+  );
+
+  const allVisibleSelected =
+    visibleItemIds.length > 0 && visibleSelectedCount === visibleItemIds.length;
+  const hasSelection = selectedFavoriteIds.length > 0;
+  const hasAdvancedFilters = dateFilter !== 'all' || searchQuery.trim().length > 0;
+  const hasActiveFilters = hasAdvancedFilters;
+
+  const renderMatrixEvent = useMatrixEventRenderer<[MatrixEvent, string, GetContentCallback]>(
+    {
+      [MessageEvent.RoomMessage]: (event, displayName, getContent) => (
+        <RenderMessageContent
+          displayName={displayName}
+          msgType={event.getContent().msgtype ?? ''}
+          ts={event.getTs()}
+          edited={Boolean(event.replacingEvent())}
+          getContent={getContent}
+          mediaAutoLoad={mediaAutoLoad}
+          urlPreview={urlPreview}
+          htmlReactParserOptions={htmlReactParserOptions}
+          linkifyOpts={linkifyOpts}
+          outlineAttachment
+          room={favoritesRoom}
+          eventId={event.getId() ?? undefined}
+          imageViewerItems={imageViewerItems}
+        />
+      ),
+      [MessageEvent.Sticker]: (event, _displayName, getContent) => (
+        <MSticker
+          content={getContent()}
+          renderImageContent={(props) => (
+            <ImageContent
+              {...props}
+              autoPlay={mediaAutoLoad}
+              viewerItems={imageViewerItems}
+              viewerItemId={event.getId() ?? undefined}
+              renderImage={(renderProps) => (
+                <Image
+                  alt={renderProps.alt}
+                  title={renderProps.title}
+                  src={renderProps.src}
+                  loading="lazy"
+                  onLoad={renderProps.onLoad}
+                  onError={renderProps.onError}
+                  onClick={renderProps.onClick}
+                />
+              )}
+              renderViewer={(viewerProps) => <ImageViewer {...viewerProps} />}
+            />
+          )}
+        />
+      ),
+    },
+    undefined,
+    (event) => (
+      <Box direction="Column">
+        <Text size="T300" priority="300">
+          {`${event.getType()} \u6682\u4e0d\u652f\u6301\u5728\u6536\u85cf\u4e2d\u9884\u89c8`}
+        </Text>
+      </Box>
+    )
+  );
+
+  const removeItemsFromLocalState = useCallback((itemsToRemove: FavoriteItem[]) => {
+    if (itemsToRemove.length === 0) return;
+
+    const removedIds = new Set(itemsToRemove.map(getFavoriteItemId));
+    const removedReferences = new Set(itemsToRemove.map((item) => item.referenceId));
+
+    setFavoriteItems((items) => items.filter((item) => !removedIds.has(getFavoriteItemId(item))));
+    setSelectedFavoriteIds((itemIds) => itemIds.filter((itemId) => !removedIds.has(itemId)));
+    setFavoriteNotesState((notes) => {
+      const nextNotes = { ...notes };
+      removedReferences.forEach((referenceId) => {
+        delete nextNotes[referenceId];
+      });
+      return nextNotes;
+    });
+  }, []);
+
+  const handleOpenSource = useCallback<FavoriteOpenSourceHandler>(
+    (sourceRoomId, sourceEventId) => {
+      if (!mx.getRoom(sourceRoomId)) return;
+      navigateRoom(sourceRoomId, sourceEventId);
+    },
+    [mx, navigateRoom]
+  );
+
+  const handleToggleSelect = useCallback((item: FavoriteItem) => {
+    const itemId = getFavoriteItemId(item);
+    setSelectedFavoriteIds((currentIds) => {
+      if (currentIds.includes(itemId)) {
+        return currentIds.filter((id) => id !== itemId);
       }
-      return next;
+      return [...currentIds, itemId];
     });
   }, []);
 
   const handleToggleSelectVisible = useCallback(() => {
-    setSelectedFavoriteIds((current) => {
-      const next = new Set(current);
+    if (visibleItemIds.length === 0) return;
 
-      if (allVisibleSelected) {
-        visibleItemIds.forEach((itemId) => {
-          next.delete(itemId);
-        });
-      } else {
-        visibleItemIds.forEach((itemId) => {
-          next.add(itemId);
-        });
+    setSelectedFavoriteIds((currentIds) => {
+      if (visibleItemIds.every((itemId) => currentIds.includes(itemId))) {
+        return currentIds.filter((itemId) => !visibleItemIdSet.has(itemId));
       }
 
-      return next;
+      const nextIds = new Set(currentIds);
+      visibleItemIds.forEach((itemId) => nextIds.add(itemId));
+      return Array.from(nextIds);
     });
-  }, [allVisibleSelected, visibleItemIds]);
+  }, [visibleItemIds, visibleItemIdSet]);
 
   const handleClearSelection = useCallback(() => {
-    setSelectedFavoriteIds(new Set());
+    setSelectedFavoriteIds([]);
   }, []);
 
-  const handleSaveNote = useCallback(
-    async (sourceRoomId: string, sourceEventId: string, note: string) => {
-      const referenceId = getFavoriteReferenceId(sourceRoomId, sourceEventId);
-      const trimmedNote = note.trim();
-      let previousNote: string | undefined;
+  const handleResetFilters = useCallback(() => {
+    setActiveCategory(getPreferredCategory(favoriteItems));
+    setDateFilter('all');
+    setSearchQuery('');
+  }, [favoriteItems]);
 
-      setFavoriteNotesState((current) => {
-        previousNote = current[referenceId];
-        const next = { ...current };
+  const handleSaveNote = useCallback<FavoriteSaveNoteHandler>(
+    async (item, note) => {
+      const referenceId = item.referenceId;
+      const previousNote = favoriteNotes[referenceId];
 
+      setFavoriteNotesState((notes) => {
+        const nextNotes = { ...notes };
+        const trimmedNote = note.trim();
         if (trimmedNote) {
-          next[referenceId] = trimmedNote;
+          nextNotes[referenceId] = trimmedNote;
         } else {
-          delete next[referenceId];
+          delete nextNotes[referenceId];
         }
-
-        return next;
+        return nextNotes;
       });
 
       try {
-        await setFavoriteNote(mx, sourceRoomId, sourceEventId, trimmedNote);
+        await setFavoriteNote(mx, item.metadata.sourceRoomId, item.metadata.sourceEventId, note);
       } catch (error) {
-        setFavoriteNotesState((current) => {
-          const next = { ...current };
+        setFavoriteNotesState((notes) => {
+          const nextNotes = { ...notes };
           if (previousNote) {
-            next[referenceId] = previousNote;
+            nextNotes[referenceId] = previousNote;
           } else {
-            delete next[referenceId];
+            delete nextNotes[referenceId];
           }
-          return next;
+          return nextNotes;
         });
         throw error;
       }
     },
-    [mx]
+    [favoriteNotes, mx]
   );
 
   const handleRemoveFavorite = useCallback(
-    (item: FavoriteItem) => {
-      const itemId = getFavoriteItemId(item);
+    async (item: FavoriteItem) => {
+      if (!favoritesRoom) return;
 
-      setFavoriteItems((items) => items.filter((favoriteItem) => getFavoriteItemId(favoriteItem) !== itemId));
-      setSelectedFavoriteIds((current) => {
-        if (!current.has(itemId)) return current;
+      const eventId = item.event.getId();
+      if (!eventId) return;
 
-        const next = new Set(current);
-        next.delete(itemId);
-        return next;
-      });
-      setFavoriteNotesState((current) => {
-        if (!(item.referenceId in current)) return current;
-
-        const next = { ...current };
-        delete next[item.referenceId];
-        return next;
-      });
-
-      removeFavoriteNote(mx, item.metadata.sourceRoomId, item.metadata.sourceEventId).catch(() => {});
+      await removeFavoriteMessage(mx, favoritesRoom.roomId, eventId);
+      await removeFavoriteNote(mx, item.metadata.sourceRoomId, item.metadata.sourceEventId);
+      removeItemsFromLocalState([item]);
     },
-    [mx]
+    [favoritesRoom, mx, removeItemsFromLocalState]
+  );
+
+  const [batchRemoveState, batchRemoveFavorites] = useAsyncCallback(
+    useCallback(
+      async (itemsToRemove: FavoriteItem[]) => {
+        if (!favoritesRoom || itemsToRemove.length === 0) return;
+
+        await Promise.all(
+          itemsToRemove.map(async (item) => {
+            const eventId = item.event.getId();
+            if (!eventId) return;
+            await removeFavoriteMessage(mx, favoritesRoom.roomId, eventId);
+          })
+        );
+
+        await removeFavoriteNotes(
+          mx,
+          itemsToRemove.map((item) => ({
+            sourceRoomId: item.metadata.sourceRoomId,
+            sourceEventId: item.metadata.sourceEventId,
+          }))
+        );
+      },
+      [favoritesRoom, mx]
+    )
   );
 
   const handleBatchRemove = () => {
-    if (batchRemoveState.status === AsyncStatus.Loading || selectedCount === 0) return;
+    if (batchRemoveState.status === AsyncStatus.Loading || selectedItems.length === 0) return;
 
-    batchRemoveFavorites()
-      .then((result) => {
-        if (!result || result.removedItemIds.length === 0) return;
-
-        const removedIds = new Set(result.removedItemIds);
-        const removedReferenceIds = new Set(result.removedReferenceIds);
-
-        setFavoriteItems((items) =>
-          items.filter((item) => !removedIds.has(getFavoriteItemId(item)))
-        );
-        setSelectedFavoriteIds((current) => {
-          const next = new Set(current);
-          result.removedItemIds.forEach((itemId) => next.delete(itemId));
-          return next;
-        });
-        setFavoriteNotesState((current) => {
-          const next = { ...current };
-          removedReferenceIds.forEach((referenceId) => {
-            delete next[referenceId];
-          });
-          return next;
-        });
+    batchRemoveFavorites(selectedItems)
+      .then(() => {
+        removeItemsFromLocalState(selectedItems);
       })
-      .catch(() => {});
+      .catch(() => undefined);
   };
 
-  const hasRoom = !!favoritesRoom;
-  const loadingRoom = createState.status === AsyncStatus.Loading;
-  const showGroupedHeading = activeCategory === 'all';
-  const hasFavorites = favoriteItems.length > 0;
-  const hasVisibleItems = visibleItems.length > 0;
-  const hasSearchQuery = searchQuery.trim().length > 0;
-  const hasActiveFilter = hasSearchQuery || dateFilter !== 'all' || activeCategory !== 'all';
-  const managementSummary = useMemo(() => {
-    const summaryParts: string[] = [];
+  const handleCreateFavorites = () => {
+    if (createFavoritesState.status === AsyncStatus.Loading) return;
+    void createFavoritesRoom().catch(() => undefined);
+  };
 
-    if (hasSearchQuery) {
-      summaryParts.push(`关键词：${searchQuery.trim()}`);
-    }
-    if (dateFilter !== 'all') {
-      summaryParts.push(`时间：${getDateFilterLabel(dateFilter)}`);
-    }
-    if (activeCategory !== 'all') {
-      summaryParts.push(`分类：${getFavoriteCategoryLabel(activeCategory)}`);
-    }
-    if (selectedCount > 0) {
-      summaryParts.push(`已选 ${selectedCount} 条`);
+  const filterSummary = [
+    `${visibleItems.length}\u6761\u7ed3\u679c`,
+    `${selectedFavoriteIds.length}\u6761\u5df2\u9009`,
+    `\u5206\u7c7b\uff1a${getFavoriteCategoryText(activeCategory)}`,
+    `\u65f6\u95f4\uff1a${getDateFilterLabel(dateFilter)}`,
+    searchQuery.trim() ? `\u5173\u952e\u8bcd\uff1a${searchQuery.trim()}` : undefined,
+  ]
+    .filter(Boolean)
+    .join(' \xb7 ');
+
+  const renderContent = () => {
+    if (!favoritesRoom) {
+      return (
+        <FavoritesEmpty
+          loading={createFavoritesState.status === AsyncStatus.Loading}
+          hasRoom={false}
+          onCreate={handleCreateFavorites}
+        />
+      );
     }
 
-    if (summaryParts.length === 0) {
-      return `当前显示 ${visibleItems.length} 条收藏，可展开后搜索、筛选或批量管理。`;
+    if (favoriteItems.length === 0 && !hasActiveFilters) {
+      return <FavoritesEmpty loading={false} hasRoom onCreate={handleCreateFavorites} />;
     }
 
-    return `当前显示 ${visibleItems.length} 条收藏，${summaryParts.join('，')}。`;
-  }, [
-    activeCategory,
-    dateFilter,
-    hasSearchQuery,
-    searchQuery,
-    selectedCount,
-    visibleItems.length,
-  ]);
+    return (
+      <Box direction="Column" gap="300">
+        <SequenceCard
+          variant="SurfaceVariant"
+          direction="Column"
+          gap="300"
+          style={{
+            position: 'sticky',
+            top: config.space.S300,
+            zIndex: 3,
+            padding: config.space.S400,
+            boxShadow: '0 16px 42px rgba(15, 23, 42, 0.08)',
+          }}
+        >
+          <Box className={css.FilterCardSection} direction="Column">
+            <Text className={css.FilterCardLabel} size="T200" priority="300">
+              {'\u5185\u5bb9\u5206\u7c7b'}
+            </Text>
+            <Box className={css.FilterCardActions}>
+              {FAVORITE_VISIBLE_CATEGORIES.map((category) => {
+                const active = activeCategory === category;
+                return (
+                  <Chip
+                    key={category}
+                    variant={active ? 'Primary' : 'SurfaceVariant'}
+                    fill={active ? 'Solid' : 'Soft'}
+                    radii="Pill"
+                    onClick={() => setActiveCategory(category)}
+                  >
+                    <Text size="B300">
+                      {`${getFavoriteCategoryText(category)} ${categoryCounts[category]}`}
+                    </Text>
+                  </Chip>
+                );
+              })}
+            </Box>
+          </Box>
+
+          <Line size="300" />
+
+          <Box className={css.FilterCardSection} direction="Column" gap="200">
+            <Box justifyContent="SpaceBetween" alignItems="Center" wrap="Wrap" gap="200">
+              <Text size="L400">
+                {visibleItems.length > 0
+                  ? `\u5171 ${visibleItems.length} \u6761\u7ed3\u679c`
+                  : '\u6ca1\u6709\u5339\u914d\u7ed3\u679c'}
+                {hasSelection ? ` \xb7 \u5df2\u9009\u62e9 ${selectedFavoriteIds.length} \u6761` : ''}
+              </Text>
+
+              <Box className={css.FilterCardActions}>
+                <Button
+                  size="300"
+                  variant="Secondary"
+                  fill="Soft"
+                  radii="300"
+                  onClick={handleToggleSelectVisible}
+                  disabled={visibleItemIds.length === 0}
+                >
+                  <Text size="B300">
+                    {allVisibleSelected
+                      ? '\u53d6\u6d88\u9009\u62e9\u5f53\u524d\u7ed3\u679c'
+                      : '\u5168\u9009\u5f53\u524d\u7ed3\u679c'}
+                  </Text>
+                </Button>
+                <Button
+                  size="300"
+                  variant="Secondary"
+                  fill="Soft"
+                  radii="300"
+                  onClick={handleClearSelection}
+                  disabled={!hasSelection}
+                >
+                  <Text size="B300">{'\u6e05\u7a7a\u9009\u62e9'}</Text>
+                </Button>
+                <Button
+                  size="300"
+                  variant="Critical"
+                  radii="300"
+                  onClick={handleBatchRemove}
+                  disabled={!hasSelection || batchRemoveState.status === AsyncStatus.Loading}
+                >
+                  {batchRemoveState.status === AsyncStatus.Loading && (
+                    <Spinner size="200" variant="Secondary" />
+                  )}
+                  <Text size="B300">
+                    {batchRemoveState.status === AsyncStatus.Loading
+                      ? '\u53d6\u6d88\u4e2d...'
+                      : '\u6279\u91cf\u53d6\u6d88\u6536\u85cf'}
+                  </Text>
+                </Button>
+                {hasActiveFilters && (
+                  <Button
+                    size="300"
+                    variant="Secondary"
+                    fill="Soft"
+                    radii="300"
+                    onClick={handleResetFilters}
+                  >
+                    <Text size="B300">{'\u91cd\u7f6e\u7b5b\u9009'}</Text>
+                  </Button>
+                )}
+                <Button
+                  size="300"
+                  variant="Secondary"
+                  fill="Soft"
+                  radii="300"
+                  onClick={() => setFiltersOpen((open) => !open)}
+                >
+                  <Text size="B300">
+                    {filtersOpen ? '\u6536\u8d77\u9ad8\u7ea7\u7b5b\u9009' : '\u9ad8\u7ea7\u7b5b\u9009'}
+                  </Text>
+                </Button>
+              </Box>
+            </Box>
+
+            <Text size="T200" priority="300">
+              {filterSummary}
+            </Text>
+          </Box>
+
+          {filtersOpen && (
+            <>
+              <Line size="300" />
+
+              <Box direction="Column" gap="300">
+                <Box className={css.FilterCardSection} direction="Column">
+                  <Text className={css.FilterCardLabel} size="T200" priority="300">
+                    {'\u641c\u7d22'}
+                  </Text>
+                  <Input
+                    size="300"
+                    variant="Secondary"
+                    radii="300"
+                    value={searchQuery}
+                    placeholder="\u641c\u7d22\u6d88\u606f\u5185\u5bb9\u3001\u5907\u6ce8\u3001\u53d1\u9001\u8005\u6216\u623f\u95f4"
+                    onChange={(evt: React.ChangeEvent<HTMLInputElement>) =>
+                      setSearchQuery(evt.target.value)
+                    }
+                  />
+                </Box>
+
+                <Box className={css.FilterCardSection} direction="Column">
+                  <Text className={css.FilterCardLabel} size="T200" priority="300">
+                    {'\u6309\u6536\u85cf\u65f6\u95f4\u7b5b\u9009'}
+                  </Text>
+                  <Box className={css.FilterCardActions}>
+                    {DATE_FILTER_OPTIONS.map((option) => {
+                      const active = dateFilter === option.id;
+                      return (
+                        <Chip
+                          key={option.id}
+                          variant={active ? 'Primary' : 'SurfaceVariant'}
+                          fill={active ? 'Solid' : 'Soft'}
+                          radii="Pill"
+                          onClick={() => setDateFilter(option.id)}
+                        >
+                          <Text size="B300">{option.label}</Text>
+                        </Chip>
+                      );
+                    })}
+                  </Box>
+                </Box>
+
+                <Text size="T200" priority="300">
+                  {'\u641c\u7d22\u548c\u65f6\u95f4\u6761\u4ef6\u4f1a\u5f71\u54cd\u9876\u90e8\u5404\u5206\u7c7b\u7684\u6570\u91cf\u7edf\u8ba1\u3002'}
+                </Text>
+              </Box>
+            </>
+          )}
+        </SequenceCard>
+
+        {batchRemoveState.status === AsyncStatus.Error && (
+          <SequenceCard
+            variant="Critical"
+            direction="Column"
+            gap="200"
+            style={{ padding: config.space.S300 }}
+          >
+            <Text size="T300">
+              {'\u6279\u91cf\u53d6\u6d88\u6536\u85cf\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5\u3002'}
+            </Text>
+          </SequenceCard>
+        )}
+
+        {visibleItems.length === 0 ? (
+          <PageHeroEmpty>
+            <PageHeroSection>
+              <PageHero
+                icon={<Icon size="600" src={Icons.Search} />}
+                title={'\u6ca1\u6709\u627e\u5230\u5339\u914d\u7684\u6536\u85cf'}
+                subTitle={
+                  '\u53ef\u4ee5\u8c03\u6574\u5206\u7c7b\u3001\u5173\u952e\u8bcd\u6216\u65f6\u95f4\u8303\u56f4\uff0c\u4e5f\u53ef\u4ee5\u76f4\u63a5\u91cd\u7f6e\u7b5b\u9009\u3002'
+                }
+              >
+                {hasActiveFilters && (
+                  <Box justifyContent="Center">
+                    <Button onClick={handleResetFilters}>
+                      <Text size="B400">{'\u91cd\u7f6e\u7b5b\u9009'}</Text>
+                    </Button>
+                  </Box>
+                )}
+              </PageHero>
+            </PageHeroSection>
+          </PageHeroEmpty>
+        ) : (
+          favoriteGroups.map((group) => (
+            <Box key={group.category} direction="Column" gap="200">
+              <Box justifyContent="SpaceBetween" alignItems="Center" wrap="Wrap" gap="200">
+                <Text size="H4">{getFavoriteCategoryText(group.category)}</Text>
+                <Text size="T200" priority="300">
+                  {`${group.items.length} \u6761`}
+                </Text>
+              </Box>
+
+              {isGalleryCategory(group.category) ? (
+                <Box className={css.MediaGrid}>
+                  {group.items.map((item) => {
+                    if (group.category === 'image') {
+                      const imageContent = getFavoriteImageContent(item);
+                      if (!imageContent) {
+                        return (
+                          <Box key={getFavoriteItemId(item)} style={{ gridColumn: '1 / -1' }}>
+                            <FavoriteCard
+                              item={item}
+                              note={favoriteNotes[item.referenceId]}
+                              hour24Clock={hour24Clock}
+                              dateFormatString={dateFormatString}
+                              selected={selectedFavoriteIds.includes(getFavoriteItemId(item))}
+                              renderMatrixEvent={renderMatrixEvent}
+                              onToggleSelect={() => handleToggleSelect(item)}
+                              onOpenSource={handleOpenSource}
+                              onRemoveFavorite={handleRemoveFavorite}
+                              onSaveNote={handleSaveNote}
+                            />
+                          </Box>
+                        );
+                      }
+
+                      return (
+                        <FavoriteImageCard
+                          key={getFavoriteItemId(item)}
+                          item={item}
+                          note={favoriteNotes[item.referenceId]}
+                          hour24Clock={hour24Clock}
+                          dateFormatString={dateFormatString}
+                          selected={selectedFavoriteIds.includes(getFavoriteItemId(item))}
+                          imageViewerItems={imageViewerItems}
+                          favoriteItemsById={favoriteItemsById}
+                          favoriteNotes={favoriteNotes}
+                          onToggleSelect={() => handleToggleSelect(item)}
+                          onOpenSource={handleOpenSource}
+                          onRemoveFavorite={handleRemoveFavorite}
+                          onSaveNote={handleSaveNote}
+                        />
+                      );
+                    }
+
+                    const videoContent = getFavoriteVideoContent(item);
+                    if (!videoContent) {
+                      return (
+                        <Box key={getFavoriteItemId(item)} style={{ gridColumn: '1 / -1' }}>
+                          <FavoriteCard
+                            item={item}
+                            note={favoriteNotes[item.referenceId]}
+                            hour24Clock={hour24Clock}
+                            dateFormatString={dateFormatString}
+                            selected={selectedFavoriteIds.includes(getFavoriteItemId(item))}
+                            renderMatrixEvent={renderMatrixEvent}
+                            onToggleSelect={() => handleToggleSelect(item)}
+                            onOpenSource={handleOpenSource}
+                            onRemoveFavorite={handleRemoveFavorite}
+                            onSaveNote={handleSaveNote}
+                          />
+                        </Box>
+                      );
+                    }
+
+                    return (
+                      <FavoriteVideoCard
+                        key={getFavoriteItemId(item)}
+                        item={item}
+                        note={favoriteNotes[item.referenceId]}
+                        hour24Clock={hour24Clock}
+                        dateFormatString={dateFormatString}
+                        selected={selectedFavoriteIds.includes(getFavoriteItemId(item))}
+                        videoItems={visibleVideoItems}
+                        favoriteNotes={favoriteNotes}
+                        onToggleSelect={() => handleToggleSelect(item)}
+                        onOpenSource={handleOpenSource}
+                        onRemoveFavorite={handleRemoveFavorite}
+                        onSaveNote={handleSaveNote}
+                      />
+                    );
+                  })}
+                </Box>
+              ) : (
+                <Box direction="Column" gap="200">
+                  {group.items.map((item) => (
+                    <FavoriteCard
+                      key={getFavoriteItemId(item)}
+                      item={item}
+                      note={favoriteNotes[item.referenceId]}
+                      hour24Clock={hour24Clock}
+                      dateFormatString={dateFormatString}
+                      selected={selectedFavoriteIds.includes(getFavoriteItemId(item))}
+                      renderMatrixEvent={renderMatrixEvent}
+                      onToggleSelect={() => handleToggleSelect(item)}
+                      onOpenSource={handleOpenSource}
+                      onRemoveFavorite={handleRemoveFavorite}
+                      onSaveNote={handleSaveNote}
+                    />
+                  ))}
+                </Box>
+              )}
+            </Box>
+          ))
+        )}
+      </Box>
+    );
+  };
 
   return (
     <Page>
       <PageHeader balance>
-        <Box grow="Yes" direction="Column" gap="300">
-          <Box alignItems="Center" justifyContent="SpaceBetween" gap="300">
-            <Box direction="Column" gap="100" grow="Yes">
-              <Text size="H3">收藏</Text>
-              <Text size="T300" priority="300">
-                默认收藏保存在 Matrix 收藏房间里。现在支持按内容或备注搜索、按日期筛选、批量取消收藏和添加备注。
-              </Text>
-            </Box>
-
-            <Box shrink="No" gap="200" alignItems="Center">
-              {hasFavorites && (
-                <Chip variant="SurfaceVariant" radii="Pill">
-                  <Text size="B300">{`${favoriteItems.length} 条`}</Text>
-                </Chip>
-              )}
-              {!hasRoom && (
-                <Button
-                  size="300"
-                  variant="Secondary"
-                  onClick={handleCreateFavoritesRoom}
-                  disabled={createState.status === AsyncStatus.Loading}
-                >
-                  {createState.status === AsyncStatus.Loading && (
-                    <Spinner size="200" variant="Secondary" />
-                  )}
-                  <Text size="B300">
-                    {createState.status === AsyncStatus.Loading
-                      ? '创建中...'
-                      : '创建收藏房间'}
-                  </Text>
-                </Button>
-              )}
-            </Box>
-          </Box>
+        <Box grow="Yes" alignItems="Center" justifyContent="Center" gap="200">
+          <Icon size="400" src={Icons.Heart} filled />
+          <Text size="H3" truncate>
+            {'\u6211\u7684\u6536\u85cf'}
+          </Text>
         </Box>
       </PageHeader>
 
-      <Box grow="Yes">
+      <Box grow="Yes" style={{ position: 'relative' }}>
         <Scroll hideTrack visibility="Hover">
           <PageContent>
-            <PageContentCenter>
-              <Box direction="Column" gap="400" style={{ width: '100%' }}>
-                {hasFavorites && (
-                  <SequenceCard
-                    variant="SurfaceVariant"
-                    direction="Column"
-                    gap="300"
-                    style={{ padding: config.space.S300 }}
-                  >
-                    <Box alignItems="Center" justifyContent="SpaceBetween" gap="300" wrap="Wrap">
-                      <Box direction="Column" gap="100" grow="Yes" style={{ minWidth: 0 }}>
-                        <Text size="L400">筛选与管理</Text>
-                        <Text size="T300" priority="300">
-                          {managementSummary}
-                        </Text>
-                      </Box>
-                      <Box shrink="No" gap="200" wrap="Wrap">
-                        {hasActiveFilter && (
-                          <Button
-                            variant="Secondary"
-                            fill="Soft"
-                            radii="300"
-                            onClick={() => {
-                              setSearchQuery('');
-                              setDateFilter('all');
-                              setActiveCategory('all');
-                            }}
-                          >
-                            <Text size="B300">重置筛选</Text>
-                          </Button>
-                        )}
-                        <Button
-                          size="300"
-                          variant="Secondary"
-                          fill="Soft"
-                          radii="300"
-                          onClick={() => setManageOpen((current) => !current)}
-                        >
-                          <Text size="B300">{manageOpen ? '收起筛选与管理' : '展开筛选与管理'}</Text>
-                        </Button>
-                      </Box>
-                    </Box>
-
-                    {manageOpen && (
-                      <>
-                        <Line size="300" />
-                        <Input
-                          size="400"
-                          variant="Secondary"
-                          radii="300"
-                          placeholder="搜索收藏内容或备注"
-                          value={searchQuery}
-                          onChange={(evt: React.ChangeEvent<HTMLInputElement>) =>
-                            setSearchQuery(evt.target.value)
-                          }
-                          before={<Icon size="200" src={Icons.Search} />}
-                        />
-                        <Box direction="Column" gap="100">
-                          <Text size="T200" priority="300">
-                            日期筛选
-                          </Text>
-                          <Box gap="200" wrap="Wrap">
-                            {DATE_FILTER_OPTIONS.map((option) => (
-                              <Button
-                                key={option.id}
-                                size="300"
-                                variant={dateFilter === option.id ? 'Primary' : 'Secondary'}
-                                fill={dateFilter === option.id ? 'Solid' : 'Soft'}
-                                radii="300"
-                                onClick={() => setDateFilter(option.id)}
-                              >
-                                <Text size="B300">{option.label}</Text>
-                              </Button>
-                            ))}
-                          </Box>
-                        </Box>
-                        <Box direction="Column" gap="100">
-                          <Text size="T200" priority="300">
-                            内容分类
-                          </Text>
-                          <Box gap="200" wrap="Wrap">
-                            {FAVORITE_VISIBLE_CATEGORIES.map((category) => (
-                              <Button
-                                key={category}
-                                size="300"
-                                variant={activeCategory === category ? 'Primary' : 'Secondary'}
-                                fill={activeCategory === category ? 'Solid' : 'Soft'}
-                                radii="300"
-                                onClick={() => setActiveCategory(category)}
-                              >
-                                <Text size="B300">
-                                  {`${getFavoriteCategoryLabel(category)} ${getCategoryCount(
-                                    searchedItems,
-                                    category
-                                  )}`}
-                                </Text>
-                              </Button>
-                            ))}
-                          </Box>
-                        </Box>
-                        <Line size="300" />
-                        <Box gap="200" wrap="Wrap">
-                          <Chip variant="SurfaceVariant" radii="Pill">
-                            <Text size="B300">{`${visibleItems.length} 条结果`}</Text>
-                          </Chip>
-                          <Chip variant="SurfaceVariant" radii="Pill">
-                            <Text size="B300">{`${selectedCount} 条已选`}</Text>
-                          </Chip>
-                          {selectedVisibleCount > 0 && selectedVisibleCount !== selectedCount && (
-                            <Chip variant="Secondary" radii="Pill">
-                              <Text size="B300">{`当前结果中已选 ${selectedVisibleCount} 条`}</Text>
-                            </Chip>
-                          )}
-                          <Button
-                            size="300"
-                            variant="Secondary"
-                            fill="Soft"
-                            radii="300"
-                            onClick={handleToggleSelectVisible}
-                            disabled={visibleItems.length === 0}
-                          >
-                            <Text size="B300">
-                              {allVisibleSelected ? '取消全选当前结果' : '全选当前结果'}
-                            </Text>
-                          </Button>
-                          <Button
-                            size="300"
-                            variant="Secondary"
-                            fill="Soft"
-                            radii="300"
-                            onClick={handleClearSelection}
-                            disabled={selectedCount === 0}
-                          >
-                            <Text size="B300">清空选择</Text>
-                          </Button>
-                          <Button
-                            size="300"
-                            variant="Critical"
-                            fill="Soft"
-                            radii="300"
-                            onClick={handleBatchRemove}
-                            disabled={
-                              selectedCount === 0 || batchRemoveState.status === AsyncStatus.Loading
-                            }
-                          >
-                            {batchRemoveState.status === AsyncStatus.Loading && (
-                              <Spinner size="200" variant="Secondary" />
-                            )}
-                            <Text size="B300">
-                              {batchRemoveState.status === AsyncStatus.Loading
-                                ? '批量取消中...'
-                                : '批量取消收藏'}
-                            </Text>
-                          </Button>
-                        </Box>
-                      </>
-                    )}
-                  </SequenceCard>
-                )}
-
-                {(loadingRoom || !hasFavorites) && (
-                  <FavoritesEmpty
-                    loading={loadingRoom}
-                    hasRoom={hasRoom}
-                    onCreate={handleCreateFavoritesRoom}
-                  />
-                )}
-
-                {hasFavorites && !hasVisibleItems && (
-                  <SequenceCard
-                    variant="SurfaceVariant"
-                    direction="Column"
-                    gap="200"
-                    style={{ padding: config.space.S400 }}
-                  >
-                    <Text size="L400">没有找到匹配的收藏</Text>
-                    <Text size="T300" priority="300">
-                      试试调整关键词、日期范围或分类条件。
-                    </Text>
-                  </SequenceCard>
-                )}
-
-                {hasVisibleItems && favoritesRoom && (
-                  <Box direction="Column" gap="500">
-                    {favoriteGroups.map((group, groupIndex) => (
-                      <Box key={group.category} direction="Column" gap="300">
-                        {showGroupedHeading && groupIndex > 0 && <Line size="300" />}
-                        {showGroupedHeading && (
-                          <Box
-                            alignItems="Center"
-                            justifyContent="SpaceBetween"
-                            gap="200"
-                            wrap="Wrap"
-                            style={{ paddingTop: groupIndex === 0 ? config.space.S100 : 0 }}
-                          >
-                            <Text size="H4">{getFavoriteCategoryLabel(group.category)}</Text>
-                            <Chip variant="SurfaceVariant" radii="Pill">
-                              <Text size="B300">{`${group.items.length} 条`}</Text>
-                            </Chip>
-                          </Box>
-                        )}
-
-                        <Box direction="Column" gap="300">
-                          {group.items.map((item) => (
-                            <FavoriteCard
-                              key={getFavoriteItemId(item)}
-                              favoritesRoom={favoritesRoom}
-                              item={item}
-                              content={renderMatrixEvent(
-                                item.event.getType(),
-                                false,
-                                item.event,
-                                item.metadata
-                              )}
-                              hour24Clock={hour24Clock}
-                              dateFormatString={dateFormatString}
-                              showSelection={manageOpen}
-                              selected={selectedFavoriteIds.has(getFavoriteItemId(item))}
-                              note={favoriteNotes[item.referenceId]}
-                              onToggleSelect={() => handleToggleSelect(getFavoriteItemId(item))}
-                              onOpenSource={handleOpenSource}
-                              onRemoved={handleRemoveFavorite}
-                              onSaveNote={(note) =>
-                                handleSaveNote(
-                                  item.metadata.sourceRoomId,
-                                  item.metadata.sourceEventId,
-                                  note
-                                )
-                              }
-                            />
-                          ))}
-                        </Box>
-                      </Box>
-                    ))}
-                  </Box>
-                )}
-              </Box>
-            </PageContentCenter>
+            <PageContentCenter>{renderContent()}</PageContentCenter>
           </PageContent>
         </Scroll>
       </Box>
