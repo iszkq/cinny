@@ -39,9 +39,36 @@ export const SpreadsheetViewerState = style([
 export const ErrorMessage = style([
   DefaultReset,
   {
-    maxWidth: '480px',
+    maxWidth: '560px',
     textAlign: 'center',
     wordBreak: 'break-word',
+  },
+]);
+
+export const PasswordForm = style([
+  DefaultReset,
+  {
+    width: 'min(100%, 520px)',
+  },
+]);
+
+export const PasswordRow = style([
+  DefaultReset,
+  {
+    display: 'grid',
+    gridTemplateColumns: '1fr auto',
+    gap: config.space.S200,
+    width: '100%',
+    alignItems: 'center',
+  },
+]);
+
+export const PasswordHint = style([
+  DefaultReset,
+  {
+    textAlign: 'center',
+    maxWidth: '560px',
+    lineHeight: '1.45',
   },
 ]);
 
@@ -82,19 +109,6 @@ export const SheetPreview = style([
   },
 ]);
 
-export const SheetPreviewInner = style([
-  DefaultReset,
-  {
-    display: 'inline-block',
-    minWidth: '100%',
-    padding: config.space.S300,
-    border: `${config.borderWidth.B300} solid ${color.Surface.ContainerLine}`,
-    borderRadius: config.radii.R400,
-    backgroundColor: color.Surface.Container,
-    boxShadow: '0 12px 32px rgba(15, 23, 42, 0.08)',
-  },
-]);
-
 export const EmptySheet = style([
   DefaultReset,
   {
@@ -103,37 +117,53 @@ export const EmptySheet = style([
     alignItems: 'center',
     justifyContent: 'center',
     padding: config.space.S600,
+    border: `${config.borderWidth.B300} solid ${color.Surface.ContainerLine}`,
+    borderRadius: config.radii.R400,
+    backgroundColor: color.Surface.Container,
   },
 ]);
 
-globalStyle(`${SheetPreviewInner} table`, {
-  borderCollapse: 'collapse',
-  width: 'max-content',
-  minWidth: '100%',
-  backgroundColor: color.Surface.Container,
+export const Table = style([
+  DefaultReset,
+  {
+    borderCollapse: 'collapse',
+    width: 'max-content',
+    minWidth: '100%',
+    backgroundColor: color.Surface.Container,
+    border: `${config.borderWidth.B300} solid ${color.Surface.ContainerLine}`,
+    borderRadius: config.radii.R400,
+    overflow: 'hidden',
+    boxShadow: '0 12px 32px rgba(15, 23, 42, 0.08)',
+  },
+]);
+
+export const Cell = style([
+  DefaultReset,
+  {
+    minWidth: '40px',
+    padding: `${config.space.S150} ${config.space.S200}`,
+    border: `${config.borderWidth.B300} solid ${color.Surface.ContainerLine}`,
+    verticalAlign: 'top',
+    whiteSpace: 'pre-wrap',
+    wordBreak: 'break-word',
+    lineHeight: '1.45',
+    backgroundColor: color.Surface.Container,
+  },
+]);
+
+export const CellText = style([
+  DefaultReset,
+  {
+    display: 'block',
+    minHeight: '1.45em',
+  },
+]);
+
+globalStyle(`${CellText} p`, {
+  margin: 0,
 });
 
-globalStyle(`${SheetPreviewInner} tr:nth-child(even) td`, {
-  backgroundColor: 'rgba(148, 163, 184, 0.06)',
-});
-
-globalStyle(`${SheetPreviewInner} td, ${SheetPreviewInner} th`, {
-  minWidth: '96px',
-  maxWidth: '360px',
-  padding: `${config.space.S150} ${config.space.S200}`,
-  border: `${config.borderWidth.B300} solid ${color.Surface.ContainerLine}`,
-  verticalAlign: 'top',
-  whiteSpace: 'pre-wrap',
-  wordBreak: 'break-word',
-  lineHeight: '1.45',
-  fontSize: '0.9375rem',
-});
-
-globalStyle(`${SheetPreviewInner} th`, {
-  backgroundColor: 'rgba(148, 163, 184, 0.12)',
-  fontWeight: '600',
-});
-
-globalStyle(`${SheetPreviewInner} td`, {
-  backgroundColor: color.Surface.Container,
+globalStyle(`${CellText} span`, {
+  font: 'inherit',
+  color: 'inherit',
 });
