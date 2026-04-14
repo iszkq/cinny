@@ -333,6 +333,20 @@ const getErrorMessage = (error: unknown): string | undefined => {
   return undefined;
 };
 
+const shouldShowSpreadsheetDebugMessage = (message?: string): boolean => {
+  if (!message) return false;
+
+  return !(
+    /bad password|invalid password|incorrect password|wrong password|decrypt/i.test(message) ||
+    /central directory|zip file|compressed folder/i.test(message) ||
+    /failed to load spreadsheet encryption runtime|spreadsheet encryption runtime/i.test(message) ||
+    /password-protected|unsupported encryption|encrypted/i.test(message) ||
+    /preview engine is not loaded/i.test(message) ||
+    /timed out/i.test(message) ||
+    /password is required/i.test(message)
+  );
+};
+
 const getSpreadsheetDisplayError = (message?: string): string | undefined => {
   if (!message) return undefined;
   if (
@@ -906,6 +920,11 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
                   {getSpreadsheetDisplayError(unlockErrorMessage)}
                 </Text>
               )}
+              {shouldShowSpreadsheetDebugMessage(unlockErrorMessage) && (
+                <Text className={css.ErrorMessage} size="T200" priority="400">
+                  {unlockErrorMessage}
+                </Text>
+              )}
               <Box
                 as="form"
                 className={css.PasswordForm}
@@ -945,6 +964,11 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
               {getSpreadsheetDisplayError(blockingErrorMessage) && (
                 <Text className={css.ErrorMessage} size="T200" priority="300">
                   {getSpreadsheetDisplayError(blockingErrorMessage)}
+                </Text>
+              )}
+              {shouldShowSpreadsheetDebugMessage(blockingErrorMessage) && (
+                <Text className={css.ErrorMessage} size="T200" priority="400">
+                  {blockingErrorMessage}
                 </Text>
               )}
               {passwordRetrySupported && (
