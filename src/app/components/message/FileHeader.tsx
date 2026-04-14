@@ -2,7 +2,7 @@ import { Badge, Box, Icon, IconButton, Icons, Spinner, Text, as, toRem } from 'f
 import React, { ReactNode, useCallback } from 'react';
 import { EncryptedAttachmentInfo } from 'browser-encrypt-attachment';
 import FileSaver from 'file-saver';
-import { mimeTypeToExt } from '../../utils/mimeTypes';
+import { getFileNameExt, mimeTypeToExt } from '../../utils/mimeTypes';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
@@ -63,20 +63,27 @@ export type FileHeaderProps = {
   mimeType: string;
   after?: ReactNode;
 };
-export const FileHeader = as<'div', FileHeaderProps>(({ body, mimeType, after, ...props }, ref) => (
-  <Box alignItems="Center" gap="200" grow="Yes" {...props} ref={ref}>
-    <Box shrink="No">
-      <Badge style={badgeStyles} variant="Secondary" radii="Pill">
-        <Text size="O400" truncate>
-          {mimeTypeToExt(mimeType)}
-        </Text>
-      </Badge>
-    </Box>
-    <Box grow="Yes">
-      <Text size="T300" truncate>
-        {body}
-      </Text>
-    </Box>
-    {after}
-  </Box>
-));
+export const FileHeader = as<'div', FileHeaderProps>(
+  ({ body, mimeType, after, ...props }, ref) => {
+    const nameExt = getFileNameExt(body);
+    const extLabel = nameExt && nameExt !== body ? nameExt : mimeTypeToExt(mimeType);
+
+    return (
+      <Box alignItems="Center" gap="200" grow="Yes" {...props} ref={ref}>
+        <Box shrink="No">
+          <Badge style={badgeStyles} variant="Secondary" radii="Pill">
+            <Text size="O400" truncate>
+              {extLabel}
+            </Text>
+          </Badge>
+        </Box>
+        <Box grow="Yes">
+          <Text size="T300" truncate>
+            {body}
+          </Text>
+        </Box>
+        {after}
+      </Box>
+    );
+  }
+);
