@@ -20,12 +20,13 @@ import {
   XLSXWorksheet,
   useXLSXLoader,
 } from '../../plugins/xlsx';
+import { decryptSpreadsheetArrayBuffer } from '../../plugins/xlsx-populate';
 import { PasswordInput } from '../password-input';
 import { getFileNameExt } from '../../utils/mimeTypes';
 import { useZoom } from '../../hooks/useZoom';
 import * as css from './SpreadsheetViewer.css';
 
-const MODERN_ENCRYPTED_EXTS = new Set(['xlsx', 'xlsm', 'xlsb', 'xlam']);
+const MODERN_ENCRYPTED_EXTS = new Set(['xlsx', 'xlsm', 'xltx', 'xltm', 'xlam']);
 const ZOOM_STEP = 0.2;
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 5;
@@ -58,6 +59,12 @@ type RenderedSheet = {
 };
 
 type WorksheetMatrix = unknown[][];
+
+type SpreadsheetDecryptState =
+  | { status: AsyncStatus.Idle }
+  | { status: AsyncStatus.Loading }
+  | { status: AsyncStatus.Success; data: ArrayBuffer }
+  | { status: AsyncStatus.Error; error: unknown };
 
 const isCellObject = (value: unknown): value is XLSXCell =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -333,6 +340,9 @@ const getSpreadsheetDisplayError = (message?: string): string | undefined => {
   ) {
     return '\u5bc6\u7801\u4e0d\u6b63\u786e\uff0c\u8bf7\u91cd\u65b0\u8f93\u5165\u3002';
   }
+  if (/central directory|zip file|compressed folder/i.test(message)) {
+    return '\u5bc6\u7801\u4e0d\u6b63\u786e\uff0c\u6216\u8005\u6587\u4ef6\u5185\u5bb9\u65e0\u6cd5\u89e3\u5bc6\uff0c\u8bf7\u786e\u8ba4\u540e\u91cd\u8bd5\u3002';
+  }
   if (
     /failed to load spreadsheet encryption runtime|spreadsheet encryption runtime/i.test(message)
   ) {
@@ -343,6 +353,12 @@ const getSpreadsheetDisplayError = (message?: string): string | undefined => {
   }
   if (/preview engine is not loaded/i.test(message)) {
     return '\u8868\u683c\u9884\u89c8\u5f15\u64ce\u5c1a\u672a\u52a0\u8f7d\u5b8c\u6210\u3002';
+  }
+  if (/timed out/i.test(message)) {
+    return '\u89e3\u5bc6\u7b49\u5f85\u8d85\u65f6\uff0c\u8bf7\u91cd\u65b0\u8f93\u5165\u5bc6\u7801\u518d\u8bd5\u4e00\u6b21\u3002';
+  }
+  if (/password is required/i.test(message)) {
+    return '\u8bf7\u5148\u8f93\u5165\u5bc6\u7801\u3002';
   }
 
   return '\u8868\u683c\u9884\u89c8\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5\u6216\u4e0b\u8f7d\u540e\u67e5\u770b\u3002';
@@ -532,14 +548,57 @@ type SpreadsheetViewerProps = {
 export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
   ({ className, name, data, mimeType, requestClose, ...props }, ref) => {
     const scrollRef = useRef<HTMLDivElement>(null);
+    const decryptRequestIdRef = useRef(0);
     const [xlsxState, loadXlsx] = useXLSXLoader();
     const [activeSheetName, setActiveSheetName] = useState<string>();
     const [passwordInput, setPasswordInput] = useState('');
     const [submittedPassword, setSubmittedPassword] = useState<string>();
+    const [decryptState, setDecryptState] = useState<SpreadsheetDecryptState>({
+      status: AsyncStatus.Idle,
+    });
+    const [workbookReady, setWorkbookReady] = useState(false);
     const { zoom, zoomIn, zoomOut, setZoom } = useZoom(ZOOM_STEP, MIN_ZOOM, MAX_ZOOM);
     const modernEncryptedWorkbook = useMemo(
       () => isModernEncryptedWorkbookData(name, data),
       [data, name]
+    );
+    const decryptedData =
+      decryptState.status === AsyncStatus.Success ? decryptState.data : undefined;
+    const workbookInputData = decryptedData ?? data;
+
+    const unlockModernWorkbook = useCallback(
+      async (password: string) => {
+        const trimmedPassword = password.trim();
+        const requestId = decryptRequestIdRef.current + 1;
+        decryptRequestIdRef.current = requestId;
+
+        setDecryptState({ status: AsyncStatus.Loading });
+        setWorkbookReady(false);
+
+        try {
+          const decryptedBuffer = await decryptSpreadsheetArrayBuffer(data, trimmedPassword);
+
+          if (decryptRequestIdRef.current !== requestId) {
+            return;
+          }
+
+          setDecryptState({
+            status: AsyncStatus.Success,
+            data: decryptedBuffer,
+          });
+        } catch (error) {
+          if (decryptRequestIdRef.current !== requestId) {
+            return;
+          }
+
+          setDecryptState({
+            status: AsyncStatus.Error,
+            error,
+          });
+          throw error;
+        }
+      },
+      [data]
     );
 
     const [workbookState, loadWorkbook] = useAsyncCallback(
@@ -549,12 +608,12 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
             throw new Error('Spreadsheet preview engine is not loaded');
           }
 
-          if (modernEncryptedWorkbook) {
-            throw new Error('Unsupported encryption for modern spreadsheet');
+          if (modernEncryptedWorkbook && !decryptedData) {
+            throw new Error('Password-protected spreadsheet requires unlocking');
           }
 
           const trimmedPassword = password?.trim() || undefined;
-          return xlsxState.data.read(data, {
+          return xlsxState.data.read(workbookInputData, {
             type: 'array',
             dense: false,
             cellDates: true,
@@ -562,17 +621,20 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
             cellHTML: true,
             cellStyles: true,
             cellNF: true,
-            password: trimmedPassword || undefined,
+            password: decryptedData ? undefined : trimmedPassword || undefined,
           });
         },
-        [data, modernEncryptedWorkbook, xlsxState]
+        [decryptedData, modernEncryptedWorkbook, workbookInputData, xlsxState]
       )
     );
 
     useEffect(() => {
+      decryptRequestIdRef.current += 1;
       setPasswordInput('');
       setSubmittedPassword(undefined);
       setActiveSheetName(undefined);
+      setDecryptState({ status: AsyncStatus.Idle });
+      setWorkbookReady(false);
       setZoom(1);
     }, [data, name, setZoom]);
 
@@ -581,10 +643,36 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
     }, [loadXlsx]);
 
     useEffect(() => {
-      if (xlsxState.status === AsyncStatus.Success) {
-        loadWorkbook(submittedPassword).catch(() => undefined);
+      if (xlsxState.status !== AsyncStatus.Success) {
+        return;
       }
-    }, [xlsxState, loadWorkbook, submittedPassword]);
+
+      if (modernEncryptedWorkbook && !decryptedData) {
+        return;
+      }
+
+      setWorkbookReady(false);
+      loadWorkbook(submittedPassword).catch(() => undefined);
+    }, [decryptedData, loadWorkbook, modernEncryptedWorkbook, submittedPassword, xlsxState]);
+
+    useEffect(
+      () => () => {
+        decryptRequestIdRef.current += 1;
+      },
+      []
+    );
+
+    useEffect(() => {
+      if (workbookState.status === AsyncStatus.Success) {
+        setWorkbookReady(true);
+      }
+    }, [workbookState]);
+
+    useEffect(() => {
+      if (decryptState.status === AsyncStatus.Success) {
+        setPasswordInput('');
+      }
+    }, [decryptState]);
 
     useEffect(() => {
       if (workbookState.status !== AsyncStatus.Success) return;
@@ -643,33 +731,51 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
       );
     }, [activeSheetName, workbookState, xlsxState]);
 
+    const modernUnlockRequired = modernEncryptedWorkbook && !decryptedData;
+    const pendingWorkbookRender =
+      !modernUnlockRequired &&
+      !workbookReady &&
+      xlsxState.status === AsyncStatus.Success &&
+      workbookState.status !== AsyncStatus.Error;
     const isLoading =
-      xlsxState.status === AsyncStatus.Loading || workbookState.status === AsyncStatus.Loading;
-    const isError =
-      xlsxState.status === AsyncStatus.Error || workbookState.status === AsyncStatus.Error;
-    const errorMessage = useMemo(() => {
+      xlsxState.status === AsyncStatus.Loading ||
+      decryptState.status === AsyncStatus.Loading ||
+      (!modernUnlockRequired && workbookState.status === AsyncStatus.Loading) ||
+      pendingWorkbookRender;
+    const blockingErrorMessage = useMemo(() => {
       if (xlsxState.status === AsyncStatus.Error) {
         return getErrorMessage(xlsxState.error);
       }
 
-      if (workbookState.status === AsyncStatus.Error) {
+      if (!modernUnlockRequired && workbookState.status === AsyncStatus.Error) {
         return getErrorMessage(workbookState.error);
       }
 
       return undefined;
-    }, [workbookState, xlsxState]);
+    }, [modernUnlockRequired, workbookState, xlsxState]);
+    const unlockErrorMessage = useMemo(() => {
+      if (decryptState.status !== AsyncStatus.Error) {
+        return undefined;
+      }
 
-    const passwordProtected = isPasswordProtectedError(errorMessage);
-    const passwordRetrySupported = passwordProtected && isLegacyPasswordSupported(name, mimeType);
-    const modernEncryptedSpreadsheet =
-      modernEncryptedWorkbook || (passwordProtected && isModernEncryptedSpreadsheet(name));
+      return getErrorMessage(decryptState.error);
+    }, [decryptState]);
+    const passwordProtected = isPasswordProtectedError(blockingErrorMessage);
+    const passwordRetrySupported =
+      !modernUnlockRequired && passwordProtected && isLegacyPasswordSupported(name, mimeType);
+    const showModernUnlockPanel =
+      modernUnlockRequired && xlsxState.status !== AsyncStatus.Error && !isLoading;
+    const showBlockingError = Boolean(blockingErrorMessage) && !showModernUnlockPanel;
     const handleRetry = () => {
-      if (modernEncryptedSpreadsheet) {
+      if (xlsxState.status === AsyncStatus.Error) {
+        loadXlsx().catch(() => undefined);
         return;
       }
 
-      if (xlsxState.status === AsyncStatus.Error) {
-        loadXlsx().catch(() => undefined);
+      if (modernUnlockRequired) {
+        if (submittedPassword?.trim()) {
+          unlockModernWorkbook(submittedPassword).catch(() => undefined);
+        }
         return;
       }
 
@@ -678,9 +784,15 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
 
     const handlePasswordSubmit: FormEventHandler<HTMLFormElement> = (evt) => {
       evt.preventDefault();
-      if (!passwordInput.trim()) return;
+      const trimmedPassword = passwordInput.trim();
+      if (!trimmedPassword) return;
 
-      setSubmittedPassword(passwordInput);
+      setSubmittedPassword(trimmedPassword);
+
+      if (modernUnlockRequired) {
+        unlockModernWorkbook(trimmedPassword).catch(() => undefined);
+        return;
+      }
     };
 
     const handleDownload = () => {
@@ -688,7 +800,7 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
     };
 
     const summaryText =
-      workbookState.status === AsyncStatus.Success && renderedSheet
+      workbookReady && workbookState.status === AsyncStatus.Success && renderedSheet
         ? [
             `${workbookState.data.SheetNames.length} \u4e2a\u5de5\u4f5c\u8868`,
             `${renderedSheet.totalRows} \u884c`,
@@ -739,7 +851,7 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
               <Icon size="50" src={Icons.Plus} />
             </IconButton>
 
-            {workbookState.status === AsyncStatus.Success && activeSheetIndex >= 0 && (
+            {workbookReady && workbookState.status === AsyncStatus.Success && activeSheetIndex >= 0 && (
               <Chip variant="SurfaceVariant" radii="Pill">
                 <Text size="B300">{`${activeSheetIndex + 1}/${workbookState.data.SheetNames.length}`}</Text>
               </Chip>
@@ -775,7 +887,53 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
             </Box>
           )}
 
-          {isError && (
+          {showModernUnlockPanel && (
+            <Box
+              className={css.SpreadsheetViewerState}
+              direction="Column"
+              gap="300"
+              alignItems="Center"
+              justifyContent="Center"
+            >
+              <Text size="T300">{'\u8bf7\u8f93\u5165\u5de5\u4f5c\u7c3f\u5bc6\u7801'}</Text>
+              <Text className={css.PasswordHint} size="T200" priority="300">
+                {
+                  '\u68c0\u6d4b\u5230\u65b0\u7248\u52a0\u5bc6\u8868\u683c\uff0c\u53ef\u4ee5\u5728\u6d4f\u89c8\u5668\u672c\u5730\u5b8c\u6210\u89e3\u5bc6\u5e76\u5728\u7ebf\u9884\u89c8\uff0c\u65e0\u9700\u5148\u4e0b\u8f7d\u3002'
+                }
+              </Text>
+              {getSpreadsheetDisplayError(unlockErrorMessage) && (
+                <Text className={css.ErrorMessage} size="T200" priority="300">
+                  {getSpreadsheetDisplayError(unlockErrorMessage)}
+                </Text>
+              )}
+              <Box
+                as="form"
+                className={css.PasswordForm}
+                direction="Column"
+                gap="200"
+                onSubmit={handlePasswordSubmit}
+              >
+                <Box className={css.PasswordRow} alignItems="Center" gap="200">
+                  <PasswordInput
+                    size="400"
+                    variant="Secondary"
+                    name="workbookPassword"
+                    placeholder={'\u8bf7\u8f93\u5165\u5de5\u4f5c\u7c3f\u5bc6\u7801'}
+                    value={passwordInput}
+                    onChange={(evt: React.ChangeEvent<HTMLInputElement>) =>
+                      setPasswordInput(evt.target.value)
+                    }
+                    required
+                  />
+                  <Button type="submit" size="300" variant="Primary" radii="300">
+                    <Text size="B300">{'\u89e3\u9501\u5e76\u9884\u89c8'}</Text>
+                  </Button>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {showBlockingError && (
             <Box
               className={css.SpreadsheetViewerState}
               direction="Column"
@@ -784,9 +942,9 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
               justifyContent="Center"
             >
               <Text size="T300">{'\u8868\u683c\u9884\u89c8\u52a0\u8f7d\u5931\u8d25\u3002'}</Text>
-              {getSpreadsheetDisplayError(errorMessage) && (
+              {getSpreadsheetDisplayError(blockingErrorMessage) && (
                 <Text className={css.ErrorMessage} size="T200" priority="300">
-                  {getSpreadsheetDisplayError(errorMessage)}
+                  {getSpreadsheetDisplayError(blockingErrorMessage)}
                 </Text>
               )}
               {passwordRetrySupported && (
@@ -827,27 +985,25 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
                   </Box>
                 </Box>
               )}
-              {modernEncryptedSpreadsheet && (
-                <Text className={css.PasswordHint} size="T200" priority="300">
-                  {'\u5f53\u524d\u65b0\u7248\u52a0\u5bc6\u5de5\u4f5c\u7c3f\u6682\u4e0d\u652f\u6301\u524d\u7aef\u5728\u7ebf\u89e3\u9501\uff0c\u5426\u5219\u5bb9\u6613\u5bfc\u81f4\u9875\u9762\u5361\u4f4f\uff0c\u8bf7\u4e0b\u8f7d\u540e\u4f7f\u7528\u672c\u5730\u529e\u516c\u8f6f\u4ef6\u6253\u5f00\u3002'}
-                </Text>
-              )}
-              {!modernEncryptedSpreadsheet && (
-                <Button
-                  variant="Critical"
-                  fill="Soft"
-                  size="300"
-                  radii="300"
-                  before={<Icon src={Icons.Warning} size="50" />}
-                  onClick={handleRetry}
-                >
-                  <Text size="B300">{'\u91cd\u8bd5'}</Text>
-                </Button>
-              )}
+              <Button
+                variant="Critical"
+                fill="Soft"
+                size="300"
+                radii="300"
+                before={<Icon src={Icons.Warning} size="50" />}
+                onClick={handleRetry}
+              >
+                <Text size="B300">{'\u91cd\u8bd5'}</Text>
+              </Button>
             </Box>
           )}
 
-          {!isLoading && !isError && workbookState.status === AsyncStatus.Success && renderedSheet && (
+          {!isLoading &&
+            !showModernUnlockPanel &&
+            !showBlockingError &&
+            workbookReady &&
+            workbookState.status === AsyncStatus.Success &&
+            renderedSheet && (
             <>
               <Box className={css.SpreadsheetStage} grow="Yes" style={{ minHeight: 0 }}>
                 <Scroll
