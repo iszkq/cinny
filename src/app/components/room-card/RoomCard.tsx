@@ -120,7 +120,7 @@ function ErrorDialog({
                   </Text>
                 </Box>
                 <Button size="400" variant="Secondary" fill="Soft" onClick={closeError}>
-                  <Text size="B400">Cancel</Text>
+                  <Text size="B400">关闭</Text>
                 </Button>
               </Box>
             </Dialog>
@@ -224,7 +224,7 @@ export const RoomCard = as<'div', RoomCardProps>(
           </Avatar>
           {(roomType === RoomType.Space || joinedRoom?.isSpaceRoom()) && (
             <Badge variant="Secondary" fill="Soft" outlined>
-              <Text size="L400">Space</Text>
+              <Text size="L400">空间</Text>
             </Badge>
           )}
         </Box>
@@ -252,7 +252,7 @@ export const RoomCard = as<'div', RoomCardProps>(
         {typeof joinedMemberCount === 'number' && (
           <Box gap="100">
             <Icon size="50" src={Icons.User} />
-            <Text size="T200">{`${millify(joinedMemberCount)} Members`}</Text>
+            <Text size="T200">{`${millify(joinedMemberCount)} 位成员`}</Text>
           </Box>
         )}
         {typeof joinedRoomId === 'string' && (
@@ -263,7 +263,7 @@ export const RoomCard = as<'div', RoomCardProps>(
             size="300"
           >
             <Text size="B300" truncate>
-              View
+              查看
             </Text>
           </Button>
         )}
@@ -276,7 +276,7 @@ export const RoomCard = as<'div', RoomCardProps>(
             before={joining && <Spinner size="50" variant="Secondary" fill="Soft" />}
           >
             <Text size="B300" truncate>
-              {joining ? 'Joining' : 'Join'}
+              {joining ? '加入中' : '加入'}
             </Text>
           </Button>
         )}
@@ -290,12 +290,12 @@ export const RoomCard = as<'div', RoomCardProps>(
               size="300"
             >
               <Text size="B300" truncate>
-                Retry
+                重试
               </Text>
             </Button>
             <ErrorDialog
-              title="Join Error"
-              message={joinState.error.message || 'Failed to join. Unknown Error.'}
+              title="加入失败"
+              message={joinState.error.message || '加入失败，发生未知错误。'}
             >
               {(openError) => (
                 <Button
@@ -307,7 +307,7 @@ export const RoomCard = as<'div', RoomCardProps>(
                   size="300"
                 >
                   <Text size="B300" truncate>
-                    View Error
+                    查看错误
                   </Text>
                 </Button>
               )}
