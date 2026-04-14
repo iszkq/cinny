@@ -23,6 +23,11 @@ const copyFiles = {
       rename: 'pdf.worker.min.js',
     },
     {
+      src: 'node_modules/xlsx/dist/xlsx.full.min.js',
+      dest: '',
+      rename: 'xlsx.full.min.js',
+    },
+    {
       src: 'netlify.toml',
       dest: '',
     },
