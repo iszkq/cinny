@@ -6,28 +6,17 @@ import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
 import { useXLSXLoader } from '../../plugins/xlsx';
 import * as css from './SpreadsheetViewer.css';
 
-const MAX_PREVIEW_ROWS = 300;
-const MAX_PREVIEW_COLS = 40;
+const extractSheetHtml = (html: string): string => {
+  const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
 
-const getColumnLabel = (index: number): string => {
-  let label = '';
-  let current = index + 1;
-
-  while (current > 0) {
-    const remainder = (current - 1) % 26;
-    label = String.fromCharCode(65 + remainder) + label;
-    current = Math.floor((current - 1) / 26);
-  }
-
-  return label;
+  return bodyMatch ? bodyMatch[1] : html;
 };
 
-const getCellText = (value: unknown): string => {
-  if (value === undefined || value === null) return '';
-  if (value instanceof Date) return value.toLocaleString();
-  if (typeof value === 'object') return JSON.stringify(value);
+const getErrorMessage = (error: unknown): string | undefined => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
 
-  return String(value);
+  return undefined;
 };
 
 type SpreadsheetViewerProps = {
@@ -53,6 +42,9 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
           dense: true,
           cellDates: true,
           raw: false,
+          cellHTML: true,
+          cellStyles: true,
+          cellNF: true,
         });
       }, [data, xlsxState])
     );
@@ -91,12 +83,10 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
       const sheet = workbookState.data.Sheets[activeSheetName];
       if (!sheet) {
         return {
-          rows: [] as string[][],
+          html: '',
           totalRows: 0,
           totalCols: 0,
-          visibleCols: 0,
-          truncatedRows: false,
-          truncatedCols: false,
+          isEmpty: true,
         };
       }
 
@@ -106,18 +96,13 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
         defval: '',
       }) as unknown[][];
       const totalCols = rawRows.reduce((max, row) => Math.max(max, row.length), 0);
-      const visibleCols = Math.min(totalCols, MAX_PREVIEW_COLS);
-      const rows = rawRows
-        .slice(0, MAX_PREVIEW_ROWS)
-        .map((row) => Array.from({ length: visibleCols }, (_, colIndex) => getCellText(row[colIndex])));
+      const html = extractSheetHtml(xlsxState.data.utils.sheet_to_html(sheet));
 
       return {
-        rows,
+        html,
         totalRows: rawRows.length,
         totalCols,
-        visibleCols,
-        truncatedRows: rawRows.length > MAX_PREVIEW_ROWS,
-        truncatedCols: totalCols > MAX_PREVIEW_COLS,
+        isEmpty: rawRows.length === 0 || totalCols === 0,
       };
     }, [activeSheetName, workbookState, xlsxState]);
 
@@ -125,6 +110,17 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
       xlsxState.status === AsyncStatus.Loading || workbookState.status === AsyncStatus.Loading;
     const isError =
       xlsxState.status === AsyncStatus.Error || workbookState.status === AsyncStatus.Error;
+    const errorMessage = useMemo(() => {
+      if (xlsxState.status === AsyncStatus.Error) {
+        return getErrorMessage(xlsxState.error);
+      }
+
+      if (workbookState.status === AsyncStatus.Error) {
+        return getErrorMessage(workbookState.error);
+      }
+
+      return undefined;
+    }, [workbookState, xlsxState]);
 
     const handleRetry = () => {
       if (xlsxState.status === AsyncStatus.Error) {
@@ -139,22 +135,13 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
       FileSaver.saveAs(new Blob([data], { type: mimeType }), name);
     };
 
-    const columnLabels = Array.from(
-      { length: sheetPreview?.visibleCols ?? 0 },
-      (_, index) => getColumnLabel(index)
-    );
-
     const summaryText =
       workbookState.status === AsyncStatus.Success && sheetPreview
         ? [
             `${workbookState.data.SheetNames.length} sheet(s)`,
             `${sheetPreview.totalRows} row(s)`,
             `${sheetPreview.totalCols} column(s)`,
-            sheetPreview.truncatedRows ? `showing first ${MAX_PREVIEW_ROWS} rows` : undefined,
-            sheetPreview.truncatedCols ? `showing first ${MAX_PREVIEW_COLS} columns` : undefined,
-          ]
-            .filter(Boolean)
-            .join(' · ')
+          ].join(' | ')
         : undefined;
 
     return (
@@ -187,15 +174,32 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
 
         <Box grow="Yes" className={css.SpreadsheetViewerContent} direction="Column">
           {isLoading && (
-            <Box className={css.SpreadsheetViewerState} direction="Column" gap="200" alignItems="Center" justifyContent="Center">
+            <Box
+              className={css.SpreadsheetViewerState}
+              direction="Column"
+              gap="200"
+              alignItems="Center"
+              justifyContent="Center"
+            >
               <Spinner variant="Secondary" size="600" />
               <Text size="T300">Loading spreadsheet...</Text>
             </Box>
           )}
 
           {isError && (
-            <Box className={css.SpreadsheetViewerState} direction="Column" gap="300" alignItems="Center" justifyContent="Center">
+            <Box
+              className={css.SpreadsheetViewerState}
+              direction="Column"
+              gap="300"
+              alignItems="Center"
+              justifyContent="Center"
+            >
               <Text size="T300">Failed to load spreadsheet preview.</Text>
+              {errorMessage && (
+                <Text className={css.ErrorMessage} size="T200" priority="300">
+                  {errorMessage}
+                </Text>
+              )}
               <Button
                 variant="Critical"
                 fill="Soft"
@@ -236,47 +240,19 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
 
               <Box grow="Yes">
                 <Scroll size="300" direction="Both" variant="Background" visibility="Hover">
-                  <div className={css.TableWrapper}>
-                    <table className={css.Table}>
-                      <thead>
-                        <tr>
-                          <th className={css.CornerCell}>#</th>
-                          {columnLabels.map((label) => (
-                            <th key={label} className={css.HeadCell}>
-                              <Text size="B300">{label}</Text>
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {sheetPreview.rows.length === 0 ? (
-                          <tr>
-                            <td className={css.EmptyCell} colSpan={Math.max(columnLabels.length + 1, 1)}>
-                              <Text size="T300" priority="300">
-                                This sheet is empty.
-                              </Text>
-                            </td>
-                          </tr>
-                        ) : (
-                          sheetPreview.rows.map((row, rowIndex) => (
-                            <tr key={`${activeSheetName}-${rowIndex}`}>
-                              <th className={css.IndexCell}>
-                                <Text size="B300">{rowIndex + 1}</Text>
-                              </th>
-                              {columnLabels.map((label, colIndex) => {
-                                const cellText = row[colIndex] ?? '';
-
-                                return (
-                                  <td key={`${label}-${rowIndex}`} className={css.Cell} title={cellText}>
-                                    <Text size="T300">{cellText || ' '}</Text>
-                                  </td>
-                                );
-                              })}
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
+                  <div className={css.SheetPreview}>
+                    {sheetPreview.isEmpty ? (
+                      <div className={css.EmptySheet}>
+                        <Text size="T300" priority="300">
+                          This sheet is empty.
+                        </Text>
+                      </div>
+                    ) : (
+                      <div
+                        className={css.SheetPreviewInner}
+                        dangerouslySetInnerHTML={{ __html: sheetPreview.html }}
+                      />
+                    )}
                   </div>
                 </Scroll>
               </Box>
