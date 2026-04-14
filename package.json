@@ -80,6 +80,7 @@
     "classnames": "2.3.2",
     "dateformat": "5.0.3",
     "dayjs": "1.11.10",
+    "docx-preview": "0.3.6",
     "domhandler": "5.0.3",
     "emojibase": "15.3.1",
     "emojibase-data": "15.3.2",
@@ -116,7 +117,8 @@
     "slate-dom": "0.123.0",
     "slate-history": "0.113.1",
     "slate-react": "0.123.0",
-    "ua-parser-js": "1.0.35"
+    "ua-parser-js": "1.0.35",
+    "xlsx": "0.18.5"
   },
   "devDependencies": {
     "@element-hq/element-call-embedded": "0.16.3",
