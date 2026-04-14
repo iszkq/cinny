@@ -347,6 +347,9 @@ const shouldShowSpreadsheetDebugMessage = (message?: string): boolean => {
   );
 };
 
+const isSpreadsheetPreviewUnavailable = (message?: string): boolean =>
+  Boolean(message && /non-whitespace before first tag|unsupported encryption/i.test(message));
+
 const getSpreadsheetDisplayError = (message?: string): string | undefined => {
   if (!message) return undefined;
   if (
@@ -560,12 +563,14 @@ type SpreadsheetViewerProps = {
   data: ArrayBuffer;
   mimeType: string;
   requestClose: () => void;
+  onPreviewUnavailable?: () => void;
 };
 
 export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
-  ({ className, name, data, mimeType, requestClose, ...props }, ref) => {
+  ({ className, name, data, mimeType, requestClose, onPreviewUnavailable, ...props }, ref) => {
     const scrollRef = useRef<HTMLDivElement>(null);
     const decryptRequestIdRef = useRef(0);
+    const unavailableNotifiedRef = useRef(false);
     const [xlsxState, loadXlsx] = useXLSXLoader();
     const [activeSheetName, setActiveSheetName] = useState<string>();
     const [passwordInput, setPasswordInput] = useState('');
@@ -692,6 +697,10 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
     }, [decryptState]);
 
     useEffect(() => {
+      unavailableNotifiedRef.current = false;
+    }, [data, name]);
+
+    useEffect(() => {
       if (workbookState.status !== AsyncStatus.Success) return;
 
       setActiveSheetName((currentSheetName) => {
@@ -777,6 +786,21 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
 
       return getErrorMessage(decryptState.error);
     }, [decryptState]);
+
+    useEffect(() => {
+      if (!onPreviewUnavailable || unavailableNotifiedRef.current) {
+        return;
+      }
+
+      const message = unlockErrorMessage ?? blockingErrorMessage;
+      if (!isSpreadsheetPreviewUnavailable(message)) {
+        return;
+      }
+
+      unavailableNotifiedRef.current = true;
+      onPreviewUnavailable();
+    }, [blockingErrorMessage, onPreviewUnavailable, unlockErrorMessage]);
+
     const passwordProtected = isPasswordProtectedError(blockingErrorMessage);
     const passwordRetrySupported =
       !modernUnlockRequired && passwordProtected && isLegacyPasswordSupported(name, mimeType);
