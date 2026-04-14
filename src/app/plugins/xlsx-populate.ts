@@ -1,3 +1,5 @@
+import xlsxPopulateRuntimeUrl from './xlsx-populate.runtime.min.js?url';
+
 export type XlsxPopulateWorkbook = {
   outputAsync: (options?: { type?: 'arraybuffer' | 'blob' }) => Promise<ArrayBuffer | Blob>;
 };
@@ -31,6 +33,8 @@ type WorkerDecryptMessage = WorkerDecryptSuccess | WorkerDecryptError;
 
 const XLSX_POPULATE_SCRIPT_ID = 'cinny-xlsx-populate-runtime';
 const XLSX_POPULATE_SCRIPT_URLS = [
+  xlsxPopulateRuntimeUrl,
+  'https://cdn.bootcdn.net/ajax/libs/xlsx-populate/1.21.0/xlsx-populate.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/xlsx-populate/1.21.0/xlsx-populate.min.js',
   'https://cdn.jsdelivr.net/npm/xlsx-populate@1.21.0/browser/xlsx-populate.min.js',
   'https://unpkg.com/xlsx-populate/browser/xlsx-populate.min.js',
