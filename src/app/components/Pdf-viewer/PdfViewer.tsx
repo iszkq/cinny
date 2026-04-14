@@ -1,5 +1,13 @@
 /* eslint-disable no-param-reassign */
-import React, { FormEventHandler, MouseEventHandler, WheelEventHandler, useEffect, useRef, useState } from 'react';
+import React, {
+  FormEventHandler,
+  MouseEventHandler,
+  PointerEventHandler,
+  WheelEventHandler,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import classNames from 'classnames';
 import {
   Box,
@@ -36,11 +44,19 @@ export type PdfViewerProps = {
 const ZOOM_STEP = 0.2;
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 5;
+const PAGE_SWIPE_THRESHOLD = 88;
+const PAGE_SWIPE_VERTICAL_TOLERANCE = 28;
 
 export const PdfViewer = as<'div', PdfViewerProps>(
   ({ className, name, src, requestClose, ...props }, ref) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
+    const gestureRef = useRef<{
+      pointerId: number;
+      startX: number;
+      startY: number;
+      triggered: boolean;
+    }>();
     const { zoom, zoomIn, zoomOut, setZoom } = useZoom(ZOOM_STEP, MIN_ZOOM, MAX_ZOOM);
 
     const [pdfJSState, loadPdfJS] = usePdfJSLoader();
@@ -54,6 +70,7 @@ export const PdfViewer = as<'div', PdfViewerProps>(
       pdfJSState.status === AsyncStatus.Error || docState.status === AsyncStatus.Error;
     const [pageNo, setPageNo] = useState(1);
     const [jumpAnchor, setJumpAnchor] = useState<RectCords>();
+    const [pointerDragging, setPointerDragging] = useState(false);
 
     useEffect(() => {
       loadPdfJS().catch(() => undefined);
@@ -68,7 +85,27 @@ export const PdfViewer = as<'div', PdfViewerProps>(
     useEffect(() => {
       setZoom(1);
       setPageNo(1);
+      setPointerDragging(false);
+      gestureRef.current = undefined;
     }, [setZoom, src]);
+
+    const canPrev = docState.status === AsyncStatus.Success && pageNo > 1;
+    const canNext = docState.status === AsyncStatus.Success && pageNo < docState.data.numPages;
+
+    const goToPage = (nextPage: number) => {
+      if (docState.status !== AsyncStatus.Success) return;
+      setPageNo(Math.max(1, Math.min(docState.data.numPages, nextPage)));
+    };
+
+    const goPrev = () => {
+      if (!canPrev) return;
+      goToPage(pageNo - 1);
+    };
+
+    const goNext = () => {
+      if (!canNext) return;
+      goToPage(pageNo + 1);
+    };
 
     useEffect(() => {
       if (docState.status !== AsyncStatus.Success) return undefined;
@@ -118,7 +155,7 @@ export const PdfViewer = as<'div', PdfViewerProps>(
       const jumpInput = evt.currentTarget.jumpInput as HTMLInputElement;
       if (!jumpInput) return;
       const jumpTo = parseInt(jumpInput.value, 10);
-      setPageNo(Math.max(1, Math.min(docState.data.numPages, jumpTo)));
+      goToPage(jumpTo);
       setJumpAnchor(undefined);
     };
 
@@ -138,6 +175,55 @@ export const PdfViewer = as<'div', PdfViewerProps>(
       });
     };
 
+    const clearGesture = () => {
+      gestureRef.current = undefined;
+      setPointerDragging(false);
+    };
+
+    const handlePointerDown: PointerEventHandler<HTMLDivElement> = (evt) => {
+      if (docState.status !== AsyncStatus.Success || evt.button !== 0) return;
+
+      gestureRef.current = {
+        pointerId: evt.pointerId,
+        startX: evt.clientX,
+        startY: evt.clientY,
+        triggered: false,
+      };
+      setPointerDragging(true);
+      evt.currentTarget.setPointerCapture?.(evt.pointerId);
+    };
+
+    const handlePointerMove: PointerEventHandler<HTMLDivElement> = (evt) => {
+      const gesture = gestureRef.current;
+      if (!gesture || gesture.pointerId !== evt.pointerId || gesture.triggered) return;
+
+      const deltaX = evt.clientX - gesture.startX;
+      const deltaY = evt.clientY - gesture.startY;
+      if (Math.abs(deltaY) > PAGE_SWIPE_VERTICAL_TOLERANCE) return;
+      if (Math.abs(deltaX) < PAGE_SWIPE_THRESHOLD) return;
+
+      if (deltaX < 0) {
+        if (canNext) goNext();
+      } else if (canPrev) {
+        goPrev();
+      }
+
+      gesture.triggered = true;
+      setPointerDragging(false);
+      evt.currentTarget.releasePointerCapture?.(evt.pointerId);
+    };
+
+    const handlePointerUp: PointerEventHandler<HTMLDivElement> = (evt) => {
+      if (gestureRef.current?.pointerId !== evt.pointerId) return;
+      evt.currentTarget.releasePointerCapture?.(evt.pointerId);
+      clearGesture();
+    };
+
+    const handlePointerCancel: PointerEventHandler<HTMLDivElement> = (evt) => {
+      if (gestureRef.current?.pointerId !== evt.pointerId) return;
+      clearGesture();
+    };
+
     return (
       <Box className={classNames(css.PdfViewer, className)} direction="Column" {...props} ref={ref}>
         <Header className={css.PdfViewerHeader} size="400">
@@ -150,6 +236,19 @@ export const PdfViewer = as<'div', PdfViewerProps>(
             </Text>
           </Box>
           <Box shrink="No" alignItems="Center" gap="200" style={{ flexWrap: 'wrap' }}>
+            {docState.status === AsyncStatus.Success && (
+              <IconButton
+                variant="SurfaceVariant"
+                size="300"
+                radii="Pill"
+                onClick={goPrev}
+                disabled={!canPrev}
+                aria-label="\u4e0a\u4e00\u9875"
+              >
+                <Icon size="50" src={Icons.ArrowLeft} />
+              </IconButton>
+            )}
+
             <IconButton
               variant={zoom < 1 ? 'Success' : 'SurfaceVariant'}
               outlined={zoom < 1}
@@ -230,6 +329,19 @@ export const PdfViewer = as<'div', PdfViewerProps>(
               </PopOut>
             )}
 
+            {docState.status === AsyncStatus.Success && (
+              <IconButton
+                variant="SurfaceVariant"
+                size="300"
+                radii="Pill"
+                onClick={goNext}
+                disabled={!canNext}
+                aria-label="\u4e0b\u4e00\u9875"
+              >
+                <Icon size="50" src={Icons.ArrowRight} />
+              </IconButton>
+            )}
+
             <Chip
               variant="Primary"
               onClick={handleDownload}
@@ -286,6 +398,18 @@ export const PdfViewer = as<'div', PdfViewerProps>(
 
           {docState.status === AsyncStatus.Success && (
             <Box className={css.PdfViewerStage} grow="Yes" style={{ minHeight: 0 }}>
+              <IconButton
+                className={classNames(css.NavButton, css.NavButtonLeft)}
+                variant="SurfaceVariant"
+                size="400"
+                radii="Pill"
+                onClick={goPrev}
+                disabled={!canPrev}
+                aria-label="\u4e0a\u4e00\u9875"
+              >
+                <Icon size="100" src={Icons.ArrowLeft} />
+              </IconButton>
+
               <Scroll
                 ref={scrollRef}
                 className={css.PdfViewerViewport}
@@ -295,13 +419,34 @@ export const PdfViewer = as<'div', PdfViewerProps>(
                 visibility="Hover"
                 onWheel={handleWheel}
               >
-                <Box className={css.PdfViewerCanvasShell} alignItems="Center" justifyContent="Center">
+                <Box
+                  className={css.PdfViewerCanvasShell}
+                  alignItems="Center"
+                  justifyContent="Center"
+                  onPointerDown={handlePointerDown}
+                  onPointerMove={handlePointerMove}
+                  onPointerUp={handlePointerUp}
+                  onPointerCancel={handlePointerCancel}
+                  style={{ cursor: pointerDragging ? 'grabbing' : 'grab' }}
+                >
                   <div
                     className={css.PdfViewerContent}
                     ref={containerRef}
                   />
                 </Box>
               </Scroll>
+
+              <IconButton
+                className={classNames(css.NavButton, css.NavButtonRight)}
+                variant="SurfaceVariant"
+                size="400"
+                radii="Pill"
+                onClick={goNext}
+                disabled={!canNext}
+                aria-label="\u4e0b\u4e00\u9875"
+              >
+                <Icon size="100" src={Icons.ArrowRight} />
+              </IconButton>
             </Box>
           )}
         </Box>

@@ -81,3 +81,28 @@ export const PdfViewerContent = style([
     boxShadow: '0 12px 32px rgba(15, 23, 42, 0.08)',
   },
 ]);
+
+export const NavButton = style([
+  DefaultReset,
+  {
+    position: 'absolute',
+    top: '50%',
+    transform: 'translateY(-50%)',
+    zIndex: 1,
+    boxShadow: '0 12px 24px rgba(15, 23, 42, 0.12)',
+    selectors: {
+      '&:disabled': {
+        opacity: 0.45,
+        boxShadow: 'none',
+      },
+    },
+  },
+]);
+
+export const NavButtonLeft = style({
+  left: config.space.S400,
+});
+
+export const NavButtonRight = style({
+  right: config.space.S400,
+});
