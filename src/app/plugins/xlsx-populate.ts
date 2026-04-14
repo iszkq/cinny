@@ -29,14 +29,15 @@ type WorkerDecryptError = {
 
 type WorkerDecryptMessage = WorkerDecryptSuccess | WorkerDecryptError;
 
+const XLSX_POPULATE_SCRIPT_ID = 'cinny-xlsx-populate-runtime';
 const XLSX_POPULATE_SCRIPT_URLS = [
   'https://cdnjs.cloudflare.com/ajax/libs/xlsx-populate/1.21.0/xlsx-populate.min.js',
   'https://cdn.jsdelivr.net/npm/xlsx-populate@1.21.0/browser/xlsx-populate.min.js',
   'https://unpkg.com/xlsx-populate/browser/xlsx-populate.min.js',
 ];
-
 const DEFAULT_DECRYPT_TIMEOUT = 60_000;
 
+let xlsxPopulateRuntimePromise: Promise<XlsxPopulateModule> | undefined;
 let workerScriptUrl: string | undefined;
 
 const getErrorMessage = (error: unknown): string => {
@@ -44,6 +45,131 @@ const getErrorMessage = (error: unknown): string => {
   if (typeof error === 'string') return error;
 
   return 'Spreadsheet decryption failed';
+};
+
+const toArrayBuffer = async (value: ArrayBuffer | Blob): Promise<ArrayBuffer> => {
+  if (value instanceof ArrayBuffer) {
+    return value;
+  }
+
+  return value.arrayBuffer();
+};
+
+const getGlobalXlsxPopulate = (): XlsxPopulateModule | undefined => {
+  const runtime = (globalThis as typeof globalThis & { XlsxPopulate?: XlsxPopulateModule })
+    .XlsxPopulate;
+
+  if (runtime && typeof runtime.fromDataAsync === 'function') {
+    return runtime;
+  }
+
+  return undefined;
+};
+
+const removeRuntimeScript = () => {
+  if (typeof document === 'undefined') return;
+
+  document.getElementById(XLSX_POPULATE_SCRIPT_ID)?.remove();
+};
+
+const loadRuntimeFromScript = (src: string): Promise<XlsxPopulateModule> =>
+  new Promise((resolve, reject) => {
+    const handleComplete = () => {
+      const runtime = getGlobalXlsxPopulate();
+
+      if (!runtime) {
+        reject(new Error('Failed to initialize spreadsheet encryption runtime'));
+        return;
+      }
+
+      resolve(runtime);
+    };
+
+    const handleError = () => {
+      reject(new Error(`Failed to load spreadsheet encryption runtime from ${src}`));
+    };
+
+    const existingScript = document.getElementById(XLSX_POPULATE_SCRIPT_ID) as
+      | HTMLScriptElement
+      | null;
+
+    if (existingScript && existingScript.src === src) {
+      existingScript.addEventListener('load', handleComplete, { once: true });
+      existingScript.addEventListener('error', handleError, { once: true });
+      return;
+    }
+
+    if (existingScript) {
+      existingScript.remove();
+    }
+
+    const script = document.createElement('script');
+    script.id = XLSX_POPULATE_SCRIPT_ID;
+    script.async = true;
+    script.src = src;
+    script.addEventListener('load', handleComplete, { once: true });
+    script.addEventListener('error', handleError, { once: true });
+
+    document.head.appendChild(script);
+  });
+
+const loadXlsxPopulateRuntime = async (): Promise<XlsxPopulateModule> => {
+  const resolved = getGlobalXlsxPopulate();
+  if (resolved) return resolved;
+
+  if (typeof document === 'undefined') {
+    throw new Error('Spreadsheet encryption preview is only available in the browser');
+  }
+
+  if (!xlsxPopulateRuntimePromise) {
+    xlsxPopulateRuntimePromise = (async () => {
+      let lastError: unknown;
+
+      for (const src of XLSX_POPULATE_SCRIPT_URLS) {
+        try {
+          return await loadRuntimeFromScript(src);
+        } catch (error) {
+          lastError = error;
+          removeRuntimeScript();
+        }
+      }
+
+      throw lastError ?? new Error('Failed to load spreadsheet encryption runtime');
+    })().catch((error) => {
+      xlsxPopulateRuntimePromise = undefined;
+      removeRuntimeScript();
+      throw error;
+    });
+  }
+
+  return xlsxPopulateRuntimePromise;
+};
+
+const waitForUiPaint = async () => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  await new Promise<void>((resolve) => {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => resolve());
+    });
+  });
+};
+
+const decryptSpreadsheetInMainThread = async (
+  data: ArrayBuffer,
+  password: string
+): Promise<ArrayBuffer> => {
+  await waitForUiPaint();
+
+  const runtime = await loadXlsxPopulateRuntime();
+  const workbook = await runtime.fromDataAsync(data.slice(0), {
+    password,
+  });
+  const output = await workbook.outputAsync({ type: 'arraybuffer' });
+
+  return toArrayBuffer(output);
 };
 
 const createWorkerSource = (): string => `
@@ -57,6 +183,18 @@ const getErrorMessage = (error) => {
   if (error instanceof Error) return error.message;
   if (typeof error === 'string') return error;
   return 'Spreadsheet decryption failed';
+};
+
+const toArrayBuffer = async (value) => {
+  if (value instanceof ArrayBuffer) {
+    return value;
+  }
+
+  if (value && typeof value.arrayBuffer === 'function') {
+    return value.arrayBuffer();
+  }
+
+  throw new Error('Failed to serialize decrypted spreadsheet');
 };
 
 const loadRuntime = async () => {
@@ -84,18 +222,6 @@ const loadRuntime = async () => {
   }
 
   throw lastError || new Error('Failed to load spreadsheet encryption runtime');
-};
-
-const toArrayBuffer = async (value) => {
-  if (value instanceof ArrayBuffer) {
-    return value;
-  }
-
-  if (value && typeof value.arrayBuffer === 'function') {
-    return value.arrayBuffer();
-  }
-
-  throw new Error('Failed to serialize decrypted spreadsheet');
 };
 
 self.onmessage = async (event) => {
@@ -133,26 +259,17 @@ const getWorkerScriptUrl = (): string => {
   return workerScriptUrl;
 };
 
-export const decryptSpreadsheetArrayBuffer = async (
+const decryptSpreadsheetInWorker = async (
   data: ArrayBuffer,
   password: string,
-  timeoutMs = DEFAULT_DECRYPT_TIMEOUT
+  timeoutMs: number
 ): Promise<ArrayBuffer> => {
-  const trimmedPassword = password.trim();
-
-  if (!trimmedPassword) {
-    throw new Error('Password is required');
-  }
-
-  if (typeof Worker === 'undefined') {
-    throw new Error('Spreadsheet encryption preview is not available in this browser');
-  }
-
   const worker = new Worker(getWorkerScriptUrl());
   const payload = data.slice(0);
 
   return new Promise<ArrayBuffer>((resolve, reject) => {
     let settled = false;
+
     const cleanup = () => {
       settled = true;
       worker.onmessage = null;
@@ -193,9 +310,31 @@ export const decryptSpreadsheetArrayBuffer = async (
     const request: WorkerDecryptRequest = {
       type: 'decrypt',
       data: payload,
-      password: trimmedPassword,
+      password,
     };
 
     worker.postMessage(request, [payload]);
   });
+};
+
+export const decryptSpreadsheetArrayBuffer = async (
+  data: ArrayBuffer,
+  password: string,
+  timeoutMs = DEFAULT_DECRYPT_TIMEOUT
+): Promise<ArrayBuffer> => {
+  const trimmedPassword = password.trim();
+
+  if (!trimmedPassword) {
+    throw new Error('Password is required');
+  }
+
+  if (typeof Worker !== 'undefined') {
+    try {
+      return await decryptSpreadsheetInWorker(data, trimmedPassword, timeoutMs);
+    } catch {
+      // Fallback to main thread when the worker environment cannot initialize the runtime.
+    }
+  }
+
+  return decryptSpreadsheetInMainThread(data, trimmedPassword);
 };
