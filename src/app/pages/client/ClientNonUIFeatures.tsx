@@ -27,6 +27,20 @@ import { useSelectedRoom } from '../../hooks/router/useSelectedRoom';
 import { useInboxNotificationsSelected } from '../../hooks/router/useInbox';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 
+const playAudio = (audioElement: HTMLAudioElement | null) => {
+  if (!audioElement) return;
+
+  try {
+    audioElement.currentTime = 0;
+  } catch {
+    // Ignore seek errors while the browser is still preparing the audio element.
+  }
+  const playPromise = audioElement.play();
+  if (playPromise) {
+    playPromise.catch(() => undefined);
+  }
+};
+
 function SystemEmojiFeature() {
   const [twitterEmoji] = useSetting(settingsAtom, 'twitterEmoji');
 
@@ -104,8 +118,7 @@ function InviteNotifications() {
   );
 
   const playSound = useCallback(() => {
-    const audioElement = audioRef.current;
-    audioElement?.play();
+    playAudio(audioRef.current);
   }, []);
 
   useEffect(() => {
@@ -122,7 +135,7 @@ function InviteNotifications() {
 
   return (
     // eslint-disable-next-line jsx-a11y/media-has-caption
-    <audio ref={audioRef} style={{ display: 'none' }}>
+    <audio ref={audioRef} style={{ display: 'none' }} preload="auto">
       <source src={InviteSound} type="audio/ogg" />
     </audio>
   );
@@ -173,8 +186,7 @@ function MessageNotifications() {
   );
 
   const playSound = useCallback(() => {
-    const audioElement = audioRef.current;
-    audioElement?.play();
+    playAudio(audioRef.current);
   }, []);
 
   useEffect(() => {
@@ -186,7 +198,6 @@ function MessageNotifications() {
       data
     ) => {
       if (mx.getSyncState() !== 'SYNCING') return;
-      if (document.hasFocus() && (selectedRoomId === room?.roomId || notificationSelected)) return;
       if (
         !room ||
         !data.liveEvent ||
@@ -200,19 +211,23 @@ function MessageNotifications() {
       const sender = mEvent.getSender();
       const eventId = mEvent.getId();
       if (!sender || !eventId || mEvent.getSender() === mx.getUserId()) return;
-      const unreadInfo = getUnreadInfo(room);
+      const unreadInfo = getUnreadInfo(mx, room);
       const cachedUnreadInfo = unreadCacheRef.current.get(room.roomId);
       unreadCacheRef.current.set(room.roomId, unreadInfo);
+      const suppressDesktopNotification =
+        document.hasFocus() && (selectedRoomId === room.roomId || notificationSelected);
 
-      if (unreadInfo.total === 0) return;
-      if (
-        cachedUnreadInfo &&
-        unreadEqual(unreadInfoToUnread(cachedUnreadInfo), unreadInfoToUnread(unreadInfo))
-      ) {
-        return;
+      if (!suppressDesktopNotification) {
+        if (unreadInfo.total === 0) return;
+        if (
+          cachedUnreadInfo &&
+          unreadEqual(unreadInfoToUnread(cachedUnreadInfo), unreadInfoToUnread(unreadInfo))
+        ) {
+          return;
+        }
       }
 
-      if (showNotifications && notificationPermission('granted')) {
+      if (!suppressDesktopNotification && showNotifications && notificationPermission('granted')) {
         const avatarMxc =
           room.getAvatarFallbackMember()?.getMxcAvatarUrl() ?? room.getMxcAvatarUrl();
         notify({
@@ -247,7 +262,7 @@ function MessageNotifications() {
 
   return (
     // eslint-disable-next-line jsx-a11y/media-has-caption
-    <audio ref={audioRef} style={{ display: 'none' }}>
+    <audio ref={audioRef} style={{ display: 'none' }} preload="auto">
       <source src={NotificationSound} type="audio/ogg" />
     </audio>
   );
