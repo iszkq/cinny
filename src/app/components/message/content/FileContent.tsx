@@ -1,4 +1,4 @@
-import React, { ReactNode, useCallback, useState } from 'react';
+import React, { ReactNode, useCallback, useEffect, useState } from 'react';
 import {
   Box,
   Button,
@@ -25,6 +25,8 @@ import {
   READABLE_EXT_TO_MIME_TYPE,
   READABLE_TEXT_MIME_TYPES,
   getFileNameExt,
+  getFilePreviewKind,
+  getNormalizedMimeType,
   mimeTypeToExt,
 } from '../../../utils/mimeTypes';
 import { stopPropagation } from '../../../utils/keyboard';
@@ -66,6 +68,51 @@ const renderErrorButton = (retry: () => void, text: string) => (
   </TooltipProvider>
 );
 
+const useLoadRemoteFile = (
+  mimeType: string,
+  url: string,
+  encInfo?: EncryptedAttachmentInfo
+) => {
+  const mx = useMatrixClient();
+  const useAuthentication = useMediaAuthentication();
+
+  return useCallback(async () => {
+    const mediaUrl = mxcUrlToHttp(mx, url, useAuthentication);
+    if (!mediaUrl) throw new Error('Invalid media URL');
+
+    return encInfo
+      ? downloadEncryptedMedia(mediaUrl, (encBuf) => decryptFile(encBuf, mimeType, encInfo))
+      : downloadMedia(mediaUrl);
+  }, [mx, url, useAuthentication, mimeType, encInfo]);
+};
+
+const renderPreviewModal = (
+  open: boolean,
+  requestClose: () => void,
+  content: ReactNode
+) => (
+  <Overlay open={open} backdrop={<OverlayBackdrop />}>
+    <OverlayCenter>
+      <FocusTrap
+        focusTrapOptions={{
+          initialFocus: false,
+          onDeactivate: requestClose,
+          clickOutsideDeactivates: true,
+          escapeDeactivates: stopPropagation,
+        }}
+      >
+        <Modal
+          className={ModalWide}
+          size="500"
+          onContextMenu={(evt: any) => evt.stopPropagation()}
+        >
+          {content}
+        </Modal>
+      </FocusTrap>
+    </OverlayCenter>
+  </Overlay>
+);
+
 type RenderTextViewerProps = {
   name: string;
   text: string;
@@ -80,57 +127,39 @@ type ReadTextFileProps = {
   renderViewer: (props: RenderTextViewerProps) => ReactNode;
 };
 export function ReadTextFile({ body, mimeType, url, encInfo, renderViewer }: ReadTextFileProps) {
-  const mx = useMatrixClient();
-  const useAuthentication = useMediaAuthentication();
   const [textViewer, setTextViewer] = useState(false);
+  const loadRemoteFile = useLoadRemoteFile(mimeType, url, encInfo);
 
   const [textState, loadText] = useAsyncCallback(
     useCallback(async () => {
-      const mediaUrl = mxcUrlToHttp(mx, url, useAuthentication);
-      if (!mediaUrl) throw new Error('Invalid media URL');
-      const fileContent = encInfo
-        ? await downloadEncryptedMedia(mediaUrl, (encBuf) => decryptFile(encBuf, mimeType, encInfo))
-        : await downloadMedia(mediaUrl);
+      const fileContent = await loadRemoteFile();
+      const text = await fileContent.text();
 
-      const text = fileContent.text();
       setTextViewer(true);
       return text;
-    }, [mx, useAuthentication, mimeType, encInfo, url])
+    }, [loadRemoteFile])
   );
+
+  const normalizedMimeType = getNormalizedMimeType(mimeType);
+  const extensionMimeType = READABLE_EXT_TO_MIME_TYPE[getFileNameExt(body)];
 
   return (
     <>
-      {textState.status === AsyncStatus.Success && (
-        <Overlay open={textViewer} backdrop={<OverlayBackdrop />}>
-          <OverlayCenter>
-            <FocusTrap
-              focusTrapOptions={{
-                initialFocus: false,
-                onDeactivate: () => setTextViewer(false),
-                clickOutsideDeactivates: true,
-                escapeDeactivates: stopPropagation,
-              }}
-            >
-              <Modal
-                className={ModalWide}
-                size="500"
-                onContextMenu={(evt: any) => evt.stopPropagation()}
-              >
-                {renderViewer({
-                  name: body,
-                  text: textState.data,
-                  langName: READABLE_TEXT_MIME_TYPES.includes(mimeType)
-                    ? mimeTypeToExt(mimeType)
-                    : mimeTypeToExt(READABLE_EXT_TO_MIME_TYPE[getFileNameExt(body)] ?? mimeType),
-                  requestClose: () => setTextViewer(false),
-                })}
-              </Modal>
-            </FocusTrap>
-          </OverlayCenter>
-        </Overlay>
-      )}
+      {textState.status === AsyncStatus.Success &&
+        renderPreviewModal(
+          textViewer,
+          () => setTextViewer(false),
+          renderViewer({
+            name: body,
+            text: textState.data,
+            langName: READABLE_TEXT_MIME_TYPES.includes(normalizedMimeType)
+              ? mimeTypeToExt(normalizedMimeType)
+              : mimeTypeToExt(extensionMimeType ?? normalizedMimeType),
+            requestClose: () => setTextViewer(false),
+          })
+        )}
       {textState.status === AsyncStatus.Error ? (
-        renderErrorButton(loadText, 'Open File')
+        renderErrorButton(loadText, 'Open Text')
       ) : (
         <Button
           variant="Secondary"
@@ -150,7 +179,7 @@ export function ReadTextFile({ body, mimeType, url, encInfo, renderViewer }: Rea
           }
         >
           <Text size="B400" truncate>
-            Open File
+            Open Text
           </Text>
         </Button>
       )}
@@ -171,50 +200,38 @@ export type ReadPdfFileProps = {
   renderViewer: (props: RenderPdfViewerProps) => ReactNode;
 };
 export function ReadPdfFile({ body, mimeType, url, encInfo, renderViewer }: ReadPdfFileProps) {
-  const mx = useMatrixClient();
-  const useAuthentication = useMediaAuthentication();
   const [pdfViewer, setPdfViewer] = useState(false);
+  const loadRemoteFile = useLoadRemoteFile(mimeType, url, encInfo);
 
   const [pdfState, loadPdf] = useAsyncCallback(
     useCallback(async () => {
-      const mediaUrl = mxcUrlToHttp(mx, url, useAuthentication);
-      if (!mediaUrl) throw new Error('Invalid media URL');
-      const fileContent = encInfo
-        ? await downloadEncryptedMedia(mediaUrl, (encBuf) => decryptFile(encBuf, mimeType, encInfo))
-        : await downloadMedia(mediaUrl);
+      const fileContent = await loadRemoteFile();
       setPdfViewer(true);
       return URL.createObjectURL(fileContent);
-    }, [mx, url, useAuthentication, mimeType, encInfo])
+    }, [loadRemoteFile])
+  );
+
+  useEffect(
+    () => () => {
+      if (pdfState.status === AsyncStatus.Success) {
+        URL.revokeObjectURL(pdfState.data);
+      }
+    },
+    [pdfState]
   );
 
   return (
     <>
-      {pdfState.status === AsyncStatus.Success && (
-        <Overlay open={pdfViewer} backdrop={<OverlayBackdrop />}>
-          <OverlayCenter>
-            <FocusTrap
-              focusTrapOptions={{
-                initialFocus: false,
-                onDeactivate: () => setPdfViewer(false),
-                clickOutsideDeactivates: true,
-                escapeDeactivates: stopPropagation,
-              }}
-            >
-              <Modal
-                className={ModalWide}
-                size="500"
-                onContextMenu={(evt: any) => evt.stopPropagation()}
-              >
-                {renderViewer({
-                  name: body,
-                  src: pdfState.data,
-                  requestClose: () => setPdfViewer(false),
-                })}
-              </Modal>
-            </FocusTrap>
-          </OverlayCenter>
-        </Overlay>
-      )}
+      {pdfState.status === AsyncStatus.Success &&
+        renderPreviewModal(
+          pdfViewer,
+          () => setPdfViewer(false),
+          renderViewer({
+            name: body,
+            src: pdfState.data,
+            requestClose: () => setPdfViewer(false),
+          })
+        )}
       {pdfState.status === AsyncStatus.Error ? (
         renderErrorButton(loadPdf, 'Open PDF')
       ) : (
@@ -242,6 +259,148 @@ export function ReadPdfFile({ body, mimeType, url, encInfo, renderViewer }: Read
   );
 }
 
+type RenderSpreadsheetViewerProps = {
+  name: string;
+  data: ArrayBuffer;
+  mimeType: string;
+  requestClose: () => void;
+};
+export type ReadSpreadsheetFileProps = {
+  body: string;
+  mimeType: string;
+  url: string;
+  encInfo?: EncryptedAttachmentInfo;
+  renderViewer: (props: RenderSpreadsheetViewerProps) => ReactNode;
+};
+export function ReadSpreadsheetFile({
+  body,
+  mimeType,
+  url,
+  encInfo,
+  renderViewer,
+}: ReadSpreadsheetFileProps) {
+  const [sheetViewer, setSheetViewer] = useState(false);
+  const loadRemoteFile = useLoadRemoteFile(mimeType, url, encInfo);
+
+  const [sheetState, loadSpreadsheet] = useAsyncCallback(
+    useCallback(async () => {
+      const fileContent = await loadRemoteFile();
+      const buffer = await fileContent.arrayBuffer();
+
+      setSheetViewer(true);
+      return buffer;
+    }, [loadRemoteFile])
+  );
+
+  return (
+    <>
+      {sheetState.status === AsyncStatus.Success &&
+        renderPreviewModal(
+          sheetViewer,
+          () => setSheetViewer(false),
+          renderViewer({
+            name: body,
+            data: sheetState.data,
+            mimeType,
+            requestClose: () => setSheetViewer(false),
+          })
+        )}
+      {sheetState.status === AsyncStatus.Error ? (
+        renderErrorButton(loadSpreadsheet, 'Open Spreadsheet')
+      ) : (
+        <Button
+          variant="Secondary"
+          fill="Solid"
+          radii="300"
+          size="400"
+          onClick={() =>
+            sheetState.status === AsyncStatus.Success ? setSheetViewer(true) : loadSpreadsheet()
+          }
+          disabled={sheetState.status === AsyncStatus.Loading}
+          before={
+            sheetState.status === AsyncStatus.Loading ? (
+              <Spinner fill="Solid" size="100" variant="Secondary" />
+            ) : (
+              <Icon size="100" src={Icons.File} filled />
+            )
+          }
+        >
+          <Text size="B400" truncate>
+            Open Spreadsheet
+          </Text>
+        </Button>
+      )}
+    </>
+  );
+}
+
+type RenderDocxViewerProps = {
+  name: string;
+  data: Blob;
+  mimeType: string;
+  requestClose: () => void;
+};
+export type ReadDocxFileProps = {
+  body: string;
+  mimeType: string;
+  url: string;
+  encInfo?: EncryptedAttachmentInfo;
+  renderViewer: (props: RenderDocxViewerProps) => ReactNode;
+};
+export function ReadDocxFile({ body, mimeType, url, encInfo, renderViewer }: ReadDocxFileProps) {
+  const [docxViewer, setDocxViewer] = useState(false);
+  const loadRemoteFile = useLoadRemoteFile(mimeType, url, encInfo);
+
+  const [docxState, loadDocx] = useAsyncCallback(
+    useCallback(async () => {
+      const fileContent = await loadRemoteFile();
+      setDocxViewer(true);
+      return fileContent;
+    }, [loadRemoteFile])
+  );
+
+  return (
+    <>
+      {docxState.status === AsyncStatus.Success &&
+        renderPreviewModal(
+          docxViewer,
+          () => setDocxViewer(false),
+          renderViewer({
+            name: body,
+            data: docxState.data,
+            mimeType,
+            requestClose: () => setDocxViewer(false),
+          })
+        )}
+      {docxState.status === AsyncStatus.Error ? (
+        renderErrorButton(loadDocx, 'Open DOCX')
+      ) : (
+        <Button
+          variant="Secondary"
+          fill="Solid"
+          radii="300"
+          size="400"
+          onClick={() =>
+            docxState.status === AsyncStatus.Success ? setDocxViewer(true) : loadDocx()
+          }
+          disabled={docxState.status === AsyncStatus.Loading}
+          before={
+            docxState.status === AsyncStatus.Loading ? (
+              <Spinner fill="Solid" size="100" variant="Secondary" />
+            ) : (
+              <Icon size="100" src={Icons.File} filled />
+            )
+          }
+        >
+          <Text size="B400" truncate>
+            Open DOCX
+          </Text>
+        </Button>
+      )}
+    </>
+  );
+}
+
 export type DownloadFileProps = {
   body: string;
   mimeType: string;
@@ -250,21 +409,15 @@ export type DownloadFileProps = {
   encInfo?: EncryptedAttachmentInfo;
 };
 export function DownloadFile({ body, mimeType, url, info, encInfo }: DownloadFileProps) {
-  const mx = useMatrixClient();
-  const useAuthentication = useMediaAuthentication();
+  const loadRemoteFile = useLoadRemoteFile(mimeType, url, encInfo);
 
   const [downloadState, download] = useAsyncCallback(
     useCallback(async () => {
-      const mediaUrl = mxcUrlToHttp(mx, url, useAuthentication);
-      if (!mediaUrl) throw new Error('Invalid media URL');
-      const fileContent = encInfo
-        ? await downloadEncryptedMedia(mediaUrl, (encBuf) => decryptFile(encBuf, mimeType, encInfo))
-        : await downloadMedia(mediaUrl);
-
+      const fileContent = await loadRemoteFile();
       const fileURL = URL.createObjectURL(fileContent);
       FileSaver.saveAs(fileURL, body);
       return fileURL;
-    }, [mx, url, useAuthentication, mimeType, encInfo, body])
+    }, [loadRemoteFile, body])
   );
 
   return downloadState.status === AsyncStatus.Error ? (
@@ -299,15 +452,33 @@ type FileContentProps = {
   mimeType: string;
   renderAsTextFile: () => ReactNode;
   renderAsPdfFile: () => ReactNode;
+  renderAsSpreadsheetFile: () => ReactNode;
+  renderAsDocxFile: () => ReactNode;
 };
 export const FileContent = as<'div', FileContentProps>(
-  ({ body, mimeType, renderAsTextFile, renderAsPdfFile, children, ...props }, ref) => (
-    <Box direction="Column" gap="300" {...props} ref={ref}>
-      {(READABLE_TEXT_MIME_TYPES.includes(mimeType) ||
-        READABLE_EXT_TO_MIME_TYPE[getFileNameExt(body)]) &&
-        renderAsTextFile()}
-      {mimeType === 'application/pdf' && renderAsPdfFile()}
-      {children}
-    </Box>
-  )
+  (
+    {
+      body,
+      mimeType,
+      renderAsTextFile,
+      renderAsPdfFile,
+      renderAsSpreadsheetFile,
+      renderAsDocxFile,
+      children,
+      ...props
+    },
+    ref
+  ) => {
+    const previewKind = getFilePreviewKind(body, mimeType);
+
+    return (
+      <Box direction="Column" gap="300" {...props} ref={ref}>
+        {previewKind === 'text' && renderAsTextFile()}
+        {previewKind === 'pdf' && renderAsPdfFile()}
+        {previewKind === 'spreadsheet' && renderAsSpreadsheetFile()}
+        {previewKind === 'docx' && renderAsDocxFile()}
+        {children}
+      </Box>
+    );
+  }
 );
