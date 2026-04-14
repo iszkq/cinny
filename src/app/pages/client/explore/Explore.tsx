@@ -1,10 +1,16 @@
-import React, { FormEventHandler, useCallback, useRef, useState } from 'react';
+import React, {
+  FormEventHandler,
+  MouseEventHandler,
+  useMemo,
+  useState,
+} from 'react';
 import { useNavigate } from 'react-router-dom';
 import FocusTrap from 'focus-trap-react';
 import {
   Avatar,
   Box,
   Button,
+  Chip,
   Dialog,
   Header,
   Icon,
@@ -14,6 +20,7 @@ import {
   Overlay,
   OverlayBackdrop,
   OverlayCenter,
+  Spinner,
   Text,
   color,
   config,
@@ -25,11 +32,16 @@ import {
   NavItemContent,
   NavLink,
 } from '../../../components/nav';
-import { getExploreFeaturedPath, getExploreServerPath } from '../../pathUtils';
+import {
+  getExploreFeaturedPath,
+  getExploreServerPath,
+  getExploreWebPath,
+} from '../../pathUtils';
 import { useClientConfig } from '../../../hooks/useClientConfig';
 import {
   useExploreFeaturedSelected,
   useExploreServer,
+  useExploreWebSourceId,
 } from '../../../hooks/router/useExploreSelected';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { getMxIdServer } from '../../../utils/matrix';
@@ -37,39 +49,90 @@ import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { useNavToActivePathMapper } from '../../../hooks/useNavToActivePathMapper';
 import { PageNav, PageNavContent, PageNavHeader } from '../../../components/page';
 import { stopPropagation } from '../../../utils/keyboard';
+import { useAccountData } from '../../../hooks/useAccountData';
+import {
+  AccountDataEvent,
+  CinnyExploreSource,
+  CinnyExploreSourceKind,
+  CinnyExploreSourcesContent,
+} from '../../../../types/matrix/accountData';
+import {
+  getExploreCustomSources,
+  normalizeExploreServerAddress,
+  removeExploreCustomSource,
+  upsertExploreCustomSource,
+} from './customSources';
 
-export function AddServer() {
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return '保存失败，请稍后重试。';
+};
+
+const getSourceIcon = (kind: CinnyExploreSourceKind, selected: boolean) =>
+  kind === 'server' ? (
+    <Icon src={Icons.Server} size="100" filled={selected} />
+  ) : (
+    <Icon src={Icons.Link} size="100" filled={selected} />
+  );
+
+const getSourceRoute = (source: CinnyExploreSource): string =>
+  source.kind === 'server' ? getExploreServerPath(source.value) : getExploreWebPath(source.id);
+
+function AddExploreSource({ builtInServers }: { builtInServers: Set<string> }) {
   const mx = useMatrixClient();
   const navigate = useNavigate();
   const [dialog, setDialog] = useState(false);
-  const serverInputRef = useRef<HTMLInputElement>(null);
+  const [sourceKind, setSourceKind] = useState<CinnyExploreSourceKind>('server');
+  const [title, setTitle] = useState('');
+  const [value, setValue] = useState('');
+  const [validationError, setValidationError] = useState<string>();
 
-  const [exploreState] = useAsyncCallback(
-    useCallback((server: string) => mx.publicRooms({ server, limit: 1 }), [mx])
+  const [saveState, saveSource] = useAsyncCallback(
+    async (kind: CinnyExploreSourceKind, nextTitle: string, nextValue: string) =>
+      upsertExploreCustomSource(mx, {
+        kind,
+        title: nextTitle,
+        value: nextValue,
+      })
   );
 
-  const getInputServer = (): string | undefined => {
-    const serverInput = serverInputRef.current;
-    if (!serverInput) return undefined;
-    const server = serverInput.value.trim();
-    return server || undefined;
+  const closeDialog = () => {
+    setDialog(false);
+    setSourceKind('server');
+    setTitle('');
+    setValue('');
+    setValidationError(undefined);
   };
 
   const handleSubmit: FormEventHandler<HTMLFormElement> = (evt) => {
     evt.preventDefault();
-    const server = getInputServer();
-    if (!server) return;
-    // explore(server);
+    setValidationError(undefined);
 
-    navigate(getExploreServerPath(server));
-    setDialog(false);
-  };
+    try {
+      if (sourceKind === 'server') {
+        const normalizedServer = normalizeExploreServerAddress(value);
+        if (builtInServers.has(normalizedServer)) {
+          navigate(getExploreServerPath(normalizedServer));
+          closeDialog();
+          return;
+        }
+      }
+    } catch (error) {
+      setValidationError(getErrorMessage(error));
+      return;
+    }
 
-  const handleView = () => {
-    const server = getInputServer();
-    if (!server) return;
-    navigate(getExploreServerPath(server));
-    setDialog(false);
+    saveSource(sourceKind, title, value)
+      .then((source) => {
+        navigate(getSourceRoute(source));
+        closeDialog();
+      })
+      .catch((error) => {
+        setValidationError(getErrorMessage(error));
+      });
   };
 
   return (
@@ -80,7 +143,7 @@ export function AddServer() {
             focusTrapOptions={{
               initialFocus: false,
               clickOutsideDeactivates: true,
-              onDeactivate: () => setDialog(false),
+              onDeactivate: closeDialog,
               escapeDeactivates: stopPropagation,
             }}
           >
@@ -94,47 +157,102 @@ export function AddServer() {
                 size="500"
               >
                 <Box grow="Yes">
-                  <Text size="H4">Add Server</Text>
+                  <Text size="H4">添加探索来源</Text>
                 </Box>
-                <IconButton size="300" onClick={() => setDialog(false)} radii="300">
+                <IconButton size="300" onClick={closeDialog} radii="300">
                   <Icon src={Icons.Cross} />
                 </IconButton>
               </Header>
               <Box
                 as="form"
                 onSubmit={handleSubmit}
-                style={{ padding: config.space.S400 }}
+                style={{ padding: config.space.S400, width: 'min(100vw, 28rem)' }}
                 direction="Column"
                 gap="400"
               >
-                <Text priority="400">Add server name to explore public communities.</Text>
+                <Text priority="400">
+                  这里新增的服务器或网页会写入 Matrix 账号数据，换设备登录后也会自动同步回来。
+                </Text>
+
                 <Box direction="Column" gap="100">
-                  <Text size="L400">Server Name</Text>
-                  <Input ref={serverInputRef} name="serverInput" variant="Background" required />
-                  {exploreState.status === AsyncStatus.Error && (
+                  <Text size="L400">来源类型</Text>
+                  <Box gap="100" wrap="Wrap">
+                    <Chip
+                      type="button"
+                      variant={sourceKind === 'server' ? 'Primary' : 'Surface'}
+                      radii="Pill"
+                      outlined={sourceKind !== 'server'}
+                      onClick={() => {
+                        setSourceKind('server');
+                        setValidationError(undefined);
+                      }}
+                    >
+                      <Text size="T200">社区服务器</Text>
+                    </Chip>
+                    <Chip
+                      type="button"
+                      variant={sourceKind === 'web' ? 'Primary' : 'Surface'}
+                      radii="Pill"
+                      outlined={sourceKind !== 'web'}
+                      onClick={() => {
+                        setSourceKind('web');
+                        setValidationError(undefined);
+                      }}
+                    >
+                      <Text size="T200">内嵌网页</Text>
+                    </Chip>
+                  </Box>
+                </Box>
+
+                <Box direction="Column" gap="100">
+                  <Text size="L400">显示名称（可选）</Text>
+                  <Input
+                    name="titleInput"
+                    variant="Background"
+                    value={title}
+                    onChange={(evt) => setTitle(evt.currentTarget.value)}
+                    placeholder={sourceKind === 'server' ? '默认显示服务器地址' : '例如：官方文档'}
+                  />
+                </Box>
+
+                <Box direction="Column" gap="100">
+                  <Text size="L400">{sourceKind === 'server' ? '服务器地址' : '网页地址'}</Text>
+                  <Input
+                    name="valueInput"
+                    variant="Background"
+                    required
+                    value={value}
+                    onChange={(evt) => setValue(evt.currentTarget.value)}
+                    placeholder={
+                      sourceKind === 'server'
+                        ? '例如：matrix.org'
+                        : '例如：https://www.mozilla.org'
+                    }
+                  />
+                  <Text size="T200" priority="300">
+                    {sourceKind === 'server'
+                      ? '用于探索该服务器公开的房间与空间。'
+                      : '仅支持允许 iframe 内嵌的网站，若网站本身禁止嵌入，则只能新窗口打开。'}
+                  </Text>
+                  {(validationError || saveState.status === AsyncStatus.Error) && (
                     <Text style={{ color: color.Critical.Main }} size="T300">
-                      Failed to load public rooms. Please try again.
+                      {validationError ?? getErrorMessage(saveState.error)}
                     </Text>
                   )}
                 </Box>
-                <Box direction="Column" gap="200">
-                  {/* <Button
-                    type="submit"
-                    variant="Secondary"
-                    before={
-                      exploreState.status === AsyncStatus.Loading ? (
-                        <Spinner fill="Solid" variant="Secondary" size="200" />
-                      ) : undefined
-                    }
-                    aria-disabled={exploreState.status === AsyncStatus.Loading}
-                  >
-                    <Text size="B400">Save</Text>
-                  </Button> */}
 
-                  <Button type="submit" onClick={handleView} variant="Secondary" fill="Soft">
-                    <Text size="B400">View</Text>
-                  </Button>
-                </Box>
+                <Button
+                  type="submit"
+                  variant="Primary"
+                  disabled={saveState.status === AsyncStatus.Loading}
+                  before={
+                    saveState.status === AsyncStatus.Loading ? (
+                      <Spinner fill="Solid" variant="Primary" size="200" />
+                    ) : undefined
+                  }
+                >
+                  <Text size="B400">保存并打开</Text>
+                </Button>
               </Box>
             </Dialog>
           </FocusTrap>
@@ -148,24 +266,146 @@ export function AddServer() {
         onClick={() => setDialog(true)}
       >
         <Text size="B300" truncate>
-          Add Server
+          添加来源
         </Text>
       </Button>
     </>
   );
 }
 
+type CustomSourceNavItemProps = {
+  source: CinnyExploreSource;
+  selected: boolean;
+  deleting: boolean;
+  onRemove: (source: CinnyExploreSource) => void;
+};
+
+function CustomSourceNavItem({
+  source,
+  selected,
+  deleting,
+  onRemove,
+}: CustomSourceNavItemProps) {
+  const handleRemove: MouseEventHandler<HTMLButtonElement> = (evt) => {
+    evt.preventDefault();
+    evt.stopPropagation();
+    onRemove(source);
+  };
+
+  return (
+    <NavItem variant="Background" radii="400" aria-selected={selected}>
+      <Box as="span" grow="Yes" alignItems="Center" gap="100">
+        <Box as="span" grow="Yes">
+          <NavLink to={getSourceRoute(source)}>
+            <NavItemContent>
+              <Box as="span" grow="Yes" alignItems="Center" gap="200">
+                <Avatar size="200" radii="400">
+                  {getSourceIcon(source.kind, selected)}
+                </Avatar>
+                <Box as="span" grow="Yes" direction="Column" gap="50">
+                  <Text as="span" size="Inherit" truncate>
+                    {source.title}
+                  </Text>
+                  <Text as="span" size="T200" priority="300" truncate>
+                    {source.value}
+                  </Text>
+                </Box>
+              </Box>
+            </NavItemContent>
+          </NavLink>
+        </Box>
+        <IconButton
+          type="button"
+          size="300"
+          fill="None"
+          radii="300"
+          aria-label="删除来源"
+          onClick={handleRemove}
+          disabled={deleting}
+        >
+          {deleting ? <Spinner size="100" variant="Secondary" /> : <Icon src={Icons.Cross} />}
+        </IconButton>
+      </Box>
+    </NavItem>
+  );
+}
+
 export function Explore() {
   const mx = useMatrixClient();
   useNavToActivePathMapper('explore');
+  const navigate = useNavigate();
   const userId = mx.getUserId();
   const clientConfig = useClientConfig();
   const userServer = userId ? getMxIdServer(userId) : undefined;
   const servers =
     clientConfig.featuredCommunities?.servers?.filter((server) => server !== userServer) ?? [];
 
+  const builtInServers = useMemo(() => {
+    const nextServers = new Set<string>();
+
+    [userServer, ...servers].forEach((server) => {
+      if (!server) return;
+      try {
+        nextServers.add(normalizeExploreServerAddress(server));
+      } catch {
+        // Ignore invalid server entries from config.
+      }
+    });
+
+    return nextServers;
+  }, [servers, userServer]);
+
+  const customSourcesEvent = useAccountData(AccountDataEvent.CinnyExploreSources);
+  const customSources = useMemo(
+    () =>
+      getExploreCustomSources(
+        customSourcesEvent?.getContent<CinnyExploreSourcesContent>()
+      ),
+    [customSourcesEvent]
+  );
+
+  const customServerSources = useMemo(
+    () =>
+      customSources.filter(
+        (source) => source.kind === 'server' && !builtInServers.has(source.value)
+      ),
+    [builtInServers, customSources]
+  );
+  const customWebSources = useMemo(
+    () => customSources.filter((source) => source.kind === 'web'),
+    [customSources]
+  );
+
   const featuredSelected = useExploreFeaturedSelected();
   const selectedServer = useExploreServer();
+  const selectedWebSourceId = useExploreWebSourceId();
+
+  const [deletingSourceId, setDeletingSourceId] = useState<string>();
+  const [removeState, removeSource] = useAsyncCallback(async (sourceId: string) => {
+    await removeExploreCustomSource(mx, sourceId);
+    return sourceId;
+  });
+
+  const handleRemoveSource = (source: CinnyExploreSource) => {
+    if (deletingSourceId) return;
+
+    setDeletingSourceId(source.id);
+    removeSource(source.id)
+      .then(() => {
+        const deletedSelectedWeb =
+          source.kind === 'web' && selectedWebSourceId === source.id;
+        const deletedSelectedServer =
+          source.kind === 'server' &&
+          selectedServer === source.value &&
+          !builtInServers.has(source.value);
+
+        if (deletedSelectedWeb || deletedSelectedServer) {
+          navigate(getExploreFeaturedPath(), { replace: true });
+        }
+      })
+      .catch(() => undefined)
+      .finally(() => setDeletingSourceId(undefined));
+  };
 
   return (
     <PageNav>
@@ -173,7 +413,7 @@ export function Explore() {
         <Box grow="Yes" gap="300">
           <Box grow="Yes">
             <Text size="H4" truncate>
-              Explore Community
+              社区探索
             </Text>
           </Box>
         </Box>
@@ -191,7 +431,7 @@ export function Explore() {
                     </Avatar>
                     <Box as="span" grow="Yes">
                       <Text as="span" size="Inherit" truncate>
-                        Featured
+                        推荐
                       </Text>
                     </Box>
                   </Box>
@@ -225,11 +465,12 @@ export function Explore() {
               </NavItem>
             )}
           </NavCategory>
+
           {servers.length > 0 && (
             <NavCategory>
               <NavCategoryHeader>
                 <Text size="O400" style={{ paddingLeft: config.space.S200 }}>
-                  Servers
+                  公共服务器
                 </Text>
               </NavCategoryHeader>
               {servers.map((server) => (
@@ -257,8 +498,53 @@ export function Explore() {
               ))}
             </NavCategory>
           )}
+
+          {customServerSources.length > 0 && (
+            <NavCategory>
+              <NavCategoryHeader>
+                <Text size="O400" style={{ paddingLeft: config.space.S200 }}>
+                  自定义服务器
+                </Text>
+              </NavCategoryHeader>
+              {customServerSources.map((source) => (
+                <CustomSourceNavItem
+                  key={source.id}
+                  source={source}
+                  selected={selectedServer === source.value}
+                  deleting={deletingSourceId === source.id}
+                  onRemove={handleRemoveSource}
+                />
+              ))}
+            </NavCategory>
+          )}
+
+          {customWebSources.length > 0 && (
+            <NavCategory>
+              <NavCategoryHeader>
+                <Text size="O400" style={{ paddingLeft: config.space.S200 }}>
+                  自定义网页
+                </Text>
+              </NavCategoryHeader>
+              {customWebSources.map((source) => (
+                <CustomSourceNavItem
+                  key={source.id}
+                  source={source}
+                  selected={selectedWebSourceId === source.id}
+                  deleting={deletingSourceId === source.id}
+                  onRemove={handleRemoveSource}
+                />
+              ))}
+            </NavCategory>
+          )}
+
+          {removeState.status === AsyncStatus.Error && (
+            <Text size="T300" style={{ color: color.Critical.Main }}>
+              {getErrorMessage(removeState.error)}
+            </Text>
+          )}
+
           <Box direction="Column">
-            <AddServer />
+            <AddExploreSource builtInServers={builtInServers} />
           </Box>
         </Box>
       </PageNavContent>

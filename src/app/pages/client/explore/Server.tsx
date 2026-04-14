@@ -66,15 +66,15 @@ const useRoomTypeFilters = (): RoomTypeFilter[] =>
   useMemo(
     () => [
       {
-        title: 'All',
+        title: '全部',
         value: undefined,
       },
       {
-        title: 'Spaces',
+        title: '空间',
         value: RoomType.Space,
       },
       {
-        title: 'Rooms',
+        title: '房间',
         value: 'null',
       },
     ],
@@ -106,14 +106,14 @@ function Search({ active, loading, searchInputRef, onSearch, onReset }: SearchPr
   return (
     <Box as="form" direction="Column" gap="100" onSubmit={handleSearchSubmit}>
       <span data-spacing-node />
-      <Text size="L400">Search</Text>
+      <Text size="L400">搜索</Text>
       <Input
         ref={searchInputRef}
         style={{ paddingRight: config.space.S300 }}
         name="searchInput"
         size="500"
         variant="Background"
-        placeholder="Search for keyword"
+        placeholder="输入关键词搜索"
         before={
           active && loading ? (
             <Spinner variant="Secondary" size="200" />
@@ -132,11 +132,11 @@ function Search({ active, loading, searchInputRef, onSearch, onReset }: SearchPr
               after={<Icon size="50" src={Icons.Cross} />}
               onClick={onReset}
             >
-              <Text size="B300">Clear</Text>
+              <Text size="B300">清空</Text>
             </Chip>
           ) : (
             <Chip type="submit" variant="Primary" size="400" radii="Pill" outlined>
-              <Text size="B300">Enter</Text>
+              <Text size="B300">搜索</Text>
             </Chip>
           )
         }
@@ -196,7 +196,7 @@ function ThirdPartyProtocolsSelector({
               style={{ padding: config.space.S100, minWidth: toRem(100) }}
             >
               <Text style={{ padding: config.space.S100 }} size="L400" truncate>
-                Protocols
+                协议源
               </Text>
               <Box direction="Column">
                 <MenuItem
@@ -288,7 +288,7 @@ function LimitButton({ limit, onLimitChange }: LimitButtonProps) {
           <Menu variant="Surface">
             <Box direction="Column" gap="400" style={{ padding: config.space.S300 }}>
               <Box direction="Column" gap="100">
-                <Text size="L400">Presets</Text>
+                <Text size="L400">预设</Text>
                 <Box gap="100" wrap="Wrap">
                   <Chip variant="SurfaceVariant" onClick={() => setLimit('24')} radii="Pill">
                     <Text size="T200">24</Text>
@@ -303,7 +303,7 @@ function LimitButton({ limit, onLimitChange }: LimitButtonProps) {
               </Box>
               <Box as="form" onSubmit={handleLimitSubmit} direction="Column" gap="300">
                 <Box direction="Column" gap="100">
-                  <Text size="L400">Custom Limit</Text>
+                  <Text size="L400">自定义每页数量</Text>
                   <Input
                     name="limitInput"
                     size="300"
@@ -314,11 +314,11 @@ function LimitButton({ limit, onLimitChange }: LimitButtonProps) {
                     outlined
                     type="number"
                     radii="400"
-                    aria-label="Per Page Item Limit"
+                    aria-label="每页项目数量"
                   />
                 </Box>
                 <Button type="submit" size="300" variant="Primary" radii="400">
-                  <Text size="B300">Change Limit</Text>
+                  <Text size="B300">应用数量</Text>
                 </Button>
               </Box>
             </Box>
@@ -334,7 +334,7 @@ function LimitButton({ limit, onLimitChange }: LimitButtonProps) {
         variant="SurfaceVariant"
         after={<Icon size="100" src={Icons.ChevronBottom} />}
       >
-        <Text size="T200" truncate>{`Page Limit: ${limit}`}</Text>
+        <Text size="T200" truncate>{`每页数量：${limit}`}</Text>
       </Chip>
     </PopOut>
   );
@@ -488,7 +488,7 @@ export function PublicRooms() {
             <Box grow="No" justifyContent="Center" alignItems="Center" gap="200">
               {screenSize !== ScreenSize.Mobile && <Icon size="400" src={Icons.Search} />}
               <Text size="H3" truncate>
-                Search
+                搜索结果
               </Text>
             </Box>
             <Box grow="Yes" basis="No" />
@@ -532,9 +532,9 @@ export function PublicRooms() {
                 <Box direction="Column" gap="400">
                   <Box direction="Column" gap="300">
                     {isSearch ? (
-                      <Text size="H4">{`Results for "${serverSearchParams.term}"`}</Text>
+                      <Text size="H4">{`“${serverSearchParams.term}” 的搜索结果`}</Text>
                     ) : (
-                      <Text size="H4">Popular Communities</Text>
+                      <Text size="H4">热门社区</Text>
                     )}
                     <Box gap="200">
                       {roomTypeFilters.map((filter) => (
@@ -624,7 +624,7 @@ export function PublicRooms() {
                               disabled={!data.prev_batch}
                             >
                               <Text size="B300" truncate>
-                                Previous Page
+                                上一页
                               </Text>
                             </Button>
                             <Box data-spacing-node grow="Yes" />
@@ -635,7 +635,7 @@ export function PublicRooms() {
                               disabled={!data.next_batch}
                             >
                               <Text size="B300" truncate>
-                                Next Page
+                                下一页
                               </Text>
                             </Button>
                           </Box>
@@ -651,7 +651,7 @@ export function PublicRooms() {
                       >
                         <Icon size="400" src={Icons.Info} />
                         <Text size="T300" align="Center">
-                          No communities found!
+                          没有找到相关社区
                         </Text>
                       </Box>
                     ))}
