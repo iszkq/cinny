@@ -68,6 +68,17 @@ const renderErrorButton = (retry: () => void, text: string) => (
   </TooltipProvider>
 );
 
+const isSpreadsheetPreviewUnavailableError = (error: unknown): boolean => {
+  const message =
+    error instanceof Error ? error.message : typeof error === 'string' ? error : undefined;
+
+  if (!message) {
+    return false;
+  }
+
+  return /non-whitespace before first tag|unsupported encryption/i.test(message);
+};
+
 const useLoadRemoteFile = (
   mimeType: string,
   url: string,
@@ -264,6 +275,7 @@ type RenderSpreadsheetViewerProps = {
   data: ArrayBuffer;
   mimeType: string;
   requestClose: () => void;
+  onPreviewUnavailable?: () => void;
 };
 export type ReadSpreadsheetFileProps = {
   body: string;
@@ -280,6 +292,7 @@ export function ReadSpreadsheetFile({
   renderViewer,
 }: ReadSpreadsheetFileProps) {
   const [sheetViewer, setSheetViewer] = useState(false);
+  const [previewUnavailable, setPreviewUnavailable] = useState(false);
   const loadRemoteFile = useLoadRemoteFile(mimeType, url, encInfo);
 
   const [sheetState, loadSpreadsheet] = useAsyncCallback(
@@ -292,6 +305,10 @@ export function ReadSpreadsheetFile({
     }, [loadRemoteFile])
   );
 
+  if (previewUnavailable) {
+    return null;
+  }
+
   return (
     <>
       {sheetState.status === AsyncStatus.Success &&
@@ -302,10 +319,14 @@ export function ReadSpreadsheetFile({
             name: body,
             data: sheetState.data,
             mimeType,
+            onPreviewUnavailable: () => {
+              setSheetViewer(false);
+              setPreviewUnavailable(true);
+            },
             requestClose: () => setSheetViewer(false),
           })
         )}
-      {sheetState.status === AsyncStatus.Error ? (
+      {sheetState.status === AsyncStatus.Error && !isSpreadsheetPreviewUnavailableError(sheetState.error) ? (
         renderErrorButton(loadSpreadsheet, '\u6253\u5f00\u8868\u683c')
       ) : (
         <Button
@@ -347,59 +368,8 @@ export type ReadDocxFileProps = {
   encInfo?: EncryptedAttachmentInfo;
   renderViewer: (props: RenderDocxViewerProps) => ReactNode;
 };
-export function ReadDocxFile({ body, mimeType, url, encInfo, renderViewer }: ReadDocxFileProps) {
-  const [docxViewer, setDocxViewer] = useState(false);
-  const loadRemoteFile = useLoadRemoteFile(mimeType, url, encInfo);
-
-  const [docxState, loadDocx] = useAsyncCallback(
-    useCallback(async () => {
-      const fileContent = await loadRemoteFile();
-      const buffer = await fileContent.arrayBuffer();
-      setDocxViewer(true);
-      return buffer;
-    }, [loadRemoteFile])
-  );
-
-  return (
-    <>
-      {docxState.status === AsyncStatus.Success &&
-        renderPreviewModal(
-          docxViewer,
-          () => setDocxViewer(false),
-          renderViewer({
-            name: body,
-            data: docxState.data,
-            mimeType,
-            requestClose: () => setDocxViewer(false),
-          })
-        )}
-      {docxState.status === AsyncStatus.Error ? (
-        renderErrorButton(loadDocx, '\u6253\u5f00\u6587\u7a3f')
-      ) : (
-        <Button
-          variant="Secondary"
-          fill="Solid"
-          radii="300"
-          size="400"
-          onClick={() =>
-            docxState.status === AsyncStatus.Success ? setDocxViewer(true) : loadDocx()
-          }
-          disabled={docxState.status === AsyncStatus.Loading}
-          before={
-            docxState.status === AsyncStatus.Loading ? (
-              <Spinner fill="Solid" size="100" variant="Secondary" />
-            ) : (
-              <Icon size="100" src={Icons.File} filled />
-            )
-          }
-        >
-          <Text size="B400" truncate>
-            {'\u6253\u5f00\u6587\u7a3f'}
-          </Text>
-        </Button>
-      )}
-    </>
-  );
+export function ReadDocxFile(_: ReadDocxFileProps) {
+  return null;
 }
 
 export type DownloadFileProps = {
@@ -471,13 +441,14 @@ export const FileContent = as<'div', FileContentProps>(
     ref
   ) => {
     const previewKind = getFilePreviewKind(body, mimeType);
+    const showDocxPreview = false;
 
     return (
       <Box direction="Column" gap="300" {...props} ref={ref}>
         {previewKind === 'text' && renderAsTextFile()}
         {previewKind === 'pdf' && renderAsPdfFile()}
         {previewKind === 'spreadsheet' && renderAsSpreadsheetFile()}
-        {previewKind === 'docx' && renderAsDocxFile()}
+        {previewKind === 'docx' && showDocxPreview && renderAsDocxFile()}
         {children}
       </Box>
     );
