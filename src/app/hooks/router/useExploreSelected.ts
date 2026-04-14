@@ -26,3 +26,9 @@ export const useExploreServer = (): string | undefined => {
 
   return server;
 };
+
+export const useExploreWebSourceId = (): string | undefined => {
+  const { webId } = useParams();
+
+  return webId;
+};
