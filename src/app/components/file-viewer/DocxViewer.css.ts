@@ -1,4 +1,4 @@
-import { style } from '@vanilla-extract/css';
+import { globalStyle, style } from '@vanilla-extract/css';
 import { DefaultReset, color, config } from 'folds';
 
 export const DocxViewer = style([
@@ -49,19 +49,20 @@ export const DocxContainer = style([
   DefaultReset,
   {
     minHeight: '100%',
-    selectors: {
-      '& .docx-wrapper': {
-        padding: 0,
-        background: 'transparent',
-      },
-      '& .docx-wrapper > .docx': {
-        marginLeft: 'auto',
-        marginRight: 'auto',
-        boxShadow: '0 24px 48px rgba(15, 23, 42, 0.14)',
-      },
-      '& .docx': {
-        maxWidth: '100%',
-      },
-    },
   },
 ]);
+
+globalStyle(`${DocxContainer} .docx-wrapper`, {
+  padding: 0,
+  background: 'transparent',
+});
+
+globalStyle(`${DocxContainer} .docx-wrapper > .docx`, {
+  marginLeft: 'auto',
+  marginRight: 'auto',
+  boxShadow: '0 24px 48px rgba(15, 23, 42, 0.14)',
+});
+
+globalStyle(`${DocxContainer} .docx`, {
+  maxWidth: '100%',
+});
