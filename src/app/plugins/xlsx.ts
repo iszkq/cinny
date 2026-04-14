@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { useAsyncCallback } from '../hooks/useAsyncCallback';
-import { trimTrailingSlash } from '../utils/common';
+import xlsxBrowserRuntimeUrl from 'xlsx/dist/xlsx.full.min.js?url';
 
 export type XLSXWorksheet = unknown;
 
@@ -17,6 +17,9 @@ export type XLSXModule = {
       dense: boolean;
       cellDates: boolean;
       raw: boolean;
+      cellHTML?: boolean;
+      cellStyles?: boolean;
+      cellNF?: boolean;
     }
   ) => XLSXWorkbook;
   utils: {
@@ -28,6 +31,7 @@ export type XLSXModule = {
         defval: string;
       }
     ) => unknown[][];
+    sheet_to_html: (sheet: XLSXWorksheet) => string;
   };
 };
 
@@ -54,8 +58,6 @@ const loadXLSXBrowserRuntime = async (): Promise<XLSXModule> => {
   }
 
   if (!xlsxRuntimePromise) {
-    const src = `${trimTrailingSlash(import.meta.env.BASE_URL)}/xlsx.full.min.js`;
-
     xlsxRuntimePromise = new Promise<XLSXModule>((resolve, reject) => {
       const complete = () => {
         const runtime = getGlobalXLSX();
@@ -85,7 +87,7 @@ const loadXLSXBrowserRuntime = async (): Promise<XLSXModule> => {
       const script = document.createElement('script');
       script.id = XLSX_BROWSER_SCRIPT_ID;
       script.async = true;
-      script.src = src;
+      script.src = xlsxBrowserRuntimeUrl;
       script.addEventListener('load', complete, { once: true });
       script.addEventListener('error', handleError, { once: true });
 
