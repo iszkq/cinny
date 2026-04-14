@@ -43,7 +43,7 @@ const renderErrorButton = (retry: () => void, text: string) => (
   <TooltipProvider
     tooltip={
       <Tooltip variant="Critical">
-        <Text>Failed to load file!</Text>
+        <Text>{'\u6587\u4ef6\u52a0\u8f7d\u5931\u8d25\u3002'}</Text>
       </Tooltip>
     }
     position="Top"
@@ -159,7 +159,7 @@ export function ReadTextFile({ body, mimeType, url, encInfo, renderViewer }: Rea
           })
         )}
       {textState.status === AsyncStatus.Error ? (
-        renderErrorButton(loadText, 'Open Text')
+        renderErrorButton(loadText, '\u6253\u5f00\u6587\u672c')
       ) : (
         <Button
           variant="Secondary"
@@ -179,7 +179,7 @@ export function ReadTextFile({ body, mimeType, url, encInfo, renderViewer }: Rea
           }
         >
           <Text size="B400" truncate>
-            Open Text
+            {'\u6253\u5f00\u6587\u672c'}
           </Text>
         </Button>
       )}
@@ -233,7 +233,7 @@ export function ReadPdfFile({ body, mimeType, url, encInfo, renderViewer }: Read
           })
         )}
       {pdfState.status === AsyncStatus.Error ? (
-        renderErrorButton(loadPdf, 'Open PDF')
+        renderErrorButton(loadPdf, '\u6253\u5f00\u6587\u6863')
       ) : (
         <Button
           variant="Secondary"
@@ -251,7 +251,7 @@ export function ReadPdfFile({ body, mimeType, url, encInfo, renderViewer }: Read
           }
         >
           <Text size="B400" truncate>
-            Open PDF
+            {'\u6253\u5f00\u6587\u6863'}
           </Text>
         </Button>
       )}
@@ -306,7 +306,7 @@ export function ReadSpreadsheetFile({
           })
         )}
       {sheetState.status === AsyncStatus.Error ? (
-        renderErrorButton(loadSpreadsheet, 'Open Spreadsheet')
+        renderErrorButton(loadSpreadsheet, '\u6253\u5f00\u8868\u683c')
       ) : (
         <Button
           variant="Secondary"
@@ -326,7 +326,7 @@ export function ReadSpreadsheetFile({
           }
         >
           <Text size="B400" truncate>
-            Open Spreadsheet
+            {'\u6253\u5f00\u8868\u683c'}
           </Text>
         </Button>
       )}
@@ -373,7 +373,7 @@ export function ReadDocxFile({ body, mimeType, url, encInfo, renderViewer }: Rea
           })
         )}
       {docxState.status === AsyncStatus.Error ? (
-        renderErrorButton(loadDocx, 'Open DOCX')
+        renderErrorButton(loadDocx, '\u6253\u5f00\u6587\u7a3f')
       ) : (
         <Button
           variant="Secondary"
@@ -393,7 +393,7 @@ export function ReadDocxFile({ body, mimeType, url, encInfo, renderViewer }: Rea
           }
         >
           <Text size="B400" truncate>
-            Open DOCX
+            {'\u6253\u5f00\u6587\u7a3f'}
           </Text>
         </Button>
       )}
@@ -421,7 +421,7 @@ export function DownloadFile({ body, mimeType, url, info, encInfo }: DownloadFil
   );
 
   return downloadState.status === AsyncStatus.Error ? (
-    renderErrorButton(download, `Retry Download (${bytesToSize(info.size ?? 0)})`)
+    renderErrorButton(download, `\u91cd\u8bd5\u4e0b\u8f7d (${bytesToSize(info.size ?? 0)})`)
   ) : (
     <Button
       variant="Secondary"
@@ -442,7 +442,7 @@ export function DownloadFile({ body, mimeType, url, info, encInfo }: DownloadFil
         )
       }
     >
-      <Text size="B400" truncate>{`Download (${bytesToSize(info.size ?? 0)})`}</Text>
+      <Text size="B400" truncate>{`\u4e0b\u8f7d (${bytesToSize(info.size ?? 0)})`}</Text>
     </Button>
   );
 }

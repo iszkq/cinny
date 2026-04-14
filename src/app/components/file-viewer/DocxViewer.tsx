@@ -5,7 +5,6 @@ import { Box, Button, Chip, Header, Icon, IconButton, Icons, Scroll, Spinner, Te
 import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
 import { useDocxPreviewLoader } from '../../plugins/docx-preview';
 import { useZoom } from '../../hooks/useZoom';
-import { useDragScroll } from '../../hooks/useDragScroll';
 import * as css from './DocxViewer.css';
 
 export type DocxViewerProps = {
@@ -26,7 +25,6 @@ export const DocxViewer = as<'div', DocxViewerProps>(
     const pageElementsRef = useRef<HTMLElement[]>([]);
     const [docxPreviewState, loadDocxPreview] = useDocxPreviewLoader();
     const { zoom, zoomIn, zoomOut, setZoom } = useZoom(ZOOM_STEP, MIN_ZOOM, MAX_ZOOM);
-    const [rotation, setRotation] = useState(0);
     const [pageNo, setPageNo] = useState(1);
     const [pageCount, setPageCount] = useState(1);
 
@@ -63,13 +61,6 @@ export const DocxViewer = as<'div', DocxViewerProps>(
       }, [data, docxPreviewState])
     );
 
-    const dragEnabled = renderState.status === AsyncStatus.Success;
-    const { cursor, onMouseDown } = useDragScroll(
-      scrollRef,
-      dragEnabled,
-      `${name}-${pageNo}-${pageCount}-${rotation}`
-    );
-
     useEffect(() => {
       loadDocxPreview().catch(() => undefined);
     }, [loadDocxPreview]);
@@ -82,7 +73,6 @@ export const DocxViewer = as<'div', DocxViewerProps>(
 
     useEffect(() => {
       setZoom(1);
-      setRotation(0);
       setPageNo(1);
     }, [data, name, setZoom]);
 
@@ -150,29 +140,6 @@ export const DocxViewer = as<'div', DocxViewerProps>(
       });
     };
 
-    const goToPage = (nextPage: number) => {
-      const page = pageElementsRef.current[nextPage - 1];
-      if (!page || !scrollRef.current) return;
-
-      setPageNo(nextPage);
-      scrollRef.current.scrollTo({
-        top: Math.max(page.offsetTop - 24, 0),
-        behavior: 'smooth',
-      });
-    };
-
-    const handlePrevPage = () => {
-      goToPage(Math.max(pageNo - 1, 1));
-    };
-
-    const handleNextPage = () => {
-      goToPage(Math.min(pageNo + 1, pageCount));
-    };
-
-    const rotateLeft = () => setRotation((angle) => angle - 90);
-    const rotateRight = () => setRotation((angle) => angle + 90);
-    const displayRotation = ((rotation % 360) + 360) % 360;
-
     return (
       <Box className={classNames(css.DocxViewer, className)} direction="Column" {...props} ref={ref}>
         <Header className={css.DocxViewerHeader} size="400">
@@ -191,6 +158,7 @@ export const DocxViewer = as<'div', DocxViewerProps>(
               size="300"
               radii="Pill"
               onClick={zoomOut}
+              aria-label="\u7f29\u5c0f"
             >
               <Icon size="50" src={Icons.Minus} />
             </IconButton>
@@ -205,25 +173,10 @@ export const DocxViewer = as<'div', DocxViewerProps>(
               size="300"
               radii="Pill"
               onClick={zoomIn}
+              aria-label="\u653e\u5927"
             >
               <Icon size="50" src={Icons.Plus} />
             </IconButton>
-
-            <Chip variant="SurfaceVariant" radii="Pill" onClick={rotateLeft}>
-              <Text size="B300">Left</Text>
-            </Chip>
-
-            <Chip
-              variant={displayRotation !== 0 ? 'Success' : 'SurfaceVariant'}
-              radii="Pill"
-              onClick={() => setRotation(0)}
-            >
-              <Text size="B300">{`${displayRotation}deg`}</Text>
-            </Chip>
-
-            <Chip variant="SurfaceVariant" radii="Pill" onClick={rotateRight}>
-              <Text size="B300">Right</Text>
-            </Chip>
 
             <Chip variant="SurfaceVariant" radii="Pill">
               <Text size="B300">{`${pageNo}/${pageCount}`}</Text>
@@ -235,7 +188,7 @@ export const DocxViewer = as<'div', DocxViewerProps>(
               radii="300"
               before={<Icon size="50" src={Icons.Download} />}
             >
-              <Text size="B300">Download</Text>
+              <Text size="B300">{'\u4e0b\u8f7d'}</Text>
             </Chip>
           </Box>
         </Header>
@@ -250,13 +203,13 @@ export const DocxViewer = as<'div', DocxViewerProps>(
           {isLoading && (
             <Box className={css.DocxViewerState} direction="Column" gap="200" alignItems="Center">
               <Spinner variant="Secondary" size="600" />
-              <Text size="T300">Loading DOCX preview...</Text>
+              <Text size="T300">{'\u6b63\u5728\u52a0\u8f7d\u6587\u7a3f\u9884\u89c8...'}</Text>
             </Box>
           )}
 
           {isError && (
             <Box className={css.DocxViewerState} direction="Column" gap="300" alignItems="Center">
-              <Text size="T300">Failed to load DOCX preview.</Text>
+              <Text size="T300">{'\u6587\u7a3f\u9884\u89c8\u52a0\u8f7d\u5931\u8d25\u3002'}</Text>
               <Button
                 variant="Critical"
                 fill="Soft"
@@ -265,27 +218,13 @@ export const DocxViewer = as<'div', DocxViewerProps>(
                 before={<Icon src={Icons.Warning} size="50" />}
                 onClick={handleRetry}
               >
-                <Text size="B300">Retry</Text>
+                <Text size="B300">{'\u91cd\u8bd5'}</Text>
               </Button>
             </Box>
           )}
 
           {!isLoading && !isError && (
             <Box className={css.DocxViewerStage} grow="Yes" style={{ minHeight: 0 }}>
-              {pageCount > 1 && (
-                <IconButton
-                  className={classNames(css.NavButton, css.NavButtonLeft)}
-                  variant="SurfaceVariant"
-                  size="400"
-                  radii="Pill"
-                  onClick={handlePrevPage}
-                  disabled={pageNo <= 1}
-                  aria-label="Previous Page"
-                >
-                  <Icon size="100" src={Icons.ArrowLeft} />
-                </IconButton>
-              )}
-
               <Scroll
                 ref={scrollRef}
                 className={css.DocxViewerViewport}
@@ -294,37 +233,13 @@ export const DocxViewer = as<'div', DocxViewerProps>(
                 variant="Background"
                 visibility="Hover"
                 onWheel={handleWheel}
-                onMouseDown={onMouseDown}
-                style={{ cursor }}
               >
                 <div className={css.DocxViewport}>
-                  <div
-                    className={css.DocxCanvasShell}
-                    style={{
-                      zoom,
-                      transform: `rotate(${rotation}deg)`,
-                      transformOrigin: 'top center',
-                      transition: cursor === 'grabbing' ? 'none' : 'transform 140ms ease',
-                    }}
-                  >
+                  <div className={css.DocxCanvasShell} style={{ zoom }}>
                     <div className={css.DocxContainer} ref={containerRef} data-mime-type={mimeType} />
                   </div>
                 </div>
               </Scroll>
-
-              {pageCount > 1 && (
-                <IconButton
-                  className={classNames(css.NavButton, css.NavButtonRight)}
-                  variant="SurfaceVariant"
-                  size="400"
-                  radii="Pill"
-                  onClick={handleNextPage}
-                  disabled={pageNo >= pageCount}
-                  aria-label="Next Page"
-                >
-                  <Icon size="100" src={Icons.ArrowRight} />
-                </IconButton>
-              )}
             </Box>
           )}
         </Box>

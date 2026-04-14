@@ -139,7 +139,7 @@ export const VideoContent = as<'div', VideoContentProps>(
               onClick={loadSrc}
               before={<Icon size="Inherit" src={Icons.Play} filled />}
             >
-              <Text size="B300">Watch</Text>
+              <Text size="B300">{'\u89c2\u770b'}</Text>
             </Button>
           </Box>
         )}
@@ -179,7 +179,7 @@ export const VideoContent = as<'div', VideoContentProps>(
                     setBlurred(false);
                   }}
                 >
-                  <Text size="B300">Spoiler</Text>
+                  <Text size="B300">{'\u663e\u793a\u5267\u900f'}</Text>
                 </Chip>
               )}
             </TooltipProvider>
@@ -197,7 +197,7 @@ export const VideoContent = as<'div', VideoContentProps>(
             <TooltipProvider
               tooltip={
                 <Tooltip variant="Critical">
-                  <Text>Failed to load video!</Text>
+                  <Text>{'\u89c6\u9891\u52a0\u8f7d\u5931\u8d25\u3002'}</Text>
                 </Tooltip>
               }
               position="Top"
@@ -214,7 +214,7 @@ export const VideoContent = as<'div', VideoContentProps>(
                   onClick={handleRetry}
                   before={<Icon size="Inherit" src={Icons.Warning} filled />}
                 >
-                  <Text size="B300">Retry</Text>
+                  <Text size="B300">{'\u91cd\u8bd5'}</Text>
                 </Button>
               )}
             </TooltipProvider>

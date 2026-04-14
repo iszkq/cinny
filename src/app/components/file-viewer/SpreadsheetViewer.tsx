@@ -22,7 +22,6 @@ import {
 import { PasswordInput } from '../password-input';
 import { getFileNameExt } from '../../utils/mimeTypes';
 import { useZoom } from '../../hooks/useZoom';
-import { useDragScroll } from '../../hooks/useDragScroll';
 import * as css from './SpreadsheetViewer.css';
 
 const MODERN_ENCRYPTED_EXTS = new Set(['xlsx', 'xlsm', 'xlsb', 'xlam']);
@@ -273,6 +272,19 @@ const getErrorMessage = (error: unknown): string | undefined => {
   return undefined;
 };
 
+const getSpreadsheetDisplayError = (message?: string): string | undefined => {
+  if (!message) return undefined;
+  if (/password-protected/i.test(message)) return '\u6587\u4ef6\u5df2\u53d7\u5bc6\u7801\u4fdd\u62a4\u3002';
+  if (/bad password|invalid password/i.test(message)) {
+    return '\u5bc6\u7801\u4e0d\u6b63\u786e\uff0c\u8bf7\u91cd\u65b0\u8f93\u5165\u3002';
+  }
+  if (/preview engine is not loaded/i.test(message)) {
+    return '\u8868\u683c\u9884\u89c8\u5f15\u64ce\u5c1a\u672a\u52a0\u8f7d\u5b8c\u6210\u3002';
+  }
+
+  return '\u8868\u683c\u9884\u89c8\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5\u6216\u4e0b\u8f7d\u540e\u67e5\u770b\u3002';
+};
+
 const isPasswordProtectedError = (message?: string): boolean =>
   Boolean(message && /password-protected/i.test(message));
 
@@ -416,7 +428,6 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
     const [passwordInput, setPasswordInput] = useState('');
     const [submittedPassword, setSubmittedPassword] = useState<string>();
     const { zoom, zoomIn, zoomOut, setZoom } = useZoom(ZOOM_STEP, MIN_ZOOM, MAX_ZOOM);
-    const [rotation, setRotation] = useState(0);
 
     const [workbookState, loadWorkbook] = useAsyncCallback(
       useCallback(
@@ -445,7 +456,6 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
       setSubmittedPassword(undefined);
       setActiveSheetName(undefined);
       setZoom(1);
-      setRotation(0);
     }, [data, name, setZoom]);
 
     useEffect(() => {
@@ -507,16 +517,6 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
       );
     }, [activeSheetName, workbookState, xlsxState]);
 
-    const dragEnabled =
-      workbookState.status === AsyncStatus.Success &&
-      !!activeSheetName &&
-      renderedSheet !== undefined;
-    const { cursor, onMouseDown } = useDragScroll(
-      scrollRef,
-      dragEnabled,
-      `${name}-${activeSheetName ?? ''}-${rotation}`
-    );
-
     const isLoading =
       xlsxState.status === AsyncStatus.Loading || workbookState.status === AsyncStatus.Loading;
     const isError =
@@ -536,9 +536,6 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
     const passwordProtected = isPasswordProtectedError(errorMessage);
     const passwordRetrySupported = passwordProtected && isLegacyPasswordSupported(name, mimeType);
     const modernEncryptedSpreadsheet = passwordProtected && isModernEncryptedSpreadsheet(name);
-    const hasMultipleSheets =
-      workbookState.status === AsyncStatus.Success && workbookState.data.SheetNames.length > 1;
-
     const handleRetry = () => {
       if (xlsxState.status === AsyncStatus.Error) {
         loadXlsx().catch(() => undefined);
@@ -570,25 +567,12 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
       });
     };
 
-    const rotateLeft = () => setRotation((angle) => angle - 90);
-    const rotateRight = () => setRotation((angle) => angle + 90);
-    const displayRotation = ((rotation % 360) + 360) % 360;
-
-    const goToSheet = (index: number) => {
-      if (workbookState.status !== AsyncStatus.Success) return;
-
-      const sheetName = workbookState.data.SheetNames[index];
-      if (!sheetName) return;
-
-      setActiveSheetName(sheetName);
-    };
-
     const summaryText =
       workbookState.status === AsyncStatus.Success && renderedSheet
         ? [
-            `${workbookState.data.SheetNames.length} sheet(s)`,
-            `${renderedSheet.totalRows} row(s)`,
-            `${renderedSheet.totalCols} column(s)`,
+            `${workbookState.data.SheetNames.length} \u4e2a\u5de5\u4f5c\u8868`,
+            `${renderedSheet.totalRows} \u884c`,
+            `${renderedSheet.totalCols} \u5217`,
           ].join(' | ')
         : undefined;
 
@@ -615,6 +599,7 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
               size="300"
               radii="Pill"
               onClick={zoomOut}
+              aria-label="\u7f29\u5c0f"
             >
               <Icon size="50" src={Icons.Minus} />
             </IconButton>
@@ -629,25 +614,10 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
               size="300"
               radii="Pill"
               onClick={zoomIn}
+              aria-label="\u653e\u5927"
             >
               <Icon size="50" src={Icons.Plus} />
             </IconButton>
-
-            <Chip variant="SurfaceVariant" radii="Pill" onClick={rotateLeft}>
-              <Text size="B300">Left</Text>
-            </Chip>
-
-            <Chip
-              variant={displayRotation !== 0 ? 'Success' : 'SurfaceVariant'}
-              radii="Pill"
-              onClick={() => setRotation(0)}
-            >
-              <Text size="B300">{`${displayRotation}deg`}</Text>
-            </Chip>
-
-            <Chip variant="SurfaceVariant" radii="Pill" onClick={rotateRight}>
-              <Text size="B300">Right</Text>
-            </Chip>
 
             {workbookState.status === AsyncStatus.Success && activeSheetIndex >= 0 && (
               <Chip variant="SurfaceVariant" radii="Pill">
@@ -661,7 +631,7 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
               radii="300"
               before={<Icon size="50" src={Icons.Download} />}
             >
-              <Text size="B300">Download</Text>
+              <Text size="B300">{'\u4e0b\u8f7d'}</Text>
             </Chip>
           </Box>
         </Header>
@@ -681,7 +651,7 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
               justifyContent="Center"
             >
               <Spinner variant="Secondary" size="600" />
-              <Text size="T300">Loading spreadsheet...</Text>
+              <Text size="T300">{'\u6b63\u5728\u52a0\u8f7d\u8868\u683c\u9884\u89c8...'}</Text>
             </Box>
           )}
 
@@ -693,10 +663,10 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
               alignItems="Center"
               justifyContent="Center"
             >
-              <Text size="T300">Failed to load spreadsheet preview.</Text>
-              {errorMessage && (
+              <Text size="T300">{'\u8868\u683c\u9884\u89c8\u52a0\u8f7d\u5931\u8d25\u3002'}</Text>
+              {getSpreadsheetDisplayError(errorMessage) && (
                 <Text className={css.ErrorMessage} size="T200" priority="300">
-                  {errorMessage}
+                  {getSpreadsheetDisplayError(errorMessage)}
                 </Text>
               )}
               {passwordRetrySupported && (
@@ -708,14 +678,14 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
                   onSubmit={handlePasswordSubmit}
                 >
                   <Text className={css.PasswordHint} size="T200" priority="300">
-                    This legacy XLS workbook may open if you enter the password below.
+                    {'\u68c0\u6d4b\u5230\u65e7\u7248\u52a0\u5bc6\u8868\u683c\uff0c\u53ef\u5c1d\u8bd5\u8f93\u5165\u5bc6\u7801\u5728\u7ebf\u6253\u5f00\u3002'}
                   </Text>
                   <Box className={css.PasswordRow} alignItems="Center" gap="200">
                     <PasswordInput
                       size="400"
                       variant="Secondary"
                       name="workbookPassword"
-                      placeholder="Workbook password"
+                      placeholder={'\u8bf7\u8f93\u5165\u5de5\u4f5c\u7c3f\u5bc6\u7801'}
                       value={passwordInput}
                       onChange={(evt: React.ChangeEvent<HTMLInputElement>) =>
                         setPasswordInput(evt.target.value)
@@ -732,15 +702,14 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
                       {workbookState.status === AsyncStatus.Loading && (
                         <Spinner size="200" variant="Secondary" />
                       )}
-                      <Text size="B300">Try Password</Text>
+                      <Text size="B300">{'\u5c1d\u8bd5\u89e3\u9501'}</Text>
                     </Button>
                   </Box>
                 </Box>
               )}
               {modernEncryptedSpreadsheet && (
                 <Text className={css.PasswordHint} size="T200" priority="300">
-                  Modern password-protected Excel files still need to be downloaded and opened in a
-                  local Office-compatible app.
+                  {'\u5f53\u524d\u65b0\u7248\u52a0\u5bc6\u8868\u683c\u6682\u4e0d\u652f\u6301\u5728\u7ebf\u9884\u89c8\uff0c\u8bf7\u4e0b\u8f7d\u540e\u4f7f\u7528\u672c\u5730\u529e\u516c\u8f6f\u4ef6\u6253\u5f00\u3002'}
                 </Text>
               )}
               <Button
@@ -751,7 +720,7 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
                 before={<Icon src={Icons.Warning} size="50" />}
                 onClick={handleRetry}
               >
-                <Text size="B300">Retry</Text>
+                <Text size="B300">{'\u91cd\u8bd5'}</Text>
               </Button>
             </Box>
           )}
@@ -782,20 +751,6 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
               </Box>
 
               <Box className={css.SpreadsheetStage} grow="Yes" style={{ minHeight: 0 }}>
-                {hasMultipleSheets && (
-                  <IconButton
-                    className={classNames(css.NavButton, css.NavButtonLeft)}
-                    variant="SurfaceVariant"
-                    size="400"
-                    radii="Pill"
-                    onClick={() => goToSheet(Math.max(activeSheetIndex - 1, 0))}
-                    disabled={activeSheetIndex <= 0}
-                    aria-label="Previous Sheet"
-                  >
-                    <Icon size="100" src={Icons.ArrowLeft} />
-                  </IconButton>
-                )}
-
                 <Scroll
                   ref={scrollRef}
                   className={css.SpreadsheetViewport}
@@ -804,26 +759,16 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
                   variant="Background"
                   visibility="Hover"
                   onWheel={handleWheel}
-                  onMouseDown={onMouseDown}
-                  style={{ cursor }}
                 >
                   <div className={css.SheetPreview}>
                     {renderedSheet.isEmpty ? (
                       <div className={css.EmptySheet}>
                         <Text size="T300" priority="300">
-                          This sheet is empty.
+                          {'\u5f53\u524d\u5de5\u4f5c\u8868\u4e3a\u7a7a\u3002'}
                         </Text>
                       </div>
                     ) : (
-                      <div
-                        className={css.SheetCanvasShell}
-                        style={{
-                          zoom,
-                          transform: `rotate(${rotation}deg)`,
-                          transformOrigin: 'top center',
-                          transition: cursor === 'grabbing' ? 'none' : 'transform 140ms ease',
-                        }}
-                      >
+                      <div className={css.SheetCanvasShell} style={{ zoom }}>
                         <table className={css.Table}>
                           <colgroup>
                             {renderedSheet.colWidths.map((width, index) => (
@@ -870,27 +815,6 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
                     )}
                   </div>
                 </Scroll>
-
-                {hasMultipleSheets && (
-                  <IconButton
-                    className={classNames(css.NavButton, css.NavButtonRight)}
-                    variant="SurfaceVariant"
-                    size="400"
-                    radii="Pill"
-                    onClick={() =>
-                      goToSheet(
-                        Math.min(activeSheetIndex + 1, workbookState.data.SheetNames.length - 1)
-                      )
-                    }
-                    disabled={
-                      activeSheetIndex < 0 ||
-                      activeSheetIndex >= workbookState.data.SheetNames.length - 1
-                    }
-                    aria-label="Next Sheet"
-                  >
-                    <Icon size="100" src={Icons.ArrowRight} />
-                  </IconButton>
-                )}
               </Box>
             </>
           )}

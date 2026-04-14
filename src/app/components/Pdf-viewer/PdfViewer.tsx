@@ -24,7 +24,6 @@ import FileSaver from 'file-saver';
 import * as css from './PdfViewer.css';
 import { AsyncStatus } from '../../hooks/useAsyncCallback';
 import { useZoom } from '../../hooks/useZoom';
-import { useDragScroll } from '../../hooks/useDragScroll';
 import { createPage, usePdfDocumentLoader, usePdfJSLoader } from '../../plugins/pdfjs-dist';
 import { stopPropagation } from '../../utils/keyboard';
 
@@ -43,7 +42,6 @@ export const PdfViewer = as<'div', PdfViewerProps>(
     const containerRef = useRef<HTMLDivElement>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
     const { zoom, zoomIn, zoomOut, setZoom } = useZoom(ZOOM_STEP, MIN_ZOOM, MAX_ZOOM);
-    const [rotation, setRotation] = useState(0);
 
     const [pdfJSState, loadPdfJS] = usePdfJSLoader();
     const [docState, loadPdfDocument] = usePdfDocumentLoader(
@@ -56,11 +54,6 @@ export const PdfViewer = as<'div', PdfViewerProps>(
       pdfJSState.status === AsyncStatus.Error || docState.status === AsyncStatus.Error;
     const [pageNo, setPageNo] = useState(1);
     const [jumpAnchor, setJumpAnchor] = useState<RectCords>();
-    const { cursor, onMouseDown } = useDragScroll(
-      scrollRef,
-      docState.status === AsyncStatus.Success,
-      `${src}-${pageNo}-${rotation}`
-    );
 
     useEffect(() => {
       loadPdfJS().catch(() => undefined);
@@ -74,7 +67,6 @@ export const PdfViewer = as<'div', PdfViewerProps>(
 
     useEffect(() => {
       setZoom(1);
-      setRotation(0);
       setPageNo(1);
     }, [setZoom, src]);
 
@@ -130,15 +122,6 @@ export const PdfViewer = as<'div', PdfViewerProps>(
       setJumpAnchor(undefined);
     };
 
-    const handlePrevPage = () => {
-      setPageNo((n) => Math.max(n - 1, 1));
-    };
-
-    const handleNextPage = () => {
-      if (docState.status !== AsyncStatus.Success) return;
-      setPageNo((n) => Math.min(n + 1, docState.data.numPages));
-    };
-
     const handleOpenJump: MouseEventHandler<HTMLButtonElement> = (evt) => {
       setJumpAnchor(evt.currentTarget.getBoundingClientRect());
     };
@@ -154,10 +137,6 @@ export const PdfViewer = as<'div', PdfViewerProps>(
         return nextZoom;
       });
     };
-
-    const rotateLeft = () => setRotation((angle) => angle - 90);
-    const rotateRight = () => setRotation((angle) => angle + 90);
-    const displayRotation = ((rotation % 360) + 360) % 360;
 
     return (
       <Box className={classNames(css.PdfViewer, className)} direction="Column" {...props} ref={ref}>
@@ -177,7 +156,7 @@ export const PdfViewer = as<'div', PdfViewerProps>(
               size="300"
               radii="Pill"
               onClick={zoomOut}
-              aria-label="Zoom Out"
+              aria-label="\u7f29\u5c0f"
             >
               <Icon size="50" src={Icons.Minus} />
             </IconButton>
@@ -192,26 +171,10 @@ export const PdfViewer = as<'div', PdfViewerProps>(
               size="300"
               radii="Pill"
               onClick={zoomIn}
-              aria-label="Zoom In"
+              aria-label="\u653e\u5927"
             >
               <Icon size="50" src={Icons.Plus} />
             </IconButton>
-
-            <Chip variant="SurfaceVariant" radii="Pill" onClick={rotateLeft}>
-              <Text size="B300">Left</Text>
-            </Chip>
-
-            <Chip
-              variant={displayRotation !== 0 ? 'Success' : 'SurfaceVariant'}
-              radii="Pill"
-              onClick={() => setRotation(0)}
-            >
-              <Text size="B300">{`${displayRotation}deg`}</Text>
-            </Chip>
-
-            <Chip variant="SurfaceVariant" radii="Pill" onClick={rotateRight}>
-              <Text size="B300">Right</Text>
-            </Chip>
 
             {docState.status === AsyncStatus.Success && (
               <PopOut
@@ -246,10 +209,10 @@ export const PdfViewer = as<'div', PdfViewerProps>(
                           outlined
                           type="number"
                           radii="300"
-                          aria-label="Page Number"
+                          aria-label="\u9875\u7801"
                         />
                         <Button type="submit" size="300" variant="Primary" radii="300">
-                          <Text size="B300">Jump To Page</Text>
+                          <Text size="B300">{'\u8df3\u8f6c\u9875\u7801'}</Text>
                         </Button>
                       </Box>
                     </Menu>
@@ -273,7 +236,7 @@ export const PdfViewer = as<'div', PdfViewerProps>(
               radii="300"
               before={<Icon size="50" src={Icons.Download} />}
             >
-              <Text size="B300">Download</Text>
+              <Text size="B300">{'\u4e0b\u8f7d'}</Text>
             </Chip>
           </Box>
         </Header>
@@ -285,14 +248,29 @@ export const PdfViewer = as<'div', PdfViewerProps>(
           style={{ minHeight: 0 }}
         >
           {isLoading && (
-            <Box grow="Yes" alignItems="Center" justifyContent="Center">
+            <Box
+              className={css.PdfViewerState}
+              grow="Yes"
+              alignItems="Center"
+              justifyContent="Center"
+              direction="Column"
+              gap="200"
+            >
               <Spinner variant="Secondary" size="600" />
+              <Text size="T300">{'\u6b63\u5728\u52a0\u8f7d\u6587\u6863\u9884\u89c8...'}</Text>
             </Box>
           )}
 
           {isError && (
-            <Box grow="Yes" alignItems="Center" justifyContent="Center" direction="Column" gap="200">
-              <Text>Failed to load PDF</Text>
+            <Box
+              className={css.PdfViewerState}
+              grow="Yes"
+              alignItems="Center"
+              justifyContent="Center"
+              direction="Column"
+              gap="200"
+            >
+              <Text>{'\u6587\u6863\u9884\u89c8\u52a0\u8f7d\u5931\u8d25\u3002'}</Text>
               <Button
                 variant="Critical"
                 fill="Soft"
@@ -301,25 +279,13 @@ export const PdfViewer = as<'div', PdfViewerProps>(
                 before={<Icon src={Icons.Warning} size="50" />}
                 onClick={handleRetry}
               >
-                <Text size="B300">Retry</Text>
+                <Text size="B300">{'\u91cd\u8bd5'}</Text>
               </Button>
             </Box>
           )}
 
           {docState.status === AsyncStatus.Success && (
             <Box className={css.PdfViewerStage} grow="Yes" style={{ minHeight: 0 }}>
-              <IconButton
-                className={classNames(css.NavButton, css.NavButtonLeft)}
-                variant="SurfaceVariant"
-                size="400"
-                radii="Pill"
-                onClick={handlePrevPage}
-                disabled={pageNo <= 1}
-                aria-label="Previous Page"
-              >
-                <Icon size="100" src={Icons.ArrowLeft} />
-              </IconButton>
-
               <Scroll
                 ref={scrollRef}
                 className={css.PdfViewerViewport}
@@ -328,33 +294,14 @@ export const PdfViewer = as<'div', PdfViewerProps>(
                 variant="Surface"
                 visibility="Hover"
                 onWheel={handleWheel}
-                onMouseDown={onMouseDown}
-                style={{ cursor }}
               >
                 <Box className={css.PdfViewerCanvasShell} alignItems="Center" justifyContent="Center">
                   <div
                     className={css.PdfViewerContent}
                     ref={containerRef}
-                    style={{
-                      transform: `rotate(${rotation}deg)`,
-                      transformOrigin: 'center top',
-                      transition: cursor === 'grabbing' ? 'none' : 'transform 140ms ease',
-                    }}
                   />
                 </Box>
               </Scroll>
-
-              <IconButton
-                className={classNames(css.NavButton, css.NavButtonRight)}
-                variant="SurfaceVariant"
-                size="400"
-                radii="Pill"
-                onClick={handleNextPage}
-                disabled={pageNo >= docState.data.numPages}
-                aria-label="Next Page"
-              >
-                <Icon size="100" src={Icons.ArrowRight} />
-              </IconButton>
             </Box>
           )}
         </Box>

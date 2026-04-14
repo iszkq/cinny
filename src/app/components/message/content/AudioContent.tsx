@@ -162,7 +162,9 @@ export function AudioContent({
             )
           }
         >
-          <Text size="B300">{playing ? 'Pause' : 'Play'}</Text>
+          <Text size="B300">
+            {playing ? '\u6682\u505c' : '\u64ad\u653e'}
+          </Text>
         </Chip>
 
         <Text size="T200">{`${secondsToMinutesAndSeconds(
