@@ -6,6 +6,7 @@ import {
   EXPLORE_FEATURED_PATH,
   EXPLORE_PATH,
   EXPLORE_SERVER_PATH,
+  EXPLORE_WEB_PATH,
   FAVORITES_PATH,
   HOME_CREATE_PATH,
   HOME_JOIN_PATH,
@@ -154,6 +155,12 @@ export const getExploreServerPath = (server: string): string => {
     server: encodeURIComponent(server),
   };
   return generatePath(EXPLORE_SERVER_PATH, params);
+};
+export const getExploreWebPath = (webId: string): string => {
+  const params = {
+    webId: encodeURIComponent(webId),
+  };
+  return generatePath(EXPLORE_WEB_PATH, params);
 };
 
 export const getCreatePath = (): string => CREATE_PATH;
