@@ -19,6 +19,8 @@ export type DocxViewerProps = {
 const ZOOM_STEP = 0.2;
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 5;
+const ZIP_FILE_SIGNATURE = [0x50, 0x4b, 0x03, 0x04];
+const OOXML_WORD_EXTS = new Set(['docx', 'docm', 'dotx', 'dotm']);
 
 const getErrorMessage = (error: unknown): string | undefined => {
   if (error instanceof Error) return error.message;
@@ -27,15 +29,11 @@ const getErrorMessage = (error: unknown): string | undefined => {
   return undefined;
 };
 
-const getWordPreviewDisplayError = (
-  name: string,
-  mimeType: string,
-  message?: string
-): string | undefined => {
+const getWordPreviewDisplayError = (name: string, message?: string): string | undefined => {
   const ext = getFileNameExt(name);
   if (
     ext === 'doc' ||
-    mimeType.toLowerCase() === 'application/msword' ||
+    /legacy doc/i.test(message ?? '') ||
     /not a zip file|central directory|end of central directory/i.test(message ?? '')
   ) {
     return '\u5f53\u524d\u4ec5\u652f\u6301 docx\u3001docm\u3001dotx\u3001dotm \u5728\u7ebf\u9884\u89c8\uff0c\u65e7\u7248 .doc \u8bf7\u4e0b\u8f7d\u540e\u4f7f\u7528\u672c\u5730\u529e\u516c\u8f6f\u4ef6\u6253\u5f00\u3002';
@@ -46,6 +44,53 @@ const getWordPreviewDisplayError = (
 
   return '\u6587\u7a3f\u9884\u89c8\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5\u6216\u4e0b\u8f7d\u540e\u67e5\u770b\u3002';
 };
+
+const hasRenderableWordHtml = (html: string): boolean => {
+  const plainText = html
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .trim();
+
+  return plainText.length > 0 || /<(img|table|svg|ol|ul)\b/i.test(html);
+};
+
+const hasBinarySignature = (buffer: ArrayBuffer, signature: number[]): boolean => {
+  if (buffer.byteLength < signature.length) {
+    return false;
+  }
+
+  const view = new Uint8Array(buffer, 0, signature.length);
+  return signature.every((byte, index) => view[index] === byte);
+};
+
+const isLegacyDocFile = (name: string, mimeType: string, buffer: ArrayBuffer): boolean => {
+  const ext = getFileNameExt(name);
+
+  if (OOXML_WORD_EXTS.has(ext)) {
+    return false;
+  }
+
+  if (ext === 'doc') {
+    return true;
+  }
+
+  return (
+    mimeType.toLowerCase() === 'application/msword' &&
+    !hasBinarySignature(buffer, ZIP_FILE_SIGNATURE)
+  );
+};
+
+const waitForNextPaint = () =>
+  new Promise<void>((resolve) => {
+    if (typeof window === 'undefined') {
+      resolve();
+      return;
+    }
+
+    window.requestAnimationFrame(() => resolve());
+  });
 
 export const DocxViewer = as<'div', DocxViewerProps>(
   ({ className, name, data, mimeType, requestClose, ...props }, ref) => {
@@ -63,6 +108,10 @@ export const DocxViewer = as<'div', DocxViewerProps>(
         const container = containerRef.current;
         if (!container) return;
 
+        if (isLegacyDocFile(name, mimeType, data)) {
+          throw new Error('Legacy DOC preview is not supported');
+        }
+
         const renderWithMammoth = async () => {
           const mammoth =
             mammothState.status === AsyncStatus.Success ? mammothState.data : await loadMammoth();
@@ -74,18 +123,25 @@ export const DocxViewer = as<'div', DocxViewerProps>(
             }
           );
 
+          if (!hasRenderableWordHtml(result.value)) {
+            throw new Error('DOCX preview rendered empty content');
+          }
+
           container.innerHTML = `<div class="cinny-docx-fallback">${result.value}</div>`;
           pageElementsRef.current = [container];
           setPageCount(1);
           setPageNo(1);
           scrollRef.current?.scrollTo({ top: 0, left: 0 });
-
-          if (!container.querySelector('.cinny-docx-fallback') || !container.textContent?.trim()) {
-            throw new Error('DOCX preview rendered empty content');
-          }
         };
 
         container.innerHTML = '';
+        try {
+          await renderWithMammoth();
+          return;
+        } catch {
+          container.innerHTML = '';
+        }
+
         try {
           if (docxPreviewState.status !== AsyncStatus.Success) {
             throw new Error('DOCX preview engine is not loaded');
@@ -102,6 +158,7 @@ export const DocxViewer = as<'div', DocxViewerProps>(
             renderFootnotes: true,
             useBase64URL: true,
           });
+          await waitForNextPaint();
 
           const pages = Array.from(
             container.querySelectorAll('.docx-wrapper > .docx, .docx')
@@ -109,9 +166,10 @@ export const DocxViewer = as<'div', DocxViewerProps>(
 
           const hasRenderableContent =
             pages.length > 0 ||
-            Boolean(container.querySelector('p, table, img, svg, section, article, div'));
+            hasRenderableWordHtml(container.innerHTML) ||
+            Boolean(container.querySelector('table, img, svg, canvas'));
 
-          if (!hasRenderableContent || !container.textContent?.trim()) {
+          if (!hasRenderableContent) {
             await renderWithMammoth();
             return;
           }
@@ -121,17 +179,18 @@ export const DocxViewer = as<'div', DocxViewerProps>(
           setPageNo(1);
           scrollRef.current?.scrollTo({ top: 0, left: 0 });
         } catch (error) {
-          container.innerHTML = '';
-          await renderWithMammoth().catch(() => {
-            throw error;
-          });
+          throw error;
         }
-      }, [data, docxPreviewState, loadMammoth, mammothState])
+      }, [data, docxPreviewState, loadMammoth, mammothState, mimeType, name])
     );
 
     useEffect(() => {
       loadDocxPreview().catch(() => undefined);
     }, [loadDocxPreview]);
+
+    useEffect(() => {
+      loadMammoth().catch(() => undefined);
+    }, [loadMammoth]);
 
     useEffect(() => {
       if (
@@ -289,9 +348,9 @@ export const DocxViewer = as<'div', DocxViewerProps>(
           {isError && (
             <Box className={css.DocxViewerState} direction="Column" gap="300" alignItems="Center">
               <Text size="T300">{'\u6587\u7a3f\u9884\u89c8\u52a0\u8f7d\u5931\u8d25\u3002'}</Text>
-              {getWordPreviewDisplayError(name, mimeType, errorMessage) && (
+              {getWordPreviewDisplayError(name, errorMessage) && (
                 <Text size="T200" priority="300" style={{ textAlign: 'center', lineHeight: '1.45' }}>
-                  {getWordPreviewDisplayError(name, mimeType, errorMessage)}
+                  {getWordPreviewDisplayError(name, errorMessage)}
                 </Text>
               )}
               <Button

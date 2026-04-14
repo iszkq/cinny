@@ -81,7 +81,7 @@ export const SheetRail = style([
   DefaultReset,
   {
     padding: `${config.space.S250} ${config.space.S300}`,
-    borderBottomWidth: config.borderWidth.B300,
+    borderTopWidth: config.borderWidth.B300,
     gap: config.space.S200,
     backgroundColor: color.Surface.Container,
   },
@@ -132,6 +132,20 @@ export const SheetPreview = style([
     minWidth: '100%',
     minHeight: '100%',
     padding: config.space.S300,
+  },
+]);
+
+export const SheetHtmlFallback = style([
+  DefaultReset,
+  {
+    width: 'fit-content',
+    minWidth: '100%',
+    marginLeft: 'auto',
+    marginRight: 'auto',
+    padding: config.space.S100,
+    borderRadius: config.radii.R400,
+    backgroundColor: color.Surface.Container,
+    boxShadow: '0 12px 32px rgba(15, 23, 42, 0.08)',
   },
 ]);
 
@@ -205,4 +219,19 @@ globalStyle(`${CellText} > *:first-child`, {
 
 globalStyle(`${CellText} > *:last-child`, {
   marginBottom: 0,
+});
+
+globalStyle(`${SheetHtmlFallback} table`, {
+  borderCollapse: 'collapse',
+  width: 'max-content',
+  minWidth: '100%',
+});
+
+globalStyle(`${SheetHtmlFallback} td, ${SheetHtmlFallback} th`, {
+  border: `${config.borderWidth.B300} solid ${color.Surface.ContainerLine}`,
+  padding: `${config.space.S150} ${config.space.S200}`,
+  verticalAlign: 'top',
+  whiteSpace: 'pre-wrap',
+  wordBreak: 'break-word',
+  lineHeight: '1.45',
 });

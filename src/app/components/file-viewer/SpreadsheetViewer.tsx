@@ -14,22 +14,23 @@ import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
 import {
   XLSXCell,
   XLSXColInfo,
+  XLSXModule,
   XLSXRange,
   XLSXRowInfo,
   XLSXWorksheet,
   useXLSXLoader,
 } from '../../plugins/xlsx';
-import { useXlsxPopulateLoader } from '../../plugins/xlsx-populate';
 import { PasswordInput } from '../password-input';
 import { getFileNameExt } from '../../utils/mimeTypes';
 import { useZoom } from '../../hooks/useZoom';
 import * as css from './SpreadsheetViewer.css';
 
 const MODERN_ENCRYPTED_EXTS = new Set(['xlsx', 'xlsm', 'xlsb', 'xlam']);
-const OOXML_PASSWORD_EXTS = new Set(['xlsx', 'xlsm', 'xlam']);
 const ZOOM_STEP = 0.2;
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 5;
+const ZIP_FILE_SIGNATURE = [0x50, 0x4b, 0x03, 0x04];
+const COMPOUND_FILE_SIGNATURE = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1];
 
 type RenderedCell = {
   key: string;
@@ -53,6 +54,7 @@ type RenderedSheet = {
   totalRows: number;
   totalCols: number;
   isEmpty: boolean;
+  html?: string;
 };
 
 type WorksheetMatrix = unknown[][];
@@ -67,6 +69,32 @@ const stripHtml = (value: string): string =>
     .replace(/<[^>]+>/g, '')
     .replace(/&nbsp;/g, ' ')
     .trim();
+
+const normalizeSheetHtml = (value?: string): string | undefined => {
+  if (!value) return undefined;
+
+  const bodyMatch = value.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+  const tableMatch = value.match(/<table[\s\S]*<\/table>/i);
+  const normalized = bodyMatch?.[1]?.trim() || tableMatch?.[0]?.trim() || value.trim();
+
+  return normalized || undefined;
+};
+
+const hasRenderableSheetHtml = (value?: string): boolean => {
+  if (!value) return false;
+
+  const plainText = stripHtml(value);
+  return plainText.length > 0 || /<(table|td|th|img|svg)\b/i.test(value);
+};
+
+const hasBinarySignature = (buffer: ArrayBuffer, signature: number[]): boolean => {
+  if (buffer.byteLength < signature.length) {
+    return false;
+  }
+
+  const view = new Uint8Array(buffer, 0, signature.length);
+  return signature.every((byte, index) => view[index] === byte);
+};
 
 const normalizeExcelColor = (value?: string): string | undefined => {
   if (!value) return undefined;
@@ -334,16 +362,10 @@ const isLegacyPasswordSupported = (name: string, mimeType: string): boolean => {
 const isModernEncryptedSpreadsheet = (name: string): boolean =>
   MODERN_ENCRYPTED_EXTS.has(getFileNameExt(name));
 
-const isOoxmlPasswordSupported = (name: string): boolean =>
-  OOXML_PASSWORD_EXTS.has(getFileNameExt(name));
-
-const toArrayBuffer = async (value: ArrayBuffer | Blob): Promise<ArrayBuffer> => {
-  if (value instanceof ArrayBuffer) {
-    return value;
-  }
-
-  return value.arrayBuffer();
-};
+const isModernEncryptedWorkbookData = (name: string, buffer: ArrayBuffer): boolean =>
+  isModernEncryptedSpreadsheet(name) &&
+  hasBinarySignature(buffer, COMPOUND_FILE_SIGNATURE) &&
+  !hasBinarySignature(buffer, ZIP_FILE_SIGNATURE);
 
 const getWorksheetCell = (
   worksheet: XLSXWorksheet,
@@ -416,6 +438,7 @@ const createMergeMaps = (merges: XLSXRange[], visibleRows: number[], visibleCols
 };
 
 const buildRenderedSheet = (
+  xlsx: XLSXModule,
   worksheet: XLSXWorksheet,
   encodeCell: (cell: { c: number; r: number }) => string,
   decodeRange: (range: string) => XLSXRange,
@@ -477,13 +500,25 @@ const buildRenderedSheet = (
   });
 
   const isEmpty = rows.every((row) => row.cells.every((cell) => !cell.text && !cell.html));
+  const exportedHtml =
+    typeof xlsx.utils.sheet_to_html === 'function'
+      ? normalizeSheetHtml(
+          xlsx.utils.sheet_to_html(worksheet, {
+            editable: false,
+            header: '',
+            footer: '',
+          })
+        )
+      : undefined;
+  const html = hasRenderableSheetHtml(exportedHtml) ? exportedHtml : undefined;
 
   return {
     rows,
     colWidths: visibleCols.map((colIndex) => getColumnWidth(colInfos[colIndex])),
     totalRows: visibleRows.length,
     totalCols: visibleCols.length,
-    isEmpty,
+    isEmpty: isEmpty && !html,
+    html,
   };
 };
 
@@ -498,11 +533,14 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
   ({ className, name, data, mimeType, requestClose, ...props }, ref) => {
     const scrollRef = useRef<HTMLDivElement>(null);
     const [xlsxState, loadXlsx] = useXLSXLoader();
-    const [xlsxPopulateState, loadXlsxPopulate] = useXlsxPopulateLoader();
     const [activeSheetName, setActiveSheetName] = useState<string>();
     const [passwordInput, setPasswordInput] = useState('');
     const [submittedPassword, setSubmittedPassword] = useState<string>();
     const { zoom, zoomIn, zoomOut, setZoom } = useZoom(ZOOM_STEP, MIN_ZOOM, MAX_ZOOM);
+    const modernEncryptedWorkbook = useMemo(
+      () => isModernEncryptedWorkbookData(name, data),
+      [data, name]
+    );
 
     const [workbookState, loadWorkbook] = useAsyncCallback(
       useCallback(
@@ -511,27 +549,12 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
             throw new Error('Spreadsheet preview engine is not loaded');
           }
 
-          const trimmedPassword = password?.trim() || undefined;
-          let workbookBuffer = data;
-
-          if (trimmedPassword && isOoxmlPasswordSupported(name)) {
-            const xlsxPopulate =
-              xlsxPopulateState.status === AsyncStatus.Success
-                ? xlsxPopulateState.data
-                : await loadXlsxPopulate();
-
-            const decryptedWorkbook = await xlsxPopulate.fromDataAsync(data, {
-              password: trimmedPassword,
-            });
-
-            workbookBuffer = await toArrayBuffer(
-              await decryptedWorkbook.outputAsync({
-                type: 'arraybuffer',
-              })
-            );
+          if (modernEncryptedWorkbook) {
+            throw new Error('Unsupported encryption for modern spreadsheet');
           }
 
-          return xlsxState.data.read(workbookBuffer, {
+          const trimmedPassword = password?.trim() || undefined;
+          return xlsxState.data.read(data, {
             type: 'array',
             dense: false,
             cellDates: true,
@@ -539,10 +562,10 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
             cellHTML: true,
             cellStyles: true,
             cellNF: true,
-            password: trimmedPassword && !isOoxmlPasswordSupported(name) ? trimmedPassword : undefined,
+            password: trimmedPassword || undefined,
           });
         },
-        [data, loadXlsxPopulate, name, xlsxPopulateState, xlsxState]
+        [data, modernEncryptedWorkbook, xlsxState]
       )
     );
 
@@ -606,6 +629,7 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
       }
 
       return buildRenderedSheet(
+        xlsxState.data,
         worksheet,
         xlsxState.data.utils.encode_cell,
         xlsxState.data.utils.decode_range,
@@ -613,6 +637,8 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
           header: 1,
           raw: false,
           defval: '',
+          blankrows: true,
+          range: worksheet['!ref'] ?? 0,
         })
       );
     }, [activeSheetName, workbookState, xlsxState]);
@@ -634,12 +660,14 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
     }, [workbookState, xlsxState]);
 
     const passwordProtected = isPasswordProtectedError(errorMessage);
-    const passwordRetrySupported =
-      passwordProtected &&
-      (isLegacyPasswordSupported(name, mimeType) || isOoxmlPasswordSupported(name));
+    const passwordRetrySupported = passwordProtected && isLegacyPasswordSupported(name, mimeType);
     const modernEncryptedSpreadsheet =
-      passwordProtected && isModernEncryptedSpreadsheet(name) && !passwordRetrySupported;
+      modernEncryptedWorkbook || (passwordProtected && isModernEncryptedSpreadsheet(name));
     const handleRetry = () => {
+      if (modernEncryptedSpreadsheet) {
+        return;
+      }
+
       if (xlsxState.status === AsyncStatus.Error) {
         loadXlsx().catch(() => undefined);
         return;
@@ -657,17 +685,6 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
 
     const handleDownload = () => {
       FileSaver.saveAs(new Blob([data], { type: mimeType }), name);
-    };
-
-    const handleWheel: React.WheelEventHandler<HTMLDivElement> = (evt) => {
-      evt.preventDefault();
-      const direction = evt.deltaY < 0 ? 1 : -1;
-      setZoom((currentZoom) => {
-        const nextZoom = Number((currentZoom + direction * ZOOM_STEP).toFixed(2));
-        if (nextZoom < MIN_ZOOM) return MIN_ZOOM;
-        if (nextZoom > MAX_ZOOM) return MAX_ZOOM;
-        return nextZoom;
-      });
     };
 
     const summaryText =
@@ -781,9 +798,7 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
                   onSubmit={handlePasswordSubmit}
                 >
                   <Text className={css.PasswordHint} size="T200" priority="300">
-                    {isOoxmlPasswordSupported(name)
-                      ? '\u68c0\u6d4b\u5230\u52a0\u5bc6\u5de5\u4f5c\u7c3f\uff0c\u53ef\u5c1d\u8bd5\u8f93\u5165\u5bc6\u7801\u5728\u7ebf\u6253\u5f00\u3002'
-                      : '\u68c0\u6d4b\u5230\u65e7\u7248\u52a0\u5bc6\u8868\u683c\uff0c\u53ef\u5c1d\u8bd5\u8f93\u5165\u5bc6\u7801\u5728\u7ebf\u6253\u5f00\u3002'}
+                    {'\u68c0\u6d4b\u5230\u65e7\u7248\u52a0\u5bc6\u8868\u683c\uff0c\u53ef\u5c1d\u8bd5\u8f93\u5165\u5bc6\u7801\u5728\u7ebf\u6253\u5f00\u3002'}
                   </Text>
                   <Box className={css.PasswordRow} alignItems="Center" gap="200">
                     <PasswordInput
@@ -814,47 +829,26 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
               )}
               {modernEncryptedSpreadsheet && (
                 <Text className={css.PasswordHint} size="T200" priority="300">
-                  {'\u5f53\u524d\u65b0\u7248\u52a0\u5bc6\u8868\u683c\u6682\u4e0d\u652f\u6301\u5728\u7ebf\u9884\u89c8\uff0c\u8bf7\u4e0b\u8f7d\u540e\u4f7f\u7528\u672c\u5730\u529e\u516c\u8f6f\u4ef6\u6253\u5f00\u3002'}
+                  {'\u5f53\u524d\u65b0\u7248\u52a0\u5bc6\u5de5\u4f5c\u7c3f\u6682\u4e0d\u652f\u6301\u524d\u7aef\u5728\u7ebf\u89e3\u9501\uff0c\u5426\u5219\u5bb9\u6613\u5bfc\u81f4\u9875\u9762\u5361\u4f4f\uff0c\u8bf7\u4e0b\u8f7d\u540e\u4f7f\u7528\u672c\u5730\u529e\u516c\u8f6f\u4ef6\u6253\u5f00\u3002'}
                 </Text>
               )}
-              <Button
-                variant="Critical"
-                fill="Soft"
-                size="300"
-                radii="300"
-                before={<Icon src={Icons.Warning} size="50" />}
-                onClick={handleRetry}
-              >
-                <Text size="B300">{'\u91cd\u8bd5'}</Text>
-              </Button>
+              {!modernEncryptedSpreadsheet && (
+                <Button
+                  variant="Critical"
+                  fill="Soft"
+                  size="300"
+                  radii="300"
+                  before={<Icon src={Icons.Warning} size="50" />}
+                  onClick={handleRetry}
+                >
+                  <Text size="B300">{'\u91cd\u8bd5'}</Text>
+                </Button>
+              )}
             </Box>
           )}
 
           {!isLoading && !isError && workbookState.status === AsyncStatus.Success && renderedSheet && (
             <>
-              <Box className={css.SheetRail} direction="Column">
-                <div className={css.SheetList}>
-                  {workbookState.data.SheetNames.map((sheetName) => (
-                    <Chip
-                      key={sheetName}
-                      variant={sheetName === activeSheetName ? 'Primary' : 'SurfaceVariant'}
-                      fill={sheetName === activeSheetName ? 'Solid' : 'Soft'}
-                      radii="Pill"
-                      onClick={() => setActiveSheetName(sheetName)}
-                    >
-                      <Text size="B300" truncate>
-                        {sheetName}
-                      </Text>
-                    </Chip>
-                  ))}
-                </div>
-                {summaryText && (
-                  <Text className={css.SheetSummary} size="T200" priority="300">
-                    {summaryText}
-                  </Text>
-                )}
-              </Box>
-
               <Box className={css.SpreadsheetStage} grow="Yes" style={{ minHeight: 0 }}>
                 <Scroll
                   ref={scrollRef}
@@ -863,10 +857,16 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
                   direction="Both"
                   variant="Background"
                   visibility="Hover"
-                  onWheel={handleWheel}
                 >
                   <div className={css.SheetPreview}>
-                    {renderedSheet.isEmpty ? (
+                    {renderedSheet.html ? (
+                      <div className={css.SheetCanvasShell} style={{ zoom }}>
+                        <div
+                          className={css.SheetHtmlFallback}
+                          dangerouslySetInnerHTML={{ __html: renderedSheet.html }}
+                        />
+                      </div>
+                    ) : renderedSheet.isEmpty ? (
                       <div className={css.EmptySheet}>
                         <Text size="T300" priority="300">
                           {'\u5f53\u524d\u5de5\u4f5c\u8868\u4e3a\u7a7a\u3002'}
@@ -920,6 +920,29 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
                     )}
                   </div>
                 </Scroll>
+              </Box>
+
+              <Box className={css.SheetRail} direction="Column">
+                {summaryText && (
+                  <Text className={css.SheetSummary} size="T200" priority="300">
+                    {summaryText}
+                  </Text>
+                )}
+                <div className={css.SheetList}>
+                  {workbookState.data.SheetNames.map((sheetName) => (
+                    <Chip
+                      key={sheetName}
+                      variant={sheetName === activeSheetName ? 'Primary' : 'SurfaceVariant'}
+                      fill={sheetName === activeSheetName ? 'Solid' : 'Soft'}
+                      radii="Pill"
+                      onClick={() => setActiveSheetName(sheetName)}
+                    >
+                      <Text size="B300" truncate>
+                        {sheetName}
+                      </Text>
+                    </Chip>
+                  ))}
+                </div>
               </Box>
             </>
           )}
