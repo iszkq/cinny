@@ -354,6 +354,9 @@ const getSpreadsheetDisplayError = (message?: string): string | undefined => {
   ) {
     return '\u5bc6\u7801\u4e0d\u6b63\u786e\uff0c\u8bf7\u91cd\u65b0\u8f93\u5165\u3002';
   }
+  if (/non-whitespace before first tag/i.test(message)) {
+    return '\u5bc6\u7801\u53ef\u80fd\u4e0d\u6b63\u786e\uff0c\u6216\u8005\u8be5\u52a0\u5bc6\u8868\u683c\u4e0d\u662f\u5f53\u524d\u6d4f\u89c8\u5668\u7aef\u80fd\u7a33\u5b9a\u89e3\u6790\u7684\u6807\u51c6 Excel \u52a0\u5bc6\u683c\u5f0f\u3002';
+  }
   if (/central directory|zip file|compressed folder/i.test(message)) {
     return '\u5bc6\u7801\u4e0d\u6b63\u786e\uff0c\u6216\u8005\u6587\u4ef6\u5185\u5bb9\u65e0\u6cd5\u89e3\u5bc6\uff0c\u8bf7\u786e\u8ba4\u540e\u91cd\u8bd5\u3002';
   }
