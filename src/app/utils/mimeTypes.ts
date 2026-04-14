@@ -31,8 +31,17 @@ export const APPLICATION_MIME_TYPES = [
   'application/javascript',
   'application/xhtml+xml',
   'application/xml',
+  'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-word.document.macroenabled.12',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.template',
+  'application/vnd.ms-word.template.macroenabled.12',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.template',
+  'application/vnd.ms-excel.sheet.macroenabled.12',
+  'application/vnd.ms-excel.template.macroenabled.12',
+  'application/vnd.ms-excel.sheet.binary.macroenabled.12',
+  'application/vnd.ms-excel.addin.macroenabled.12',
   'application/vnd.ms-excel',
 ];
 
@@ -112,10 +121,18 @@ export const FALLBACK_MIMETYPE = 'application/octet-stream';
 
 export const DOCX_MIME_TYPES = [
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-word.document.macroenabled.12',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.template',
+  'application/vnd.ms-word.template.macroenabled.12',
 ];
 
 export const SPREADSHEET_MIME_TYPES = [
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.template',
+  'application/vnd.ms-excel.sheet.macroenabled.12',
+  'application/vnd.ms-excel.template.macroenabled.12',
+  'application/vnd.ms-excel.sheet.binary.macroenabled.12',
+  'application/vnd.ms-excel.addin.macroenabled.12',
   'application/vnd.ms-excel',
   'text/csv',
   'text/tab-separated-values',
@@ -174,13 +191,17 @@ export const getFilePreviewKind = (fileName: string, mimeType: string): FilePrev
     return 'pdf';
   }
 
-  if (DOCX_MIME_TYPES.includes(normalizedMimeType) || ext === 'docx') {
+  if (
+    normalizedMimeType === 'application/msword' ||
+    DOCX_MIME_TYPES.includes(normalizedMimeType) ||
+    ['doc', 'docx', 'docm', 'dotx', 'dotm'].includes(ext)
+  ) {
     return 'docx';
   }
 
   if (
     SPREADSHEET_MIME_TYPES.includes(normalizedMimeType) ||
-    ['xlsx', 'xls', 'csv', 'tsv'].includes(ext)
+    ['xlsx', 'xlsm', 'xltx', 'xltm', 'xlam', 'xlsb', 'xls', 'csv', 'tsv'].includes(ext)
   ) {
     return 'spreadsheet';
   }
