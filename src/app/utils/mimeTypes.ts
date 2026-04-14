@@ -31,6 +31,9 @@ export const APPLICATION_MIME_TYPES = [
   'application/javascript',
   'application/xhtml+xml',
   'application/xml',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-excel',
 ];
 
 export const TEXT_MIME_TYPE = [
@@ -85,6 +88,8 @@ export const READABLE_EXT_TO_MIME_TYPE: Record<string, string> = {
   xml: 'text/xml',
   txt: 'text/plain',
   text: 'text/plain',
+  csv: 'text/csv',
+  tsv: 'text/tab-separated-values',
   conf: 'text/conf',
   cfg: 'text/conf',
   cnf: 'text/conf',
@@ -105,9 +110,28 @@ export const ALLOWED_BLOB_MIME_TYPES = [
 
 export const FALLBACK_MIMETYPE = 'application/octet-stream';
 
-export const getBlobSafeMimeType = (mimeType: string) => {
+export const DOCX_MIME_TYPES = [
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+];
+
+export const SPREADSHEET_MIME_TYPES = [
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-excel',
+  'text/csv',
+  'text/tab-separated-values',
+];
+
+export type FilePreviewKind = 'none' | 'text' | 'pdf' | 'spreadsheet' | 'docx';
+
+export const getNormalizedMimeType = (mimeType: string): string => {
   if (typeof mimeType !== 'string') return FALLBACK_MIMETYPE;
+
   const [type] = mimeType.split(';');
+  return type.trim().toLowerCase();
+};
+
+export const getBlobSafeMimeType = (mimeType: string) => {
+  const type = getNormalizedMimeType(mimeType);
   if (!ALLOWED_BLOB_MIME_TYPES.includes(type)) {
     return FALLBACK_MIMETYPE;
   }
@@ -131,11 +155,42 @@ export const mimeTypeToExt = (mimeType: string): string => {
   return mimeType.slice(extStart);
 };
 export const getFileNameExt = (fileName: string): string => {
-  const extStart = fileName.lastIndexOf('.') + 1;
-  return fileName.slice(extStart);
+  const extStart = fileName.lastIndexOf('.');
+  if (extStart <= 0 || extStart === fileName.length - 1) return '';
+
+  return fileName.slice(extStart + 1).toLowerCase();
 };
 export const getFileNameWithoutExt = (fileName: string): string => {
   const extStart = fileName.lastIndexOf('.');
   if (extStart === 0 || extStart === -1) return fileName;
   return fileName.slice(0, extStart);
+};
+
+export const getFilePreviewKind = (fileName: string, mimeType: string): FilePreviewKind => {
+  const normalizedMimeType = getNormalizedMimeType(mimeType);
+  const ext = getFileNameExt(fileName);
+
+  if (normalizedMimeType === 'application/pdf' || ext === 'pdf') {
+    return 'pdf';
+  }
+
+  if (DOCX_MIME_TYPES.includes(normalizedMimeType) || ext === 'docx') {
+    return 'docx';
+  }
+
+  if (
+    SPREADSHEET_MIME_TYPES.includes(normalizedMimeType) ||
+    ['xlsx', 'xls', 'csv', 'tsv'].includes(ext)
+  ) {
+    return 'spreadsheet';
+  }
+
+  if (
+    READABLE_TEXT_MIME_TYPES.includes(normalizedMimeType) ||
+    Boolean(READABLE_EXT_TO_MIME_TYPE[ext])
+  ) {
+    return 'text';
+  }
+
+  return 'none';
 };
