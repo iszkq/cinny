@@ -116,8 +116,19 @@ export type XLSXModule = {
         header: 1;
         raw: boolean;
         defval: string;
+        blankrows?: boolean;
+        range?: string | number;
       }
     ) => unknown[][];
+    sheet_to_html?: (
+      sheet: XLSXWorksheet,
+      options?: {
+        id?: string;
+        editable?: boolean;
+        header?: string;
+        footer?: string;
+      }
+    ) => string;
     decode_range: (range: string) => XLSXRange;
     encode_cell: (cell: XLSXAddress) => string;
   };

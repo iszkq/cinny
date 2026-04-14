@@ -22,6 +22,7 @@ const MAMMOTH_SCRIPT_ID = 'cinny-mammoth-runtime';
 const MAMMOTH_SCRIPT_URLS = [
   'https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js',
   'https://unpkg.com/mammoth@1.8.0/mammoth.browser.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js',
 ];
 
 let mammothRuntimePromise: Promise<MammothModule> | undefined;
