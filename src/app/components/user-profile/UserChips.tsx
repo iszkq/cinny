@@ -87,7 +87,7 @@ export function ServerChip({ server }: { server: string }) {
                   close();
                 }}
               >
-                <Text size="B300">Copy Server</Text>
+                <Text size="B300">复制服务器</Text>
               </MenuItem>
               <MenuItem
                 variant="Surface"
@@ -99,7 +99,7 @@ export function ServerChip({ server }: { server: string }) {
                   closeProfile();
                 }}
               >
-                <Text size="B300">Explore Community</Text>
+                <Text size="B300">社区探索</Text>
               </MenuItem>
             </div>
             <Line size="300" />
@@ -114,7 +114,7 @@ export function ServerChip({ server }: { server: string }) {
                   close();
                 }}
               >
-                <Text size="B300">Open in Browser</Text>
+                <Text size="B300">浏览器打开</Text>
               </MenuItem>
             </div>
           </Menu>
