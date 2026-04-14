@@ -4,6 +4,7 @@ import React, {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import classNames from 'classnames';
@@ -20,9 +21,14 @@ import {
 } from '../../plugins/xlsx';
 import { PasswordInput } from '../password-input';
 import { getFileNameExt } from '../../utils/mimeTypes';
+import { useZoom } from '../../hooks/useZoom';
+import { useDragScroll } from '../../hooks/useDragScroll';
 import * as css from './SpreadsheetViewer.css';
 
 const MODERN_ENCRYPTED_EXTS = new Set(['xlsx', 'xlsm', 'xlsb', 'xlam']);
+const ZOOM_STEP = 0.2;
+const MIN_ZOOM = 0.1;
+const MAX_ZOOM = 5;
 
 type RenderedCell = {
   key: string;
@@ -404,10 +410,13 @@ type SpreadsheetViewerProps = {
 
 export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
   ({ className, name, data, mimeType, requestClose, ...props }, ref) => {
+    const scrollRef = useRef<HTMLDivElement>(null);
     const [xlsxState, loadXlsx] = useXLSXLoader();
     const [activeSheetName, setActiveSheetName] = useState<string>();
     const [passwordInput, setPasswordInput] = useState('');
     const [submittedPassword, setSubmittedPassword] = useState<string>();
+    const { zoom, zoomIn, zoomOut, setZoom } = useZoom(ZOOM_STEP, MIN_ZOOM, MAX_ZOOM);
+    const [rotation, setRotation] = useState(0);
 
     const [workbookState, loadWorkbook] = useAsyncCallback(
       useCallback(
@@ -435,7 +444,9 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
       setPasswordInput('');
       setSubmittedPassword(undefined);
       setActiveSheetName(undefined);
-    }, [data, name]);
+      setZoom(1);
+      setRotation(0);
+    }, [data, name, setZoom]);
 
     useEffect(() => {
       loadXlsx().catch(() => undefined);
@@ -458,6 +469,16 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
         return workbookState.data.SheetNames[0];
       });
     }, [workbookState]);
+
+    useEffect(() => {
+      scrollRef.current?.scrollTo({ top: 0, left: 0 });
+    }, [activeSheetName]);
+
+    const activeSheetIndex = useMemo(() => {
+      if (workbookState.status !== AsyncStatus.Success || !activeSheetName) return -1;
+
+      return workbookState.data.SheetNames.indexOf(activeSheetName);
+    }, [activeSheetName, workbookState]);
 
     const renderedSheet = useMemo(() => {
       if (
@@ -486,6 +507,16 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
       );
     }, [activeSheetName, workbookState, xlsxState]);
 
+    const dragEnabled =
+      workbookState.status === AsyncStatus.Success &&
+      !!activeSheetName &&
+      renderedSheet !== undefined;
+    const { cursor, onMouseDown } = useDragScroll(
+      scrollRef,
+      dragEnabled,
+      `${name}-${activeSheetName ?? ''}-${rotation}`
+    );
+
     const isLoading =
       xlsxState.status === AsyncStatus.Loading || workbookState.status === AsyncStatus.Loading;
     const isError =
@@ -505,6 +536,8 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
     const passwordProtected = isPasswordProtectedError(errorMessage);
     const passwordRetrySupported = passwordProtected && isLegacyPasswordSupported(name, mimeType);
     const modernEncryptedSpreadsheet = passwordProtected && isModernEncryptedSpreadsheet(name);
+    const hasMultipleSheets =
+      workbookState.status === AsyncStatus.Success && workbookState.data.SheetNames.length > 1;
 
     const handleRetry = () => {
       if (xlsxState.status === AsyncStatus.Error) {
@@ -524,6 +557,30 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
 
     const handleDownload = () => {
       FileSaver.saveAs(new Blob([data], { type: mimeType }), name);
+    };
+
+    const handleWheel: React.WheelEventHandler<HTMLDivElement> = (evt) => {
+      evt.preventDefault();
+      const direction = evt.deltaY < 0 ? 1 : -1;
+      setZoom((currentZoom) => {
+        const nextZoom = Number((currentZoom + direction * ZOOM_STEP).toFixed(2));
+        if (nextZoom < MIN_ZOOM) return MIN_ZOOM;
+        if (nextZoom > MAX_ZOOM) return MAX_ZOOM;
+        return nextZoom;
+      });
+    };
+
+    const rotateLeft = () => setRotation((angle) => angle - 90);
+    const rotateRight = () => setRotation((angle) => angle + 90);
+    const displayRotation = ((rotation % 360) + 360) % 360;
+
+    const goToSheet = (index: number) => {
+      if (workbookState.status !== AsyncStatus.Success) return;
+
+      const sheetName = workbookState.data.SheetNames[index];
+      if (!sheetName) return;
+
+      setActiveSheetName(sheetName);
     };
 
     const summaryText =
@@ -552,6 +609,52 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
             </Text>
           </Box>
           <Box shrink="No" alignItems="Center" gap="200" style={{ flexWrap: 'wrap' }}>
+            <IconButton
+              variant={zoom < 1 ? 'Success' : 'SurfaceVariant'}
+              outlined={zoom < 1}
+              size="300"
+              radii="Pill"
+              onClick={zoomOut}
+            >
+              <Icon size="50" src={Icons.Minus} />
+            </IconButton>
+
+            <Chip variant="SurfaceVariant" radii="Pill" onClick={() => setZoom(1)}>
+              <Text size="B300">{Math.round(zoom * 100)}%</Text>
+            </Chip>
+
+            <IconButton
+              variant={zoom > 1 ? 'Success' : 'SurfaceVariant'}
+              outlined={zoom > 1}
+              size="300"
+              radii="Pill"
+              onClick={zoomIn}
+            >
+              <Icon size="50" src={Icons.Plus} />
+            </IconButton>
+
+            <Chip variant="SurfaceVariant" radii="Pill" onClick={rotateLeft}>
+              <Text size="B300">Left</Text>
+            </Chip>
+
+            <Chip
+              variant={displayRotation !== 0 ? 'Success' : 'SurfaceVariant'}
+              radii="Pill"
+              onClick={() => setRotation(0)}
+            >
+              <Text size="B300">{`${displayRotation}deg`}</Text>
+            </Chip>
+
+            <Chip variant="SurfaceVariant" radii="Pill" onClick={rotateRight}>
+              <Text size="B300">Right</Text>
+            </Chip>
+
+            {workbookState.status === AsyncStatus.Success && activeSheetIndex >= 0 && (
+              <Chip variant="SurfaceVariant" radii="Pill">
+                <Text size="B300">{`${activeSheetIndex + 1}/${workbookState.data.SheetNames.length}`}</Text>
+              </Chip>
+            )}
+
             <Chip
               variant="Primary"
               onClick={handleDownload}
@@ -563,7 +666,12 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
           </Box>
         </Header>
 
-        <Box grow="Yes" className={css.SpreadsheetViewerContent} direction="Column">
+        <Box
+          grow="Yes"
+          className={css.SpreadsheetViewerBody}
+          direction="Column"
+          style={{ minHeight: 0 }}
+        >
           {isLoading && (
             <Box
               className={css.SpreadsheetViewerState}
@@ -673,8 +781,32 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
                 )}
               </Box>
 
-              <Box grow="Yes">
-                <Scroll size="300" direction="Both" variant="Background" visibility="Hover">
+              <Box className={css.SpreadsheetStage} grow="Yes" style={{ minHeight: 0 }}>
+                {hasMultipleSheets && (
+                  <IconButton
+                    className={classNames(css.NavButton, css.NavButtonLeft)}
+                    variant="SurfaceVariant"
+                    size="400"
+                    radii="Pill"
+                    onClick={() => goToSheet(Math.max(activeSheetIndex - 1, 0))}
+                    disabled={activeSheetIndex <= 0}
+                    aria-label="Previous Sheet"
+                  >
+                    <Icon size="100" src={Icons.ArrowLeft} />
+                  </IconButton>
+                )}
+
+                <Scroll
+                  ref={scrollRef}
+                  className={css.SpreadsheetViewport}
+                  size="300"
+                  direction="Both"
+                  variant="Background"
+                  visibility="Hover"
+                  onWheel={handleWheel}
+                  onMouseDown={onMouseDown}
+                  style={{ cursor }}
+                >
                   <div className={css.SheetPreview}>
                     {renderedSheet.isEmpty ? (
                       <div className={css.EmptySheet}>
@@ -683,51 +815,82 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
                         </Text>
                       </div>
                     ) : (
-                      <table className={css.Table}>
-                        <colgroup>
-                          {renderedSheet.colWidths.map((width, index) => (
-                            <col
-                              key={`col-${index}`}
-                              style={
-                                width
-                                  ? {
-                                      width,
-                                      minWidth: width,
-                                    }
-                                  : undefined
-                              }
-                            />
-                          ))}
-                        </colgroup>
-                        <tbody>
-                          {renderedSheet.rows.map((row) => (
-                            <tr key={row.key} style={row.height ? { height: row.height } : undefined}>
-                              {row.cells.map((cell) => (
-                                <td
-                                  key={cell.key}
-                                  className={css.Cell}
-                                  colSpan={cell.colSpan}
-                                  rowSpan={cell.rowSpan}
-                                  style={cell.style}
-                                  title={cell.title}
-                                >
-                                  {cell.html ? (
-                                    <span
-                                      className={css.CellText}
-                                      dangerouslySetInnerHTML={{ __html: cell.html }}
-                                    />
-                                  ) : (
-                                    <span className={css.CellText}>{cell.text || ' '}</span>
-                                  )}
-                                </td>
-                              ))}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                      <div
+                        className={css.SheetCanvasShell}
+                        style={{
+                          zoom,
+                          transform: `rotate(${rotation}deg)`,
+                          transformOrigin: 'top center',
+                          transition: cursor === 'grabbing' ? 'none' : 'transform 140ms ease',
+                        }}
+                      >
+                        <table className={css.Table}>
+                          <colgroup>
+                            {renderedSheet.colWidths.map((width, index) => (
+                              <col
+                                key={`col-${index}`}
+                                style={
+                                  width
+                                    ? {
+                                        width,
+                                        minWidth: width,
+                                      }
+                                    : undefined
+                                }
+                              />
+                            ))}
+                          </colgroup>
+                          <tbody>
+                            {renderedSheet.rows.map((row) => (
+                              <tr key={row.key} style={row.height ? { height: row.height } : undefined}>
+                                {row.cells.map((cell) => (
+                                  <td
+                                    key={cell.key}
+                                    className={css.Cell}
+                                    colSpan={cell.colSpan}
+                                    rowSpan={cell.rowSpan}
+                                    style={cell.style}
+                                    title={cell.title}
+                                  >
+                                    {cell.html ? (
+                                      <span
+                                        className={css.CellText}
+                                        dangerouslySetInnerHTML={{ __html: cell.html }}
+                                      />
+                                    ) : (
+                                      <span className={css.CellText}>{cell.text || ' '}</span>
+                                    )}
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     )}
                   </div>
                 </Scroll>
+
+                {hasMultipleSheets && (
+                  <IconButton
+                    className={classNames(css.NavButton, css.NavButtonRight)}
+                    variant="SurfaceVariant"
+                    size="400"
+                    radii="Pill"
+                    onClick={() =>
+                      goToSheet(
+                        Math.min(activeSheetIndex + 1, workbookState.data.SheetNames.length - 1)
+                      )
+                    }
+                    disabled={
+                      activeSheetIndex < 0 ||
+                      activeSheetIndex >= workbookState.data.SheetNames.length - 1
+                    }
+                    aria-label="Next Sheet"
+                  >
+                    <Icon size="100" src={Icons.ArrowRight} />
+                  </IconButton>
+                )}
               </Box>
             </>
           )}

@@ -4,27 +4,41 @@ import { DefaultReset, color, config } from 'folds';
 export const SpreadsheetViewer = style([
   DefaultReset,
   {
+    width: '100%',
     height: '100%',
+    minHeight: 0,
+    borderRadius: config.radii.R500,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(7, 10, 16, 0.96)',
+    color: '#fff',
+    boxShadow: '0 28px 80px rgba(7, 10, 16, 0.4)',
   },
 ]);
 
 export const SpreadsheetViewerHeader = style([
   DefaultReset,
   {
-    paddingLeft: config.space.S200,
-    paddingRight: config.space.S200,
-    borderBottomWidth: config.borderWidth.B300,
+    paddingLeft: config.space.S300,
+    paddingRight: config.space.S300,
+    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+    background: 'rgba(255, 255, 255, 0.03)',
     flexShrink: 0,
     gap: config.space.S200,
   },
 ]);
 
-export const SpreadsheetViewerContent = style([
+export const SpreadsheetViewerBody = style([
   DefaultReset,
   {
+    width: '100%',
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    minHeight: 0,
     overflow: 'hidden',
-    backgroundColor: color.Background.Container,
-    color: color.Background.OnContainer,
+    background:
+      'radial-gradient(circle at top, rgba(59, 130, 246, 0.08), transparent 32%), rgba(7, 10, 16, 0.98)',
+    color: '#fff',
   },
 ]);
 
@@ -76,9 +90,9 @@ export const SheetRail = style([
   DefaultReset,
   {
     padding: `${config.space.S250} ${config.space.S300}`,
-    borderBottomWidth: config.borderWidth.B300,
+    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
     gap: config.space.S200,
-    backgroundColor: color.Surface.Container,
+    background: 'rgba(255, 255, 255, 0.03)',
   },
 ]);
 
@@ -100,12 +114,48 @@ export const SheetSummary = style([
   },
 ]);
 
+export const SpreadsheetStage = style([
+  DefaultReset,
+  {
+    width: '100%',
+    flex: 1,
+    display: 'flex',
+    position: 'relative',
+    minHeight: 0,
+    overflow: 'hidden',
+    padding: config.space.S300,
+  },
+]);
+
+export const SpreadsheetViewport = style([
+  DefaultReset,
+  {
+    position: 'relative',
+    width: '100%',
+    height: '100%',
+    minHeight: 0,
+    borderRadius: config.radii.R400,
+    background: 'rgba(255, 255, 255, 0.03)',
+  },
+]);
+
 export const SheetPreview = style([
   DefaultReset,
   {
     minWidth: '100%',
     minHeight: '100%',
-    padding: config.space.S300,
+    padding: config.space.S500,
+  },
+]);
+
+export const SheetCanvasShell = style([
+  DefaultReset,
+  {
+    width: 'fit-content',
+    minWidth: '100%',
+    marginLeft: 'auto',
+    marginRight: 'auto',
+    transition: 'transform 140ms ease',
   },
 ]);
 
@@ -133,7 +183,7 @@ export const Table = style([
     border: `${config.borderWidth.B300} solid ${color.Surface.ContainerLine}`,
     borderRadius: config.radii.R400,
     overflow: 'hidden',
-    boxShadow: '0 12px 32px rgba(15, 23, 42, 0.08)',
+    boxShadow: '0 24px 48px rgba(15, 23, 42, 0.18)',
   },
 ]);
 
@@ -158,6 +208,27 @@ export const CellText = style([
     minHeight: '1.45em',
   },
 ]);
+
+export const NavButton = style([
+  DefaultReset,
+  {
+    position: 'absolute',
+    top: '50%',
+    zIndex: 2,
+    transform: 'translateY(-50%)',
+    background: 'rgba(15, 23, 42, 0.72)',
+    color: '#fff',
+    boxShadow: '0 18px 40px rgba(15, 23, 42, 0.18)',
+  },
+]);
+
+export const NavButtonLeft = style({
+  left: config.space.S300,
+});
+
+export const NavButtonRight = style({
+  right: config.space.S300,
+});
 
 globalStyle(`${CellText} p`, {
   margin: 0,

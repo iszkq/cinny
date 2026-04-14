@@ -1,9 +1,11 @@
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import classNames from 'classnames';
 import FileSaver from 'file-saver';
 import { Box, Button, Chip, Header, Icon, IconButton, Icons, Scroll, Spinner, Text, as } from 'folds';
 import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
 import { useDocxPreviewLoader } from '../../plugins/docx-preview';
+import { useZoom } from '../../hooks/useZoom';
+import { useDragScroll } from '../../hooks/useDragScroll';
 import * as css from './DocxViewer.css';
 
 export type DocxViewerProps = {
@@ -13,10 +15,20 @@ export type DocxViewerProps = {
   requestClose: () => void;
 };
 
+const ZOOM_STEP = 0.2;
+const MIN_ZOOM = 0.1;
+const MAX_ZOOM = 5;
+
 export const DocxViewer = as<'div', DocxViewerProps>(
   ({ className, name, data, mimeType, requestClose, ...props }, ref) => {
     const containerRef = useRef<HTMLDivElement>(null);
+    const scrollRef = useRef<HTMLDivElement>(null);
+    const pageElementsRef = useRef<HTMLElement[]>([]);
     const [docxPreviewState, loadDocxPreview] = useDocxPreviewLoader();
+    const { zoom, zoomIn, zoomOut, setZoom } = useZoom(ZOOM_STEP, MIN_ZOOM, MAX_ZOOM);
+    const [rotation, setRotation] = useState(0);
+    const [pageNo, setPageNo] = useState(1);
+    const [pageCount, setPageCount] = useState(1);
 
     const [renderState, renderDocument] = useAsyncCallback(
       useCallback(async () => {
@@ -39,7 +51,23 @@ export const DocxViewer = as<'div', DocxViewerProps>(
           renderFootnotes: true,
           useBase64URL: true,
         });
+
+        const pages = Array.from(
+          container.querySelectorAll('.docx-wrapper > .docx, .docx')
+        ).filter((page, index, allPages) => allPages.indexOf(page) === index) as HTMLElement[];
+
+        pageElementsRef.current = pages.length > 0 ? pages : [container];
+        setPageCount(Math.max(pages.length, 1));
+        setPageNo(1);
+        scrollRef.current?.scrollTo({ top: 0, left: 0 });
       }, [data, docxPreviewState])
+    );
+
+    const dragEnabled = renderState.status === AsyncStatus.Success;
+    const { cursor, onMouseDown } = useDragScroll(
+      scrollRef,
+      dragEnabled,
+      `${name}-${pageNo}-${pageCount}-${rotation}`
     );
 
     useEffect(() => {
@@ -52,6 +80,12 @@ export const DocxViewer = as<'div', DocxViewerProps>(
       }
     }, [docxPreviewState, renderDocument]);
 
+    useEffect(() => {
+      setZoom(1);
+      setRotation(0);
+      setPageNo(1);
+    }, [data, name, setZoom]);
+
     useEffect(
       () => () => {
         if (containerRef.current) {
@@ -60,6 +94,32 @@ export const DocxViewer = as<'div', DocxViewerProps>(
       },
       []
     );
+
+    useEffect(() => {
+      const viewport = scrollRef.current;
+      if (!viewport || pageCount <= 1) return undefined;
+
+      const handleScroll = () => {
+        const viewportCenter = viewport.scrollTop + viewport.clientHeight / 2;
+        let nextPage = 1;
+        let nextDistance = Number.POSITIVE_INFINITY;
+
+        pageElementsRef.current.forEach((page, index) => {
+          const pageCenter = page.offsetTop + page.offsetHeight / 2;
+          const distance = Math.abs(pageCenter - viewportCenter);
+
+          if (distance < nextDistance) {
+            nextDistance = distance;
+            nextPage = index + 1;
+          }
+        });
+
+        setPageNo(nextPage);
+      };
+
+      viewport.addEventListener('scroll', handleScroll, { passive: true });
+      return () => viewport.removeEventListener('scroll', handleScroll);
+    }, [pageCount]);
 
     const isLoading =
       docxPreviewState.status === AsyncStatus.Loading || renderState.status === AsyncStatus.Loading;
@@ -79,6 +139,40 @@ export const DocxViewer = as<'div', DocxViewerProps>(
       FileSaver.saveAs(data, name);
     };
 
+    const handleWheel: React.WheelEventHandler<HTMLDivElement> = (evt) => {
+      evt.preventDefault();
+      const direction = evt.deltaY < 0 ? 1 : -1;
+      setZoom((currentZoom) => {
+        const nextZoom = Number((currentZoom + direction * ZOOM_STEP).toFixed(2));
+        if (nextZoom < MIN_ZOOM) return MIN_ZOOM;
+        if (nextZoom > MAX_ZOOM) return MAX_ZOOM;
+        return nextZoom;
+      });
+    };
+
+    const goToPage = (nextPage: number) => {
+      const page = pageElementsRef.current[nextPage - 1];
+      if (!page || !scrollRef.current) return;
+
+      setPageNo(nextPage);
+      scrollRef.current.scrollTo({
+        top: Math.max(page.offsetTop - 24, 0),
+        behavior: 'smooth',
+      });
+    };
+
+    const handlePrevPage = () => {
+      goToPage(Math.max(pageNo - 1, 1));
+    };
+
+    const handleNextPage = () => {
+      goToPage(Math.min(pageNo + 1, pageCount));
+    };
+
+    const rotateLeft = () => setRotation((angle) => angle - 90);
+    const rotateRight = () => setRotation((angle) => angle + 90);
+    const displayRotation = ((rotation % 360) + 360) % 360;
+
     return (
       <Box className={classNames(css.DocxViewer, className)} direction="Column" {...props} ref={ref}>
         <Header className={css.DocxViewerHeader} size="400">
@@ -91,6 +185,50 @@ export const DocxViewer = as<'div', DocxViewerProps>(
             </Text>
           </Box>
           <Box shrink="No" alignItems="Center" gap="200" style={{ flexWrap: 'wrap' }}>
+            <IconButton
+              variant={zoom < 1 ? 'Success' : 'SurfaceVariant'}
+              outlined={zoom < 1}
+              size="300"
+              radii="Pill"
+              onClick={zoomOut}
+            >
+              <Icon size="50" src={Icons.Minus} />
+            </IconButton>
+
+            <Chip variant="SurfaceVariant" radii="Pill" onClick={() => setZoom(1)}>
+              <Text size="B300">{Math.round(zoom * 100)}%</Text>
+            </Chip>
+
+            <IconButton
+              variant={zoom > 1 ? 'Success' : 'SurfaceVariant'}
+              outlined={zoom > 1}
+              size="300"
+              radii="Pill"
+              onClick={zoomIn}
+            >
+              <Icon size="50" src={Icons.Plus} />
+            </IconButton>
+
+            <Chip variant="SurfaceVariant" radii="Pill" onClick={rotateLeft}>
+              <Text size="B300">Left</Text>
+            </Chip>
+
+            <Chip
+              variant={displayRotation !== 0 ? 'Success' : 'SurfaceVariant'}
+              radii="Pill"
+              onClick={() => setRotation(0)}
+            >
+              <Text size="B300">{`${displayRotation}deg`}</Text>
+            </Chip>
+
+            <Chip variant="SurfaceVariant" radii="Pill" onClick={rotateRight}>
+              <Text size="B300">Right</Text>
+            </Chip>
+
+            <Chip variant="SurfaceVariant" radii="Pill">
+              <Text size="B300">{`${pageNo}/${pageCount}`}</Text>
+            </Chip>
+
             <Chip
               variant="Primary"
               onClick={handleDownload}
@@ -104,9 +242,10 @@ export const DocxViewer = as<'div', DocxViewerProps>(
 
         <Box
           grow="Yes"
-          className={css.DocxViewerContent}
+          className={css.DocxViewerBody}
           justifyContent={isLoading || isError ? 'Center' : undefined}
           alignItems={isLoading || isError ? 'Center' : undefined}
+          style={{ minHeight: 0 }}
         >
           {isLoading && (
             <Box className={css.DocxViewerState} direction="Column" gap="200" alignItems="Center">
@@ -132,15 +271,61 @@ export const DocxViewer = as<'div', DocxViewerProps>(
           )}
 
           {!isLoading && !isError && (
-            <Scroll hideTrack variant="Background" visibility="Hover">
-              <div className={css.DocxViewport}>
-                <div
-                  className={css.DocxContainer}
-                  ref={containerRef}
-                  data-mime-type={mimeType}
-                />
-              </div>
-            </Scroll>
+            <Box className={css.DocxViewerStage} grow="Yes" style={{ minHeight: 0 }}>
+              {pageCount > 1 && (
+                <IconButton
+                  className={classNames(css.NavButton, css.NavButtonLeft)}
+                  variant="SurfaceVariant"
+                  size="400"
+                  radii="Pill"
+                  onClick={handlePrevPage}
+                  disabled={pageNo <= 1}
+                  aria-label="Previous Page"
+                >
+                  <Icon size="100" src={Icons.ArrowLeft} />
+                </IconButton>
+              )}
+
+              <Scroll
+                ref={scrollRef}
+                className={css.DocxViewerViewport}
+                direction="Both"
+                hideTrack
+                variant="Background"
+                visibility="Hover"
+                onWheel={handleWheel}
+                onMouseDown={onMouseDown}
+                style={{ cursor }}
+              >
+                <div className={css.DocxViewport}>
+                  <div
+                    className={css.DocxCanvasShell}
+                    style={{
+                      zoom,
+                      transform: `rotate(${rotation}deg)`,
+                      transformOrigin: 'top center',
+                      transition: cursor === 'grabbing' ? 'none' : 'transform 140ms ease',
+                    }}
+                  >
+                    <div className={css.DocxContainer} ref={containerRef} data-mime-type={mimeType} />
+                  </div>
+                </div>
+              </Scroll>
+
+              {pageCount > 1 && (
+                <IconButton
+                  className={classNames(css.NavButton, css.NavButtonRight)}
+                  variant="SurfaceVariant"
+                  size="400"
+                  radii="Pill"
+                  onClick={handleNextPage}
+                  disabled={pageNo >= pageCount}
+                  aria-label="Next Page"
+                >
+                  <Icon size="100" src={Icons.ArrowRight} />
+                </IconButton>
+              )}
+            </Box>
           )}
         </Box>
       </Box>
