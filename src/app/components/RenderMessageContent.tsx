@@ -6,6 +6,7 @@ import { config } from 'folds';
 import {
   AudioContent,
   DownloadFile,
+  ReadDocxFile,
   FileContent,
   ImageContent,
   MAudio,
@@ -24,11 +25,13 @@ import {
   UnsupportedContent,
   VideoContent,
   PollContent,
+  ReadSpreadsheetFile,
 } from './message';
 import { UrlPreviewCard, UrlPreviewHolder } from './url-preview';
 import { Image, MediaControl, Video } from './media';
 import { ImageViewer } from './image-viewer';
 import { PdfViewer } from './Pdf-viewer';
+import { DocxViewer, SpreadsheetViewer } from './file-viewer';
 import { TextViewer } from './text-viewer';
 import { testMatrixTo } from '../plugins/matrix-to';
 import { IImageContent } from '../../types/matrix/common';
@@ -125,6 +128,24 @@ export function RenderMessageContent({
                 url={url}
                 encInfo={encInfo}
                 renderViewer={(p) => <TextViewer {...p} />}
+              />
+            )}
+            renderAsSpreadsheetFile={() => (
+              <ReadSpreadsheetFile
+                body={body}
+                mimeType={mimeType}
+                url={url}
+                encInfo={encInfo}
+                renderViewer={(p) => <SpreadsheetViewer {...p} />}
+              />
+            )}
+            renderAsDocxFile={() => (
+              <ReadDocxFile
+                body={body}
+                mimeType={mimeType}
+                url={url}
+                encInfo={encInfo}
+                renderViewer={(p) => <DocxViewer {...p} />}
               />
             )}
           >
