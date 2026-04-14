@@ -5,6 +5,7 @@ import { Box, Button, Chip, Header, Icon, IconButton, Icons, Scroll, Spinner, Te
 import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
 import { useDocxPreviewLoader } from '../../plugins/docx-preview';
 import { useZoom } from '../../hooks/useZoom';
+import { getFileNameExt } from '../../utils/mimeTypes';
 import * as css from './DocxViewer.css';
 
 export type DocxViewerProps = {
@@ -17,6 +18,33 @@ export type DocxViewerProps = {
 const ZOOM_STEP = 0.2;
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 5;
+
+const getErrorMessage = (error: unknown): string | undefined => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+
+  return undefined;
+};
+
+const getWordPreviewDisplayError = (
+  name: string,
+  mimeType: string,
+  message?: string
+): string | undefined => {
+  const ext = getFileNameExt(name);
+  if (
+    ext === 'doc' ||
+    mimeType.toLowerCase() === 'application/msword' ||
+    /not a zip file|central directory|end of central directory/i.test(message ?? '')
+  ) {
+    return '\u5f53\u524d\u4ec5\u652f\u6301 docx\u3001docm\u3001dotx\u3001dotm \u5728\u7ebf\u9884\u89c8\uff0c\u65e7\u7248 .doc \u8bf7\u4e0b\u8f7d\u540e\u4f7f\u7528\u672c\u5730\u529e\u516c\u8f6f\u4ef6\u6253\u5f00\u3002';
+  }
+  if (/preview engine is not loaded/i.test(message ?? '')) {
+    return '\u6587\u7a3f\u9884\u89c8\u5f15\u64ce\u5c1a\u672a\u52a0\u8f7d\u5b8c\u6210\u3002';
+  }
+
+  return '\u6587\u7a3f\u9884\u89c8\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5\u6216\u4e0b\u8f7d\u540e\u67e5\u770b\u3002';
+};
 
 export const DocxViewer = as<'div', DocxViewerProps>(
   ({ className, name, data, mimeType, requestClose, ...props }, ref) => {
@@ -115,6 +143,12 @@ export const DocxViewer = as<'div', DocxViewerProps>(
       docxPreviewState.status === AsyncStatus.Loading || renderState.status === AsyncStatus.Loading;
     const isError =
       docxPreviewState.status === AsyncStatus.Error || renderState.status === AsyncStatus.Error;
+    const errorMessage =
+      docxPreviewState.status === AsyncStatus.Error
+        ? getErrorMessage(docxPreviewState.error)
+        : renderState.status === AsyncStatus.Error
+        ? getErrorMessage(renderState.error)
+        : undefined;
 
     const handleRetry = () => {
       if (docxPreviewState.status === AsyncStatus.Error) {
@@ -210,6 +244,11 @@ export const DocxViewer = as<'div', DocxViewerProps>(
           {isError && (
             <Box className={css.DocxViewerState} direction="Column" gap="300" alignItems="Center">
               <Text size="T300">{'\u6587\u7a3f\u9884\u89c8\u52a0\u8f7d\u5931\u8d25\u3002'}</Text>
+              {getWordPreviewDisplayError(name, mimeType, errorMessage) && (
+                <Text size="T200" priority="300" style={{ textAlign: 'center', lineHeight: '1.45' }}>
+                  {getWordPreviewDisplayError(name, mimeType, errorMessage)}
+                </Text>
+              )}
               <Button
                 variant="Critical"
                 fill="Soft"
