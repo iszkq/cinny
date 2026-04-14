@@ -1,5 +1,5 @@
 import { MatrixClient, ReceiptType } from 'matrix-js-sdk';
-import { getRoomFullyReadEventId } from './room';
+import { getRoomFullyReadEventId, setOptimisticRoomReadMarker } from './room';
 
 export const ROOM_MARKED_AS_READ = 'cinny:room-marked-as-read';
 const FULLY_READ_EVENT_TYPE = 'm.fully_read';
@@ -65,5 +65,6 @@ export async function markAsRead(mx: MatrixClient, roomId: string, privateReceip
     ]);
   }
 
+  setOptimisticRoomReadMarker(roomId, latestEventId);
   dispatchRoomMarkedAsRead(roomId);
 }

@@ -35,6 +35,12 @@ type FullyReadContent = {
 };
 
 const FULLY_READ_EVENT_TYPE = 'm.fully_read';
+const optimisticRoomReadMarkers = new Map<string, string>();
+
+type RoomReadMarkerState = {
+  eventId?: string;
+  optimistic: boolean;
+};
 
 export const getStateEvent = (
   room: Room,
@@ -58,7 +64,16 @@ export const getRoomFullyReadEventId = (room: Room): string | undefined => {
   return typeof eventId === 'string' ? eventId : undefined;
 };
 
-export const getRoomReadMarkerEventId = (
+export const setOptimisticRoomReadMarker = (roomId: string, eventId: string) => {
+  optimisticRoomReadMarkers.set(roomId, eventId);
+};
+
+export const clearOptimisticRoomReadMarker = (roomId: string, eventId?: string) => {
+  if (eventId && optimisticRoomReadMarkers.get(roomId) !== eventId) return;
+  optimisticRoomReadMarkers.delete(roomId);
+};
+
+const getStoredRoomReadMarkerEventId = (
   room: Room,
   userId?: string | null
 ): string | undefined => {
@@ -67,6 +82,59 @@ export const getRoomReadMarkerEventId = (
   if (!userId) return undefined;
   return room.getEventReadUpTo(userId) ?? undefined;
 };
+
+const getLiveTimelineEventIndex = (room: Room, eventId?: string): number => {
+  if (!eventId) return -1;
+  return room.getLiveTimeline().getEvents().findIndex((event) => event.getId() === eventId);
+};
+
+const getRoomReadMarkerState = (room: Room, userId?: string | null): RoomReadMarkerState => {
+  const storedReadMarkerEventId = getStoredRoomReadMarkerEventId(room, userId);
+  const optimisticReadMarkerEventId = optimisticRoomReadMarkers.get(room.roomId);
+
+  if (!optimisticReadMarkerEventId) {
+    return {
+      eventId: storedReadMarkerEventId,
+      optimistic: false,
+    };
+  }
+
+  if (storedReadMarkerEventId === optimisticReadMarkerEventId) {
+    clearOptimisticRoomReadMarker(room.roomId, optimisticReadMarkerEventId);
+    return {
+      eventId: storedReadMarkerEventId,
+      optimistic: false,
+    };
+  }
+
+  const optimisticIndex = getLiveTimelineEventIndex(room, optimisticReadMarkerEventId);
+  if (optimisticIndex === -1) {
+    clearOptimisticRoomReadMarker(room.roomId, optimisticReadMarkerEventId);
+    return {
+      eventId: storedReadMarkerEventId,
+      optimistic: false,
+    };
+  }
+
+  const storedIndex = getLiveTimelineEventIndex(room, storedReadMarkerEventId);
+  if (storedIndex >= optimisticIndex) {
+    clearOptimisticRoomReadMarker(room.roomId, optimisticReadMarkerEventId);
+    return {
+      eventId: storedReadMarkerEventId,
+      optimistic: false,
+    };
+  }
+
+  return {
+    eventId: optimisticReadMarkerEventId,
+    optimistic: true,
+  };
+};
+
+export const getRoomReadMarkerEventId = (
+  room: Room,
+  userId?: string | null
+): string | undefined => getRoomReadMarkerState(room, userId).eventId;
 
 export const getMDirects = (mDirectEvent: MatrixEvent): Set<string> => {
   const roomIds = new Set<string>();
@@ -255,9 +323,18 @@ export const roomHaveUnread = (mx: MatrixClient, room: Room) => {
   return true;
 };
 
-export const getUnreadInfo = (room: Room): UnreadInfo => {
+export const getUnreadInfo = (mx: MatrixClient, room: Room): UnreadInfo => {
   const total = room.getUnreadNotificationCount(NotificationCountType.Total);
   const highlight = room.getUnreadNotificationCount(NotificationCountType.Highlight);
+
+  if (getRoomReadMarkerState(room, mx.getUserId()).optimistic && !roomHaveUnread(mx, room)) {
+    return {
+      roomId: room.roomId,
+      highlight: 0,
+      total: 0,
+    };
+  }
+
   return {
     roomId: room.roomId,
     highlight,
@@ -271,8 +348,13 @@ export const getUnreadInfos = (mx: MatrixClient): UnreadInfo[] => {
     if (room.getMyMembership() !== 'join') return unread;
     if (getNotificationType(mx, room.roomId) === NotificationType.Mute) return unread;
 
-    if (roomHaveNotification(room) || roomHaveUnread(mx, room)) {
-      unread.push(getUnreadInfo(room));
+    const hasUnread = roomHaveUnread(mx, room);
+    const unreadInfo = getUnreadInfo(mx, room);
+
+    if (roomHaveNotification(room) || hasUnread) {
+      if (unreadInfo.total > 0 || hasUnread) {
+        unread.push(unreadInfo);
+      }
     }
 
     return unread;
