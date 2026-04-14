@@ -69,6 +69,7 @@ export const SPACE_ROOM_PATH = `/:spaceIdOrAlias/${_ROOM_PATH}`;
 
 export const _FEATURED_PATH = 'featured/';
 export const _SERVER_PATH = ':server/';
+export const _WEB_PATH = 'web/:webId/';
 export const EXPLORE_PATH = '/explore/';
 export const EXPLORE_FEATURED_PATH = `/explore/${_FEATURED_PATH}`;
 
@@ -80,6 +81,7 @@ export type ExploreServerPathSearchParams = {
   instance?: string;
 };
 export const EXPLORE_SERVER_PATH = `/explore/${_SERVER_PATH}`;
+export const EXPLORE_WEB_PATH = `/explore/${_WEB_PATH}`;
 
 export const CREATE_PATH = '/create';
 
