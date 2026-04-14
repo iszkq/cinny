@@ -2,7 +2,93 @@ import { useCallback } from 'react';
 import { useAsyncCallback } from '../hooks/useAsyncCallback';
 import xlsxBrowserRuntimeUrl from 'xlsx/dist/xlsx.full.min.js?url';
 
-export type XLSXWorksheet = unknown;
+export type XLSXAddress = {
+  c: number;
+  r: number;
+};
+
+export type XLSXRange = {
+  s: XLSXAddress;
+  e: XLSXAddress;
+};
+
+export type XLSXColor = {
+  rgb?: string;
+  theme?: number;
+  tint?: number;
+  auto?: 1;
+};
+
+export type XLSXFont = {
+  name?: string;
+  sz?: number;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean | string;
+  color?: XLSXColor;
+};
+
+export type XLSXAlignment = {
+  horizontal?: string;
+  vertical?: string;
+  wrapText?: boolean;
+  textRotation?: number;
+};
+
+export type XLSXFill = {
+  patternType?: string;
+  fgColor?: XLSXColor;
+  bgColor?: XLSXColor;
+};
+
+export type XLSXBorderSide = {
+  style?: string;
+  color?: XLSXColor;
+};
+
+export type XLSXBorder = {
+  top?: XLSXBorderSide;
+  right?: XLSXBorderSide;
+  bottom?: XLSXBorderSide;
+  left?: XLSXBorderSide;
+};
+
+export type XLSXCellStyle = {
+  font?: XLSXFont;
+  alignment?: XLSXAlignment;
+  fill?: XLSXFill;
+  border?: XLSXBorder;
+};
+
+export type XLSXCell = {
+  t?: string;
+  v?: unknown;
+  w?: string;
+  h?: string;
+  z?: string;
+  s?: XLSXCellStyle;
+};
+
+export type XLSXRowInfo = {
+  hidden?: boolean;
+  hpx?: number;
+  hpt?: number;
+  level?: number;
+};
+
+export type XLSXColInfo = {
+  hidden?: boolean;
+  wpx?: number;
+  width?: number;
+  wch?: number;
+};
+
+export type XLSXWorksheet = Record<string, XLSXCell | XLSXRange[] | XLSXRowInfo[] | XLSXColInfo[] | string | undefined> & {
+  '!ref'?: string;
+  '!merges'?: XLSXRange[];
+  '!rows'?: XLSXRowInfo[];
+  '!cols'?: XLSXColInfo[];
+};
 
 export type XLSXWorkbook = {
   SheetNames: string[];
@@ -20,6 +106,7 @@ export type XLSXModule = {
       cellHTML?: boolean;
       cellStyles?: boolean;
       cellNF?: boolean;
+      password?: string;
     }
   ) => XLSXWorkbook;
   utils: {
@@ -31,7 +118,8 @@ export type XLSXModule = {
         defval: string;
       }
     ) => unknown[][];
-    sheet_to_html: (sheet: XLSXWorksheet) => string;
+    decode_range: (range: string) => XLSXRange;
+    encode_cell: (cell: XLSXAddress) => string;
   };
 };
 
@@ -103,6 +191,4 @@ const loadXLSXBrowserRuntime = async (): Promise<XLSXModule> => {
 };
 
 export const useXLSXLoader = () =>
-  useAsyncCallback(
-    useCallback(async () => loadXLSXBrowserRuntime(), [])
-  );
+  useAsyncCallback(useCallback(async () => loadXLSXBrowserRuntime(), []));
