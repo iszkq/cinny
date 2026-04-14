@@ -336,7 +336,7 @@ export function ReadSpreadsheetFile({
 
 type RenderDocxViewerProps = {
   name: string;
-  data: Blob;
+  data: ArrayBuffer;
   mimeType: string;
   requestClose: () => void;
 };
@@ -354,8 +354,9 @@ export function ReadDocxFile({ body, mimeType, url, encInfo, renderViewer }: Rea
   const [docxState, loadDocx] = useAsyncCallback(
     useCallback(async () => {
       const fileContent = await loadRemoteFile();
+      const buffer = await fileContent.arrayBuffer();
       setDocxViewer(true);
-      return fileContent;
+      return buffer;
     }, [loadRemoteFile])
   );
 

@@ -102,3 +102,34 @@ globalStyle(`${DocxContainer} .docx-wrapper > .docx`, {
 globalStyle(`${DocxContainer} .docx`, {
   maxWidth: '100%',
 });
+
+globalStyle(`${DocxContainer} .cinny-docx-fallback`, {
+  maxWidth: '900px',
+  marginLeft: 'auto',
+  marginRight: 'auto',
+  padding: `${config.space.S500} ${config.space.S600}`,
+  background: color.Surface.Container,
+  color: color.Surface.OnContainer,
+  borderRadius: config.radii.R400,
+  boxShadow: '0 12px 32px rgba(15, 23, 42, 0.08)',
+});
+
+globalStyle(`${DocxContainer} .cinny-docx-fallback > *:first-child`, {
+  marginTop: 0,
+});
+
+globalStyle(`${DocxContainer} .cinny-docx-fallback > *:last-child`, {
+  marginBottom: 0,
+});
+
+globalStyle(`${DocxContainer} .cinny-docx-fallback table`, {
+  width: '100%',
+  borderCollapse: 'collapse',
+  marginBottom: config.space.S400,
+});
+
+globalStyle(`${DocxContainer} .cinny-docx-fallback th, ${DocxContainer} .cinny-docx-fallback td`, {
+  border: `${config.borderWidth.B300} solid ${color.Surface.ContainerLine}`,
+  padding: `${config.space.S100} ${config.space.S200}`,
+  verticalAlign: 'top',
+});

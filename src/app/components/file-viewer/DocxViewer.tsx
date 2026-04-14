@@ -4,13 +4,14 @@ import FileSaver from 'file-saver';
 import { Box, Button, Chip, Header, Icon, IconButton, Icons, Scroll, Spinner, Text, as } from 'folds';
 import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
 import { useDocxPreviewLoader } from '../../plugins/docx-preview';
+import { useMammothLoader } from '../../plugins/mammoth';
 import { useZoom } from '../../hooks/useZoom';
 import { getFileNameExt } from '../../utils/mimeTypes';
 import * as css from './DocxViewer.css';
 
 export type DocxViewerProps = {
   name: string;
-  data: Blob;
+  data: ArrayBuffer;
   mimeType: string;
   requestClose: () => void;
 };
@@ -52,41 +53,80 @@ export const DocxViewer = as<'div', DocxViewerProps>(
     const scrollRef = useRef<HTMLDivElement>(null);
     const pageElementsRef = useRef<HTMLElement[]>([]);
     const [docxPreviewState, loadDocxPreview] = useDocxPreviewLoader();
+    const [mammothState, loadMammoth] = useMammothLoader();
     const { zoom, zoomIn, zoomOut, setZoom } = useZoom(ZOOM_STEP, MIN_ZOOM, MAX_ZOOM);
     const [pageNo, setPageNo] = useState(1);
     const [pageCount, setPageCount] = useState(1);
 
     const [renderState, renderDocument] = useAsyncCallback(
       useCallback(async () => {
-        if (docxPreviewState.status !== AsyncStatus.Success) {
-          throw new Error('DOCX preview engine is not loaded');
-        }
-
         const container = containerRef.current;
         if (!container) return;
 
+        const renderWithMammoth = async () => {
+          const mammoth =
+            mammothState.status === AsyncStatus.Success ? mammothState.data : await loadMammoth();
+
+          const result = await mammoth.convertToHtml(
+            { arrayBuffer: data },
+            {
+              includeDefaultStyleMap: true,
+            }
+          );
+
+          container.innerHTML = `<div class="cinny-docx-fallback">${result.value}</div>`;
+          pageElementsRef.current = [container];
+          setPageCount(1);
+          setPageNo(1);
+          scrollRef.current?.scrollTo({ top: 0, left: 0 });
+
+          if (!container.querySelector('.cinny-docx-fallback') || !container.textContent?.trim()) {
+            throw new Error('DOCX preview rendered empty content');
+          }
+        };
+
         container.innerHTML = '';
-        await docxPreviewState.data.renderAsync(data, container, undefined, {
-          className: 'cinny-docx-preview',
-          inWrapper: true,
-          breakPages: true,
-          ignoreWidth: false,
-          ignoreHeight: false,
-          renderHeaders: true,
-          renderFooters: true,
-          renderFootnotes: true,
-          useBase64URL: true,
-        });
+        try {
+          if (docxPreviewState.status !== AsyncStatus.Success) {
+            throw new Error('DOCX preview engine is not loaded');
+          }
 
-        const pages = Array.from(
-          container.querySelectorAll('.docx-wrapper > .docx, .docx')
-        ).filter((page, index, allPages) => allPages.indexOf(page) === index) as HTMLElement[];
+          await docxPreviewState.data.renderAsync(data, container, undefined, {
+            className: 'cinny-docx-preview',
+            inWrapper: true,
+            breakPages: true,
+            ignoreWidth: false,
+            ignoreHeight: false,
+            renderHeaders: true,
+            renderFooters: true,
+            renderFootnotes: true,
+            useBase64URL: true,
+          });
 
-        pageElementsRef.current = pages.length > 0 ? pages : [container];
-        setPageCount(Math.max(pages.length, 1));
-        setPageNo(1);
-        scrollRef.current?.scrollTo({ top: 0, left: 0 });
-      }, [data, docxPreviewState])
+          const pages = Array.from(
+            container.querySelectorAll('.docx-wrapper > .docx, .docx')
+          ).filter((page, index, allPages) => allPages.indexOf(page) === index) as HTMLElement[];
+
+          const hasRenderableContent =
+            pages.length > 0 ||
+            Boolean(container.querySelector('p, table, img, svg, section, article, div'));
+
+          if (!hasRenderableContent || !container.textContent?.trim()) {
+            await renderWithMammoth();
+            return;
+          }
+
+          pageElementsRef.current = pages.length > 0 ? pages : [container];
+          setPageCount(Math.max(pages.length, 1));
+          setPageNo(1);
+          scrollRef.current?.scrollTo({ top: 0, left: 0 });
+        } catch (error) {
+          container.innerHTML = '';
+          await renderWithMammoth().catch(() => {
+            throw error;
+          });
+        }
+      }, [data, docxPreviewState, loadMammoth, mammothState])
     );
 
     useEffect(() => {
@@ -94,7 +134,10 @@ export const DocxViewer = as<'div', DocxViewerProps>(
     }, [loadDocxPreview]);
 
     useEffect(() => {
-      if (docxPreviewState.status === AsyncStatus.Success) {
+      if (
+        docxPreviewState.status === AsyncStatus.Success ||
+        docxPreviewState.status === AsyncStatus.Error
+      ) {
         renderDocument().catch(() => undefined);
       }
     }, [docxPreviewState, renderDocument]);
@@ -140,14 +183,16 @@ export const DocxViewer = as<'div', DocxViewerProps>(
     }, [pageCount]);
 
     const isLoading =
-      docxPreviewState.status === AsyncStatus.Loading || renderState.status === AsyncStatus.Loading;
+      renderState.status === AsyncStatus.Loading ||
+      (renderState.status === AsyncStatus.Idle && docxPreviewState.status === AsyncStatus.Loading);
     const isError =
-      docxPreviewState.status === AsyncStatus.Error || renderState.status === AsyncStatus.Error;
+      renderState.status === AsyncStatus.Error ||
+      (renderState.status === AsyncStatus.Idle && docxPreviewState.status === AsyncStatus.Error);
     const errorMessage =
-      docxPreviewState.status === AsyncStatus.Error
-        ? getErrorMessage(docxPreviewState.error)
-        : renderState.status === AsyncStatus.Error
+      renderState.status === AsyncStatus.Error
         ? getErrorMessage(renderState.error)
+        : docxPreviewState.status === AsyncStatus.Error
+        ? getErrorMessage(docxPreviewState.error)
         : undefined;
 
     const handleRetry = () => {
@@ -160,7 +205,7 @@ export const DocxViewer = as<'div', DocxViewerProps>(
     };
 
     const handleDownload = () => {
-      FileSaver.saveAs(data, name);
+      FileSaver.saveAs(new Blob([data], { type: mimeType }), name);
     };
 
     const handleWheel: React.WheelEventHandler<HTMLDivElement> = (evt) => {

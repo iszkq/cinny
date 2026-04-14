@@ -199,7 +199,10 @@ globalStyle(`${CellText} p`, {
   margin: 0,
 });
 
-globalStyle(`${CellText} span`, {
-  font: 'inherit',
-  color: 'inherit',
+globalStyle(`${CellText} > *:first-child`, {
+  marginTop: 0,
+});
+
+globalStyle(`${CellText} > *:last-child`, {
+  marginBottom: 0,
 });

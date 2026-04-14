@@ -19,12 +19,14 @@ import {
   XLSXWorksheet,
   useXLSXLoader,
 } from '../../plugins/xlsx';
+import { useXlsxPopulateLoader } from '../../plugins/xlsx-populate';
 import { PasswordInput } from '../password-input';
 import { getFileNameExt } from '../../utils/mimeTypes';
 import { useZoom } from '../../hooks/useZoom';
 import * as css from './SpreadsheetViewer.css';
 
 const MODERN_ENCRYPTED_EXTS = new Set(['xlsx', 'xlsm', 'xlsb', 'xlam']);
+const OOXML_PASSWORD_EXTS = new Set(['xlsx', 'xlsm', 'xlam']);
 const ZOOM_STEP = 0.2;
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 5;
@@ -52,6 +54,8 @@ type RenderedSheet = {
   totalCols: number;
   isEmpty: boolean;
 };
+
+type WorksheetMatrix = unknown[][];
 
 const isCellObject = (value: unknown): value is XLSXCell =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -150,8 +154,11 @@ const getCellStyle = (cell?: XLSXCell): CSSProperties => {
   }
 
   const fillColor = normalizeExcelColor(fill?.fgColor?.rgb);
-  if (fillColor && fill?.patternType !== 'none') {
-    style.backgroundColor = fillColor;
+  const backgroundColor = fillColor ?? normalizeExcelColor(fill?.bgColor?.rgb);
+  if (backgroundColor && fill?.patternType !== 'none') {
+    style.backgroundColor = backgroundColor;
+  } else if (backgroundColor && !fill?.patternType) {
+    style.backgroundColor = backgroundColor;
   }
 
   const topBorderColor = normalizeExcelColor(border?.top?.color?.rgb);
@@ -161,21 +168,25 @@ const getCellStyle = (cell?: XLSXCell): CSSProperties => {
 
   if (border?.top?.style) {
     style.borderTopStyle = getBorderStyle(border.top.style);
+    style.borderTopWidth = '1px';
     if (topBorderColor) style.borderTopColor = topBorderColor;
   }
 
   if (border?.right?.style) {
     style.borderRightStyle = getBorderStyle(border.right.style);
+    style.borderRightWidth = '1px';
     if (rightBorderColor) style.borderRightColor = rightBorderColor;
   }
 
   if (border?.bottom?.style) {
     style.borderBottomStyle = getBorderStyle(border.bottom.style);
+    style.borderBottomWidth = '1px';
     if (bottomBorderColor) style.borderBottomColor = bottomBorderColor;
   }
 
   if (border?.left?.style) {
     style.borderLeftStyle = getBorderStyle(border.left.style);
+    style.borderLeftWidth = '1px';
     if (leftBorderColor) style.borderLeftColor = leftBorderColor;
   }
 
@@ -250,6 +261,21 @@ const getColumnWidth = (col?: XLSXColInfo): string | undefined => {
   return undefined;
 };
 
+const getMatrixCellText = (
+  matrix: WorksheetMatrix,
+  rowIndex: number,
+  colIndex: number,
+  rowOffset: number,
+  colOffset: number
+): string | undefined => {
+  const value = matrix[rowIndex - rowOffset]?.[colIndex - colOffset];
+  if (value === undefined || value === null) return undefined;
+  if (value instanceof Date) return value.toLocaleString();
+  if (typeof value === 'string') return value;
+
+  return String(value);
+};
+
 const getVisibleIndexes = (
   start: number,
   end: number,
@@ -274,9 +300,18 @@ const getErrorMessage = (error: unknown): string | undefined => {
 
 const getSpreadsheetDisplayError = (message?: string): string | undefined => {
   if (!message) return undefined;
-  if (/password-protected/i.test(message)) return '\u6587\u4ef6\u5df2\u53d7\u5bc6\u7801\u4fdd\u62a4\u3002';
-  if (/bad password|invalid password/i.test(message)) {
+  if (
+    /bad password|invalid password|incorrect password|wrong password|decrypt/i.test(message)
+  ) {
     return '\u5bc6\u7801\u4e0d\u6b63\u786e\uff0c\u8bf7\u91cd\u65b0\u8f93\u5165\u3002';
+  }
+  if (
+    /failed to load spreadsheet encryption runtime|spreadsheet encryption runtime/i.test(message)
+  ) {
+    return '\u52a0\u5bc6\u8868\u683c\u89e3\u6790\u7ec4\u4ef6\u52a0\u8f7d\u5931\u8d25\uff0c\u53ef\u80fd\u88ab\u6d4f\u89c8\u5668\u6216\u7f51\u7edc\u62e6\u622a\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5\u6216\u4e0b\u8f7d\u540e\u67e5\u770b\u3002';
+  }
+  if (/password-protected|unsupported encryption|encrypted/i.test(message)) {
+    return '\u6587\u4ef6\u5df2\u53d7\u5bc6\u7801\u4fdd\u62a4\u3002';
   }
   if (/preview engine is not loaded/i.test(message)) {
     return '\u8868\u683c\u9884\u89c8\u5f15\u64ce\u5c1a\u672a\u52a0\u8f7d\u5b8c\u6210\u3002';
@@ -286,7 +321,7 @@ const getSpreadsheetDisplayError = (message?: string): string | undefined => {
 };
 
 const isPasswordProtectedError = (message?: string): boolean =>
-  Boolean(message && /password-protected/i.test(message));
+  Boolean(message && /password-protected|unsupported encryption|encrypted|bad password|invalid password|incorrect password|wrong password|decrypt/i.test(message));
 
 const isLegacyPasswordSupported = (name: string, mimeType: string): boolean => {
   const ext = getFileNameExt(name);
@@ -298,6 +333,43 @@ const isLegacyPasswordSupported = (name: string, mimeType: string): boolean => {
 
 const isModernEncryptedSpreadsheet = (name: string): boolean =>
   MODERN_ENCRYPTED_EXTS.has(getFileNameExt(name));
+
+const isOoxmlPasswordSupported = (name: string): boolean =>
+  OOXML_PASSWORD_EXTS.has(getFileNameExt(name));
+
+const toArrayBuffer = async (value: ArrayBuffer | Blob): Promise<ArrayBuffer> => {
+  if (value instanceof ArrayBuffer) {
+    return value;
+  }
+
+  return value.arrayBuffer();
+};
+
+const getWorksheetCell = (
+  worksheet: XLSXWorksheet,
+  rowIndex: number,
+  colIndex: number,
+  encodeCell: (cell: { c: number; r: number }) => string
+): XLSXCell | undefined => {
+  const denseData = (worksheet as XLSXWorksheet & {
+    '!data'?: Array<Array<XLSXCell | undefined> | undefined>;
+  })['!data'];
+
+  if (Array.isArray(denseData)) {
+    const denseCell = denseData[rowIndex]?.[colIndex];
+    return isCellObject(denseCell) ? denseCell : undefined;
+  }
+
+  const denseRows = worksheet as unknown as Array<Array<XLSXCell | undefined> | undefined>;
+  if (Array.isArray(denseRows)) {
+    const denseCell = denseRows[rowIndex]?.[colIndex];
+    return isCellObject(denseCell) ? denseCell : undefined;
+  }
+
+  const ref = encodeCell({ c: colIndex, r: rowIndex });
+  const maybeCell = worksheet[ref];
+  return isCellObject(maybeCell) ? maybeCell : undefined;
+};
 
 const createMergeMaps = (merges: XLSXRange[], visibleRows: number[], visibleCols: number[]) => {
   const visibleRowSet = new Set(visibleRows);
@@ -346,7 +418,8 @@ const createMergeMaps = (merges: XLSXRange[], visibleRows: number[], visibleCols
 const buildRenderedSheet = (
   worksheet: XLSXWorksheet,
   encodeCell: (cell: { c: number; r: number }) => string,
-  decodeRange: (range: string) => XLSXRange
+  decodeRange: (range: string) => XLSXRange,
+  matrix: WorksheetMatrix
 ): RenderedSheet => {
   const rangeRef = worksheet['!ref'];
   if (!rangeRef) {
@@ -378,20 +451,21 @@ const buildRenderedSheet = (
       const key = `${rowIndex}:${colIndex}`;
       if (coveredCells.has(key)) return;
 
-      const ref = encodeCell({ c: colIndex, r: rowIndex });
-      const maybeCell = worksheet[ref];
-      const cell = isCellObject(maybeCell) ? maybeCell : undefined;
+      const cell = getWorksheetCell(worksheet, rowIndex, colIndex, encodeCell);
       const merged = mergeStarts.get(key);
       const content = getCellContent(cell);
+      const fallbackText = getMatrixCellText(matrix, rowIndex, colIndex, range.s.r, range.s.c);
+      const resolvedText =
+        content.text || content.html ? content.text : fallbackText ?? '';
 
       cells.push({
         key,
         colSpan: merged?.colSpan ?? 1,
         rowSpan: merged?.rowSpan ?? 1,
         style: getCellStyle(cell),
-        text: content.text,
+        text: resolvedText,
         html: content.html,
-        title: content.title,
+        title: content.title ?? fallbackText,
       });
     });
 
@@ -424,6 +498,7 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
   ({ className, name, data, mimeType, requestClose, ...props }, ref) => {
     const scrollRef = useRef<HTMLDivElement>(null);
     const [xlsxState, loadXlsx] = useXLSXLoader();
+    const [xlsxPopulateState, loadXlsxPopulate] = useXlsxPopulateLoader();
     const [activeSheetName, setActiveSheetName] = useState<string>();
     const [passwordInput, setPasswordInput] = useState('');
     const [submittedPassword, setSubmittedPassword] = useState<string>();
@@ -436,18 +511,38 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
             throw new Error('Spreadsheet preview engine is not loaded');
           }
 
-          return xlsxState.data.read(data, {
+          const trimmedPassword = password?.trim() || undefined;
+          let workbookBuffer = data;
+
+          if (trimmedPassword && isOoxmlPasswordSupported(name)) {
+            const xlsxPopulate =
+              xlsxPopulateState.status === AsyncStatus.Success
+                ? xlsxPopulateState.data
+                : await loadXlsxPopulate();
+
+            const decryptedWorkbook = await xlsxPopulate.fromDataAsync(data, {
+              password: trimmedPassword,
+            });
+
+            workbookBuffer = await toArrayBuffer(
+              await decryptedWorkbook.outputAsync({
+                type: 'arraybuffer',
+              })
+            );
+          }
+
+          return xlsxState.data.read(workbookBuffer, {
             type: 'array',
-            dense: true,
+            dense: false,
             cellDates: true,
             raw: false,
             cellHTML: true,
             cellStyles: true,
             cellNF: true,
-            password: password?.trim() || undefined,
+            password: trimmedPassword && !isOoxmlPasswordSupported(name) ? trimmedPassword : undefined,
           });
         },
-        [data, xlsxState]
+        [data, loadXlsxPopulate, name, xlsxPopulateState, xlsxState]
       )
     );
 
@@ -513,7 +608,12 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
       return buildRenderedSheet(
         worksheet,
         xlsxState.data.utils.encode_cell,
-        xlsxState.data.utils.decode_range
+        xlsxState.data.utils.decode_range,
+        xlsxState.data.utils.sheet_to_json(worksheet, {
+          header: 1,
+          raw: false,
+          defval: '',
+        })
       );
     }, [activeSheetName, workbookState, xlsxState]);
 
@@ -534,8 +634,11 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
     }, [workbookState, xlsxState]);
 
     const passwordProtected = isPasswordProtectedError(errorMessage);
-    const passwordRetrySupported = passwordProtected && isLegacyPasswordSupported(name, mimeType);
-    const modernEncryptedSpreadsheet = passwordProtected && isModernEncryptedSpreadsheet(name);
+    const passwordRetrySupported =
+      passwordProtected &&
+      (isLegacyPasswordSupported(name, mimeType) || isOoxmlPasswordSupported(name));
+    const modernEncryptedSpreadsheet =
+      passwordProtected && isModernEncryptedSpreadsheet(name) && !passwordRetrySupported;
     const handleRetry = () => {
       if (xlsxState.status === AsyncStatus.Error) {
         loadXlsx().catch(() => undefined);
@@ -678,7 +781,9 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
                   onSubmit={handlePasswordSubmit}
                 >
                   <Text className={css.PasswordHint} size="T200" priority="300">
-                    {'\u68c0\u6d4b\u5230\u65e7\u7248\u52a0\u5bc6\u8868\u683c\uff0c\u53ef\u5c1d\u8bd5\u8f93\u5165\u5bc6\u7801\u5728\u7ebf\u6253\u5f00\u3002'}
+                    {isOoxmlPasswordSupported(name)
+                      ? '\u68c0\u6d4b\u5230\u52a0\u5bc6\u5de5\u4f5c\u7c3f\uff0c\u53ef\u5c1d\u8bd5\u8f93\u5165\u5bc6\u7801\u5728\u7ebf\u6253\u5f00\u3002'
+                      : '\u68c0\u6d4b\u5230\u65e7\u7248\u52a0\u5bc6\u8868\u683c\uff0c\u53ef\u5c1d\u8bd5\u8f93\u5165\u5bc6\u7801\u5728\u7ebf\u6253\u5f00\u3002'}
                   </Text>
                   <Box className={css.PasswordRow} alignItems="Center" gap="200">
                     <PasswordInput
