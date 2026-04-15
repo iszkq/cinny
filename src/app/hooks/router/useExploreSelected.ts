@@ -32,3 +32,9 @@ export const useExploreWebSourceId = (): string | undefined => {
 
   return webId;
 };
+
+export const useExploreNavSourceId = (): string | undefined => {
+  const { navId } = useParams();
+
+  return navId;
+};
