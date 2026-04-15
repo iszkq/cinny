@@ -36,6 +36,8 @@ export type CinnyFavoriteNotesContent = {
 };
 
 export type CinnyExploreSourceKind = 'server' | 'web';
+export type CinnyExploreWebOpenMode = 'auto' | 'external';
+export type CinnyExploreWebEmbedStatus = 'unknown' | 'embeddable' | 'blocked';
 
 export type CinnyExploreSource = {
   id: string;
@@ -44,6 +46,8 @@ export type CinnyExploreSource = {
   value: string;
   createdAt: number;
   updatedAt: number;
+  webOpenMode?: CinnyExploreWebOpenMode;
+  webEmbedStatus?: CinnyExploreWebEmbedStatus;
 };
 
 export type CinnyExploreSourcesContent = {
