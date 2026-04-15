@@ -81,6 +81,12 @@ const getSourceIcon = (kind: CinnyExploreSourceKind, selected: boolean) =>
 const getSourceRoute = (source: CinnyExploreSource): string =>
   source.kind === 'server' ? getExploreServerPath(source.value) : getExploreWebPath(source.id);
 
+const wrapTextStyle = {
+  whiteSpace: 'pre-wrap' as const,
+  wordBreak: 'break-word' as const,
+  overflowWrap: 'anywhere' as const,
+};
+
 function AddExploreSource({ builtInServers }: { builtInServers: Set<string> }) {
   const mx = useMatrixClient();
   const navigate = useNavigate();
@@ -166,11 +172,16 @@ function AddExploreSource({ builtInServers }: { builtInServers: Set<string> }) {
               <Box
                 as="form"
                 onSubmit={handleSubmit}
-                style={{ padding: config.space.S400, width: 'min(100vw, 28rem)' }}
+                style={{
+                  padding: config.space.S400,
+                  width: '28rem',
+                  maxWidth: 'calc(100vw - 2rem)',
+                  boxSizing: 'border-box',
+                }}
                 direction="Column"
                 gap="400"
               >
-                <Text priority="400">
+                <Text priority="400" style={wrapTextStyle}>
                   这里新增的服务器或网页会写入 Matrix 账号数据，换设备登录后也会自动同步回来。
                 </Text>
 
@@ -229,7 +240,7 @@ function AddExploreSource({ builtInServers }: { builtInServers: Set<string> }) {
                         : '例如：https://www.mozilla.org'
                     }
                   />
-                  <Text size="T200" priority="300">
+                  <Text size="T200" priority="300" style={wrapTextStyle}>
                     {sourceKind === 'server'
                       ? '用于探索该服务器公开的房间与空间。'
                       : '仅支持允许 iframe 内嵌的网站，若网站本身禁止嵌入，则只能新窗口打开。'}
