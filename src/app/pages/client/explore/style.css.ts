@@ -94,8 +94,8 @@ globalStyle(`${ExploreNavSectionActions} > *`, {
 
 export const ExploreNavGrid = style({
   display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fill, minmax(13rem, 14rem))',
-  gap: config.space.S250,
+  gridTemplateColumns: 'repeat(auto-fill, minmax(14.5rem, 14.5rem))',
+  gap: config.space.S300,
   justifyContent: 'start',
   alignItems: 'start',
 });
@@ -149,12 +149,19 @@ export const ExploreNavCard = style([
   },
 ]);
 
+export const ExploreNavCardHead = style({
+  display: 'flex',
+  alignItems: 'flex-start',
+  gap: config.space.S175,
+  minWidth: 0,
+});
+
 export const ExploreNavCardButton = style({
-  width: '100%',
   display: 'flex',
   flexDirection: 'column',
   justifyContent: 'flex-start',
-  gap: config.space.S125,
+  gap: config.space.S150,
+  flex: 1,
   alignItems: 'stretch',
   textAlign: 'left',
   background: 'transparent',
@@ -188,27 +195,18 @@ export const ExploreNavCardAvatarShell = style([
   },
 ]);
 
-export const ExploreNavHost = style([
-  ContainerColor({ variant: 'SurfaceVariant' }),
-  {
-    display: 'inline-flex',
-    alignItems: 'center',
-    maxWidth: '100%',
-    padding: `${config.space.S50} ${config.space.S150}`,
-    borderRadius: config.radii.R300,
-    fontSize: '0.76rem',
-    lineHeight: 1.35,
-    color: 'rgba(71, 85, 105, 0.92)',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-  },
-]);
+export const ExploreNavCardTitleBlock = style({
+  display: 'flex',
+  flexDirection: 'column',
+  gap: config.space.S100,
+  minWidth: 0,
+  paddingTop: config.space.S50,
+});
 
 export const ExploreNavCardDescription = style({
   overflow: 'hidden',
   display: '-webkit-box',
-  WebkitLineClamp: 2,
+  WebkitLineClamp: 1,
   WebkitBoxOrient: 'vertical',
   lineHeight: 1.38,
   wordBreak: 'break-word',
@@ -218,10 +216,10 @@ export const ExploreNavCardDescription = style({
 
 export const ExploreNavCardFooter = style({
   display: 'flex',
-  justifyContent: 'flex-end',
   alignItems: 'center',
   gap: config.space.S100,
-  marginTop: config.space.S125,
+  flexShrink: 0,
+  paddingTop: config.space.S50,
   opacity: 0.62,
   transition: 'opacity 140ms ease',
   selectors: {
@@ -239,6 +237,7 @@ export const ExploreNavTagRail = style({
   flexWrap: 'wrap',
   gap: config.space.S100,
   alignItems: 'center',
+  minHeight: '1rem',
 });
 
 export const ExploreNavTag = style({

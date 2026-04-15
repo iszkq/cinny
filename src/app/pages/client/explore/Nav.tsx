@@ -404,80 +404,82 @@ function ExploreNavCardItem({
 
   return (
     <Box className={css.ExploreNavCard} direction="Column">
-      <a
-        className={css.ExploreNavCardButton}
-        href={card.url}
-        target="_blank"
-        rel="noopener noreferrer"
-      >
-        <Box alignItems="Center" gap="200">
-          <Box className={css.ExploreNavCardAvatarShell} alignItems="Center" justifyContent="Center">
-            <Avatar size="300" radii="400">
-              {card.iconUrl ? (
-                <AvatarImage src={card.iconUrl} alt={card.title} />
-              ) : (
-                <AvatarFallback>
-                  <Text size="L400">{card.title.slice(0, 1).toUpperCase()}</Text>
-                </AvatarFallback>
+      <Box className={css.ExploreNavCardHead}>
+        <a
+          className={css.ExploreNavCardButton}
+          href={card.url}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <Box alignItems="Start" gap="175">
+            <Box className={css.ExploreNavCardAvatarShell} alignItems="Center" justifyContent="Center">
+              <Avatar size="300" radii="400">
+                {card.iconUrl ? (
+                  <AvatarImage src={card.iconUrl} alt={card.title} />
+                ) : (
+                  <AvatarFallback>
+                    <Text size="L400">{card.title.slice(0, 1).toUpperCase()}</Text>
+                  </AvatarFallback>
+                )}
+              </Avatar>
+            </Box>
+            <Box className={css.ExploreNavCardTitleBlock}>
+              <Text size="H5" truncate>
+                {card.title}
+              </Text>
+
+              {(visibleTags.length > 0 || hiddenTagCount > 0) && (
+                <Box className={css.ExploreNavTagRail}>
+                  {visibleTags.map((tag) => (
+                    <span key={tag} className={css.ExploreNavTag}>
+                      {tag}
+                    </span>
+                  ))}
+                  {hiddenTagCount > 0 && (
+                    <span className={css.ExploreNavTag}>{`+${hiddenTagCount}`}</span>
+                  )}
+                </Box>
               )}
-            </Avatar>
+            </Box>
           </Box>
-          <Box grow="Yes" direction="Column" gap="50">
-            <Text size="H5" truncate>
-              {card.title}
+
+          {showDescription && (
+            <Text
+              size="T300"
+              priority="300"
+              className={css.ExploreNavCardDescription}
+              style={helperTextStyle}
+            >
+              {card.description}
             </Text>
-          </Box>
-        </Box>
+          )}
+        </a>
 
-        {showDescription && (
-          <Text
-            size="T300"
-            priority="300"
-            className={css.ExploreNavCardDescription}
-            style={helperTextStyle}
+        <Box className={css.ExploreNavCardFooter} alignItems="Center" justifyContent="End" gap="100">
+          <IconButton
+            type="button"
+            size="300"
+            fill="Soft"
+            radii="300"
+            aria-label="编辑卡片"
+            title="编辑卡片"
+            onClick={() => onEdit(sectionId, card)}
           >
-            {card.description}
-          </Text>
-        )}
-
-        {(visibleTags.length > 0 || hiddenTagCount > 0) && (
-          <Box className={css.ExploreNavTagRail}>
-            {visibleTags.map((tag) => (
-              <span key={tag} className={css.ExploreNavTag}>
-                {tag}
-              </span>
-            ))}
-            {hiddenTagCount > 0 && (
-              <span className={css.ExploreNavTag}>{`+${hiddenTagCount}`}</span>
-            )}
-          </Box>
-        )}
-      </a>
-
-      <Box className={css.ExploreNavCardFooter} alignItems="Center" justifyContent="End" gap="100">
-        <IconButton
-          type="button"
-          size="300"
-          fill="Soft"
-          radii="300"
-          aria-label="编辑卡片"
-          title="编辑卡片"
-          onClick={() => onEdit(sectionId, card)}
-        >
-          <Icon size="100" src={Icons.Pencil} />
-        </IconButton>
-        <IconButton
-          type="button"
-          size="300"
-          fill="Soft"
-          radii="300"
-          aria-label="删除卡片"
-          title="删除卡片"
-          disabled={busy}
-          onClick={() => onRemove(sectionId, card.id)}
-        >
-          {busy ? <Spinner size="100" variant="Secondary" /> : <Icon size="100" src={Icons.Delete} />}
-        </IconButton>
+            <Icon size="100" src={Icons.Pencil} />
+          </IconButton>
+          <IconButton
+            type="button"
+            size="300"
+            fill="Soft"
+            radii="300"
+            aria-label="删除卡片"
+            title="删除卡片"
+            disabled={busy}
+            onClick={() => onRemove(sectionId, card.id)}
+          >
+            {busy ? <Spinner size="100" variant="Secondary" /> : <Icon size="100" src={Icons.Delete} />}
+          </IconButton>
+        </Box>
       </Box>
     </Box>
   );
