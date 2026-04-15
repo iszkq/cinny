@@ -46,10 +46,10 @@ export function ExploreWebView() {
           >
             <Icon size="400" src={Icons.Info} />
             <Text size="L400" align="Center">
-              未找到这个网页源
+              没有找到这个网页来源
             </Text>
             <Text size="T300" align="Center" priority="300">
-              这个入口可能已被删除，或者还没有同步到当前设备。
+              这个入口可能已经被删除，或者还没有同步到当前设备。
             </Text>
           </Box>
           <Button
@@ -88,13 +88,14 @@ export function ExploreWebView() {
           </Text>
         </Box>
         <Box grow="Yes" basis="No" justifyContent="End" gap="100">
-          <IconButton
-            title="重新载入"
-            aria-label="重新载入"
+          <Button
+            variant="Secondary"
+            fill="Soft"
+            size="300"
             onClick={() => setRefreshKey((count) => count + 1)}
           >
-            <Icon src={Icons.Repeat} />
-          </IconButton>
+            <Text size="B300">刷新</Text>
+          </Button>
           <IconButton
             title="浏览器打开"
             aria-label="浏览器打开"
