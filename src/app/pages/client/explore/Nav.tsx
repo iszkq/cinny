@@ -399,9 +399,9 @@ function ExploreNavCardItem({
 }: ExploreNavCardItemProps) {
   const visibleTags = card.tags?.slice(0, 2) ?? [];
   const hiddenTagCount = (card.tags?.length ?? 0) - visibleTags.length;
+  const hasTags = visibleTags.length > 0 || hiddenTagCount > 0;
   const showDescription =
     !!card.description && card.description.trim() !== card.title.trim();
-  const descriptionText = showDescription ? card.description : '\u00A0';
 
   return (
     <Box className={css.ExploreNavCard} direction="Column">
@@ -412,7 +412,7 @@ function ExploreNavCardItem({
           target="_blank"
           rel="noopener noreferrer"
         >
-          <Box alignItems="Start" gap="250">
+          <Box className={css.ExploreNavCardMain}>
             <Box className={css.ExploreNavCardAvatarShell} alignItems="Center" justifyContent="Center">
               <Avatar size="300" radii="400">
                 {card.iconUrl ? (
@@ -424,32 +424,38 @@ function ExploreNavCardItem({
                 )}
               </Avatar>
             </Box>
-            <Box className={css.ExploreNavCardTitleBlock}>
-              <Text size="H5" truncate>
-                {card.title}
-              </Text>
+            <Box className={css.ExploreNavCardContent}>
+              <Box className={css.ExploreNavCardTitleBlock}>
+                <Text size="H5" truncate>
+                  {card.title}
+                </Text>
 
-              <Box className={css.ExploreNavTagRail}>
-                {visibleTags.map((tag) => (
-                  <span key={tag} className={css.ExploreNavTag}>
-                    {tag}
-                  </span>
-                ))}
-                {hiddenTagCount > 0 && (
-                  <span className={css.ExploreNavTag}>{`+${hiddenTagCount}`}</span>
+                {hasTags && (
+                  <Box className={css.ExploreNavTagRail}>
+                    {visibleTags.map((tag) => (
+                      <span key={tag} className={css.ExploreNavTag}>
+                        {tag}
+                      </span>
+                    ))}
+                    {hiddenTagCount > 0 && (
+                      <span className={css.ExploreNavTag}>{`+${hiddenTagCount}`}</span>
+                    )}
+                  </Box>
                 )}
               </Box>
+
+              {showDescription && (
+                <Text
+                  size="T300"
+                  priority="300"
+                  className={css.ExploreNavCardDescription}
+                  style={helperTextStyle}
+                >
+                  {card.description}
+                </Text>
+              )}
             </Box>
           </Box>
-
-          <Text
-            size="T300"
-            priority="300"
-            className={css.ExploreNavCardDescription}
-            style={showDescription ? helperTextStyle : undefined}
-          >
-            {descriptionText}
-          </Text>
         </a>
 
         <Box className={css.ExploreNavCardFooter} alignItems="Center" justifyContent="End" gap="100">
