@@ -94,10 +94,9 @@ globalStyle(`${ExploreNavSectionActions} > *`, {
 
 export const ExploreNavGrid = style({
   display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fill, minmax(14.5rem, 14.5rem))',
+  gridTemplateColumns: 'repeat(auto-fill, minmax(13.25rem, 1fr))',
   gap: config.space.S300,
-  justifyContent: 'start',
-  alignItems: 'start',
+  alignItems: 'stretch',
 });
 
 export const ExploreNavCard = style([
@@ -107,7 +106,9 @@ export const ExploreNavCard = style([
     flexDirection: 'column',
     width: '100%',
     alignSelf: 'start',
-    padding: config.space.S300,
+    height: '100%',
+    minHeight: '7.75rem',
+    padding: config.space.S250,
     borderRadius: config.radii.R500,
     minWidth: 0,
     boxSizing: 'border-box',
@@ -152,7 +153,7 @@ export const ExploreNavCard = style([
 export const ExploreNavCardHead = style({
   display: 'flex',
   alignItems: 'flex-start',
-  gap: config.space.S175,
+  gap: config.space.S250,
   minWidth: 0,
 });
 
@@ -160,7 +161,7 @@ export const ExploreNavCardButton = style({
   display: 'flex',
   flexDirection: 'column',
   justifyContent: 'flex-start',
-  gap: config.space.S150,
+  gap: config.space.S100,
   flex: 1,
   alignItems: 'stretch',
   textAlign: 'left',
@@ -198,12 +199,14 @@ export const ExploreNavCardAvatarShell = style([
 export const ExploreNavCardTitleBlock = style({
   display: 'flex',
   flexDirection: 'column',
-  gap: config.space.S100,
+  flex: 1,
+  gap: config.space.S50,
   minWidth: 0,
   paddingTop: config.space.S50,
 });
 
 export const ExploreNavCardDescription = style({
+  minHeight: '1.35rem',
   overflow: 'hidden',
   display: '-webkit-box',
   WebkitLineClamp: 1,
@@ -216,6 +219,7 @@ export const ExploreNavCardDescription = style({
 
 export const ExploreNavCardFooter = style({
   display: 'flex',
+  flexDirection: 'column',
   alignItems: 'center',
   gap: config.space.S100,
   flexShrink: 0,
@@ -235,9 +239,11 @@ export const ExploreNavCardFooter = style({
 export const ExploreNavTagRail = style({
   display: 'flex',
   flexWrap: 'wrap',
-  gap: config.space.S100,
+  gap: config.space.S50,
   alignItems: 'center',
-  minHeight: '1rem',
+  minHeight: '1.15rem',
+  paddingTop: config.space.S50,
+  maxWidth: '100%',
 });
 
 export const ExploreNavTag = style({

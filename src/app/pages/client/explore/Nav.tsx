@@ -401,6 +401,7 @@ function ExploreNavCardItem({
   const hiddenTagCount = (card.tags?.length ?? 0) - visibleTags.length;
   const showDescription =
     !!card.description && card.description.trim() !== card.title.trim();
+  const descriptionText = showDescription ? card.description : '\u00A0';
 
   return (
     <Box className={css.ExploreNavCard} direction="Column">
@@ -411,7 +412,7 @@ function ExploreNavCardItem({
           target="_blank"
           rel="noopener noreferrer"
         >
-          <Box alignItems="Start" gap="175">
+          <Box alignItems="Start" gap="250">
             <Box className={css.ExploreNavCardAvatarShell} alignItems="Center" justifyContent="Center">
               <Avatar size="300" radii="400">
                 {card.iconUrl ? (
@@ -428,31 +429,27 @@ function ExploreNavCardItem({
                 {card.title}
               </Text>
 
-              {(visibleTags.length > 0 || hiddenTagCount > 0) && (
-                <Box className={css.ExploreNavTagRail}>
-                  {visibleTags.map((tag) => (
-                    <span key={tag} className={css.ExploreNavTag}>
-                      {tag}
-                    </span>
-                  ))}
-                  {hiddenTagCount > 0 && (
-                    <span className={css.ExploreNavTag}>{`+${hiddenTagCount}`}</span>
-                  )}
-                </Box>
-              )}
+              <Box className={css.ExploreNavTagRail}>
+                {visibleTags.map((tag) => (
+                  <span key={tag} className={css.ExploreNavTag}>
+                    {tag}
+                  </span>
+                ))}
+                {hiddenTagCount > 0 && (
+                  <span className={css.ExploreNavTag}>{`+${hiddenTagCount}`}</span>
+                )}
+              </Box>
             </Box>
           </Box>
 
-          {showDescription && (
-            <Text
-              size="T300"
-              priority="300"
-              className={css.ExploreNavCardDescription}
-              style={helperTextStyle}
-            >
-              {card.description}
-            </Text>
-          )}
+          <Text
+            size="T300"
+            priority="300"
+            className={css.ExploreNavCardDescription}
+            style={showDescription ? helperTextStyle : undefined}
+          >
+            {descriptionText}
+          </Text>
         </a>
 
         <Box className={css.ExploreNavCardFooter} alignItems="Center" justifyContent="End" gap="100">
