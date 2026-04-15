@@ -1,9 +1,4 @@
-import React, {
-  FormEventHandler,
-  MouseEventHandler,
-  useMemo,
-  useState,
-} from 'react';
+import React, { FormEventHandler, MouseEventHandler, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import FocusTrap from 'focus-trap-react';
 import {
@@ -81,10 +76,11 @@ const getSourceIcon = (kind: CinnyExploreSourceKind, selected: boolean) =>
 const getSourceRoute = (source: CinnyExploreSource): string =>
   source.kind === 'server' ? getExploreServerPath(source.value) : getExploreWebPath(source.id);
 
-const wrapTextStyle = {
-  whiteSpace: 'pre-wrap' as const,
-  wordBreak: 'break-word' as const,
-  overflowWrap: 'anywhere' as const,
+const openExternalUrl = (url: string) => {
+  const popup = window.open(url, '_blank', 'noopener,noreferrer');
+  if (!popup) {
+    window.location.href = url;
+  }
 };
 
 function AddExploreSource({ builtInServers }: { builtInServers: Set<string> }) {
@@ -181,9 +177,10 @@ function AddExploreSource({ builtInServers }: { builtInServers: Set<string> }) {
                 direction="Column"
                 gap="400"
               >
-                <Text priority="400" style={wrapTextStyle}>
-                  这里新增的服务器或网页会写入 Matrix 账号数据，换设备登录后也会自动同步回来。
-                </Text>
+                <Box direction="Column" gap="50">
+                  <Text priority="400">添加的来源会写入当前 Matrix 账号。</Text>
+                  <Text priority="400">同账号的其他设备也会自动同步。</Text>
+                </Box>
 
                 <Box direction="Column" gap="100">
                   <Text size="L400">来源类型</Text>
@@ -210,7 +207,7 @@ function AddExploreSource({ builtInServers }: { builtInServers: Set<string> }) {
                         setValidationError(undefined);
                       }}
                     >
-                      <Text size="T200">内嵌网页</Text>
+                      <Text size="T200">自定义网页</Text>
                     </Chip>
                   </Box>
                 </Box>
@@ -222,7 +219,7 @@ function AddExploreSource({ builtInServers }: { builtInServers: Set<string> }) {
                     variant="Background"
                     value={title}
                     onChange={(evt) => setTitle(evt.currentTarget.value)}
-                    placeholder={sourceKind === 'server' ? '默认显示服务器地址' : '例如：官方文档'}
+                    placeholder={sourceKind === 'server' ? '默认显示服务器地址' : '例如：官网文档'}
                   />
                 </Box>
 
@@ -235,16 +232,25 @@ function AddExploreSource({ builtInServers }: { builtInServers: Set<string> }) {
                     value={value}
                     onChange={(evt) => setValue(evt.currentTarget.value)}
                     placeholder={
-                      sourceKind === 'server'
-                        ? '例如：matrix.org'
-                        : '例如：https://www.mozilla.org'
+                      sourceKind === 'server' ? '例如：matrix.org' : '例如：https://www.mozilla.org'
                     }
                   />
-                  <Text size="T200" priority="300" style={wrapTextStyle}>
-                    {sourceKind === 'server'
-                      ? '用于探索该服务器公开的房间与空间。'
-                      : '仅支持允许 iframe 内嵌的网站，若网站本身禁止嵌入，则只能新窗口打开。'}
-                  </Text>
+
+                  {sourceKind === 'server' ? (
+                    <Text size="T200" priority="300">
+                      用于探索该服务器公开的房间与空间。
+                    </Text>
+                  ) : (
+                    <Box direction="Column" gap="50">
+                      <Text size="T200" priority="300">
+                        支持内嵌时，会保留网页内嵌。
+                      </Text>
+                      <Text size="T200" priority="300">
+                        不适合内嵌时，会自动改为浏览器打开。
+                      </Text>
+                    </Box>
+                  )}
+
                   {(validationError || saveState.status === AsyncStatus.Error) && (
                     <Text style={{ color: color.Critical.Main }} size="T300">
                       {validationError ?? getErrorMessage(saveState.error)}
@@ -297,17 +303,31 @@ function CustomSourceNavItem({
   deleting,
   onRemove,
 }: CustomSourceNavItemProps) {
+  const directExternalOpen = source.kind === 'web' && source.webOpenMode === 'external';
+
   const handleRemove: MouseEventHandler<HTMLButtonElement> = (evt) => {
     evt.preventDefault();
     evt.stopPropagation();
     onRemove(source);
   };
 
+  const handleOpen: MouseEventHandler<HTMLAnchorElement> = (evt) => {
+    if (!directExternalOpen) return;
+
+    evt.preventDefault();
+    evt.stopPropagation();
+    openExternalUrl(source.value);
+  };
+
   return (
-    <NavItem variant="Background" radii="400" aria-selected={selected}>
+    <NavItem
+      variant="Background"
+      radii="400"
+      aria-selected={directExternalOpen ? false : selected}
+    >
       <Box as="span" grow="Yes" alignItems="Center" gap="100">
         <Box as="span" grow="Yes">
-          <NavLink to={getSourceRoute(source)}>
+          <NavLink to={getSourceRoute(source)} onClick={handleOpen}>
             <NavItemContent>
               <Box as="span" grow="Yes" alignItems="Center" gap="200">
                 <Avatar size="200" radii="400">
@@ -318,7 +338,7 @@ function CustomSourceNavItem({
                     {source.title}
                   </Text>
                   <Text as="span" size="T200" priority="300" truncate>
-                    {source.value}
+                    {directExternalOpen ? '点击后将直接在浏览器打开' : source.value}
                   </Text>
                 </Box>
               </Box>
@@ -368,10 +388,7 @@ export function Explore() {
 
   const customSourcesEvent = useAccountData(AccountDataEvent.CinnyExploreSources);
   const customSources = useMemo(
-    () =>
-      getExploreCustomSources(
-        customSourcesEvent?.getContent<CinnyExploreSourcesContent>()
-      ),
+    () => getExploreCustomSources(customSourcesEvent?.getContent<CinnyExploreSourcesContent>()),
     [customSourcesEvent]
   );
 
@@ -540,7 +557,7 @@ export function Explore() {
                 <CustomSourceNavItem
                   key={source.id}
                   source={source}
-                  selected={selectedWebSourceId === source.id}
+                  selected={source.webOpenMode === 'external' ? false : selectedWebSourceId === source.id}
                   deleting={deletingSourceId === source.id}
                   onRemove={handleRemoveSource}
                 />

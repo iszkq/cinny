@@ -18,14 +18,6 @@ export const PublicRoomsError = style([
   },
 ]);
 
-export const ExploreWebNotice = style([
-  ContainerColor({ variant: 'SurfaceVariant' }),
-  {
-    padding: config.space.S300,
-    borderRadius: config.radii.R400,
-  },
-]);
-
 export const ExploreWebFrameShell = style([
   ContainerColor({ variant: 'Surface' }),
   {

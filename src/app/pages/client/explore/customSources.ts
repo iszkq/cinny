@@ -4,6 +4,8 @@ import {
   CinnyExploreSource,
   CinnyExploreSourceKind,
   CinnyExploreSourcesContent,
+  CinnyExploreWebEmbedStatus,
+  CinnyExploreWebOpenMode,
 } from '../../../../types/matrix/accountData';
 
 const EXPLORE_SOURCES_VERSION = 1;
@@ -22,6 +24,12 @@ const trimTitle = (value?: string): string | undefined => {
 
 const createSourceId = (): string =>
   `src_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+
+const isExploreWebOpenMode = (value: unknown): value is CinnyExploreWebOpenMode =>
+  value === 'auto' || value === 'external';
+
+const isExploreWebEmbedStatus = (value: unknown): value is CinnyExploreWebEmbedStatus =>
+  value === 'unknown' || value === 'embeddable' || value === 'blocked';
 
 export const normalizeExploreServerAddress = (value: string): string => {
   const trimmed = value.trim();
@@ -100,6 +108,7 @@ export const getExploreCustomSources = (
           ? normalizeExploreServerAddress(item.value)
           : normalizeExploreWebUrl(item.value);
       const fallbackTimestamp = Date.now();
+
       sources.push({
         id: item.id.trim(),
         kind: item.kind,
@@ -107,6 +116,18 @@ export const getExploreCustomSources = (
         title: trimTitle(item.title) ?? getDefaultTitle(item.kind, normalizedValue),
         createdAt: toTimestamp(item.createdAt, fallbackTimestamp),
         updatedAt: toTimestamp(item.updatedAt, fallbackTimestamp),
+        webOpenMode:
+          item.kind === 'web' && isExploreWebOpenMode(item.webOpenMode)
+            ? item.webOpenMode
+            : item.kind === 'web'
+              ? 'auto'
+              : undefined,
+        webEmbedStatus:
+          item.kind === 'web' && isExploreWebEmbedStatus(item.webEmbedStatus)
+            ? item.webEmbedStatus
+            : item.kind === 'web'
+              ? 'unknown'
+              : undefined,
       });
     } catch {
       // Ignore malformed saved items.
@@ -150,8 +171,7 @@ export const upsertExploreCustomSource = async (
     kind === 'server'
       ? normalizeExploreServerAddress(source.value)
       : normalizeExploreWebUrl(source.value);
-  const normalizedTitle =
-    trimTitle(source.title) ?? getDefaultTitle(kind, normalizedValue);
+  const normalizedTitle = trimTitle(source.title) ?? getDefaultTitle(kind, normalizedValue);
 
   const currentSources = getExploreCustomSources(
     mx.getAccountData(AccountDataEvent.CinnyExploreSources)?.getContent<CinnyExploreSourcesContent>()
@@ -182,10 +202,43 @@ export const upsertExploreCustomSource = async (
     value: normalizedValue,
     createdAt: now,
     updatedAt: now,
+    webOpenMode: kind === 'web' ? 'auto' : undefined,
+    webEmbedStatus: kind === 'web' ? 'unknown' : undefined,
   };
 
   await writeExploreCustomSources(mx, [...currentSources, createdSource]);
   return createdSource;
+};
+
+export const setExploreWebSourcePolicy = async (
+  mx: MatrixClient,
+  sourceId: string,
+  policy: {
+    webOpenMode?: CinnyExploreWebOpenMode;
+    webEmbedStatus?: CinnyExploreWebEmbedStatus;
+  }
+): Promise<CinnyExploreSource | undefined> => {
+  const currentSources = getExploreCustomSources(
+    mx.getAccountData(AccountDataEvent.CinnyExploreSources)?.getContent<CinnyExploreSourcesContent>()
+  );
+  const existing = currentSources.find((item) => item.id === sourceId && item.kind === 'web');
+  if (!existing) {
+    return undefined;
+  }
+
+  const updatedSource: CinnyExploreSource = {
+    ...existing,
+    webOpenMode: policy.webOpenMode ?? existing.webOpenMode ?? 'auto',
+    webEmbedStatus: policy.webEmbedStatus ?? existing.webEmbedStatus ?? 'unknown',
+    updatedAt: Date.now(),
+  };
+
+  await writeExploreCustomSources(
+    mx,
+    currentSources.map((item) => (item.id === existing.id ? updatedSource : item))
+  );
+
+  return updatedSource;
 };
 
 export const removeExploreCustomSource = async (

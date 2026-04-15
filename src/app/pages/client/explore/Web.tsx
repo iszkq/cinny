@@ -1,14 +1,28 @@
-import React, { useMemo, useState } from 'react';
-import { Box, Button, Icon, IconButton, Icons, Text, config } from 'folds';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Box, Button, Icon, IconButton, Icons, Spinner, Text, config } from 'folds';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Page, PageHeader } from '../../../components/page';
 import { BackRouteHandler } from '../../../components/BackRouteHandler';
 import { useAccountData } from '../../../hooks/useAccountData';
 import { ScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
+import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { AccountDataEvent, CinnyExploreSourcesContent } from '../../../../types/matrix/accountData';
 import { getExploreFeaturedPath } from '../../pathUtils';
-import { getExploreCustomSourceById } from './customSources';
+import { getExploreCustomSourceById, setExploreWebSourcePolicy } from './customSources';
 import * as css from './style.css';
+
+const PROBE_TIMEOUT_MS = 3500;
+
+type WebViewMode = 'probing' | 'embed' | 'external';
+
+const hiddenFrameStyle = {
+  position: 'absolute' as const,
+  inset: 0,
+  width: '1px',
+  height: '1px',
+  opacity: 0,
+  pointerEvents: 'none' as const,
+};
 
 const wrapTextStyle = {
   whiteSpace: 'pre-wrap' as const,
@@ -16,11 +30,80 @@ const wrapTextStyle = {
   overflowWrap: 'anywhere' as const,
 };
 
+const openExternalUrl = (url: string) => {
+  const popup = window.open(url, '_blank', 'noopener,noreferrer');
+  if (!popup) {
+    window.location.href = url;
+  }
+};
+
+const indicatesBlockedByHeaders = (
+  csp: string | null,
+  xFrameOptions: string | null,
+  currentOrigin: string,
+  targetOrigin: string
+): boolean => {
+  const normalizedXfo = xFrameOptions?.toLowerCase().trim();
+  if (normalizedXfo && normalizedXfo !== 'allowall') {
+    return true;
+  }
+
+  const normalizedCsp = csp?.toLowerCase();
+  if (!normalizedCsp || !normalizedCsp.includes('frame-ancestors')) {
+    return false;
+  }
+
+  const match = normalizedCsp.match(/frame-ancestors\s+([^;]+)/);
+  const directive = match?.[1]?.trim();
+  if (!directive) {
+    return false;
+  }
+
+  if (directive.includes("'none'")) {
+    return true;
+  }
+
+  if (directive.includes('*')) {
+    return false;
+  }
+
+  if (directive.includes("'self'") && currentOrigin.toLowerCase() === targetOrigin.toLowerCase()) {
+    return false;
+  }
+
+  return !directive.includes(currentOrigin.toLowerCase());
+};
+
+const probeByHeaders = async (url: string): Promise<boolean> => {
+  try {
+    const response = await fetch(url, {
+      method: 'HEAD',
+      mode: 'cors',
+      redirect: 'follow',
+    });
+
+    return indicatesBlockedByHeaders(
+      response.headers.get('content-security-policy'),
+      response.headers.get('x-frame-options'),
+      window.location.origin,
+      new URL(url).origin
+    );
+  } catch {
+    return false;
+  }
+};
+
 export function ExploreWebView() {
+  const mx = useMatrixClient();
   const { webId } = useParams();
   const screenSize = useScreenSizeContext();
   const navigate = useNavigate();
   const [refreshKey, setRefreshKey] = useState(0);
+  const [mode, setMode] = useState<WebViewMode>('probing');
+  const [statusText, setStatusText] = useState<string>();
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const probeSettledRef = useRef(false);
+  const externalOpenedRef = useRef(false);
 
   const sourceEvent = useAccountData(AccountDataEvent.CinnyExploreSources);
   const source = useMemo(
@@ -32,9 +115,115 @@ export function ExploreWebView() {
     [sourceEvent, webId]
   );
 
-  const openInBrowser = () => {
+  const rememberExternal = useCallback(async () => {
+    if (!source || source.kind !== 'web') return;
+    await setExploreWebSourcePolicy(mx, source.id, {
+      webOpenMode: 'external',
+      webEmbedStatus: 'blocked',
+    });
+  }, [mx, source]);
+
+  const rememberEmbeddable = useCallback(async () => {
+    if (!source || source.kind !== 'web') return;
+    await setExploreWebSourcePolicy(mx, source.id, {
+      webOpenMode: 'auto',
+      webEmbedStatus: 'embeddable',
+    });
+  }, [mx, source]);
+
+  const openInBrowser = useCallback(() => {
     if (!source) return;
-    window.open(source.value, '_blank', 'noopener,noreferrer');
+    if (source.kind === 'web') {
+      void setExploreWebSourcePolicy(mx, source.id, {
+        webOpenMode: 'external',
+      });
+    }
+    openExternalUrl(source.value);
+  }, [mx, source]);
+
+  const switchToExternal = useCallback(
+    (message: string, autoOpen: boolean) => {
+      if (probeSettledRef.current) return;
+      probeSettledRef.current = true;
+      setMode('external');
+      setStatusText(message);
+      void rememberExternal();
+
+      if (autoOpen && source && !externalOpenedRef.current) {
+        externalOpenedRef.current = true;
+        openExternalUrl(source.value);
+      }
+    },
+    [rememberExternal, source]
+  );
+
+  const switchToEmbed = useCallback(() => {
+    if (probeSettledRef.current) return;
+    probeSettledRef.current = true;
+    setMode('embed');
+    setStatusText(undefined);
+    void rememberEmbeddable();
+  }, [rememberEmbeddable]);
+
+  useEffect(() => {
+    externalOpenedRef.current = false;
+    probeSettledRef.current = false;
+
+    if (!source || source.kind !== 'web') {
+      return undefined;
+    }
+
+    if (source.webOpenMode === 'external' || source.webEmbedStatus === 'blocked') {
+      setMode('external');
+      setStatusText('此网页会直接在浏览器中打开。');
+      return undefined;
+    }
+
+    if (source.webEmbedStatus === 'embeddable') {
+      setMode('embed');
+      setStatusText(undefined);
+      return undefined;
+    }
+
+    setMode('probing');
+    setStatusText('正在检测网页是否适合内嵌...');
+
+    const timeoutId = window.setTimeout(() => {
+      switchToExternal('此网页不适合内嵌，已改为浏览器打开。', true);
+    }, PROBE_TIMEOUT_MS);
+
+    void probeByHeaders(source.value).then((blocked) => {
+      if (!blocked || probeSettledRef.current) return;
+      window.clearTimeout(timeoutId);
+      switchToExternal('目标网站禁止 iframe 内嵌，已改为浏览器打开。', true);
+    });
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [
+    source,
+    refreshKey,
+    switchToExternal,
+  ]);
+
+  const handleFrameLoad = () => {
+    if (mode !== 'probing') return;
+
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+
+    try {
+      const href = iframe.contentWindow?.location.href;
+      if (!href || href === 'about:blank') {
+        switchToExternal('目标网站拒绝 iframe 内嵌，已改为浏览器打开。', true);
+        return;
+      }
+    } catch {
+      // Cross-origin navigation succeeded. We treat this as embeddable.
+    }
+
+    switchToEmbed();
   };
 
   if (!source || source.kind !== 'web') {
@@ -76,6 +265,8 @@ export function ExploreWebView() {
     );
   }
 
+  const showFrame = mode !== 'external';
+
   return (
     <Page>
       <PageHeader balance={screenSize === ScreenSize.Mobile}>
@@ -99,14 +290,16 @@ export function ExploreWebView() {
           </Text>
         </Box>
         <Box grow="Yes" basis="No" justifyContent="End" gap="100">
-          <Button
-            variant="Secondary"
-            fill="Soft"
-            size="300"
-            onClick={() => setRefreshKey((count) => count + 1)}
-          >
-            <Text size="B300">刷新</Text>
-          </Button>
+          {mode === 'embed' && (
+            <Button
+              variant="Secondary"
+              fill="Soft"
+              size="300"
+              onClick={() => setRefreshKey((count) => count + 1)}
+            >
+              <Text size="B300">刷新</Text>
+            </Button>
+          )}
           <IconButton title="浏览器打开" aria-label="浏览器打开" onClick={openInBrowser}>
             <Icon src={Icons.Link} />
           </IconButton>
@@ -114,30 +307,60 @@ export function ExploreWebView() {
       </PageHeader>
 
       <Box grow="Yes" direction="Column" gap="300" style={{ padding: config.space.S400 }}>
-        <Box className={css.ExploreWebNotice} direction="Column" gap="100">
-          <Text size="L400">网页嵌入预览</Text>
-          <Text size="T200" priority="300" style={wrapTextStyle}>
-            部分网站会禁止 iframe 内嵌。即使先出现启动动画，后面变成白屏，也通常说明站点在后续加载阶段阻止了嵌入。
-          </Text>
-          <Text size="T200" priority="300" style={wrapTextStyle}>
-            这种情况不是你这里的页面容器坏了，而是目标网站本身不允许稳定地被内嵌，建议直接用浏览器打开。
-          </Text>
-          <Box>
+        {mode === 'probing' && (
+          <Box
+            className={css.RoomsInfoCard}
+            direction="Column"
+            justifyContent="Center"
+            alignItems="Center"
+            gap="200"
+          >
+            <Spinner variant="Secondary" size="400" />
+            <Text size="L400" align="Center">
+              正在检测
+            </Text>
+            <Text size="T300" align="Center" priority="300" style={wrapTextStyle}>
+              {statusText}
+            </Text>
+          </Box>
+        )}
+
+        {mode === 'external' && (
+          <Box
+            className={css.RoomsInfoCard}
+            direction="Column"
+            justifyContent="Center"
+            alignItems="Center"
+            gap="200"
+          >
+            <Icon size="400" src={Icons.Link} />
+            <Text size="L400" align="Center">
+              已改为浏览器打开
+            </Text>
+            <Text size="T300" align="Center" priority="300" style={wrapTextStyle}>
+              {statusText}
+            </Text>
             <Button variant="Secondary" fill="Soft" size="300" onClick={openInBrowser}>
-              <Text size="B300">浏览器打开</Text>
+              <Text size="B300">打开网页</Text>
             </Button>
           </Box>
-        </Box>
-        <Box className={css.ExploreWebFrameShell}>
-          <iframe
-            key={refreshKey}
-            title={source.title}
-            src={source.value}
-            className={css.ExploreWebFrame}
-            referrerPolicy="strict-origin-when-cross-origin"
-            allow="autoplay; clipboard-read; clipboard-write; fullscreen"
-          />
-        </Box>
+        )}
+
+        {showFrame && (
+          <Box className={css.ExploreWebFrameShell} style={{ position: 'relative' }}>
+            <iframe
+              key={refreshKey}
+              ref={iframeRef}
+              title={source.title}
+              src={source.value}
+              className={css.ExploreWebFrame}
+              style={mode === 'probing' ? hiddenFrameStyle : undefined}
+              onLoad={handleFrameLoad}
+              referrerPolicy="strict-origin-when-cross-origin"
+              allow="autoplay; clipboard-read; clipboard-write; fullscreen"
+            />
+          </Box>
+        )}
       </Box>
     </Page>
   );
