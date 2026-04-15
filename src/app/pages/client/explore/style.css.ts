@@ -1,4 +1,4 @@
-import { style } from '@vanilla-extract/css';
+import { globalStyle, style } from '@vanilla-extract/css';
 import { config } from 'folds';
 import { ContainerColor } from '../../../styles/ContainerColor.css';
 
@@ -86,11 +86,10 @@ export const ExploreNavSectionActions = style({
   marginLeft: 'auto',
   minWidth: 0,
   paddingRight: config.space.S100,
-  selectors: {
-    '& > *': {
-      flexShrink: 0,
-    },
-  },
+});
+
+globalStyle(`${ExploreNavSectionActions} > *`, {
+  flexShrink: 0,
 });
 
 export const ExploreNavGrid = style({
