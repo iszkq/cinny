@@ -40,7 +40,8 @@ export const ExploreNavSection = style({
   display: 'flex',
   flexDirection: 'column',
   minWidth: 0,
-  padding: config.space.S250,
+  padding: config.space.S400,
+  boxSizing: 'border-box',
   borderRadius: config.radii.R500,
   background:
     'linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 252, 0.84))',
@@ -59,26 +60,54 @@ export const ExploreNavCanvas = style({
 
 export const ExploreNavSectionHeader = style({
   display: 'flex',
-  alignItems: 'center',
+  flexWrap: 'wrap',
+  alignItems: 'flex-start',
   justifyContent: 'space-between',
-  gap: config.space.S200,
+  gap: config.space.S300,
   minWidth: 0,
-  padding: `${config.space.S50} ${config.space.S50} ${config.space.S100}`,
+  paddingBottom: config.space.S300,
+  borderBottom: '1px solid rgba(226, 232, 240, 0.78)',
+});
+
+export const ExploreNavSectionMeta = style({
+  display: 'flex',
+  flexDirection: 'column',
+  gap: config.space.S100,
+  minWidth: 0,
+  paddingLeft: config.space.S100,
+});
+
+export const ExploreNavSectionActions = style({
+  display: 'flex',
+  flexWrap: 'wrap',
+  gap: config.space.S100,
+  justifyContent: 'flex-end',
+  alignItems: 'center',
+  marginLeft: 'auto',
+  minWidth: 0,
+  paddingRight: config.space.S100,
+  selectors: {
+    '& > *': {
+      flexShrink: 0,
+    },
+  },
 });
 
 export const ExploreNavGrid = style({
   display: 'grid',
   gridTemplateColumns: 'repeat(auto-fill, minmax(13rem, 14rem))',
-  gap: config.space.S200,
+  gap: config.space.S250,
   justifyContent: 'start',
 });
 
 export const ExploreNavCard = style([
   {
-    position: 'relative',
+    display: 'flex',
+    flexDirection: 'column',
     width: '100%',
-    padding: config.space.S200,
+    padding: config.space.S250,
     borderRadius: config.radii.R500,
+    minHeight: '9.25rem',
     minWidth: 0,
     boxSizing: 'border-box',
     overflow: 'hidden',
@@ -124,7 +153,7 @@ export const ExploreNavCardButton = style({
   display: 'flex',
   flexDirection: 'column',
   justifyContent: 'flex-start',
-  gap: config.space.S150,
+  gap: config.space.S175,
   alignItems: 'stretch',
   textAlign: 'left',
   background: 'transparent',
@@ -133,8 +162,6 @@ export const ExploreNavCardButton = style({
   color: 'inherit',
   font: 'inherit',
   padding: 0,
-  paddingRight: `calc(${config.space.S200} + 2.2rem)`,
-  paddingBottom: config.space.S150,
   minWidth: 0,
   cursor: 'pointer',
   textDecoration: 'none',
@@ -189,26 +216,21 @@ export const ExploreNavCardDescription = style({
 });
 
 export const ExploreNavCardFooter = style({
-  position: 'absolute',
-  right: config.space.S150,
-  bottom: config.space.S150,
-  opacity: 0.22,
-  pointerEvents: 'auto',
-  padding: config.space.S50,
-  borderRadius: config.radii.R400,
-  background: 'rgba(255, 255, 255, 0.94)',
-  border: '1px solid rgba(226, 232, 240, 0.9)',
-  boxShadow: '0 10px 24px rgba(148, 163, 184, 0.16)',
-  transform: 'translateY(-2px)',
-  transition: 'opacity 140ms ease, transform 140ms ease',
+  display: 'flex',
+  justifyContent: 'flex-end',
+  alignItems: 'center',
+  gap: config.space.S100,
+  marginTop: config.space.S200,
+  paddingTop: config.space.S150,
+  borderTop: '1px solid rgba(226, 232, 240, 0.74)',
+  opacity: 0.7,
+  transition: 'opacity 140ms ease',
   selectors: {
     [`${ExploreNavCard}:hover &`]: {
       opacity: 1,
-      transform: 'translateY(0)',
     },
     [`${ExploreNavCard}:focus-within &`]: {
       opacity: 1,
-      transform: 'translateY(0)',
     },
   },
 });
@@ -216,19 +238,22 @@ export const ExploreNavCardFooter = style({
 export const ExploreNavTagRail = style({
   display: 'flex',
   flexWrap: 'wrap',
-  gap: config.space.S50,
+  gap: config.space.S100,
   alignItems: 'center',
 });
 
-export const ExploreNavTag = style([
-  ContainerColor({ variant: 'SurfaceVariant' }),
-  {
-    display: 'inline-flex',
-    alignItems: 'center',
-    padding: `${config.space.S50} ${config.space.S150}`,
-    borderRadius: config.radii.R300,
-    fontSize: '0.75rem',
-    lineHeight: 1.3,
-    color: 'rgba(71, 85, 105, 0.95)',
+export const ExploreNavTag = style({
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '0.12rem',
+  fontSize: '0.74rem',
+  lineHeight: 1.3,
+  fontWeight: 500,
+  color: 'rgba(37, 99, 235, 0.9)',
+  selectors: {
+    '&::before': {
+      content: '"#"',
+      color: 'rgba(96, 165, 250, 0.88)',
+    },
   },
-]);
+});

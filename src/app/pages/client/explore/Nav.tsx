@@ -97,14 +97,6 @@ const dialogFormStyle = {
   boxSizing: 'border-box' as const,
 };
 
-const getCardHost = (url: string): string => {
-  try {
-    return new URL(url).hostname;
-  } catch {
-    return url;
-  }
-};
-
 type SectionDialogProps = {
   open: boolean;
   initialSection?: CinnyExploreNavSection;
@@ -411,7 +403,7 @@ function ExploreNavCardItem({
     !!card.description && card.description.trim() !== card.title.trim();
 
   return (
-    <Box className={css.ExploreNavCard} direction="Column" gap="200">
+    <Box className={css.ExploreNavCard} direction="Column">
       <a
         className={css.ExploreNavCardButton}
         href={card.url}
@@ -448,24 +440,18 @@ function ExploreNavCardItem({
           </Text>
         )}
 
-        <Box direction="Column" gap="150">
-          <span className={css.ExploreNavHost} title={getCardHost(card.url)}>
-            {getCardHost(card.url)}
-          </span>
-
-          {(visibleTags.length > 0 || hiddenTagCount > 0) && (
-            <Box className={css.ExploreNavTagRail}>
-              {visibleTags.map((tag) => (
-                <span key={tag} className={css.ExploreNavTag}>
-                  {tag}
-                </span>
-              ))}
-              {hiddenTagCount > 0 && (
-                <span className={css.ExploreNavTag}>{`+${hiddenTagCount}`}</span>
-              )}
-            </Box>
-          )}
-        </Box>
+        {(visibleTags.length > 0 || hiddenTagCount > 0) && (
+          <Box className={css.ExploreNavTagRail}>
+            {visibleTags.map((tag) => (
+              <span key={tag} className={css.ExploreNavTag}>
+                {tag}
+              </span>
+            ))}
+            {hiddenTagCount > 0 && (
+              <span className={css.ExploreNavTag}>{`+${hiddenTagCount}`}</span>
+            )}
+          </Box>
+        )}
       </a>
 
       <Box className={css.ExploreNavCardFooter} alignItems="Center" justifyContent="End" gap="100">
@@ -729,14 +715,8 @@ export function ExploreNavView() {
                       direction="Column"
                       gap="300"
                     >
-                      <Box
-                        className={css.ExploreNavSectionHeader}
-                        alignItems="Center"
-                        justifyContent="SpaceBetween"
-                        gap="200"
-                        wrap="Wrap"
-                      >
-                        <Box direction="Column" gap="50">
+                      <Box className={css.ExploreNavSectionHeader}>
+                        <Box className={css.ExploreNavSectionMeta}>
                           <Text size="H4" style={helperTextStyle}>
                             {section.title}
                           </Text>
@@ -744,7 +724,7 @@ export function ExploreNavView() {
                             {`${section.cards.length} 张卡片`}
                           </Text>
                         </Box>
-                        <Box gap="100" wrap="Wrap">
+                        <Box className={css.ExploreNavSectionActions}>
                           <Button
                             size="300"
                             variant="Secondary"
