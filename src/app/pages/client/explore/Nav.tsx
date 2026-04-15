@@ -82,20 +82,19 @@ const textAreaStyle = {
   font: 'inherit',
 };
 
-const dialogShellStyle = (width: string) => ({
-  width: `min(${width}, calc(100vw - 1.5rem))`,
-  maxWidth: 'calc(100vw - 1.5rem)',
+const dialogStyle = (width: string) => ({
+  width: 'calc(100vw - 1.5rem)',
+  maxWidth: width,
+  maxHeight: 'calc(100vh - 1.5rem)',
   minWidth: 0,
-  overflow: 'hidden' as const,
   boxSizing: 'border-box' as const,
+  overflow: 'hidden' as const,
 });
 
-const dialogContentStyle = {
-  width: '100%',
-  maxWidth: '100%',
+const dialogFormStyle = {
   minWidth: 0,
+  padding: config.space.S400,
   boxSizing: 'border-box' as const,
-  overflow: 'hidden' as const,
 };
 
 const getCardHost = (url: string): string => {
@@ -151,8 +150,7 @@ function SectionDialog({ open, initialSection, onClose, onSave }: SectionDialogP
             escapeDeactivates: stopPropagation,
           }}
         >
-          <Box style={dialogShellStyle('26rem')}>
-            <Dialog variant="Surface">
+          <Dialog variant="Surface" style={dialogStyle('26rem')}>
               <Header
                 style={{
                   padding: `0 ${config.space.S200} 0 ${config.space.S400}`,
@@ -168,50 +166,48 @@ function SectionDialog({ open, initialSection, onClose, onSave }: SectionDialogP
                   <Icon src={Icons.Cross} />
                 </IconButton>
               </Header>
-              <Box
-                as="form"
-                onSubmit={handleSubmit}
-                style={{
-                  ...dialogContentStyle,
-                  padding: config.space.S400,
-                }}
-                direction="Column"
-                gap="300"
-              >
-                <Box direction="Column" gap="100" style={fieldGroupStyle}>
-                  <Text size="L400">分组名称</Text>
-                  <Input
-                    autoFocus
-                    required
-                    variant="Background"
-                    value={title}
-                    onChange={(evt) => setTitle(evt.currentTarget.value)}
-                    style={fullWidthStyle}
-                    placeholder="例如：常用工具"
-                  />
-                </Box>
+              <Scroll size="300" hideTrack visibility="Hover">
+                <Box
+                  as="form"
+                  onSubmit={handleSubmit}
+                  style={dialogFormStyle}
+                  direction="Column"
+                  gap="300"
+                >
+                  <Box direction="Column" gap="100" style={fieldGroupStyle}>
+                    <Text size="L400">分组名称</Text>
+                    <Input
+                      autoFocus
+                      required
+                      variant="Background"
+                      value={title}
+                      onChange={(evt) => setTitle(evt.currentTarget.value)}
+                      style={fullWidthStyle}
+                      placeholder="例如：常用工具"
+                    />
+                  </Box>
 
-                {error && (
-                  <Text style={{ ...helperTextStyle, color: color.Critical.Main }} size="T300">
-                    {error}
-                  </Text>
-                )}
+                  {error && (
+                    <Text style={{ ...helperTextStyle, color: color.Critical.Main }} size="T300">
+                      {error}
+                    </Text>
+                  )}
 
-                <Box style={fullWidthStyle} direction="Column">
-                  <Button
-                    type="submit"
-                    variant="Primary"
-                    disabled={saving}
-                    before={
-                      saving ? <Spinner fill="Solid" variant="Primary" size="200" /> : undefined
-                    }
-                  >
-                    <Text size="B400">{initialSection ? '保存分组' : '创建分组'}</Text>
-                  </Button>
+                  <Box style={fullWidthStyle} direction="Column">
+                    <Button
+                      type="submit"
+                      variant="Primary"
+                      disabled={saving}
+                      before={
+                        saving ? <Spinner fill="Solid" variant="Primary" size="200" /> : undefined
+                      }
+                    >
+                      <Text size="B400">{initialSection ? '保存分组' : '创建分组'}</Text>
+                    </Button>
+                  </Box>
                 </Box>
-              </Box>
+              </Scroll>
             </Dialog>
-          </Box>
         </FocusTrap>
       </OverlayCenter>
     </Overlay>
@@ -286,8 +282,7 @@ function CardDialog({ open, initialCard, onClose, onSave }: CardDialogProps) {
             escapeDeactivates: stopPropagation,
           }}
         >
-          <Box style={dialogShellStyle('30rem')}>
-            <Dialog variant="Surface">
+          <Dialog variant="Surface" style={dialogStyle('30rem')}>
               <Header
                 style={{
                   padding: `0 ${config.space.S200} 0 ${config.space.S400}`,
@@ -303,94 +298,92 @@ function CardDialog({ open, initialCard, onClose, onSave }: CardDialogProps) {
                   <Icon src={Icons.Cross} />
                 </IconButton>
               </Header>
-              <Box
-                as="form"
-                onSubmit={handleSubmit}
-                style={{
-                  ...dialogContentStyle,
-                  padding: config.space.S400,
-                }}
-                direction="Column"
-                gap="300"
-              >
-                <Box direction="Column" gap="100" style={fieldGroupStyle}>
-                  <Text size="L400">标题</Text>
-                  <Input
-                    autoFocus
-                    required
-                    variant="Background"
-                    value={title}
-                    onChange={(evt) => setTitle(evt.currentTarget.value)}
-                    style={fullWidthStyle}
-                    placeholder="例如：Google 翻译"
-                  />
-                </Box>
+              <Scroll size="300" hideTrack visibility="Hover">
+                <Box
+                  as="form"
+                  onSubmit={handleSubmit}
+                  style={dialogFormStyle}
+                  direction="Column"
+                  gap="300"
+                >
+                  <Box direction="Column" gap="100" style={fieldGroupStyle}>
+                    <Text size="L400">标题</Text>
+                    <Input
+                      autoFocus
+                      required
+                      variant="Background"
+                      value={title}
+                      onChange={(evt) => setTitle(evt.currentTarget.value)}
+                      style={fullWidthStyle}
+                      placeholder="例如：Google 翻译"
+                    />
+                  </Box>
 
-                <Box direction="Column" gap="100" style={fieldGroupStyle}>
-                  <Text size="L400">链接地址</Text>
-                  <Input
-                    required
-                    variant="Background"
-                    value={url}
-                    onChange={(evt) => setUrl(evt.currentTarget.value)}
-                    style={fullWidthStyle}
-                    placeholder="例如：https://translate.google.com"
-                  />
-                </Box>
+                  <Box direction="Column" gap="100" style={fieldGroupStyle}>
+                    <Text size="L400">链接地址</Text>
+                    <Input
+                      required
+                      variant="Background"
+                      value={url}
+                      onChange={(evt) => setUrl(evt.currentTarget.value)}
+                      style={fullWidthStyle}
+                      placeholder="例如：https://translate.google.com"
+                    />
+                  </Box>
 
-                <Box direction="Column" gap="100" style={fieldGroupStyle}>
-                  <Text size="L400">描述（可选）</Text>
-                  <textarea
-                    value={description}
-                    onChange={(evt) => setDescription(evt.currentTarget.value)}
-                    rows={4}
-                    style={textAreaStyle}
-                  />
-                </Box>
+                  <Box direction="Column" gap="100" style={fieldGroupStyle}>
+                    <Text size="L400">描述（可选）</Text>
+                    <textarea
+                      value={description}
+                      onChange={(evt) => setDescription(evt.currentTarget.value)}
+                      rows={4}
+                      style={textAreaStyle}
+                    />
+                  </Box>
 
-                <Box direction="Column" gap="100" style={fieldGroupStyle}>
-                  <Text size="L400">图标链接（可选）</Text>
-                  <Input
-                    variant="Background"
-                    value={iconUrl}
-                    onChange={(evt) => setIconUrl(evt.currentTarget.value)}
-                    style={fullWidthStyle}
-                    placeholder="例如：https://example.com/logo.png"
-                  />
-                </Box>
+                  <Box direction="Column" gap="100" style={fieldGroupStyle}>
+                    <Text size="L400">图标链接（可选）</Text>
+                    <Input
+                      variant="Background"
+                      value={iconUrl}
+                      onChange={(evt) => setIconUrl(evt.currentTarget.value)}
+                      style={fullWidthStyle}
+                      placeholder="例如：https://example.com/logo.png"
+                    />
+                  </Box>
 
-                <Box direction="Column" gap="100" style={fieldGroupStyle}>
-                  <Text size="L400">标签（可选）</Text>
-                  <Input
-                    variant="Background"
-                    value={tagsText}
-                    onChange={(evt) => setTagsText(evt.currentTarget.value)}
-                    style={fullWidthStyle}
-                    placeholder="用逗号分隔，例如：翻译, 工具"
-                  />
-                </Box>
+                  <Box direction="Column" gap="100" style={fieldGroupStyle}>
+                    <Text size="L400">标签（可选）</Text>
+                    <Input
+                      variant="Background"
+                      value={tagsText}
+                      onChange={(evt) => setTagsText(evt.currentTarget.value)}
+                      style={fullWidthStyle}
+                      placeholder="用逗号分隔，例如：翻译, 工具"
+                    />
+                  </Box>
 
-                {error && (
-                  <Text style={{ ...helperTextStyle, color: color.Critical.Main }} size="T300">
-                    {error}
-                  </Text>
-                )}
+                  {error && (
+                    <Text style={{ ...helperTextStyle, color: color.Critical.Main }} size="T300">
+                      {error}
+                    </Text>
+                  )}
 
-                <Box style={fullWidthStyle} direction="Column">
-                  <Button
-                    type="submit"
-                    variant="Primary"
-                    disabled={saving}
-                    before={
-                      saving ? <Spinner fill="Solid" variant="Primary" size="200" /> : undefined
-                    }
-                  >
-                    <Text size="B400">{initialCard ? '保存卡片' : '创建卡片'}</Text>
-                  </Button>
+                  <Box style={fullWidthStyle} direction="Column">
+                    <Button
+                      type="submit"
+                      variant="Primary"
+                      disabled={saving}
+                      before={
+                        saving ? <Spinner fill="Solid" variant="Primary" size="200" /> : undefined
+                      }
+                    >
+                      <Text size="B400">{initialCard ? '保存卡片' : '创建卡片'}</Text>
+                    </Button>
+                  </Box>
                 </Box>
-              </Box>
+              </Scroll>
             </Dialog>
-          </Box>
         </FocusTrap>
       </OverlayCenter>
     </Overlay>

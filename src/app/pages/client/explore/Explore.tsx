@@ -15,6 +15,7 @@ import {
   Overlay,
   OverlayBackdrop,
   OverlayCenter,
+  Scroll,
   Spinner,
   Text,
   color,
@@ -102,20 +103,19 @@ const fieldGroupStyle = {
   alignSelf: 'stretch' as const,
 };
 
-const dialogShellStyle = (width: string) => ({
-  width: `min(${width}, calc(100vw - 1.5rem))`,
-  maxWidth: 'calc(100vw - 1.5rem)',
+const dialogStyle = (width: string) => ({
+  width: 'calc(100vw - 1.5rem)',
+  maxWidth: width,
+  maxHeight: 'calc(100vh - 1.5rem)',
   minWidth: 0,
-  overflow: 'hidden' as const,
   boxSizing: 'border-box' as const,
+  overflow: 'hidden' as const,
 });
 
-const dialogContentStyle = {
-  width: '100%',
-  maxWidth: '100%',
+const dialogFormStyle = {
   minWidth: 0,
+  padding: config.space.S400,
   boxSizing: 'border-box' as const,
-  overflow: 'hidden' as const,
 };
 
 const helperTextStyle = {
@@ -319,8 +319,7 @@ function AddExploreSource({
               escapeDeactivates: stopPropagation,
             }}
           >
-            <Box style={dialogShellStyle('28rem')}>
-              <Dialog variant="Surface">
+            <Dialog variant="Surface" style={dialogStyle('28rem')}>
                 <Header
                   style={{
                     padding: `0 ${config.space.S200} 0 ${config.space.S400}`,
@@ -336,152 +335,150 @@ function AddExploreSource({
                     <Icon src={Icons.Cross} />
                   </IconButton>
                 </Header>
-                <Box
-                  as="form"
-                  onSubmit={handleSubmit}
-                  style={{
-                    ...dialogContentStyle,
-                    padding: config.space.S400,
-                  }}
-                  direction="Column"
-                  gap="400"
-                >
-                  <Box direction="Column" gap="50">
-                    <Text priority="400" style={helperTextStyle}>
-                      添加的来源会写入当前 Matrix 账号。
-                    </Text>
-                    <Text priority="400" style={helperTextStyle}>
-                      同账号的其他设备也会自动同步。
-                    </Text>
-                  </Box>
+                <Scroll size="300" hideTrack visibility="Hover">
+                  <Box
+                    as="form"
+                    onSubmit={handleSubmit}
+                    style={dialogFormStyle}
+                    direction="Column"
+                    gap="400"
+                  >
+                    <Box direction="Column" gap="50">
+                      <Text priority="400" style={helperTextStyle}>
+                        添加的来源会写入当前 Matrix 账号。
+                      </Text>
+                      <Text priority="400" style={helperTextStyle}>
+                        同账号的其他设备也会自动同步。
+                      </Text>
+                    </Box>
 
-                  <Box direction="Column" gap="100" style={fieldGroupStyle}>
-                    <Text size="L400">来源类型</Text>
-                    <Box gap="100" wrap="Wrap">
-                      <Chip
-                        type="button"
-                        variant={sourceKind === 'server' ? 'Primary' : 'Surface'}
-                        radii="Pill"
-                        outlined={sourceKind !== 'server'}
-                        onClick={() => {
-                          setSourceKind('server');
-                          setValidationError(undefined);
-                        }}
+                    <Box direction="Column" gap="100" style={fieldGroupStyle}>
+                      <Text size="L400">来源类型</Text>
+                      <Box gap="100" wrap="Wrap">
+                        <Chip
+                          type="button"
+                          variant={sourceKind === 'server' ? 'Primary' : 'Surface'}
+                          radii="Pill"
+                          outlined={sourceKind !== 'server'}
+                          onClick={() => {
+                            setSourceKind('server');
+                            setValidationError(undefined);
+                          }}
+                        >
+                          <Text size="T200">社区服务器</Text>
+                        </Chip>
+                        <Chip
+                          type="button"
+                          variant={sourceKind === 'web' ? 'Primary' : 'Surface'}
+                          radii="Pill"
+                          outlined={sourceKind !== 'web'}
+                          onClick={() => {
+                            setSourceKind('web');
+                            setValidationError(undefined);
+                          }}
+                        >
+                          <Text size="T200">自定义网页</Text>
+                        </Chip>
+                        <Chip
+                          type="button"
+                          variant={sourceKind === 'nav' ? 'Primary' : 'Surface'}
+                          radii="Pill"
+                          outlined={sourceKind !== 'nav'}
+                          onClick={() => {
+                            setSourceKind('nav');
+                            setValidationError(undefined);
+                          }}
+                        >
+                          <Text size="T200">导航站</Text>
+                        </Chip>
+                      </Box>
+                    </Box>
+
+                    <Box direction="Column" gap="100" style={fieldGroupStyle}>
+                      <Text size="L400">
+                        {sourceKind === 'nav' ? '导航站名称' : '显示名称（可选）'}
+                      </Text>
+                      <Input
+                        name="titleInput"
+                        variant="Background"
+                        required={sourceKind === 'nav'}
+                        value={title}
+                        onChange={(evt) => setTitle(evt.currentTarget.value)}
+                        style={fullWidthStyle}
+                        placeholder={
+                          sourceKind === 'server'
+                            ? '默认显示服务器地址'
+                            : sourceKind === 'web'
+                              ? '例如：官网文档'
+                              : '例如：工作台'
+                        }
+                      />
+                    </Box>
+
+                    <Box direction="Column" gap="100" style={fieldGroupStyle}>
+                      <Text size="L400">
+                        {sourceKind === 'server'
+                          ? '服务器地址'
+                          : sourceKind === 'web'
+                            ? '网页地址'
+                            : '导航站简介（可选）'}
+                      </Text>
+                      <Input
+                        name="valueInput"
+                        variant="Background"
+                        required={sourceKind !== 'nav'}
+                        value={value}
+                        onChange={(evt) => setValue(evt.currentTarget.value)}
+                        style={fullWidthStyle}
+                        placeholder={
+                          sourceKind === 'server'
+                            ? '例如：matrix.org'
+                            : sourceKind === 'web'
+                              ? '例如：https://www.mozilla.org'
+                              : '例如：收纳常用网站和工具'
+                        }
+                      />
+
+                      {sourceKind === 'server' && (
+                        <Text size="T200" priority="300" style={helperTextStyle}>
+                          用于探索该服务器公开的房间与空间。
+                        </Text>
+                      )}
+                      {sourceKind === 'nav' && (
+                        <Box direction="Column" gap="50">
+                          <Text size="T200" priority="300" style={helperTextStyle}>
+                            导航站适合收纳多个常用链接和卡片。
+                          </Text>
+                          <Text size="T200" priority="300" style={helperTextStyle}>
+                            创建后可以继续添加分组和链接卡片。
+                          </Text>
+                        </Box>
+                      )}
+
+                      {(validationError || saveState.status === AsyncStatus.Error) && (
+                        <Text style={{ ...helperTextStyle, color: color.Critical.Main }} size="T300">
+                          {validationError ?? getErrorMessage(saveState.error)}
+                        </Text>
+                      )}
+                    </Box>
+
+                    <Box style={fullWidthStyle} direction="Column">
+                      <Button
+                        type="submit"
+                        variant="Primary"
+                        disabled={saveState.status === AsyncStatus.Loading}
+                        before={
+                          saveState.status === AsyncStatus.Loading ? (
+                            <Spinner fill="Solid" variant="Primary" size="200" />
+                          ) : undefined
+                        }
                       >
-                        <Text size="T200">社区服务器</Text>
-                      </Chip>
-                      <Chip
-                        type="button"
-                        variant={sourceKind === 'web' ? 'Primary' : 'Surface'}
-                        radii="Pill"
-                        outlined={sourceKind !== 'web'}
-                        onClick={() => {
-                          setSourceKind('web');
-                          setValidationError(undefined);
-                        }}
-                      >
-                        <Text size="T200">自定义网页</Text>
-                      </Chip>
-                      <Chip
-                        type="button"
-                        variant={sourceKind === 'nav' ? 'Primary' : 'Surface'}
-                        radii="Pill"
-                        outlined={sourceKind !== 'nav'}
-                        onClick={() => {
-                          setSourceKind('nav');
-                          setValidationError(undefined);
-                        }}
-                      >
-                        <Text size="T200">导航站</Text>
-                      </Chip>
+                        <Text size="B400">保存并打开</Text>
+                      </Button>
                     </Box>
                   </Box>
-
-                  <Box direction="Column" gap="100" style={fieldGroupStyle}>
-                    <Text size="L400">
-                      {sourceKind === 'nav' ? '导航站名称' : '显示名称（可选）'}
-                    </Text>
-                    <Input
-                      name="titleInput"
-                      variant="Background"
-                      required={sourceKind === 'nav'}
-                      value={title}
-                      onChange={(evt) => setTitle(evt.currentTarget.value)}
-                      style={fullWidthStyle}
-                      placeholder={
-                        sourceKind === 'server'
-                          ? '默认显示服务器地址'
-                          : sourceKind === 'web'
-                            ? '例如：官网文档'
-                            : '例如：工作台'
-                      }
-                    />
-                  </Box>
-
-                  <Box direction="Column" gap="100" style={fieldGroupStyle}>
-                    <Text size="L400">
-                      {sourceKind === 'server'
-                        ? '服务器地址'
-                        : sourceKind === 'web'
-                          ? '网页地址'
-                          : '导航站简介（可选）'}
-                    </Text>
-                    <Input
-                      name="valueInput"
-                      variant="Background"
-                      required={sourceKind !== 'nav'}
-                      value={value}
-                      onChange={(evt) => setValue(evt.currentTarget.value)}
-                      style={fullWidthStyle}
-                      placeholder={
-                        sourceKind === 'server'
-                          ? '例如：matrix.org'
-                          : sourceKind === 'web'
-                            ? '例如：https://www.mozilla.org'
-                            : '例如：收纳常用网站和工具'
-                      }
-                    />
-
-                    {sourceKind === 'server' && (
-                      <Text size="T200" priority="300" style={helperTextStyle}>
-                        用于探索该服务器公开的房间与空间。
-                      </Text>
-                    )}
-                    {sourceKind === 'nav' && (
-                      <Box direction="Column" gap="50">
-                        <Text size="T200" priority="300" style={helperTextStyle}>
-                          导航站适合收纳多个常用链接和卡片。
-                        </Text>
-                        <Text size="T200" priority="300" style={helperTextStyle}>
-                          创建后可以继续添加分组和链接卡片。
-                        </Text>
-                      </Box>
-                    )}
-
-                    {(validationError || saveState.status === AsyncStatus.Error) && (
-                      <Text style={{ ...helperTextStyle, color: color.Critical.Main }} size="T300">
-                        {validationError ?? getErrorMessage(saveState.error)}
-                      </Text>
-                    )}
-                  </Box>
-
-                  <Box style={fullWidthStyle} direction="Column">
-                    <Button
-                      type="submit"
-                      variant="Primary"
-                      disabled={saveState.status === AsyncStatus.Loading}
-                      before={
-                        saveState.status === AsyncStatus.Loading ? (
-                          <Spinner fill="Solid" variant="Primary" size="200" />
-                        ) : undefined
-                      }
-                    >
-                      <Text size="B400">保存并打开</Text>
-                    </Button>
-                  </Box>
-                </Box>
+                </Scroll>
               </Dialog>
-            </Box>
           </FocusTrap>
         </OverlayCenter>
       </Overlay>
