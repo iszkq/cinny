@@ -24,6 +24,7 @@ import {
   NavCategory,
   NavCategoryHeader,
   NavItem,
+  NavButton,
   NavItemContent,
   NavLink,
 } from '../../../components/nav';
@@ -57,8 +58,11 @@ import {
   getExploreCustomSources,
   normalizeExploreServerAddress,
   removeExploreCustomSource,
+  setExploreWebSourcePolicy,
   upsertExploreCustomSource,
 } from './customSources';
+
+const PROBE_TIMEOUT_MS = 2500;
 
 const getErrorMessage = (error: unknown): string => {
   if (error instanceof Error && error.message) {
@@ -69,6 +73,13 @@ const getErrorMessage = (error: unknown): string => {
 };
 
 const openExternalUrl = (url: string) => {
+  const popup = window.open(url, '_blank', 'noopener,noreferrer');
+  if (popup) {
+    popup.opener = null;
+    popup.focus?.();
+    return;
+  }
+
   const link = document.createElement('a');
   link.href = url;
   link.target = '_blank';
@@ -81,13 +92,110 @@ const openExternalUrl = (url: string) => {
 
 const fullWidthStyle = {
   width: '100%',
+  maxWidth: '100%',
   minWidth: 0,
+  boxSizing: 'border-box' as const,
+};
+
+const fieldGroupStyle = {
+  ...fullWidthStyle,
+  alignSelf: 'stretch' as const,
+};
+
+const dialogShellStyle = (width: string) => ({
+  width: `min(${width}, calc(100vw - 1.5rem))`,
+  maxWidth: 'calc(100vw - 1.5rem)',
+  minWidth: 0,
+  overflow: 'hidden' as const,
+  boxSizing: 'border-box' as const,
+});
+
+const dialogContentStyle = {
+  width: '100%',
+  maxWidth: '100%',
+  minWidth: 0,
+  boxSizing: 'border-box' as const,
+  overflow: 'hidden' as const,
 };
 
 const helperTextStyle = {
   whiteSpace: 'normal' as const,
   wordBreak: 'break-word' as const,
   overflowWrap: 'anywhere' as const,
+};
+
+const indicatesBlockedByHeaders = (
+  csp: string | null,
+  xFrameOptions: string | null,
+  currentOrigin: string,
+  targetOrigin: string
+): boolean => {
+  const normalizedXfo = xFrameOptions?.toLowerCase().trim();
+  if (normalizedXfo) {
+    if (normalizedXfo === 'allowall') {
+      return false;
+    }
+
+    if (normalizedXfo === 'sameorigin') {
+      return currentOrigin.toLowerCase() !== targetOrigin.toLowerCase();
+    }
+
+    if (normalizedXfo.startsWith('allow-from')) {
+      return !normalizedXfo.includes(currentOrigin.toLowerCase());
+    }
+
+    return true;
+  }
+
+  const normalizedCsp = csp?.toLowerCase();
+  if (!normalizedCsp || !normalizedCsp.includes('frame-ancestors')) {
+    return false;
+  }
+
+  const match = normalizedCsp.match(/frame-ancestors\s+([^;]+)/);
+  const directive = match?.[1]?.trim();
+  if (!directive) {
+    return false;
+  }
+
+  if (directive.includes("'none'")) {
+    return true;
+  }
+
+  if (directive.includes('*')) {
+    return false;
+  }
+
+  if (directive.includes("'self'") && currentOrigin.toLowerCase() === targetOrigin.toLowerCase()) {
+    return false;
+  }
+
+  return !directive.includes(currentOrigin.toLowerCase());
+};
+
+const probeByHeaders = async (url: string): Promise<boolean> => {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(url, {
+      method: 'HEAD',
+      mode: 'cors',
+      redirect: 'follow',
+      signal: controller.signal,
+    });
+
+    return indicatesBlockedByHeaders(
+      response.headers.get('content-security-policy'),
+      response.headers.get('x-frame-options'),
+      window.location.origin,
+      new URL(url).origin
+    );
+  } catch {
+    return false;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
 };
 
 const getSourceIcon = (kind: CinnyExploreSourceKind, selected: boolean) => {
@@ -127,14 +235,20 @@ const getSourceSubtitle = (source: CinnyExploreSource): string => {
     return `${sectionCount} 个分组，${cardCount} 张卡片`;
   }
 
-  if (source.kind === 'web' && source.webOpenMode === 'external') {
+  if (source.kind === 'web' && (source.webOpenMode === 'external' || source.webEmbedStatus === 'blocked')) {
     return '点击后将直接在浏览器打开';
   }
 
   return source.value;
 };
 
-function AddExploreSource({ builtInServers }: { builtInServers: Set<string> }) {
+function AddExploreSource({
+  builtInServers,
+  onOpenSource,
+}: {
+  builtInServers: Set<string>;
+  onOpenSource: (source: CinnyExploreSource) => void;
+}) {
   const mx = useMatrixClient();
   const navigate = useNavigate();
   const [dialog, setDialog] = useState(false);
@@ -185,12 +299,8 @@ function AddExploreSource({ builtInServers }: { builtInServers: Set<string> }) {
 
     saveSource(sourceKind, title, value)
       .then((source) => {
-        if (source.kind === 'web' && source.webOpenMode === 'external') {
-          openExternalUrl(source.value);
-        } else {
-          navigate(getSourceRoute(source));
-        }
         closeDialog();
+        onOpenSource(source);
       })
       .catch((error) => {
         setValidationError(getErrorMessage(error));
@@ -209,177 +319,169 @@ function AddExploreSource({ builtInServers }: { builtInServers: Set<string> }) {
               escapeDeactivates: stopPropagation,
             }}
           >
-            <Dialog variant="Surface">
-              <Header
-                style={{
-                  padding: `0 ${config.space.S200} 0 ${config.space.S400}`,
-                  borderBottomWidth: config.borderWidth.B300,
-                }}
-                variant="Surface"
-                size="500"
-              >
-                <Box grow="Yes">
-                  <Text size="H4">添加探索来源</Text>
-                </Box>
-                <IconButton size="300" onClick={closeDialog} radii="300">
-                  <Icon src={Icons.Cross} />
-                </IconButton>
-              </Header>
-              <Box
-                as="form"
-                onSubmit={handleSubmit}
-                style={{
-                  padding: config.space.S400,
-                  width: '28rem',
-                  maxWidth: 'calc(100vw - 2rem)',
-                  boxSizing: 'border-box',
-                }}
-                direction="Column"
-                gap="400"
-              >
-                <Box direction="Column" gap="50">
-                  <Text priority="400" style={helperTextStyle}>
-                    添加的来源会写入当前 Matrix 账号。
-                  </Text>
-                  <Text priority="400" style={helperTextStyle}>
-                    同账号的其他设备也会自动同步。
-                  </Text>
-                </Box>
+            <Box style={dialogShellStyle('28rem')}>
+              <Dialog variant="Surface">
+                <Header
+                  style={{
+                    padding: `0 ${config.space.S200} 0 ${config.space.S400}`,
+                    borderBottomWidth: config.borderWidth.B300,
+                  }}
+                  variant="Surface"
+                  size="500"
+                >
+                  <Box grow="Yes">
+                    <Text size="H4">添加探索来源</Text>
+                  </Box>
+                  <IconButton size="300" onClick={closeDialog} radii="300">
+                    <Icon src={Icons.Cross} />
+                  </IconButton>
+                </Header>
+                <Box
+                  as="form"
+                  onSubmit={handleSubmit}
+                  style={{
+                    ...dialogContentStyle,
+                    padding: config.space.S400,
+                  }}
+                  direction="Column"
+                  gap="400"
+                >
+                  <Box direction="Column" gap="50">
+                    <Text priority="400" style={helperTextStyle}>
+                      添加的来源会写入当前 Matrix 账号。
+                    </Text>
+                    <Text priority="400" style={helperTextStyle}>
+                      同账号的其他设备也会自动同步。
+                    </Text>
+                  </Box>
 
-                <Box direction="Column" gap="100">
-                  <Text size="L400">来源类型</Text>
-                  <Box gap="100" wrap="Wrap">
-                    <Chip
-                      type="button"
-                      variant={sourceKind === 'server' ? 'Primary' : 'Surface'}
-                      radii="Pill"
-                      outlined={sourceKind !== 'server'}
-                      onClick={() => {
-                        setSourceKind('server');
-                        setValidationError(undefined);
-                      }}
+                  <Box direction="Column" gap="100" style={fieldGroupStyle}>
+                    <Text size="L400">来源类型</Text>
+                    <Box gap="100" wrap="Wrap">
+                      <Chip
+                        type="button"
+                        variant={sourceKind === 'server' ? 'Primary' : 'Surface'}
+                        radii="Pill"
+                        outlined={sourceKind !== 'server'}
+                        onClick={() => {
+                          setSourceKind('server');
+                          setValidationError(undefined);
+                        }}
+                      >
+                        <Text size="T200">社区服务器</Text>
+                      </Chip>
+                      <Chip
+                        type="button"
+                        variant={sourceKind === 'web' ? 'Primary' : 'Surface'}
+                        radii="Pill"
+                        outlined={sourceKind !== 'web'}
+                        onClick={() => {
+                          setSourceKind('web');
+                          setValidationError(undefined);
+                        }}
+                      >
+                        <Text size="T200">自定义网页</Text>
+                      </Chip>
+                      <Chip
+                        type="button"
+                        variant={sourceKind === 'nav' ? 'Primary' : 'Surface'}
+                        radii="Pill"
+                        outlined={sourceKind !== 'nav'}
+                        onClick={() => {
+                          setSourceKind('nav');
+                          setValidationError(undefined);
+                        }}
+                      >
+                        <Text size="T200">导航站</Text>
+                      </Chip>
+                    </Box>
+                  </Box>
+
+                  <Box direction="Column" gap="100" style={fieldGroupStyle}>
+                    <Text size="L400">
+                      {sourceKind === 'nav' ? '导航站名称' : '显示名称（可选）'}
+                    </Text>
+                    <Input
+                      name="titleInput"
+                      variant="Background"
+                      required={sourceKind === 'nav'}
+                      value={title}
+                      onChange={(evt) => setTitle(evt.currentTarget.value)}
+                      style={fullWidthStyle}
+                      placeholder={
+                        sourceKind === 'server'
+                          ? '默认显示服务器地址'
+                          : sourceKind === 'web'
+                            ? '例如：官网文档'
+                            : '例如：工作台'
+                      }
+                    />
+                  </Box>
+
+                  <Box direction="Column" gap="100" style={fieldGroupStyle}>
+                    <Text size="L400">
+                      {sourceKind === 'server'
+                        ? '服务器地址'
+                        : sourceKind === 'web'
+                          ? '网页地址'
+                          : '导航站简介（可选）'}
+                    </Text>
+                    <Input
+                      name="valueInput"
+                      variant="Background"
+                      required={sourceKind !== 'nav'}
+                      value={value}
+                      onChange={(evt) => setValue(evt.currentTarget.value)}
+                      style={fullWidthStyle}
+                      placeholder={
+                        sourceKind === 'server'
+                          ? '例如：matrix.org'
+                          : sourceKind === 'web'
+                            ? '例如：https://www.mozilla.org'
+                            : '例如：收纳常用网站和工具'
+                      }
+                    />
+
+                    {sourceKind === 'server' && (
+                      <Text size="T200" priority="300" style={helperTextStyle}>
+                        用于探索该服务器公开的房间与空间。
+                      </Text>
+                    )}
+                    {sourceKind === 'nav' && (
+                      <Box direction="Column" gap="50">
+                        <Text size="T200" priority="300" style={helperTextStyle}>
+                          导航站适合收纳多个常用链接和卡片。
+                        </Text>
+                        <Text size="T200" priority="300" style={helperTextStyle}>
+                          创建后可以继续添加分组和链接卡片。
+                        </Text>
+                      </Box>
+                    )}
+
+                    {(validationError || saveState.status === AsyncStatus.Error) && (
+                      <Text style={{ ...helperTextStyle, color: color.Critical.Main }} size="T300">
+                        {validationError ?? getErrorMessage(saveState.error)}
+                      </Text>
+                    )}
+                  </Box>
+
+                  <Box style={fullWidthStyle} direction="Column">
+                    <Button
+                      type="submit"
+                      variant="Primary"
+                      disabled={saveState.status === AsyncStatus.Loading}
+                      before={
+                        saveState.status === AsyncStatus.Loading ? (
+                          <Spinner fill="Solid" variant="Primary" size="200" />
+                        ) : undefined
+                      }
                     >
-                      <Text size="T200">社区服务器</Text>
-                    </Chip>
-                    <Chip
-                      type="button"
-                      variant={sourceKind === 'web' ? 'Primary' : 'Surface'}
-                      radii="Pill"
-                      outlined={sourceKind !== 'web'}
-                      onClick={() => {
-                        setSourceKind('web');
-                        setValidationError(undefined);
-                      }}
-                    >
-                      <Text size="T200">自定义网页</Text>
-                    </Chip>
-                    <Chip
-                      type="button"
-                      variant={sourceKind === 'nav' ? 'Primary' : 'Surface'}
-                      radii="Pill"
-                      outlined={sourceKind !== 'nav'}
-                      onClick={() => {
-                        setSourceKind('nav');
-                        setValidationError(undefined);
-                      }}
-                    >
-                      <Text size="T200">导航站</Text>
-                    </Chip>
+                      <Text size="B400">保存并打开</Text>
+                    </Button>
                   </Box>
                 </Box>
-
-                <Box direction="Column" gap="100">
-                  <Text size="L400">
-                    {sourceKind === 'nav' ? '导航站名称' : '显示名称（可选）'}
-                  </Text>
-                  <Input
-                    name="titleInput"
-                    variant="Background"
-                    required={sourceKind === 'nav'}
-                    value={title}
-                    onChange={(evt) => setTitle(evt.currentTarget.value)}
-                    style={fullWidthStyle}
-                    placeholder={
-                      sourceKind === 'server'
-                        ? '默认显示服务器地址'
-                        : sourceKind === 'web'
-                          ? '例如：官网文档'
-                          : '例如：工作台'
-                    }
-                  />
-                </Box>
-
-                <Box direction="Column" gap="100">
-                  <Text size="L400">
-                    {sourceKind === 'server'
-                      ? '服务器地址'
-                      : sourceKind === 'web'
-                        ? '网页地址'
-                        : '导航站简介（可选）'}
-                  </Text>
-                  <Input
-                    name="valueInput"
-                    variant="Background"
-                    required={sourceKind !== 'nav'}
-                    value={value}
-                    onChange={(evt) => setValue(evt.currentTarget.value)}
-                    style={fullWidthStyle}
-                    placeholder={
-                      sourceKind === 'server'
-                        ? '例如：matrix.org'
-                        : sourceKind === 'web'
-                          ? '例如：https://www.mozilla.org'
-                          : '例如：收纳常用网站和工具'
-                    }
-                  />
-
-                  {sourceKind === 'server' && (
-                    <Text size="T200" priority="300" style={helperTextStyle}>
-                      用于探索该服务器公开的房间与空间。
-                    </Text>
-                  )}
-                  {sourceKind === 'web' && (
-                    <Box direction="Column" gap="50">
-                      <Text size="T200" priority="300" style={helperTextStyle}>
-                        支持内嵌时，会保留网页内嵌。
-                      </Text>
-                      <Text size="T200" priority="300" style={helperTextStyle}>
-                        不适合内嵌时，会自动改为浏览器打开。
-                      </Text>
-                    </Box>
-                  )}
-                  {sourceKind === 'nav' && (
-                    <Box direction="Column" gap="50">
-                      <Text size="T200" priority="300" style={helperTextStyle}>
-                        导航站适合收纳多个常用链接和卡片。
-                      </Text>
-                      <Text size="T200" priority="300" style={helperTextStyle}>
-                        创建后可以继续添加分组和链接卡片。
-                      </Text>
-                    </Box>
-                  )}
-
-                  {(validationError || saveState.status === AsyncStatus.Error) && (
-                    <Text style={{ ...helperTextStyle, color: color.Critical.Main }} size="T300">
-                      {validationError ?? getErrorMessage(saveState.error)}
-                    </Text>
-                  )}
-                </Box>
-
-                <Button
-                  type="submit"
-                  variant="Primary"
-                  disabled={saveState.status === AsyncStatus.Loading}
-                  before={
-                    saveState.status === AsyncStatus.Loading ? (
-                      <Spinner fill="Solid" variant="Primary" size="200" />
-                    ) : undefined
-                  }
-                >
-                  <Text size="B400">保存并打开</Text>
-                </Button>
-              </Box>
-            </Dialog>
+              </Dialog>
+            </Box>
           </FocusTrap>
         </OverlayCenter>
       </Overlay>
@@ -402,6 +504,7 @@ type CustomSourceNavItemProps = {
   source: CinnyExploreSource;
   selected: boolean;
   deleting: boolean;
+  onOpenSource: (source: CinnyExploreSource) => void;
   onRemove: (source: CinnyExploreSource) => void;
 };
 
@@ -409,9 +512,12 @@ function CustomSourceNavItem({
   source,
   selected,
   deleting,
+  onOpenSource,
   onRemove,
 }: CustomSourceNavItemProps) {
-  const directExternalOpen = source.kind === 'web' && source.webOpenMode === 'external';
+  const directExternalOpen =
+    source.kind === 'web' &&
+    (source.webOpenMode === 'external' || source.webEmbedStatus === 'blocked');
 
   const handleRemove: MouseEventHandler<HTMLButtonElement> = (evt) => {
     evt.preventDefault();
@@ -420,11 +526,11 @@ function CustomSourceNavItem({
   };
 
   const handleOpen: MouseEventHandler<HTMLAnchorElement> = (evt) => {
-    if (!directExternalOpen) return;
-
-    evt.preventDefault();
-    evt.stopPropagation();
-    openExternalUrl(source.value);
+    if (source.kind === 'web' && source.webEmbedStatus === 'unknown') {
+      evt.preventDefault();
+      evt.stopPropagation();
+      onOpenSource(source);
+    }
   };
 
   return (
@@ -435,23 +541,43 @@ function CustomSourceNavItem({
     >
       <Box as="span" grow="Yes" alignItems="Center" gap="100">
         <Box as="span" grow="Yes">
-          <NavLink to={getSourceRoute(source)} onClick={handleOpen}>
-            <NavItemContent>
-              <Box as="span" grow="Yes" alignItems="Center" gap="200">
-                <Avatar size="200" radii="400">
-                  {getSourceIcon(source.kind, selected)}
-                </Avatar>
-                <Box as="span" grow="Yes" direction="Column" gap="50">
-                  <Text as="span" size="Inherit" truncate>
-                    {source.title}
-                  </Text>
-                  <Text as="span" size="T200" priority="300" truncate>
-                    {getSourceSubtitle(source)}
-                  </Text>
+          {directExternalOpen ? (
+            <NavButton as="a" href={source.value} target="_blank" rel="noopener noreferrer">
+              <NavItemContent>
+                <Box as="span" grow="Yes" alignItems="Center" gap="200">
+                  <Avatar size="200" radii="400">
+                    {getSourceIcon(source.kind, selected)}
+                  </Avatar>
+                  <Box as="span" grow="Yes" direction="Column" gap="50">
+                    <Text as="span" size="Inherit" truncate>
+                      {source.title}
+                    </Text>
+                    <Text as="span" size="T200" priority="300" truncate>
+                      {getSourceSubtitle(source)}
+                    </Text>
+                  </Box>
                 </Box>
-              </Box>
-            </NavItemContent>
-          </NavLink>
+              </NavItemContent>
+            </NavButton>
+          ) : (
+            <NavLink to={getSourceRoute(source)} onClick={handleOpen}>
+              <NavItemContent>
+                <Box as="span" grow="Yes" alignItems="Center" gap="200">
+                  <Avatar size="200" radii="400">
+                    {getSourceIcon(source.kind, selected)}
+                  </Avatar>
+                  <Box as="span" grow="Yes" direction="Column" gap="50">
+                    <Text as="span" size="Inherit" truncate>
+                      {source.title}
+                    </Text>
+                    <Text as="span" size="T200" priority="300" truncate>
+                      {getSourceSubtitle(source)}
+                    </Text>
+                  </Box>
+                </Box>
+              </NavItemContent>
+            </NavLink>
+          )}
         </Box>
         <IconButton
           type="button"
@@ -547,6 +673,43 @@ export function Explore() {
       })
       .catch(() => undefined)
       .finally(() => setDeletingSourceId(undefined));
+  };
+
+  const openCustomSource = async (source: CinnyExploreSource) => {
+    try {
+      if (
+        source.kind === 'web' &&
+        source.webOpenMode !== 'external' &&
+        source.webEmbedStatus === 'unknown'
+      ) {
+        const blocked = await probeByHeaders(source.value);
+
+        if (blocked) {
+          await setExploreWebSourcePolicy(mx, source.id, {
+            webOpenMode: 'external',
+            webEmbedStatus: 'blocked',
+          });
+          openExternalUrl(source.value);
+          return;
+        }
+      }
+    } catch {
+      // Fall back to the existing route when probing or persistence fails.
+    }
+
+    if (
+      source.kind === 'web' &&
+      (source.webOpenMode === 'external' || source.webEmbedStatus === 'blocked')
+    ) {
+      openExternalUrl(source.value);
+      return;
+    }
+
+    navigate(getSourceRoute(source));
+  };
+
+  const handleOpenSource = (source: CinnyExploreSource) => {
+    void openCustomSource(source);
   };
 
   return (
@@ -654,6 +817,7 @@ export function Explore() {
                   source={source}
                   selected={selectedServer === source.value}
                   deleting={deletingSourceId === source.id}
+                  onOpenSource={handleOpenSource}
                   onRemove={handleRemoveSource}
                 />
               ))}
@@ -673,6 +837,7 @@ export function Explore() {
                   source={source}
                   selected={selectedNavSourceId === source.id}
                   deleting={deletingSourceId === source.id}
+                  onOpenSource={handleOpenSource}
                   onRemove={handleRemoveSource}
                 />
               ))}
@@ -690,8 +855,13 @@ export function Explore() {
                 <CustomSourceNavItem
                   key={source.id}
                   source={source}
-                  selected={source.webOpenMode === 'external' ? false : selectedWebSourceId === source.id}
+                  selected={
+                    source.webOpenMode === 'external' || source.webEmbedStatus === 'blocked'
+                      ? false
+                      : selectedWebSourceId === source.id
+                  }
                   deleting={deletingSourceId === source.id}
+                  onOpenSource={handleOpenSource}
                   onRemove={handleRemoveSource}
                 />
               ))}
@@ -705,7 +875,7 @@ export function Explore() {
           )}
 
           <Box direction="Column">
-            <AddExploreSource builtInServers={builtInServers} />
+            <AddExploreSource builtInServers={builtInServers} onOpenSource={handleOpenSource} />
           </Box>
         </Box>
       </PageNavContent>
