@@ -35,9 +35,24 @@ export type CinnyFavoriteNotesContent = {
   notes?: Record<string, string>;
 };
 
-export type CinnyExploreSourceKind = 'server' | 'web';
+export type CinnyExploreSourceKind = 'server' | 'web' | 'nav';
 export type CinnyExploreWebOpenMode = 'auto' | 'external';
 export type CinnyExploreWebEmbedStatus = 'unknown' | 'embeddable' | 'blocked';
+
+export type CinnyExploreNavCard = {
+  id: string;
+  title: string;
+  url: string;
+  description?: string;
+  iconUrl?: string;
+  tags?: string[];
+};
+
+export type CinnyExploreNavSection = {
+  id: string;
+  title: string;
+  cards: CinnyExploreNavCard[];
+};
 
 export type CinnyExploreSource = {
   id: string;
@@ -48,6 +63,7 @@ export type CinnyExploreSource = {
   updatedAt: number;
   webOpenMode?: CinnyExploreWebOpenMode;
   webEmbedStatus?: CinnyExploreWebEmbedStatus;
+  navSections?: CinnyExploreNavSection[];
 };
 
 export type CinnyExploreSourcesContent = {
