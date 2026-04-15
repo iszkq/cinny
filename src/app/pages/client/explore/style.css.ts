@@ -97,16 +97,18 @@ export const ExploreNavGrid = style({
   gridTemplateColumns: 'repeat(auto-fill, minmax(13rem, 14rem))',
   gap: config.space.S250,
   justifyContent: 'start',
+  alignItems: 'start',
 });
 
 export const ExploreNavCard = style([
   {
+    position: 'relative',
     display: 'flex',
     flexDirection: 'column',
     width: '100%',
-    padding: config.space.S250,
+    alignSelf: 'start',
+    padding: config.space.S300,
     borderRadius: config.radii.R500,
-    minHeight: '9.25rem',
     minWidth: 0,
     boxSizing: 'border-box',
     overflow: 'hidden',
@@ -152,7 +154,7 @@ export const ExploreNavCardButton = style({
   display: 'flex',
   flexDirection: 'column',
   justifyContent: 'flex-start',
-  gap: config.space.S175,
+  gap: config.space.S125,
   alignItems: 'stretch',
   textAlign: 'left',
   background: 'transparent',
@@ -177,9 +179,9 @@ export const ExploreNavCardButton = style({
 export const ExploreNavCardAvatarShell = style([
   ContainerColor({ variant: 'SurfaceVariant' }),
   {
-    width: '2.7rem',
-    height: '2.7rem',
-    minWidth: '2.7rem',
+    width: '2.45rem',
+    height: '2.45rem',
+    minWidth: '2.45rem',
     borderRadius: config.radii.R400,
     border: '1px solid rgba(226, 232, 240, 0.98)',
     boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.8)',
@@ -219,10 +221,8 @@ export const ExploreNavCardFooter = style({
   justifyContent: 'flex-end',
   alignItems: 'center',
   gap: config.space.S100,
-  marginTop: config.space.S200,
-  paddingTop: config.space.S150,
-  borderTop: '1px solid rgba(226, 232, 240, 0.74)',
-  opacity: 0.7,
+  marginTop: config.space.S125,
+  opacity: 0.62,
   transition: 'opacity 140ms ease',
   selectors: {
     [`${ExploreNavCard}:hover &`]: {
