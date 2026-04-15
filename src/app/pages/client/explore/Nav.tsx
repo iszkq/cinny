@@ -47,10 +47,14 @@ const getErrorMessage = (error: unknown): string => {
 };
 
 const openExternalUrl = (url: string) => {
-  const popup = window.open(url, '_blank', 'noopener,noreferrer');
-  if (!popup) {
-    window.location.href = url;
-  }
+  const link = document.createElement('a');
+  link.href = url;
+  link.target = '_blank';
+  link.rel = 'noopener noreferrer';
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  link.click();
+  window.setTimeout(() => link.remove(), 0);
 };
 
 const fullWidthStyle = {
@@ -387,7 +391,7 @@ function ExploreNavCardItem({
   onRemove,
 }: ExploreNavCardItemProps) {
   return (
-    <Box className={css.ExploreNavCard} direction="Column" gap="300">
+    <Box className={css.ExploreNavCard} direction="Column" gap="200">
       <button
         className={css.ExploreNavCardButton}
         type="button"
@@ -435,24 +439,30 @@ function ExploreNavCardItem({
         )}
       </button>
 
-      <Box gap="100" wrap="Wrap">
-        <Button
+      <Box className={css.ExploreNavCardFooter} alignItems="Center" justifyContent="End" gap="100">
+        <IconButton
+          type="button"
           size="300"
-          variant="Secondary"
           fill="Soft"
+          radii="300"
+          aria-label="编辑卡片"
+          title="编辑卡片"
           onClick={() => onEdit(sectionId, card)}
         >
-          <Text size="B300">编辑</Text>
-        </Button>
-        <Button
+          <Icon size="100" src={Icons.Pencil} />
+        </IconButton>
+        <IconButton
+          type="button"
           size="300"
-          variant="Secondary"
           fill="Soft"
+          radii="300"
+          aria-label="删除卡片"
+          title="删除卡片"
           disabled={busy}
           onClick={() => onRemove(sectionId, card.id)}
         >
-          <Text size="B300">{busy ? '删除中...' : '删除'}</Text>
-        </Button>
+          {busy ? <Spinner size="100" variant="Secondary" /> : <Icon size="100" src={Icons.Delete} />}
+        </IconButton>
       </Box>
     </Box>
   );

@@ -69,10 +69,14 @@ const getErrorMessage = (error: unknown): string => {
 };
 
 const openExternalUrl = (url: string) => {
-  const popup = window.open(url, '_blank', 'noopener,noreferrer');
-  if (!popup) {
-    window.location.href = url;
-  }
+  const link = document.createElement('a');
+  link.href = url;
+  link.target = '_blank';
+  link.rel = 'noopener noreferrer';
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  link.click();
+  window.setTimeout(() => link.remove(), 0);
 };
 
 const fullWidthStyle = {
