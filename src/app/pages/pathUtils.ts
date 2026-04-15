@@ -4,6 +4,7 @@ import {
   DIRECT_PATH,
   DIRECT_ROOM_PATH,
   EXPLORE_FEATURED_PATH,
+  EXPLORE_NAV_PATH,
   EXPLORE_PATH,
   EXPLORE_SERVER_PATH,
   EXPLORE_WEB_PATH,
@@ -161,6 +162,12 @@ export const getExploreWebPath = (webId: string): string => {
     webId: encodeURIComponent(webId),
   };
   return generatePath(EXPLORE_WEB_PATH, params);
+};
+export const getExploreNavPath = (navId: string): string => {
+  const params = {
+    navId: encodeURIComponent(navId),
+  };
+  return generatePath(EXPLORE_NAV_PATH, params);
 };
 
 export const getCreatePath = (): string => CREATE_PATH;

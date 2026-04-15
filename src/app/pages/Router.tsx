@@ -25,6 +25,7 @@ import {
   _INVITES_PATH,
   _JOIN_PATH,
   _LOBBY_PATH,
+  _NAV_PATH,
   _NOTIFICATIONS_PATH,
   _ROOM_PATH,
   _SEARCH_PATH,
@@ -46,7 +47,7 @@ import { Home, HomeRouteRoomProvider, HomeSearch } from './client/home';
 import { Direct, DirectCreate, DirectRouteRoomProvider } from './client/direct';
 import { Favorites } from './client/favorites';
 import { RouteSpaceProvider, Space, SpaceRouteRoomProvider, SpaceSearch } from './client/space';
-import { Explore, ExploreWebView, FeaturedRooms, PublicRooms } from './client/explore';
+import { Explore, ExploreNavView, ExploreWebView, FeaturedRooms, PublicRooms } from './client/explore';
 import { Notifications, Inbox, Invites } from './client/inbox';
 import { setAfterLoginRedirectPath } from './afterLoginRedirectPath';
 import { Room } from '../features/room';
@@ -272,6 +273,7 @@ export const createRouter = (clientConfig: ClientConfig, screenSize: ScreenSize)
             />
           )}
           <Route path={_FEATURED_PATH} element={<FeaturedRooms />} />
+          <Route path={_NAV_PATH} element={<ExploreNavView />} />
           <Route path={_WEB_PATH} element={<ExploreWebView />} />
           <Route path={_SERVER_PATH} element={<PublicRooms />} />
         </Route>

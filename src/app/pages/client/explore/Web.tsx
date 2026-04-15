@@ -44,7 +44,19 @@ const indicatesBlockedByHeaders = (
   targetOrigin: string
 ): boolean => {
   const normalizedXfo = xFrameOptions?.toLowerCase().trim();
-  if (normalizedXfo && normalizedXfo !== 'allowall') {
+  if (normalizedXfo) {
+    if (normalizedXfo === 'allowall') {
+      return false;
+    }
+
+    if (normalizedXfo === 'sameorigin') {
+      return currentOrigin.toLowerCase() !== targetOrigin.toLowerCase();
+    }
+
+    if (normalizedXfo.startsWith('allow-from')) {
+      return !normalizedXfo.includes(currentOrigin.toLowerCase());
+    }
+
     return true;
   }
 
@@ -133,13 +145,8 @@ export function ExploreWebView() {
 
   const openInBrowser = useCallback(() => {
     if (!source) return;
-    if (source.kind === 'web') {
-      void setExploreWebSourcePolicy(mx, source.id, {
-        webOpenMode: 'external',
-      });
-    }
     openExternalUrl(source.value);
-  }, [mx, source]);
+  }, [source]);
 
   const switchToExternal = useCallback(
     (message: string, autoOpen: boolean) => {

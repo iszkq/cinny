@@ -1,6 +1,8 @@
 import { MatrixClient } from 'matrix-js-sdk';
 import {
   AccountDataEvent,
+  CinnyExploreNavCard,
+  CinnyExploreNavSection,
   CinnyExploreSource,
   CinnyExploreSourceKind,
   CinnyExploreSourcesContent,
@@ -15,15 +17,17 @@ const hasProtocol = (value: string): boolean => /^[a-z][a-z0-9+.-]*:\/\//i.test(
 const toTimestamp = (value: unknown, fallback: number): number =>
   typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 
-const trimTitle = (value?: string): string | undefined => {
+const trimOptionalText = (value?: string): string | undefined => {
   if (typeof value !== 'string') return undefined;
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
-const createSourceId = (): string =>
-  `src_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+const normalizeOptionalText = (value?: string): string => trimOptionalText(value) ?? '';
+
+const createId = (prefix: string): string =>
+  `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 
 const isExploreWebOpenMode = (value: unknown): value is CinnyExploreWebOpenMode =>
   value === 'auto' || value === 'external';
@@ -79,6 +83,10 @@ const getDefaultTitle = (kind: CinnyExploreSourceKind, value: string): string =>
     return value;
   }
 
+  if (kind === 'nav') {
+    return '未命名导航站';
+  }
+
   try {
     return new URL(value).hostname || value;
   } catch {
@@ -87,7 +95,129 @@ const getDefaultTitle = (kind: CinnyExploreSourceKind, value: string): string =>
 };
 
 const isExploreSourceKind = (value: unknown): value is CinnyExploreSourceKind =>
-  value === 'server' || value === 'web';
+  value === 'server' || value === 'web' || value === 'nav';
+
+const normalizeTags = (value: unknown): string[] | undefined => {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const tags = value
+    .map((item) => trimOptionalText(typeof item === 'string' ? item : undefined))
+    .filter((item): item is string => !!item);
+
+  return tags.length > 0 ? Array.from(new Set(tags)) : undefined;
+};
+
+const normalizeNavCard = (value: unknown): CinnyExploreNavCard | undefined => {
+  if (!value || typeof value !== 'object') return undefined;
+  const item = value as Record<string, unknown>;
+  if (typeof item.id !== 'string' || item.id.trim().length === 0) return undefined;
+  if (typeof item.title !== 'string' || item.title.trim().length === 0) return undefined;
+  if (typeof item.url !== 'string' || item.url.trim().length === 0) return undefined;
+
+  let normalizedUrl: string;
+  try {
+    normalizedUrl = normalizeExploreWebUrl(item.url);
+  } catch {
+    return undefined;
+  }
+
+  let normalizedIconUrl: string | undefined;
+  try {
+    normalizedIconUrl = trimOptionalText(typeof item.iconUrl === 'string' ? item.iconUrl : undefined)
+      ? normalizeExploreWebUrl(item.iconUrl as string)
+      : undefined;
+  } catch {
+    normalizedIconUrl = undefined;
+  }
+
+  return {
+    id: item.id.trim(),
+    title: item.title.trim(),
+    url: normalizedUrl,
+    description: trimOptionalText(typeof item.description === 'string' ? item.description : undefined),
+    iconUrl: normalizedIconUrl,
+    tags: normalizeTags(item.tags),
+  };
+};
+
+const normalizeNavSections = (value: unknown): CinnyExploreNavSection[] | undefined => {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const sections = value.reduce<CinnyExploreNavSection[]>((acc, item) => {
+    if (!item || typeof item !== 'object') return acc;
+    const section = item as Record<string, unknown>;
+    if (typeof section.id !== 'string' || section.id.trim().length === 0) return acc;
+    if (typeof section.title !== 'string' || section.title.trim().length === 0) return acc;
+    if (!Array.isArray(section.cards)) return acc;
+
+    const cards = section.cards
+      .map((card) => normalizeNavCard(card))
+      .filter((card): card is CinnyExploreNavCard => !!card);
+
+    acc.push({
+      id: section.id.trim(),
+      title: section.title.trim(),
+      cards,
+    });
+    return acc;
+  }, []);
+
+  return sections;
+};
+
+const normalizeExploreSourceValue = (kind: CinnyExploreSourceKind, value: string): string => {
+  if (kind === 'server') {
+    return normalizeExploreServerAddress(value);
+  }
+
+  if (kind === 'web') {
+    return normalizeExploreWebUrl(value);
+  }
+
+  return normalizeOptionalText(value);
+};
+
+const getCurrentSources = (mx: MatrixClient): CinnyExploreSource[] =>
+  getExploreCustomSources(
+    mx.getAccountData(AccountDataEvent.CinnyExploreSources)?.getContent<CinnyExploreSourcesContent>()
+  );
+
+const writeExploreCustomSources = async (
+  mx: MatrixClient,
+  sources: CinnyExploreSource[]
+): Promise<void> => {
+  const content: CinnyExploreSourcesContent = {
+    version: EXPLORE_SOURCES_VERSION,
+    updatedAt: Date.now(),
+    sources,
+  };
+
+  await mx.setAccountData(AccountDataEvent.CinnyExploreSources, content);
+};
+
+const updateExploreSource = async (
+  mx: MatrixClient,
+  sourceId: string,
+  updater: (source: CinnyExploreSource) => CinnyExploreSource | undefined
+): Promise<CinnyExploreSource | undefined> => {
+  const currentSources = getCurrentSources(mx);
+  const existing = currentSources.find((item) => item.id === sourceId);
+  if (!existing) return undefined;
+
+  const updatedSource = updater(existing);
+  if (!updatedSource) return undefined;
+
+  await writeExploreCustomSources(
+    mx,
+    currentSources.map((item) => (item.id === existing.id ? updatedSource : item))
+  );
+
+  return updatedSource;
+};
 
 export const getExploreCustomSources = (
   content?: CinnyExploreSourcesContent
@@ -100,20 +230,23 @@ export const getExploreCustomSources = (
     if (!item || typeof item !== 'object') return sources;
     if (typeof item.id !== 'string' || item.id.trim().length === 0) return sources;
     if (!isExploreSourceKind(item.kind)) return sources;
-    if (typeof item.value !== 'string' || item.value.trim().length === 0) return sources;
+
+    if (item.kind !== 'nav' && (typeof item.value !== 'string' || item.value.trim().length === 0)) {
+      return sources;
+    }
 
     try {
-      const normalizedValue =
-        item.kind === 'server'
-          ? normalizeExploreServerAddress(item.value)
-          : normalizeExploreWebUrl(item.value);
+      const normalizedValue = normalizeExploreSourceValue(
+        item.kind,
+        typeof item.value === 'string' ? item.value : ''
+      );
       const fallbackTimestamp = Date.now();
 
       sources.push({
         id: item.id.trim(),
         kind: item.kind,
         value: normalizedValue,
-        title: trimTitle(item.title) ?? getDefaultTitle(item.kind, normalizedValue),
+        title: trimOptionalText(item.title) ?? getDefaultTitle(item.kind, normalizedValue),
         createdAt: toTimestamp(item.createdAt, fallbackTimestamp),
         updatedAt: toTimestamp(item.updatedAt, fallbackTimestamp),
         webOpenMode:
@@ -128,6 +261,8 @@ export const getExploreCustomSources = (
             : item.kind === 'web'
               ? 'unknown'
               : undefined,
+        navSections:
+          item.kind === 'nav' ? normalizeNavSections(item.navSections) ?? [] : undefined,
       });
     } catch {
       // Ignore malformed saved items.
@@ -145,19 +280,6 @@ export const getExploreCustomSourceById = (
   return getExploreCustomSources(content).find((source) => source.id === sourceId);
 };
 
-const writeExploreCustomSources = async (
-  mx: MatrixClient,
-  sources: CinnyExploreSource[]
-): Promise<void> => {
-  const content: CinnyExploreSourcesContent = {
-    version: EXPLORE_SOURCES_VERSION,
-    updatedAt: Date.now(),
-    sources,
-  };
-
-  await mx.setAccountData(AccountDataEvent.CinnyExploreSources, content);
-};
-
 export const upsertExploreCustomSource = async (
   mx: MatrixClient,
   source: {
@@ -167,20 +289,16 @@ export const upsertExploreCustomSource = async (
   }
 ): Promise<CinnyExploreSource> => {
   const kind = source.kind;
-  const normalizedValue =
-    kind === 'server'
-      ? normalizeExploreServerAddress(source.value)
-      : normalizeExploreWebUrl(source.value);
-  const normalizedTitle = trimTitle(source.title) ?? getDefaultTitle(kind, normalizedValue);
-
-  const currentSources = getExploreCustomSources(
-    mx.getAccountData(AccountDataEvent.CinnyExploreSources)?.getContent<CinnyExploreSourcesContent>()
-  );
+  const normalizedValue = normalizeExploreSourceValue(kind, source.value);
+  const normalizedTitle = trimOptionalText(source.title) ?? getDefaultTitle(kind, normalizedValue);
+  const currentSources = getCurrentSources(mx);
   const now = Date.now();
 
-  const existing = currentSources.find(
-    (item) => item.kind === kind && item.value === normalizedValue
-  );
+  const existing =
+    kind === 'nav'
+      ? undefined
+      : currentSources.find((item) => item.kind === kind && item.value === normalizedValue);
+
   if (existing) {
     const updatedSource: CinnyExploreSource = {
       ...existing,
@@ -192,11 +310,12 @@ export const upsertExploreCustomSource = async (
       mx,
       currentSources.map((item) => (item.id === existing.id ? updatedSource : item))
     );
+
     return updatedSource;
   }
 
   const createdSource: CinnyExploreSource = {
-    id: createSourceId(),
+    id: createId('src'),
     kind,
     title: normalizedTitle,
     value: normalizedValue,
@@ -204,6 +323,7 @@ export const upsertExploreCustomSource = async (
     updatedAt: now,
     webOpenMode: kind === 'web' ? 'auto' : undefined,
     webEmbedStatus: kind === 'web' ? 'unknown' : undefined,
+    navSections: kind === 'nav' ? [] : undefined,
   };
 
   await writeExploreCustomSources(mx, [...currentSources, createdSource]);
@@ -217,37 +337,183 @@ export const setExploreWebSourcePolicy = async (
     webOpenMode?: CinnyExploreWebOpenMode;
     webEmbedStatus?: CinnyExploreWebEmbedStatus;
   }
-): Promise<CinnyExploreSource | undefined> => {
-  const currentSources = getExploreCustomSources(
-    mx.getAccountData(AccountDataEvent.CinnyExploreSources)?.getContent<CinnyExploreSourcesContent>()
-  );
-  const existing = currentSources.find((item) => item.id === sourceId && item.kind === 'web');
-  if (!existing) {
-    return undefined;
+): Promise<CinnyExploreSource | undefined> =>
+  updateExploreSource(mx, sourceId, (source) => {
+    if (source.kind !== 'web') {
+      return undefined;
+    }
+
+    return {
+      ...source,
+      webOpenMode: policy.webOpenMode ?? source.webOpenMode ?? 'auto',
+      webEmbedStatus: policy.webEmbedStatus ?? source.webEmbedStatus ?? 'unknown',
+      updatedAt: Date.now(),
+    };
+  });
+
+export const upsertExploreNavSection = async (
+  mx: MatrixClient,
+  sourceId: string,
+  section: {
+    id?: string;
+    title: string;
   }
+): Promise<CinnyExploreSource | undefined> =>
+  updateExploreSource(mx, sourceId, (source) => {
+    if (source.kind !== 'nav') {
+      return undefined;
+    }
 
-  const updatedSource: CinnyExploreSource = {
-    ...existing,
-    webOpenMode: policy.webOpenMode ?? existing.webOpenMode ?? 'auto',
-    webEmbedStatus: policy.webEmbedStatus ?? existing.webEmbedStatus ?? 'unknown',
-    updatedAt: Date.now(),
-  };
+    const title = trimOptionalText(section.title);
+    if (!title) {
+      throw new Error('请输入分组名称。');
+    }
 
-  await writeExploreCustomSources(
-    mx,
-    currentSources.map((item) => (item.id === existing.id ? updatedSource : item))
-  );
+    const sections = source.navSections ?? [];
+    const existingSection = section.id && sections.find((item) => item.id === section.id);
 
-  return updatedSource;
-};
+    const nextSection: CinnyExploreNavSection = existingSection
+      ? {
+          ...existingSection,
+          title,
+        }
+      : {
+          id: createId('nav_section'),
+          title,
+          cards: [],
+        };
+
+    const nextSections = existingSection
+      ? sections.map((item) => (item.id === existingSection.id ? nextSection : item))
+      : [...sections, nextSection];
+
+    return {
+      ...source,
+      navSections: nextSections,
+      updatedAt: Date.now(),
+    };
+  });
+
+export const removeExploreNavSection = async (
+  mx: MatrixClient,
+  sourceId: string,
+  sectionId: string
+): Promise<CinnyExploreSource | undefined> =>
+  updateExploreSource(mx, sourceId, (source) => {
+    if (source.kind !== 'nav') {
+      return undefined;
+    }
+
+    return {
+      ...source,
+      navSections: (source.navSections ?? []).filter((section) => section.id !== sectionId),
+      updatedAt: Date.now(),
+    };
+  });
+
+export const upsertExploreNavCard = async (
+  mx: MatrixClient,
+  sourceId: string,
+  sectionId: string,
+  card: {
+    id?: string;
+    title: string;
+    url: string;
+    description?: string;
+    iconUrl?: string;
+    tags?: string[];
+  }
+): Promise<CinnyExploreSource | undefined> =>
+  updateExploreSource(mx, sourceId, (source) => {
+    if (source.kind !== 'nav') {
+      return undefined;
+    }
+
+    const title = trimOptionalText(card.title);
+    if (!title) {
+      throw new Error('请输入卡片标题。');
+    }
+
+    const url = normalizeExploreWebUrl(card.url);
+    const description = trimOptionalText(card.description);
+    const iconUrl = trimOptionalText(card.iconUrl)
+      ? normalizeExploreWebUrl(card.iconUrl as string)
+      : undefined;
+    const tags = normalizeTags(card.tags) ?? undefined;
+
+    const sections = source.navSections ?? [];
+    const targetSection = sections.find((section) => section.id === sectionId);
+    if (!targetSection) {
+      throw new Error('没有找到对应分组。');
+    }
+
+    const existingCard = card.id && targetSection.cards.find((item) => item.id === card.id);
+    const nextCard: CinnyExploreNavCard = existingCard
+      ? {
+          ...existingCard,
+          title,
+          url,
+          description,
+          iconUrl,
+          tags,
+        }
+      : {
+          id: createId('nav_card'),
+          title,
+          url,
+          description,
+          iconUrl,
+          tags,
+        };
+
+    const nextSections = sections.map((section) => {
+      if (section.id !== sectionId) return section;
+
+      return {
+        ...section,
+        cards: existingCard
+          ? section.cards.map((item) => (item.id === existingCard.id ? nextCard : item))
+          : [...section.cards, nextCard],
+      };
+    });
+
+    return {
+      ...source,
+      navSections: nextSections,
+      updatedAt: Date.now(),
+    };
+  });
+
+export const removeExploreNavCard = async (
+  mx: MatrixClient,
+  sourceId: string,
+  sectionId: string,
+  cardId: string
+): Promise<CinnyExploreSource | undefined> =>
+  updateExploreSource(mx, sourceId, (source) => {
+    if (source.kind !== 'nav') {
+      return undefined;
+    }
+
+    return {
+      ...source,
+      navSections: (source.navSections ?? []).map((section) =>
+        section.id === sectionId
+          ? {
+              ...section,
+              cards: section.cards.filter((card) => card.id !== cardId),
+            }
+          : section
+      ),
+      updatedAt: Date.now(),
+    };
+  });
 
 export const removeExploreCustomSource = async (
   mx: MatrixClient,
   sourceId: string
 ): Promise<void> => {
-  const currentSources = getExploreCustomSources(
-    mx.getAccountData(AccountDataEvent.CinnyExploreSources)?.getContent<CinnyExploreSourcesContent>()
-  );
+  const currentSources = getCurrentSources(mx);
   const nextSources = currentSources.filter((item) => item.id !== sourceId);
 
   if (nextSources.length === currentSources.length) {

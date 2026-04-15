@@ -29,12 +29,14 @@ import {
 } from '../../../components/nav';
 import {
   getExploreFeaturedPath,
+  getExploreNavPath,
   getExploreServerPath,
   getExploreWebPath,
 } from '../../pathUtils';
 import { useClientConfig } from '../../../hooks/useClientConfig';
 import {
   useExploreFeaturedSelected,
+  useExploreNavSourceId,
   useExploreServer,
   useExploreWebSourceId,
 } from '../../../hooks/router/useExploreSelected';
@@ -66,21 +68,66 @@ const getErrorMessage = (error: unknown): string => {
   return '保存失败，请稍后重试。';
 };
 
-const getSourceIcon = (kind: CinnyExploreSourceKind, selected: boolean) =>
-  kind === 'server' ? (
-    <Icon src={Icons.Server} size="100" filled={selected} />
-  ) : (
-    <Icon src={Icons.Link} size="100" filled={selected} />
-  );
-
-const getSourceRoute = (source: CinnyExploreSource): string =>
-  source.kind === 'server' ? getExploreServerPath(source.value) : getExploreWebPath(source.id);
-
 const openExternalUrl = (url: string) => {
   const popup = window.open(url, '_blank', 'noopener,noreferrer');
   if (!popup) {
     window.location.href = url;
   }
+};
+
+const fullWidthStyle = {
+  width: '100%',
+  minWidth: 0,
+};
+
+const helperTextStyle = {
+  whiteSpace: 'normal' as const,
+  wordBreak: 'break-word' as const,
+  overflowWrap: 'anywhere' as const,
+};
+
+const getSourceIcon = (kind: CinnyExploreSourceKind, selected: boolean) => {
+  if (kind === 'server') {
+    return <Icon src={Icons.Server} size="100" filled={selected} />;
+  }
+
+  if (kind === 'nav') {
+    return <Icon src={Icons.Space} size="100" filled={selected} />;
+  }
+
+  return <Icon src={Icons.Link} size="100" filled={selected} />;
+};
+
+const getSourceRoute = (source: CinnyExploreSource): string => {
+  if (source.kind === 'server') {
+    return getExploreServerPath(source.value);
+  }
+
+  if (source.kind === 'nav') {
+    return getExploreNavPath(source.id);
+  }
+
+  return getExploreWebPath(source.id);
+};
+
+const getSourceSubtitle = (source: CinnyExploreSource): string => {
+  if (source.kind === 'nav') {
+    const sectionCount = source.navSections?.length ?? 0;
+    const cardCount =
+      source.navSections?.reduce((count, section) => count + section.cards.length, 0) ?? 0;
+
+    if (source.value) {
+      return source.value;
+    }
+
+    return `${sectionCount} 个分组，${cardCount} 张卡片`;
+  }
+
+  if (source.kind === 'web' && source.webOpenMode === 'external') {
+    return '点击后将直接在浏览器打开';
+  }
+
+  return source.value;
 };
 
 function AddExploreSource({ builtInServers }: { builtInServers: Set<string> }) {
@@ -113,6 +160,11 @@ function AddExploreSource({ builtInServers }: { builtInServers: Set<string> }) {
     evt.preventDefault();
     setValidationError(undefined);
 
+    if (sourceKind === 'nav' && !title.trim()) {
+      setValidationError('请输入导航站名称。');
+      return;
+    }
+
     try {
       if (sourceKind === 'server') {
         const normalizedServer = normalizeExploreServerAddress(value);
@@ -129,7 +181,11 @@ function AddExploreSource({ builtInServers }: { builtInServers: Set<string> }) {
 
     saveSource(sourceKind, title, value)
       .then((source) => {
-        navigate(getSourceRoute(source));
+        if (source.kind === 'web' && source.webOpenMode === 'external') {
+          openExternalUrl(source.value);
+        } else {
+          navigate(getSourceRoute(source));
+        }
         closeDialog();
       })
       .catch((error) => {
@@ -178,8 +234,12 @@ function AddExploreSource({ builtInServers }: { builtInServers: Set<string> }) {
                 gap="400"
               >
                 <Box direction="Column" gap="50">
-                  <Text priority="400">添加的来源会写入当前 Matrix 账号。</Text>
-                  <Text priority="400">同账号的其他设备也会自动同步。</Text>
+                  <Text priority="400" style={helperTextStyle}>
+                    添加的来源会写入当前 Matrix 账号。
+                  </Text>
+                  <Text priority="400" style={helperTextStyle}>
+                    同账号的其他设备也会自动同步。
+                  </Text>
                 </Box>
 
                 <Box direction="Column" gap="100">
@@ -209,50 +269,94 @@ function AddExploreSource({ builtInServers }: { builtInServers: Set<string> }) {
                     >
                       <Text size="T200">自定义网页</Text>
                     </Chip>
+                    <Chip
+                      type="button"
+                      variant={sourceKind === 'nav' ? 'Primary' : 'Surface'}
+                      radii="Pill"
+                      outlined={sourceKind !== 'nav'}
+                      onClick={() => {
+                        setSourceKind('nav');
+                        setValidationError(undefined);
+                      }}
+                    >
+                      <Text size="T200">导航站</Text>
+                    </Chip>
                   </Box>
                 </Box>
 
                 <Box direction="Column" gap="100">
-                  <Text size="L400">显示名称（可选）</Text>
+                  <Text size="L400">
+                    {sourceKind === 'nav' ? '导航站名称' : '显示名称（可选）'}
+                  </Text>
                   <Input
                     name="titleInput"
                     variant="Background"
+                    required={sourceKind === 'nav'}
                     value={title}
                     onChange={(evt) => setTitle(evt.currentTarget.value)}
-                    placeholder={sourceKind === 'server' ? '默认显示服务器地址' : '例如：官网文档'}
+                    style={fullWidthStyle}
+                    placeholder={
+                      sourceKind === 'server'
+                        ? '默认显示服务器地址'
+                        : sourceKind === 'web'
+                          ? '例如：官网文档'
+                          : '例如：工作台'
+                    }
                   />
                 </Box>
 
                 <Box direction="Column" gap="100">
-                  <Text size="L400">{sourceKind === 'server' ? '服务器地址' : '网页地址'}</Text>
+                  <Text size="L400">
+                    {sourceKind === 'server'
+                      ? '服务器地址'
+                      : sourceKind === 'web'
+                        ? '网页地址'
+                        : '导航站简介（可选）'}
+                  </Text>
                   <Input
                     name="valueInput"
                     variant="Background"
-                    required
+                    required={sourceKind !== 'nav'}
                     value={value}
                     onChange={(evt) => setValue(evt.currentTarget.value)}
+                    style={fullWidthStyle}
                     placeholder={
-                      sourceKind === 'server' ? '例如：matrix.org' : '例如：https://www.mozilla.org'
+                      sourceKind === 'server'
+                        ? '例如：matrix.org'
+                        : sourceKind === 'web'
+                          ? '例如：https://www.mozilla.org'
+                          : '例如：收纳常用网站和工具'
                     }
                   />
 
-                  {sourceKind === 'server' ? (
-                    <Text size="T200" priority="300">
+                  {sourceKind === 'server' && (
+                    <Text size="T200" priority="300" style={helperTextStyle}>
                       用于探索该服务器公开的房间与空间。
                     </Text>
-                  ) : (
+                  )}
+                  {sourceKind === 'web' && (
                     <Box direction="Column" gap="50">
-                      <Text size="T200" priority="300">
+                      <Text size="T200" priority="300" style={helperTextStyle}>
                         支持内嵌时，会保留网页内嵌。
                       </Text>
-                      <Text size="T200" priority="300">
+                      <Text size="T200" priority="300" style={helperTextStyle}>
                         不适合内嵌时，会自动改为浏览器打开。
+                      </Text>
+                    </Box>
+                  )}
+                  {sourceKind === 'nav' && (
+                    <Box direction="Column" gap="50">
+                      <Text size="T200" priority="300" style={helperTextStyle}>
+                        导航站适合收纳多个常用链接和卡片。
+                      </Text>
+                      <Text size="T200" priority="300" style={helperTextStyle}>
+                        创建后可以继续添加分组和链接卡片。
                       </Text>
                     </Box>
                   )}
 
                   {(validationError || saveState.status === AsyncStatus.Error) && (
-                    <Text style={{ color: color.Critical.Main }} size="T300">
+                    <Text style={{ ...helperTextStyle, color: color.Critical.Main }} size="T300">
                       {validationError ?? getErrorMessage(saveState.error)}
                     </Text>
                   )}
@@ -338,7 +442,7 @@ function CustomSourceNavItem({
                     {source.title}
                   </Text>
                   <Text as="span" size="T200" priority="300" truncate>
-                    {directExternalOpen ? '点击后将直接在浏览器打开' : source.value}
+                    {getSourceSubtitle(source)}
                   </Text>
                 </Box>
               </Box>
@@ -399,6 +503,10 @@ export function Explore() {
       ),
     [builtInServers, customSources]
   );
+  const customNavSources = useMemo(
+    () => customSources.filter((source) => source.kind === 'nav'),
+    [customSources]
+  );
   const customWebSources = useMemo(
     () => customSources.filter((source) => source.kind === 'web'),
     [customSources]
@@ -407,6 +515,7 @@ export function Explore() {
   const featuredSelected = useExploreFeaturedSelected();
   const selectedServer = useExploreServer();
   const selectedWebSourceId = useExploreWebSourceId();
+  const selectedNavSourceId = useExploreNavSourceId();
 
   const [deletingSourceId, setDeletingSourceId] = useState<string>();
   const [removeState, removeSource] = useAsyncCallback(async (sourceId: string) => {
@@ -426,8 +535,9 @@ export function Explore() {
           source.kind === 'server' &&
           selectedServer === source.value &&
           !builtInServers.has(source.value);
+        const deletedSelectedNav = source.kind === 'nav' && selectedNavSourceId === source.id;
 
-        if (deletedSelectedWeb || deletedSelectedServer) {
+        if (deletedSelectedWeb || deletedSelectedServer || deletedSelectedNav) {
           navigate(getExploreFeaturedPath(), { replace: true });
         }
       })
@@ -546,6 +656,25 @@ export function Explore() {
             </NavCategory>
           )}
 
+          {customNavSources.length > 0 && (
+            <NavCategory>
+              <NavCategoryHeader>
+                <Text size="O400" style={{ paddingLeft: config.space.S200 }}>
+                  导航站
+                </Text>
+              </NavCategoryHeader>
+              {customNavSources.map((source) => (
+                <CustomSourceNavItem
+                  key={source.id}
+                  source={source}
+                  selected={selectedNavSourceId === source.id}
+                  deleting={deletingSourceId === source.id}
+                  onRemove={handleRemoveSource}
+                />
+              ))}
+            </NavCategory>
+          )}
+
           {customWebSources.length > 0 && (
             <NavCategory>
               <NavCategoryHeader>
@@ -566,7 +695,7 @@ export function Explore() {
           )}
 
           {removeState.status === AsyncStatus.Error && (
-            <Text size="T300" style={{ color: color.Critical.Main }}>
+            <Text size="T300" style={{ ...helperTextStyle, color: color.Critical.Main }}>
               {getErrorMessage(removeState.error)}
             </Text>
           )}

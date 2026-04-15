@@ -35,3 +35,73 @@ export const ExploreWebFrame = style({
   display: 'block',
   background: '#fff',
 });
+
+export const ExploreNavSection = style({
+  display: 'flex',
+  flexDirection: 'column',
+  minWidth: 0,
+});
+
+export const ExploreNavSectionHeader = style([
+  ContainerColor({ variant: 'SurfaceVariant' }),
+  {
+    padding: config.space.S300,
+    borderRadius: config.radii.R400,
+    minWidth: 0,
+  },
+]);
+
+export const ExploreNavGrid = style({
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(16rem, 1fr))',
+  gap: config.space.S300,
+});
+
+export const ExploreNavCard = style([
+  ContainerColor({ variant: 'SurfaceVariant' }),
+  {
+    padding: config.space.S300,
+    borderRadius: config.radii.R400,
+    minHeight: '13rem',
+    minWidth: 0,
+  },
+]);
+
+export const ExploreNavCardButton = style({
+  width: '100%',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: config.space.S300,
+  alignItems: 'stretch',
+  textAlign: 'left',
+  background: 'transparent',
+  border: 'none',
+  appearance: 'none',
+  color: 'inherit',
+  font: 'inherit',
+  padding: 0,
+  minWidth: 0,
+  cursor: 'pointer',
+});
+
+export const ExploreNavCardDescription = style({
+  overflow: 'hidden',
+  display: '-webkit-box',
+  WebkitLineClamp: 2,
+  WebkitBoxOrient: 'vertical',
+  lineHeight: 1.5,
+  wordBreak: 'break-word',
+  overflowWrap: 'anywhere',
+});
+
+export const ExploreNavTag = style([
+  ContainerColor({ variant: 'Surface' }),
+  {
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: `${config.space.S50} ${config.space.S200}`,
+    borderRadius: config.radii.R300,
+    fontSize: '0.75rem',
+    lineHeight: 1.4,
+  },
+]);
