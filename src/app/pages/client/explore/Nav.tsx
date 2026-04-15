@@ -33,7 +33,13 @@ import {
   CinnyExploreNavSection,
   CinnyExploreSourcesContent,
 } from '../../../../types/matrix/accountData';
-import { getExploreCustomSourceById, removeExploreNavCard, removeExploreNavSection, upsertExploreNavCard, upsertExploreNavSection } from './customSources';
+import {
+  getExploreCustomSourceById,
+  removeExploreNavCard,
+  removeExploreNavSection,
+  upsertExploreNavCard,
+  upsertExploreNavSection,
+} from './customSources';
 import { getExploreFeaturedPath } from '../../pathUtils';
 import { stopPropagation } from '../../../utils/keyboard';
 import * as css from './style.css';
@@ -46,20 +52,16 @@ const getErrorMessage = (error: unknown): string => {
   return '保存失败，请稍后重试。';
 };
 
-const openExternalUrl = (url: string) => {
-  const link = document.createElement('a');
-  link.href = url;
-  link.target = '_blank';
-  link.rel = 'noopener noreferrer';
-  link.style.display = 'none';
-  document.body.appendChild(link);
-  link.click();
-  window.setTimeout(() => link.remove(), 0);
-};
-
 const fullWidthStyle = {
   width: '100%',
+  maxWidth: '100%',
   minWidth: 0,
+  boxSizing: 'border-box' as const,
+};
+
+const fieldGroupStyle = {
+  ...fullWidthStyle,
+  alignSelf: 'stretch' as const,
 };
 
 const helperTextStyle = {
@@ -78,6 +80,22 @@ const textAreaStyle = {
   background: 'transparent',
   color: 'inherit',
   font: 'inherit',
+};
+
+const dialogShellStyle = (width: string) => ({
+  width: `min(${width}, calc(100vw - 1.5rem))`,
+  maxWidth: 'calc(100vw - 1.5rem)',
+  minWidth: 0,
+  overflow: 'hidden' as const,
+  boxSizing: 'border-box' as const,
+});
+
+const dialogContentStyle = {
+  width: '100%',
+  maxWidth: '100%',
+  minWidth: 0,
+  boxSizing: 'border-box' as const,
+  overflow: 'hidden' as const,
 };
 
 const getCardHost = (url: string): string => {
@@ -133,65 +151,67 @@ function SectionDialog({ open, initialSection, onClose, onSave }: SectionDialogP
             escapeDeactivates: stopPropagation,
           }}
         >
-          <Dialog variant="Surface">
-            <Header
-              style={{
-                padding: `0 ${config.space.S200} 0 ${config.space.S400}`,
-                borderBottomWidth: config.borderWidth.B300,
-              }}
-              variant="Surface"
-              size="500"
-            >
-              <Box grow="Yes">
-                <Text size="H4">{initialSection ? '编辑分组' : '添加分组'}</Text>
-              </Box>
-              <IconButton size="300" onClick={onClose} radii="300">
-                <Icon src={Icons.Cross} />
-              </IconButton>
-            </Header>
-            <Box
-              as="form"
-              onSubmit={handleSubmit}
-              style={{
-                padding: config.space.S400,
-                width: '26rem',
-                maxWidth: 'calc(100vw - 2rem)',
-                boxSizing: 'border-box',
-              }}
-              direction="Column"
-              gap="300"
-            >
-              <Box direction="Column" gap="100">
-                <Text size="L400">分组名称</Text>
-                <Input
-                  autoFocus
-                  required
-                  variant="Background"
-                  value={title}
-                  onChange={(evt) => setTitle(evt.currentTarget.value)}
-                  style={fullWidthStyle}
-                  placeholder="例如：常用工具"
-                />
-              </Box>
-
-              {error && (
-                <Text style={{ ...helperTextStyle, color: color.Critical.Main }} size="T300">
-                  {error}
-                </Text>
-              )}
-
-              <Button
-                type="submit"
-                variant="Primary"
-                disabled={saving}
-                before={
-                  saving ? <Spinner fill="Solid" variant="Primary" size="200" /> : undefined
-                }
+          <Box style={dialogShellStyle('26rem')}>
+            <Dialog variant="Surface">
+              <Header
+                style={{
+                  padding: `0 ${config.space.S200} 0 ${config.space.S400}`,
+                  borderBottomWidth: config.borderWidth.B300,
+                }}
+                variant="Surface"
+                size="500"
               >
-                <Text size="B400">{initialSection ? '保存分组' : '创建分组'}</Text>
-              </Button>
-            </Box>
-          </Dialog>
+                <Box grow="Yes">
+                  <Text size="H4">{initialSection ? '编辑分组' : '添加分组'}</Text>
+                </Box>
+                <IconButton size="300" onClick={onClose} radii="300">
+                  <Icon src={Icons.Cross} />
+                </IconButton>
+              </Header>
+              <Box
+                as="form"
+                onSubmit={handleSubmit}
+                style={{
+                  ...dialogContentStyle,
+                  padding: config.space.S400,
+                }}
+                direction="Column"
+                gap="300"
+              >
+                <Box direction="Column" gap="100" style={fieldGroupStyle}>
+                  <Text size="L400">分组名称</Text>
+                  <Input
+                    autoFocus
+                    required
+                    variant="Background"
+                    value={title}
+                    onChange={(evt) => setTitle(evt.currentTarget.value)}
+                    style={fullWidthStyle}
+                    placeholder="例如：常用工具"
+                  />
+                </Box>
+
+                {error && (
+                  <Text style={{ ...helperTextStyle, color: color.Critical.Main }} size="T300">
+                    {error}
+                  </Text>
+                )}
+
+                <Box style={fullWidthStyle} direction="Column">
+                  <Button
+                    type="submit"
+                    variant="Primary"
+                    disabled={saving}
+                    before={
+                      saving ? <Spinner fill="Solid" variant="Primary" size="200" /> : undefined
+                    }
+                  >
+                    <Text size="B400">{initialSection ? '保存分组' : '创建分组'}</Text>
+                  </Button>
+                </Box>
+              </Box>
+            </Dialog>
+          </Box>
         </FocusTrap>
       </OverlayCenter>
     </Overlay>
@@ -266,109 +286,111 @@ function CardDialog({ open, initialCard, onClose, onSave }: CardDialogProps) {
             escapeDeactivates: stopPropagation,
           }}
         >
-          <Dialog variant="Surface">
-            <Header
-              style={{
-                padding: `0 ${config.space.S200} 0 ${config.space.S400}`,
-                borderBottomWidth: config.borderWidth.B300,
-              }}
-              variant="Surface"
-              size="500"
-            >
-              <Box grow="Yes">
-                <Text size="H4">{initialCard ? '编辑卡片' : '添加卡片'}</Text>
-              </Box>
-              <IconButton size="300" onClick={onClose} radii="300">
-                <Icon src={Icons.Cross} />
-              </IconButton>
-            </Header>
-            <Box
-              as="form"
-              onSubmit={handleSubmit}
-              style={{
-                padding: config.space.S400,
-                width: '30rem',
-                maxWidth: 'calc(100vw - 2rem)',
-                boxSizing: 'border-box',
-              }}
-              direction="Column"
-              gap="300"
-            >
-              <Box direction="Column" gap="100">
-                <Text size="L400">标题</Text>
-                <Input
-                  autoFocus
-                  required
-                  variant="Background"
-                  value={title}
-                  onChange={(evt) => setTitle(evt.currentTarget.value)}
-                  style={fullWidthStyle}
-                  placeholder="例如：Google 翻译"
-                />
-              </Box>
-
-              <Box direction="Column" gap="100">
-                <Text size="L400">链接地址</Text>
-                <Input
-                  required
-                  variant="Background"
-                  value={url}
-                  onChange={(evt) => setUrl(evt.currentTarget.value)}
-                  style={fullWidthStyle}
-                  placeholder="例如：https://translate.google.com"
-                />
-              </Box>
-
-              <Box direction="Column" gap="100">
-                <Text size="L400">描述（可选）</Text>
-                <textarea
-                  value={description}
-                  onChange={(evt) => setDescription(evt.currentTarget.value)}
-                  rows={4}
-                  style={textAreaStyle}
-                />
-              </Box>
-
-              <Box direction="Column" gap="100">
-                <Text size="L400">图标链接（可选）</Text>
-                <Input
-                  variant="Background"
-                  value={iconUrl}
-                  onChange={(evt) => setIconUrl(evt.currentTarget.value)}
-                  style={fullWidthStyle}
-                  placeholder="例如：https://example.com/logo.png"
-                />
-              </Box>
-
-              <Box direction="Column" gap="100">
-                <Text size="L400">标签（可选）</Text>
-                <Input
-                  variant="Background"
-                  value={tagsText}
-                  onChange={(evt) => setTagsText(evt.currentTarget.value)}
-                  style={fullWidthStyle}
-                  placeholder="用逗号分隔，例如：翻译, 工具"
-                />
-              </Box>
-
-              {error && (
-                <Text style={{ ...helperTextStyle, color: color.Critical.Main }} size="T300">
-                  {error}
-                </Text>
-              )}
-
-              <Button
-                type="submit"
-                variant="Primary"
-                disabled={saving}
-                before={
-                  saving ? <Spinner fill="Solid" variant="Primary" size="200" /> : undefined
-                }
+          <Box style={dialogShellStyle('30rem')}>
+            <Dialog variant="Surface">
+              <Header
+                style={{
+                  padding: `0 ${config.space.S200} 0 ${config.space.S400}`,
+                  borderBottomWidth: config.borderWidth.B300,
+                }}
+                variant="Surface"
+                size="500"
               >
-                <Text size="B400">{initialCard ? '保存卡片' : '创建卡片'}</Text>
-              </Button>
-            </Box>
-          </Dialog>
+                <Box grow="Yes">
+                  <Text size="H4">{initialCard ? '编辑卡片' : '添加卡片'}</Text>
+                </Box>
+                <IconButton size="300" onClick={onClose} radii="300">
+                  <Icon src={Icons.Cross} />
+                </IconButton>
+              </Header>
+              <Box
+                as="form"
+                onSubmit={handleSubmit}
+                style={{
+                  ...dialogContentStyle,
+                  padding: config.space.S400,
+                }}
+                direction="Column"
+                gap="300"
+              >
+                <Box direction="Column" gap="100" style={fieldGroupStyle}>
+                  <Text size="L400">标题</Text>
+                  <Input
+                    autoFocus
+                    required
+                    variant="Background"
+                    value={title}
+                    onChange={(evt) => setTitle(evt.currentTarget.value)}
+                    style={fullWidthStyle}
+                    placeholder="例如：Google 翻译"
+                  />
+                </Box>
+
+                <Box direction="Column" gap="100" style={fieldGroupStyle}>
+                  <Text size="L400">链接地址</Text>
+                  <Input
+                    required
+                    variant="Background"
+                    value={url}
+                    onChange={(evt) => setUrl(evt.currentTarget.value)}
+                    style={fullWidthStyle}
+                    placeholder="例如：https://translate.google.com"
+                  />
+                </Box>
+
+                <Box direction="Column" gap="100" style={fieldGroupStyle}>
+                  <Text size="L400">描述（可选）</Text>
+                  <textarea
+                    value={description}
+                    onChange={(evt) => setDescription(evt.currentTarget.value)}
+                    rows={4}
+                    style={textAreaStyle}
+                  />
+                </Box>
+
+                <Box direction="Column" gap="100" style={fieldGroupStyle}>
+                  <Text size="L400">图标链接（可选）</Text>
+                  <Input
+                    variant="Background"
+                    value={iconUrl}
+                    onChange={(evt) => setIconUrl(evt.currentTarget.value)}
+                    style={fullWidthStyle}
+                    placeholder="例如：https://example.com/logo.png"
+                  />
+                </Box>
+
+                <Box direction="Column" gap="100" style={fieldGroupStyle}>
+                  <Text size="L400">标签（可选）</Text>
+                  <Input
+                    variant="Background"
+                    value={tagsText}
+                    onChange={(evt) => setTagsText(evt.currentTarget.value)}
+                    style={fullWidthStyle}
+                    placeholder="用逗号分隔，例如：翻译, 工具"
+                  />
+                </Box>
+
+                {error && (
+                  <Text style={{ ...helperTextStyle, color: color.Critical.Main }} size="T300">
+                    {error}
+                  </Text>
+                )}
+
+                <Box style={fullWidthStyle} direction="Column">
+                  <Button
+                    type="submit"
+                    variant="Primary"
+                    disabled={saving}
+                    before={
+                      saving ? <Spinner fill="Solid" variant="Primary" size="200" /> : undefined
+                    }
+                  >
+                    <Text size="B400">{initialCard ? '保存卡片' : '创建卡片'}</Text>
+                  </Button>
+                </Box>
+              </Box>
+            </Dialog>
+          </Box>
         </FocusTrap>
       </OverlayCenter>
     </Overlay>
@@ -390,34 +412,39 @@ function ExploreNavCardItem({
   onEdit,
   onRemove,
 }: ExploreNavCardItemProps) {
+  const visibleTags = card.tags?.slice(0, 2) ?? [];
+  const hiddenTagCount = (card.tags?.length ?? 0) - visibleTags.length;
+  const showDescription =
+    !!card.description && card.description.trim() !== card.title.trim();
+
   return (
     <Box className={css.ExploreNavCard} direction="Column" gap="200">
-      <button
+      <a
         className={css.ExploreNavCardButton}
-        type="button"
-        onClick={() => openExternalUrl(card.url)}
+        href={card.url}
+        target="_blank"
+        rel="noopener noreferrer"
       >
         <Box alignItems="Center" gap="200">
-          <Avatar size="300" radii="400">
-            {card.iconUrl ? (
-              <AvatarImage src={card.iconUrl} alt={card.title} />
-            ) : (
-              <AvatarFallback>
-                <Text size="L400">{card.title.slice(0, 1).toUpperCase()}</Text>
-              </AvatarFallback>
-            )}
-          </Avatar>
+          <Box className={css.ExploreNavCardAvatarShell} alignItems="Center" justifyContent="Center">
+            <Avatar size="300" radii="400">
+              {card.iconUrl ? (
+                <AvatarImage src={card.iconUrl} alt={card.title} />
+              ) : (
+                <AvatarFallback>
+                  <Text size="L400">{card.title.slice(0, 1).toUpperCase()}</Text>
+                </AvatarFallback>
+              )}
+            </Avatar>
+          </Box>
           <Box grow="Yes" direction="Column" gap="50">
             <Text size="H5" truncate>
               {card.title}
             </Text>
-            <Text size="T200" priority="300" truncate>
-              {getCardHost(card.url)}
-            </Text>
           </Box>
         </Box>
 
-        {card.description && (
+        {showDescription && (
           <Text
             size="T300"
             priority="300"
@@ -428,16 +455,25 @@ function ExploreNavCardItem({
           </Text>
         )}
 
-        {card.tags && card.tags.length > 0 && (
-          <Box gap="100" wrap="Wrap">
-            {card.tags.map((tag) => (
-              <span key={tag} className={css.ExploreNavTag}>
-                {tag}
-              </span>
-            ))}
-          </Box>
-        )}
-      </button>
+        <Box direction="Column" gap="150">
+          <span className={css.ExploreNavHost} title={getCardHost(card.url)}>
+            {getCardHost(card.url)}
+          </span>
+
+          {(visibleTags.length > 0 || hiddenTagCount > 0) && (
+            <Box className={css.ExploreNavTagRail}>
+              {visibleTags.map((tag) => (
+                <span key={tag} className={css.ExploreNavTag}>
+                  {tag}
+                </span>
+              ))}
+              {hiddenTagCount > 0 && (
+                <span className={css.ExploreNavTag}>{`+${hiddenTagCount}`}</span>
+              )}
+            </Box>
+          )}
+        </Box>
+      </a>
 
       <Box className={css.ExploreNavCardFooter} alignItems="Center" justifyContent="End" gap="100">
         <IconButton
@@ -653,7 +689,7 @@ export function ExploreNavView() {
         <Scroll hideTrack visibility="Hover">
           <PageContent>
             <PageContentCenter>
-              <Box direction="Column" gap="500">
+              <Box className={css.ExploreNavCanvas} direction="Column" gap="500">
                 {actionError && (
                   <Text size="T300" style={{ ...helperTextStyle, color: color.Critical.Main }}>
                     {actionError}

@@ -31,6 +31,13 @@ const wrapTextStyle = {
 };
 
 const openExternalUrl = (url: string) => {
+  const popup = window.open(url, '_blank', 'noopener,noreferrer');
+  if (popup) {
+    popup.opener = null;
+    popup.focus?.();
+    return;
+  }
+
   const link = document.createElement('a');
   link.href = url;
   link.target = '_blank';
