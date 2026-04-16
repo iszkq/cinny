@@ -3,6 +3,8 @@ import { useCallback, useMemo, useState } from 'react';
 import { AccountDataEvent } from '../../types/matrix/accountData';
 import { StateEvent } from '../../types/matrix/room';
 import {
+  getCustomUserImagePack,
+  getCustomUserImagePacks,
   getGlobalImagePacks,
   getRoomImagePack,
   getRoomImagePacks,
@@ -27,6 +29,44 @@ export const useUserImagePack = (): ImagePack | undefined => {
         }
       },
       [mx]
+    )
+  );
+
+  return userPack;
+};
+
+export const useCustomUserImagePacks = (): ImagePack[] => {
+  const mx = useMatrixClient();
+  const [userPacks, setUserPacks] = useState(() => getCustomUserImagePacks(mx));
+
+  useAccountDataCallback(
+    mx,
+    useCallback(
+      (mEvent) => {
+        if (mEvent.getType() === AccountDataEvent.CinnyUserEmojiPacks) {
+          setUserPacks(getCustomUserImagePacks(mx));
+        }
+      },
+      [mx]
+    )
+  );
+
+  return userPacks;
+};
+
+export const useCustomUserImagePack = (packId: string): ImagePack | undefined => {
+  const mx = useMatrixClient();
+  const [userPack, setUserPack] = useState(() => getCustomUserImagePack(mx, packId));
+
+  useAccountDataCallback(
+    mx,
+    useCallback(
+      (mEvent) => {
+        if (mEvent.getType() === AccountDataEvent.CinnyUserEmojiPacks) {
+          setUserPack(getCustomUserImagePack(mx, packId));
+        }
+      },
+      [mx, packId]
     )
   );
 
@@ -142,11 +182,12 @@ export const useRoomsImagePacks = (rooms: Room[]) => {
 
 export const useRelevantImagePacks = (usage: ImageUsage, rooms: Room[]): ImagePack[] => {
   const userPack = useUserImagePack();
+  const customUserPacks = useCustomUserImagePacks();
   const globalPacks = useGlobalImagePacks();
   const roomsPacks = useRoomsImagePacks(rooms);
 
   const relevantPacks = useMemo(() => {
-    const packs = userPack ? [userPack] : [];
+    const packs = userPack ? [userPack, ...customUserPacks] : customUserPacks;
     const globalPackIds = new Set(globalPacks.map((pack) => pack.id));
 
     const relPacks = packs.concat(
@@ -155,7 +196,7 @@ export const useRelevantImagePacks = (usage: ImageUsage, rooms: Room[]): ImagePa
     );
 
     return relPacks.filter((pack) => pack.getImages(usage).length > 0);
-  }, [userPack, globalPacks, roomsPacks, usage]);
+  }, [userPack, customUserPacks, globalPacks, roomsPacks, usage]);
 
   return relevantPacks;
 };
