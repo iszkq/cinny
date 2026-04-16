@@ -66,9 +66,9 @@ const defaultSettings: Settings = {
   twitterEmoji: false,
   pageZoom: 100,
   readReceiptAvatarCount: 7,
-  presenceVisibility: PresenceVisibility.Offline,
-  sendTypingNotifications: false,
-  sendReadReceipts: false,
+  presenceVisibility: PresenceVisibility.Online,
+  sendTypingNotifications: true,
+  sendReadReceipts: true,
 
   isPeopleDrawer: true,
   memberSortFilterIndex: 0,
