@@ -22,7 +22,7 @@ import { preventScrollWithArrowKey, stopPropagation } from '../../utils/keyboard
 import { useRelevantImagePacks } from '../../hooks/useImagePacks';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useRecentEmoji } from '../../hooks/useRecentEmoji';
-import { isUserId, mxcUrlToHttp } from '../../utils/matrix';
+import { mxcUrlToHttp } from '../../utils/matrix';
 import { editableActiveElement, targetFromEvent } from '../../utils/dom';
 import { useAsyncSearch, UseAsyncSearchOptions } from '../../hooks/useAsyncSearch';
 import { useDebounce } from '../../hooks/useDebounce';
@@ -88,7 +88,7 @@ const useGroups = (
 
     imagePacks.forEach((pack) => {
       let label = pack.meta.name;
-      if (!label) label = isUserId(pack.id) ? 'Personal Pack' : mx.getRoom(pack.id)?.name;
+      if (!label) label = !pack.address ? '\u4e2a\u4eba\u5206\u7c7b' : mx.getRoom(pack.id)?.name;
 
       g.push({
         id: pack.id,
@@ -116,7 +116,7 @@ const useGroups = (
 
     imagePacks.forEach((pack) => {
       let label = pack.meta.name;
-      if (!label) label = isUserId(pack.id) ? 'Personal Pack' : mx.getRoom(pack.id)?.name;
+      if (!label) label = !pack.address ? '\u4e2a\u4eba\u5206\u7c7b' : mx.getRoom(pack.id)?.name;
 
       g.push({
         id: pack.id,
@@ -199,7 +199,8 @@ function EmojiSidebar({ activeGroupAtom, packs, onScrollToGroup }: EmojiSidebarP
           <SidebarDivider />
           {packs.map((pack) => {
             let label = pack.meta.name;
-            if (!label) label = isUserId(pack.id) ? 'Personal Pack' : mx.getRoom(pack.id)?.name;
+            if (!label)
+              label = !pack.address ? '\u4e2a\u4eba\u5206\u7c7b' : mx.getRoom(pack.id)?.name;
 
             const url =
               mxcUrlToHttp(mx, pack.getAvatarUrl(usage) ?? '', useAuthentication) ?? undefined;
@@ -262,7 +263,8 @@ function StickerSidebar({ activeGroupAtom, packs, onScrollToGroup }: StickerSide
       <SidebarStack>
         {packs.map((pack) => {
           let label = pack.meta.name;
-          if (!label) label = isUserId(pack.id) ? 'Personal Pack' : mx.getRoom(pack.id)?.name;
+          if (!label)
+            label = !pack.address ? '\u4e2a\u4eba\u5206\u7c7b' : mx.getRoom(pack.id)?.name;
 
           const url =
             mxcUrlToHttp(mx, pack.getAvatarUrl(usage) ?? '', useAuthentication) ?? undefined;
