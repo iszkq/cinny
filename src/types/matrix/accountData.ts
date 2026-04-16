@@ -7,6 +7,7 @@ export enum AccountDataEvent {
   CinnyFavorites = 'in.cinny.favorites',
   CinnyFavoriteNotes = 'in.cinny.favorite_notes',
   CinnyExploreSources = 'in.cinny.explore_sources',
+  CinnyUserEmojiPacks = 'in.cinny.user_emoji_packs',
 
   ElementRecentEmoji = 'io.element.recent_emoji',
 
