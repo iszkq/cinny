@@ -932,6 +932,11 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     )
   );
 
+  useEffect(() => {
+    if (!document.hasFocus() || !atBottomRef.current) return;
+    tryAutoMarkAsRead();
+  }, [privateReceipt, tryAutoMarkAsRead]);
+
   // Handle up arrow edit
   useKeyDown(
     window,
