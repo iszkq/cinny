@@ -32,7 +32,13 @@ import FocusTrap from 'focus-trap-react';
 import { Page, PageContent, PageHeader } from '../../../components/page';
 import { SequenceCard } from '../../../components/sequence-card';
 import { useSetting } from '../../../state/hooks/settings';
-import { DateFormat, MessageLayout, MessageSpacing, settingsAtom } from '../../../state/settings';
+import {
+  DateFormat,
+  MessageLayout,
+  MessageSpacing,
+  PresenceVisibility,
+  settingsAtom,
+} from '../../../state/settings';
 import { SettingTile } from '../../../components/setting-tile';
 import { KeySymbol } from '../../../utils/key-symbol';
 import { isMacOS } from '../../../utils/user-agent';
@@ -785,31 +791,149 @@ function DateAndTime() {
 function Editor() {
   const [enterForNewline, setEnterForNewline] = useSetting(settingsAtom, 'enterForNewline');
   const [isMarkdown, setIsMarkdown] = useSetting(settingsAtom, 'isMarkdown');
-  const [hideActivity, setHideActivity] = useSetting(settingsAtom, 'hideActivity');
 
   return (
     <Box direction="Column" gap="100">
-      <Text size="L400">输入框</Text>
+      <Text size="L400">{'\u8f93\u5165\u6846'}</Text>
       <SequenceCard className={SequenceCardStyle} variant="SurfaceVariant" direction="Column">
         <SettingTile
-          title="回车换行"
-          description={`Use ${
+          title={'\u56de\u8f66\u6362\u884c'}
+          description={`\u4f7f\u7528 ${
             isMacOS() ? KeySymbol.Command : 'Ctrl'
-          } + Enter 发送消息，单独按 Enter 换行。`}
+          } + Enter \u53d1\u9001\u6d88\u606f\uff0c\u5355\u72ec\u6309 Enter \u6362\u884c\u3002`}
           after={<Switch variant="Primary" value={enterForNewline} onChange={setEnterForNewline} />}
         />
       </SequenceCard>
       <SequenceCard className={SequenceCardStyle} variant="SurfaceVariant" direction="Column">
         <SettingTile
-          title="标记语法模式"
+          title={'\u6807\u8bb0\u8bed\u6cd5\u6a21\u5f0f'}
           after={<Switch variant="Primary" value={isMarkdown} onChange={setIsMarkdown} />}
+        />
+      </SequenceCard>
+    </Box>
+  );
+}
+
+function SelectPresenceVisibility() {
+  const [menuCords, setMenuCords] = useState<RectCords>();
+  const [presenceVisibility, setPresenceVisibility] = useSetting(
+    settingsAtom,
+    'presenceVisibility'
+  );
+
+  const items = [
+    { value: PresenceVisibility.Offline, label: '离线' },
+    { value: PresenceVisibility.Online, label: '在线' },
+  ];
+
+  const handleMenu: MouseEventHandler<HTMLButtonElement> = (evt) => {
+    setMenuCords(evt.currentTarget.getBoundingClientRect());
+  };
+
+  const handleSelect = (value: PresenceVisibility) => {
+    setPresenceVisibility(value);
+    setMenuCords(undefined);
+  };
+
+  return (
+    <>
+      <Button
+        size="300"
+        variant="Secondary"
+        outlined
+        fill="Soft"
+        radii="300"
+        after={<Icon size="300" src={Icons.ChevronBottom} />}
+        onClick={handleMenu}
+      >
+        <Text size="T300">
+          {items.find((item) => item.value === presenceVisibility)?.label ?? presenceVisibility}
+        </Text>
+      </Button>
+      <PopOut
+        anchor={menuCords}
+        offset={5}
+        position="Bottom"
+        align="End"
+        content={
+          <FocusTrap
+            focusTrapOptions={{
+              initialFocus: false,
+              onDeactivate: () => setMenuCords(undefined),
+              clickOutsideDeactivates: true,
+              isKeyForward: (evt: KeyboardEvent) =>
+                evt.key === 'ArrowDown' || evt.key === 'ArrowRight',
+              isKeyBackward: (evt: KeyboardEvent) =>
+                evt.key === 'ArrowUp' || evt.key === 'ArrowLeft',
+              escapeDeactivates: stopPropagation,
+            }}
+          >
+            <Menu>
+              <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
+                {items.map((item) => (
+                  <MenuItem
+                    key={item.value}
+                    size="300"
+                    variant={presenceVisibility === item.value ? 'Primary' : 'Surface'}
+                    radii="300"
+                    onClick={() => handleSelect(item.value)}
+                  >
+                    <Text size="T300">{item.label}</Text>
+                  </MenuItem>
+                ))}
+              </Box>
+            </Menu>
+          </FocusTrap>
+        }
+      />
+    </>
+  );
+}
+
+function PrivacyMode() {
+  const [sendTypingNotifications, setSendTypingNotifications] = useSetting(
+    settingsAtom,
+    'sendTypingNotifications'
+  );
+  const [sendReadReceipts, setSendReadReceipts] = useSetting(
+    settingsAtom,
+    'sendReadReceipts'
+  );
+
+  return (
+    <Box direction="Column" gap="100">
+      <Text size="L400">隐身模式</Text>
+      <SequenceCard className={SequenceCardStyle} variant="SurfaceVariant" direction="Column">
+        <SettingTile
+          title="在线状态"
+          description="控制其他 Matrix 客户端看到的当前在线状态。"
+          after={<SelectPresenceVisibility />}
         />
       </SequenceCard>
       <SequenceCard className={SequenceCardStyle} variant="SurfaceVariant" direction="Column">
         <SettingTile
-          title="隐藏输入与已读回执"
-          description="关闭输入状态和已读回执，尽量减少在线活动暴露。"
-          after={<Switch variant="Primary" value={hideActivity} onChange={setHideActivity} />}
+          title="发送输入状态"
+          description="开启后，其他人可以看到你正在输入消息。"
+          after={
+            <Switch
+              variant="Primary"
+              value={sendTypingNotifications}
+              onChange={setSendTypingNotifications}
+            />
+          }
+        />
+      </SequenceCard>
+      <SequenceCard className={SequenceCardStyle} variant="SurfaceVariant" direction="Column">
+        <SettingTile
+          title="发送已读回执"
+          description="开启后，其他人可以看到你已读到哪条消息。"
+          after={
+            <Switch
+              variant="Primary"
+              value={sendReadReceipts}
+              onChange={setSendReadReceipts}
+            />
+          }
         />
       </SequenceCard>
     </Box>
@@ -1080,6 +1204,7 @@ export function General({ requestClose }: GeneralProps) {
               <Appearance />
               <DateAndTime />
               <Editor />
+              <PrivacyMode />
               <Messages />
             </Box>
           </PageContent>
