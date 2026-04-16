@@ -1,49 +1,228 @@
-import React from 'react';
-import { Avatar, AvatarFallback, AvatarImage, Box, Button, Icon, Icons, Text } from 'folds';
-import { useUserImagePack } from '../../../hooks/useImagePacks';
+import React, { ChangeEventHandler, FormEventHandler, useCallback, useState } from 'react';
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+  Box,
+  Button,
+  Icon,
+  IconButton,
+  Icons,
+  Input,
+  Spinner,
+  Text,
+} from 'folds';
+import { useCustomUserImagePacks, useUserImagePack } from '../../../hooks/useImagePacks';
 import { SequenceCard } from '../../../components/sequence-card';
 import { SequenceCardStyle } from '../styles.css';
 import { SettingTile } from '../../../components/setting-tile';
-import { ImagePack, ImageUsage } from '../../../plugins/custom-emoji';
+import {
+  ImagePack,
+  ImageUsage,
+  UserImagePacksContent,
+  getCustomUserImagePacksContent,
+} from '../../../plugins/custom-emoji';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { mxcUrlToHttp } from '../../../utils/matrix';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
+import { LineClamp2 } from '../../../styles/Text.css';
+import { AccountDataEvent } from '../../../../types/matrix/accountData';
+import { randomStr } from '../../../utils/common';
+import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 
 type UserPackProps = {
   onViewPack: (imagePack: ImagePack) => void;
 };
+
+const createPersonalPackId = () =>
+  `personal-${Date.now().toString(36)}-${randomStr(4).toLowerCase()}`;
+
+function CreatePersonalPackTile() {
+  const mx = useMatrixClient();
+  const [packName, setPackName] = useState('');
+
+  const [createState, createPack] = useAsyncCallback<void, Error, [string]>(
+    useCallback(
+      async (name) => {
+        const content = getCustomUserImagePacksContent(mx);
+        let packId = createPersonalPackId();
+
+        while (content.packs?.[packId]) {
+          packId = createPersonalPackId();
+        }
+
+        const updatedContent: UserImagePacksContent = {
+          ...content,
+          version: content.version ?? 1,
+          packs: {
+            ...(content.packs ?? {}),
+            [packId]: {
+              pack: {
+                display_name: name,
+              },
+            },
+          },
+        };
+
+        await mx.setAccountData(AccountDataEvent.CinnyUserEmojiPacks, updatedContent);
+      },
+      [mx]
+    )
+  );
+
+  const creating = createState.status === AsyncStatus.Loading;
+
+  const handleNameChange: ChangeEventHandler<HTMLInputElement> = (evt) => {
+    setPackName(evt.currentTarget.value);
+  };
+
+  const handleSubmit: FormEventHandler<HTMLFormElement> = (evt) => {
+    evt.preventDefault();
+    if (creating) return;
+
+    const name = packName.trim();
+    if (!name) return;
+
+    createPack(name)
+      .then(() => {
+        setPackName('');
+      })
+      .catch(() => undefined);
+  };
+
+  return (
+    <SequenceCard
+      className={SequenceCardStyle}
+      variant="SurfaceVariant"
+      direction="Column"
+      gap="400"
+    >
+      <SettingTile
+        title={'\u65b0\u5efa\u4e2a\u4eba\u5206\u7c7b'}
+        description={'\u65b0\u5efa\u4e00\u4e2a\u5355\u72ec\u7684\u4e2a\u4eba\u8868\u60c5\u5206\u7c7b\uff0c\u7528\u6765\u6309\u4e3b\u9898\u6574\u7406\u81ea\u5df1\u7684\u8868\u60c5\u3001\u8d34\u7eb8\u6216\u7d20\u6750\u3002'}
+      >
+        <Box as="form" gap="200" alignItems="Center" onSubmit={handleSubmit}>
+          <Box grow="Yes">
+            <Input
+              name="packNameInput"
+              value={packName}
+              onChange={handleNameChange}
+              size="400"
+              variant="Secondary"
+              radii="300"
+              placeholder={'\u4f8b\u5982\uff1a\u65e5\u5e38\u8868\u60c5'}
+              required
+              readOnly={creating}
+            />
+          </Box>
+          <Box shrink="No">
+            <Button
+              variant="Success"
+              radii="300"
+              type="submit"
+              disabled={creating || packName.trim() === ''}
+              before={creating && <Spinner size="200" variant="Success" fill="Solid" />}
+            >
+              <Text size="B300">{'\u521b\u5efa'}</Text>
+            </Button>
+          </Box>
+        </Box>
+      </SettingTile>
+      {createState.status === AsyncStatus.Error && (
+        <Text size="T200" priority="300">
+          {'\u521b\u5efa\u5206\u7c7b\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5\u3002'}
+        </Text>
+      )}
+    </SequenceCard>
+  );
+}
+
 export function UserPack({ onViewPack }: UserPackProps) {
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
 
   const userPack = useUserImagePack();
-  const avatarMxc = userPack?.getAvatarUrl(ImageUsage.Emoticon);
-  const avatarUrl = avatarMxc ? mxcUrlToHttp(mx, avatarMxc, useAuthentication) : undefined;
+  const customUserPacks = useCustomUserImagePacks();
+  const [removingPackId, setRemovingPackId] = useState<string>();
+  const [removeError, setRemoveError] = useState<string>();
 
-  const handleView = () => {
-    if (userPack) {
-      onViewPack(userPack);
-    } else {
-      const defaultPack = new ImagePack(mx.getUserId() ?? '', {}, undefined);
+  const handleView = useCallback(
+    (imagePack?: ImagePack) => {
+      if (imagePack) {
+        onViewPack(imagePack);
+        return;
+      }
+
+      const defaultPack = new ImagePack(
+        mx.getUserId() ?? '',
+        {
+          pack: {
+            display_name: '\u9ed8\u8ba4\u5206\u7c7b',
+          },
+        },
+        undefined
+      );
       onViewPack(defaultPack);
-    }
-  };
+    },
+    [mx, onViewPack]
+  );
 
-  return (
-    <Box direction="Column" gap="100">
-      <Text size="L400">{'\u9ed8\u8ba4\u5206\u7c7b'}</Text>
+  const handleDelete = useCallback(
+    async (imagePack: ImagePack) => {
+      if (removingPackId) return;
+
+      const packName = imagePack.meta.name ?? '\u672a\u547d\u540d\u5206\u7c7b';
+      if (!window.confirm(`\u786e\u5b9a\u5220\u9664\u300c${packName}\u300d\u5417\uff1f`)) return;
+
+      setRemoveError(undefined);
+      setRemovingPackId(imagePack.id);
+
+      try {
+        const content = getCustomUserImagePacksContent(mx);
+        const nextPacks = { ...(content.packs ?? {}) };
+        delete nextPacks[imagePack.id];
+
+        const updatedContent: UserImagePacksContent = {
+          ...content,
+          version: content.version ?? 1,
+        };
+
+        if (Object.keys(nextPacks).length > 0) {
+          updatedContent.packs = nextPacks;
+        } else {
+          delete updatedContent.packs;
+        }
+
+        await mx.setAccountData(AccountDataEvent.CinnyUserEmojiPacks, updatedContent);
+      } catch {
+        setRemoveError('\u5220\u9664\u5206\u7c7b\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5\u3002');
+      } finally {
+        setRemovingPackId(undefined);
+      }
+    },
+    [mx, removingPackId]
+  );
+
+  const renderPack = (imagePack: ImagePack, isDefault = false) => {
+    const avatarMxc = imagePack.getAvatarUrl(ImageUsage.Emoticon);
+    const avatarUrl = avatarMxc ? mxcUrlToHttp(mx, avatarMxc, useAuthentication) : undefined;
+    const description =
+      imagePack.meta.attribution ??
+      (isDefault
+        ? '\u8fd9\u662f\u4f60\u7684\u9ed8\u8ba4\u4e2a\u4eba\u5206\u7c7b\uff0c\u4f1a\u4f18\u5148\u51fa\u73b0\u5728\u8868\u60c5\u9762\u677f\u4e2d\u3002'
+        : '\u8fd9\u662f\u4f60\u81ea\u5df1\u65b0\u5efa\u7684\u4e2a\u4eba\u5206\u7c7b\uff0c\u53ef\u4ee5\u5355\u72ec\u6574\u7406\u4e0d\u540c\u4e3b\u9898\u7684\u8868\u60c5\u3002');
+
+    return (
       <SequenceCard
+        key={imagePack.id}
         className={SequenceCardStyle}
         variant="SurfaceVariant"
         direction="Column"
         gap="400"
       >
         <SettingTile
-          title={userPack?.meta.name ?? '\u9ed8\u8ba4\u5206\u7c7b'}
-          description={
-            userPack?.meta.attribution ??
-            '\u8fd9\u662f\u4f60\u7684\u4e2a\u4eba\u9ed8\u8ba4\u8868\u60c5\u5206\u7c7b\u3002'
-          }
+          title={imagePack.meta.name ?? (isDefault ? '\u9ed8\u8ba4\u5206\u7c7b' : '\u672a\u547d\u540d\u5206\u7c7b')}
+          description={<span className={LineClamp2}>{description}</span>}
           before={
             <Avatar size="300" radii="300">
               {avatarUrl ? (
@@ -56,19 +235,79 @@ export function UserPack({ onViewPack }: UserPackProps) {
             </Avatar>
           }
           after={
-            <Button
-              variant="Secondary"
-              fill="Soft"
-              size="300"
-              radii="300"
-              outlined
-              onClick={handleView}
-            >
-              <Text size="B300">{'\u7ba1\u7406\u5206\u7c7b'}</Text>
-            </Button>
+            <Box gap="200">
+              {!isDefault && (
+                <IconButton
+                  size="300"
+                  radii="300"
+                  variant="Secondary"
+                  onClick={() => handleDelete(imagePack)}
+                  disabled={removingPackId === imagePack.id}
+                >
+                  {removingPackId === imagePack.id ? (
+                    <Spinner size="100" />
+                  ) : (
+                    <Icon src={Icons.Delete} size="100" />
+                  )}
+                </IconButton>
+              )}
+              <Button
+                variant="Secondary"
+                fill="Soft"
+                size="300"
+                radii="300"
+                outlined
+                onClick={() => handleView(imagePack)}
+              >
+                <Text size="B300">
+                  {isDefault ? '\u7ba1\u7406\u9ed8\u8ba4\u5206\u7c7b' : '\u7ba1\u7406\u5206\u7c7b'}
+                </Text>
+              </Button>
+            </Box>
           }
         />
       </SequenceCard>
+    );
+  };
+
+  return (
+    <Box direction="Column" gap="100">
+      <Text size="L400">{'\u4e2a\u4eba\u5206\u7c7b'}</Text>
+      {renderPack(
+        userPack ??
+          new ImagePack(
+            mx.getUserId() ?? '',
+            {
+              pack: {
+                display_name: '\u9ed8\u8ba4\u5206\u7c7b',
+              },
+            },
+            undefined
+          ),
+        true
+      )}
+      <CreatePersonalPackTile />
+      {customUserPacks.map((imagePack) => renderPack(imagePack))}
+      {customUserPacks.length === 0 && (
+        <SequenceCard
+          className={SequenceCardStyle}
+          variant="SurfaceVariant"
+          direction="Column"
+          gap="400"
+        >
+          <SettingTile
+            title={'\u6682\u65e0\u81ea\u5b9a\u4e49\u5206\u7c7b'}
+            description={
+              '\u4f60\u76ee\u524d\u53ea\u6709\u4e00\u4e2a\u9ed8\u8ba4\u5206\u7c7b\uff0c\u53ef\u4ee5\u901a\u8fc7\u4e0a\u65b9\u7684\u201c\u65b0\u5efa\u4e2a\u4eba\u5206\u7c7b\u201d\u6309\u94ae\u518d\u521b\u5efa\u66f4\u591a\u5206\u7c7b\u3002'
+            }
+          />
+        </SequenceCard>
+      )}
+      {removeError && (
+        <Text size="T200" priority="300">
+          {removeError}
+        </Text>
+      )}
     </Box>
   );
 }

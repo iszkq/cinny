@@ -107,7 +107,7 @@ function GlobalPackSelector({
       <Header size="400" variant="Surface" style={{ padding: `0 ${config.space.S300}` }}>
         <Box grow="Yes">
           <Text size="L400" truncate>
-            {'\u623f\u95f4\u5206\u7c7b'}
+            {'\u623f\u95f4\u5171\u4eab\u5206\u7c7b'}
           </Text>
         </Box>
         <Box shrink="No">
@@ -238,7 +238,7 @@ function GlobalPackSelector({
                   </Text>
                   <Text size="T200" align="Center">
                     {
-                      '\u623f\u95f4\u4e2d\u7684\u8868\u60c5\u5206\u7c7b\u4f1a\u663e\u793a\u5728\u8fd9\u91cc\uff0c\u76ee\u524d\u8fd8\u6ca1\u6709\u53ef\u9009\u7684\u5206\u7c7b\u3002'
+                      '\u4f60\u52a0\u5165\u7684\u623f\u95f4\u91cc\u6682\u65e0\u53ef\u6536\u85cf\u7684\u5171\u4eab\u5206\u7c7b\u3002'
                     }
                   </Text>
                 </Box>
@@ -424,7 +424,7 @@ export function GlobalPacks({ onViewPack }: GlobalPacksProps) {
   return (
     <>
       <Box direction="Column" gap="100">
-        <Text size="L400">{'\u623f\u95f4/\u6536\u85cf\u5206\u7c7b'}</Text>
+        <Text size="L400">{'\u623f\u95f4\u5171\u4eab\u5206\u7c7b'}</Text>
         <SequenceCard
           className={SequenceCardStyle}
           variant="SurfaceVariant"
@@ -432,9 +432,9 @@ export function GlobalPacks({ onViewPack }: GlobalPacksProps) {
           gap="400"
         >
           <SettingTile
-            title={'\u6dfb\u52a0\u5206\u7c7b'}
+            title={'\u6536\u85cf\u623f\u95f4\u5206\u7c7b'}
             description={
-              '\u4ece\u623f\u95f4\u4e2d\u9009\u62e9\u4e0d\u540c\u7684\u8868\u60c5\u5206\u7c7b\uff0c\u52a0\u5165\u4f60\u7684\u5168\u5c40\u4f7f\u7528\u5217\u8868\u3002'
+              '\u5c06\u623f\u95f4\u91cc\u7684\u5171\u4eab\u5206\u7c7b\u52a0\u5165\u4f60\u7684\u5168\u5c40\u8868\u60c5\u9762\u677f\uff0c\u4e4b\u540e\u5728\u4efb\u4f55\u623f\u95f4\u90fd\u80fd\u5feb\u901f\u4f7f\u7528\u3002'
             }
             after={
               <>
