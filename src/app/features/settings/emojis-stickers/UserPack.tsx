@@ -37,11 +37,27 @@ type UserPackProps = {
 const createPersonalPackId = () =>
   `personal-${Date.now().toString(36)}-${randomStr(4).toLowerCase()}`;
 
-function CreatePersonalPackTile() {
+const createFallbackPackName = (content: UserImagePacksContent) => {
+  const existingNames = new Set(
+    Object.values(content.packs ?? {}).map((pack) => pack.pack?.display_name).filter(Boolean)
+  );
+
+  let index = 1;
+  let nextName = `\u4e2a\u4eba\u5206\u7c7b ${index}`;
+
+  while (existingNames.has(nextName)) {
+    index += 1;
+    nextName = `\u4e2a\u4eba\u5206\u7c7b ${index}`;
+  }
+
+  return nextName;
+};
+
+function CreatePersonalPackTile({ onViewPack }: UserPackProps) {
   const mx = useMatrixClient();
   const [packName, setPackName] = useState('');
 
-  const [createState, createPack] = useAsyncCallback<void, Error, [string]>(
+  const [createState, createPack] = useAsyncCallback<ImagePack, Error, [string]>(
     useCallback(
       async (name) => {
         const content = getCustomUserImagePacksContent(mx);
@@ -51,20 +67,25 @@ function CreatePersonalPackTile() {
           packId = createPersonalPackId();
         }
 
+        const trimmedName = name.trim();
+        const resolvedName = trimmedName || createFallbackPackName(content);
+        const packContent = {
+          pack: {
+            display_name: resolvedName,
+          },
+        };
+
         const updatedContent: UserImagePacksContent = {
           ...content,
           version: content.version ?? 1,
           packs: {
             ...(content.packs ?? {}),
-            [packId]: {
-              pack: {
-                display_name: name,
-              },
-            },
+            [packId]: packContent,
           },
         };
 
         await mx.setAccountData(AccountDataEvent.CinnyUserEmojiPacks, updatedContent);
+        return new ImagePack(packId, packContent, undefined);
       },
       [mx]
     )
@@ -80,12 +101,10 @@ function CreatePersonalPackTile() {
     evt.preventDefault();
     if (creating) return;
 
-    const name = packName.trim();
-    if (!name) return;
-
-    createPack(name)
-      .then(() => {
+    createPack(packName)
+      .then((imagePack) => {
         setPackName('');
+        onViewPack(imagePack);
       })
       .catch(() => undefined);
   };
@@ -101,8 +120,14 @@ function CreatePersonalPackTile() {
         title={'\u65b0\u5efa\u4e2a\u4eba\u5206\u7c7b'}
         description={'\u65b0\u5efa\u4e00\u4e2a\u5355\u72ec\u7684\u4e2a\u4eba\u8868\u60c5\u5206\u7c7b\uff0c\u7528\u6765\u6309\u4e3b\u9898\u6574\u7406\u81ea\u5df1\u7684\u8868\u60c5\u3001\u8d34\u7eb8\u6216\u7d20\u6750\u3002'}
       >
-        <Box as="form" gap="200" alignItems="Center" onSubmit={handleSubmit}>
-          <Box grow="Yes">
+        <Box
+          as="form"
+          direction="Column"
+          gap="200"
+          onSubmit={handleSubmit}
+          style={{ width: '100%' }}
+        >
+          <Box grow="Yes" style={{ width: '100%' }}>
             <Input
               name="packNameInput"
               value={packName}
@@ -110,21 +135,30 @@ function CreatePersonalPackTile() {
               size="400"
               variant="Secondary"
               radii="300"
-              placeholder={'\u4f8b\u5982\uff1a\u65e5\u5e38\u8868\u60c5'}
-              required
+              placeholder={'\u53ef\u9009\uff0c\u4f8b\u5982\uff1a\u65e5\u5e38\u8868\u60c5'}
               readOnly={creating}
+              style={{ width: '100%' }}
             />
           </Box>
-          <Box shrink="No">
-            <Button
-              variant="Success"
-              radii="300"
-              type="submit"
-              disabled={creating || packName.trim() === ''}
-              before={creating && <Spinner size="200" variant="Success" fill="Solid" />}
-            >
-              <Text size="B300">{'\u521b\u5efa'}</Text>
-            </Button>
+          <Box alignItems="Center" gap="300">
+            <Box grow="Yes">
+              <Text size="T200" priority="300">
+                {
+                  '\u5206\u7c7b\u540d\u79f0\u53ef\u4ee5\u5148\u4e0d\u586b\uff0c\u76f4\u63a5\u70b9\u51fb\u521b\u5efa\u540e\u4f1a\u81ea\u52a8\u751f\u6210\u540d\u79f0\uff0c\u7a0d\u540e\u518d\u6539\u4e5f\u53ef\u4ee5\u3002'
+                }
+              </Text>
+            </Box>
+            <Box shrink="No">
+              <Button
+                variant="Success"
+                radii="300"
+                type="submit"
+                disabled={creating}
+                before={creating && <Spinner size="200" variant="Success" fill="Solid" />}
+              >
+                <Text size="B300">{'\u76f4\u63a5\u521b\u5efa'}</Text>
+              </Button>
+            </Box>
           </Box>
         </Box>
       </SettingTile>
@@ -286,7 +320,7 @@ export function UserPack({ onViewPack }: UserPackProps) {
           ),
         true
       )}
-      <CreatePersonalPackTile />
+      <CreatePersonalPackTile onViewPack={onViewPack} />
       {customUserPacks.map((imagePack) => renderPack(imagePack))}
       {customUserPacks.length === 0 && (
         <SequenceCard
