@@ -5,14 +5,20 @@ import { Page, PageHeader, PageContent } from '../page';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { RoomImagePack } from './RoomImagePack';
 import { UserImagePack } from './UserImagePack';
+import { CustomUserImagePack } from './CustomUserImagePack';
 
 type ImagePackViewProps = {
-  address: PackAddress | undefined;
+  imagePack?: {
+    id: string;
+    address: PackAddress | undefined;
+  };
   requestClose: () => void;
 };
-export function ImagePackView({ address, requestClose }: ImagePackViewProps) {
+export function ImagePackView({ imagePack, requestClose }: ImagePackViewProps) {
   const mx = useMatrixClient();
-  const room = address && mx.getRoom(address.roomId);
+  const room = imagePack?.address && mx.getRoom(imagePack.address.roomId);
+  const userId = mx.getUserId();
+  const isDefaultUserPack = !imagePack?.address && imagePack?.id === userId;
 
   return (
     <Page>
@@ -38,8 +44,10 @@ export function ImagePackView({ address, requestClose }: ImagePackViewProps) {
       <Box grow="Yes">
         <Scroll hideTrack visibility="Hover">
           <PageContent>
-            {room && address ? (
-              <RoomImagePack room={room} stateKey={address.stateKey} />
+            {room && imagePack?.address ? (
+              <RoomImagePack room={room} stateKey={imagePack.address.stateKey} />
+            ) : imagePack && !isDefaultUserPack ? (
+              <CustomUserImagePack packId={imagePack.id} />
             ) : (
               <UserImagePack />
             )}
