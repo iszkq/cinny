@@ -65,6 +65,21 @@ function PageZoomFeature() {
   return null;
 }
 
+function PresenceSyncFeature() {
+  const mx = useMatrixClient();
+  const [presenceVisibility] = useSetting(settingsAtom, 'presenceVisibility');
+
+  useEffect(() => {
+    void mx.setSyncPresence?.(presenceVisibility);
+    const updatePresence = mx.setPresence?.({
+      presence: presenceVisibility,
+    });
+    updatePresence?.catch(() => undefined);
+  }, [mx, presenceVisibility]);
+
+  return null;
+}
+
 function FaviconUpdater() {
   const roomToUnread = useAtomValue(roomToUnreadAtom);
 
@@ -277,6 +292,7 @@ export function ClientNonUIFeatures({ children }: ClientNonUIFeaturesProps) {
     <>
       <SystemEmojiFeature />
       <PageZoomFeature />
+      <PresenceSyncFeature />
       <FaviconUpdater />
       <InviteNotifications />
       <MessageNotifications />

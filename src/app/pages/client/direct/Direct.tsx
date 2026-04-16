@@ -57,13 +57,13 @@ type DirectMenuProps = {
 };
 const DirectMenu = forwardRef<HTMLDivElement, DirectMenuProps>(({ requestClose }, ref) => {
   const mx = useMatrixClient();
-  const [hideActivity] = useSetting(settingsAtom, 'hideActivity');
+  const [sendReadReceipts] = useSetting(settingsAtom, 'sendReadReceipts');
   const orphanRooms = useDirectRooms();
   const unread = useRoomsUnread(orphanRooms, roomToUnreadAtom);
 
   const handleMarkAsRead = () => {
     if (!unread) return;
-    orphanRooms.forEach((rId) => markAsRead(mx, rId, hideActivity));
+    orphanRooms.forEach((rId) => markAsRead(mx, rId, !sendReadReceipts));
     requestClose();
   };
 

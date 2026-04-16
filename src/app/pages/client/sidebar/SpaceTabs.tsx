@@ -102,7 +102,7 @@ type SpaceMenuProps = {
 const SpaceMenu = forwardRef<HTMLDivElement, SpaceMenuProps>(
   ({ room, requestClose, onUnpin }, ref) => {
     const mx = useMatrixClient();
-    const [hideActivity] = useSetting(settingsAtom, 'hideActivity');
+    const [sendReadReceipts] = useSetting(settingsAtom, 'sendReadReceipts');
     const roomToParents = useAtomValue(roomToParentsAtom);
     const powerLevels = usePowerLevels(room);
     const creators = useRoomCreators(room);
@@ -121,7 +121,7 @@ const SpaceMenu = forwardRef<HTMLDivElement, SpaceMenuProps>(
     const unread = useRoomsUnread(allChild, roomToUnreadAtom);
 
     const handleMarkAsRead = () => {
-      allChild.forEach((childRoomId) => markAsRead(mx, childRoomId, hideActivity));
+      allChild.forEach((childRoomId) => markAsRead(mx, childRoomId, !sendReadReceipts));
       requestClose();
     };
 
