@@ -21,12 +21,12 @@ import {
   ImageUsage,
   UserImagePacksContent,
   getCustomUserImagePacksContent,
+  setCustomUserImagePacksContent,
 } from '../../../plugins/custom-emoji';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { mxcUrlToHttp } from '../../../utils/matrix';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { LineClamp2 } from '../../../styles/Text.css';
-import { AccountDataEvent } from '../../../../types/matrix/accountData';
 import { randomStr } from '../../../utils/common';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 
@@ -84,7 +84,7 @@ function CreatePersonalPackTile({ onViewPack }: UserPackProps) {
           },
         };
 
-        await mx.setAccountData(AccountDataEvent.CinnyUserEmojiPacks, updatedContent);
+        await setCustomUserImagePacksContent(mx, updatedContent);
         return new ImagePack(packId, packContent, undefined);
       },
       [mx]
@@ -227,7 +227,7 @@ export function UserPack({ onViewPack }: UserPackProps) {
           delete updatedContent.packs;
         }
 
-        await mx.setAccountData(AccountDataEvent.CinnyUserEmojiPacks, updatedContent);
+        await setCustomUserImagePacksContent(mx, updatedContent);
       } catch {
         setRemoveError('\u5220\u9664\u5206\u7c7b\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5\u3002');
       } finally {
