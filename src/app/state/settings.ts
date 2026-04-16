@@ -1,4 +1,5 @@
 import { atom } from 'jotai';
+import { SetPresence } from 'matrix-js-sdk';
 
 const STORAGE_KEY = 'settings';
 export type DateFormat =
@@ -14,6 +15,8 @@ export enum MessageLayout {
   Compact = 1,
   Bubble = 2,
 }
+export const PresenceVisibility = SetPresence;
+export type PresenceVisibility = SetPresence;
 
 export interface Settings {
   themeId?: string;
@@ -26,7 +29,9 @@ export interface Settings {
   twitterEmoji: boolean;
   pageZoom: number;
   readReceiptAvatarCount: number;
-  hideActivity: boolean;
+  presenceVisibility: PresenceVisibility;
+  sendTypingNotifications: boolean;
+  sendReadReceipts: boolean;
 
   isPeopleDrawer: boolean;
   memberSortFilterIndex: number;
@@ -61,12 +66,14 @@ const defaultSettings: Settings = {
   twitterEmoji: false,
   pageZoom: 100,
   readReceiptAvatarCount: 7,
-  hideActivity: false,
+  presenceVisibility: PresenceVisibility.Offline,
+  sendTypingNotifications: false,
+  sendReadReceipts: false,
 
   isPeopleDrawer: true,
   memberSortFilterIndex: 0,
   enterForNewline: false,
-  messageLayout: 0,
+  messageLayout: MessageLayout.Bubble,
   messageSpacing: '400',
   hideMembershipEvents: false,
   hideNickAvatarEvents: true,
@@ -79,7 +86,7 @@ const defaultSettings: Settings = {
   showNotifications: true,
   isNotificationSounds: true,
 
-  hour24Clock: false,
+  hour24Clock: true,
   dateFormatString: 'D MMM YYYY',
 
   developerTools: false,
@@ -88,9 +95,30 @@ const defaultSettings: Settings = {
 export const getSettings = () => {
   const settings = localStorage.getItem(STORAGE_KEY);
   if (settings === null) return defaultSettings;
+
+  const {
+    hideActivity,
+    ...storedSettings
+  } = JSON.parse(settings) as Partial<Settings> & { hideActivity?: boolean };
+
   return {
     ...defaultSettings,
-    ...(JSON.parse(settings) as Settings),
+    ...storedSettings,
+    presenceVisibility:
+      storedSettings.presenceVisibility ??
+      (hideActivity === true
+        ? PresenceVisibility.Offline
+        : defaultSettings.presenceVisibility),
+    sendTypingNotifications:
+      storedSettings.sendTypingNotifications ??
+      (typeof hideActivity === 'boolean'
+        ? !hideActivity
+        : defaultSettings.sendTypingNotifications),
+    sendReadReceipts:
+      storedSettings.sendReadReceipts ??
+      (typeof hideActivity === 'boolean'
+        ? !hideActivity
+        : defaultSettings.sendReadReceipts),
   };
 };
 
