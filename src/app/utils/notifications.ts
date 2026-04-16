@@ -1,4 +1,4 @@
-import { MatrixClient, MatrixEvent, ReceiptType } from 'matrix-js-sdk';
+import { EventTimeline, MatrixClient, MatrixEvent, ReceiptType } from 'matrix-js-sdk';
 import { getRoomFullyReadEventId, setOptimisticRoomReadMarker } from './room';
 
 export const ROOM_MARKED_AS_READ = 'cinny:room-marked-as-read';
@@ -26,28 +26,35 @@ const getLatestValidEvent = (timeline: MatrixEvent[]) => {
 };
 
 const getPrivateReceiptPublicAnchor = (
-  roomId: string,
+  room: ReturnType<MatrixClient['getRoom']>,
   timeline: MatrixEvent[],
   userId: string,
+  latestEventId: string,
   publicReadEventId?: string | null
 ) => {
-  if (!publicReadEventId) return undefined;
-
-  const publicReadIndex = timeline.findIndex((event) => event.getId() === publicReadEventId);
-  if (publicReadIndex === -1) return undefined;
-
-  for (let i = publicReadIndex; i >= 0; i -= 1) {
+  for (let i = timeline.length - 1; i >= 0; i -= 1) {
     const event = timeline[i];
     if (event.isSending()) continue;
-    if (event.getSender() === userId) return event;
+    if (event.getSender() === userId && event.getId() !== latestEventId) return event;
   }
 
-  for (let i = 0; i <= publicReadIndex; i += 1) {
-    const event = timeline[i];
-    if (!event.isSending()) return event;
+  const roomCreateEvent =
+    room
+      ?.getLiveTimeline()
+      .getState(EventTimeline.FORWARDS)
+      ?.getStateEvents('m.room.create', '') ?? undefined;
+  if (roomCreateEvent && roomCreateEvent.getId() !== latestEventId) {
+    return roomCreateEvent;
   }
 
-  return timeline.find((event) => !event.isSending() && event.getRoomId() === roomId);
+  if (publicReadEventId) {
+    const publicReadEvent = timeline.find((event) => event.getId() === publicReadEventId);
+    if (publicReadEvent && !publicReadEvent.isSending() && publicReadEventId !== latestEventId) {
+      return publicReadEvent;
+    }
+  }
+
+  return timeline.find((event) => !event.isSending() && event.getId() !== latestEventId);
 };
 
 export async function markAsRead(mx: MatrixClient, roomId: string, privateReceipt: boolean) {
@@ -67,7 +74,7 @@ export async function markAsRead(mx: MatrixClient, roomId: string, privateReceip
   if (!latestEventId) return;
 
   const publicReceiptAnchor = privateReceipt
-    ? getPrivateReceiptPublicAnchor(roomId, timeline, userId, publicReadEventId)
+    ? getPrivateReceiptPublicAnchor(room, timeline, userId, latestEventId, publicReadEventId)
     : undefined;
   const publicReceiptEvent = privateReceipt
     ? publicReceiptAnchor && publicReceiptAnchor.getId() !== publicReadEventId
