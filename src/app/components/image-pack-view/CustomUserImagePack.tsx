@@ -4,11 +4,11 @@ import {
   ImagePack,
   PackContent,
   PackImageReader,
+  setCustomUserImagePacksContent,
   UserImagePacksContent,
   getCustomUserImagePacksContent,
 } from '../../plugins/custom-emoji';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
-import { AccountDataEvent } from '../../../types/matrix/accountData';
 import { useCustomUserImagePack, useCustomUserImagePacks, useUserImagePack } from '../../hooks/useImagePacks';
 import {
   getCustomPersonalPackTargets,
@@ -62,7 +62,7 @@ export function CustomUserImagePack({ packId }: CustomUserImagePackProps) {
         },
       };
 
-      await mx.setAccountData(AccountDataEvent.CinnyUserEmojiPacks, updatedContent);
+      await setCustomUserImagePacksContent(mx, updatedContent);
     },
     [mx, packId]
   );

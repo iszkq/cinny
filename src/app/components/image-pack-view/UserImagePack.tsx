@@ -1,8 +1,12 @@
 import React, { useCallback, useMemo } from 'react';
 import { ImagePackContent } from './ImagePackContent';
-import { ImagePack, PackContent, PackImageReader } from '../../plugins/custom-emoji';
+import {
+  ImagePack,
+  PackContent,
+  PackImageReader,
+  setRawDefaultUserImagePackContent,
+} from '../../plugins/custom-emoji';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
-import { AccountDataEvent } from '../../../types/matrix/accountData';
 import { useCustomUserImagePacks, useUserImagePack } from '../../hooks/useImagePacks';
 import {
   getCustomPersonalPackTargets,
@@ -24,7 +28,7 @@ export function UserImagePack() {
 
   const handleUpdate = useCallback(
     async (packContent: PackContent) => {
-      await mx.setAccountData(AccountDataEvent.PoniesUserEmotes, packContent);
+      await setRawDefaultUserImagePackContent(mx, packContent);
     },
     [mx]
   );
