@@ -57,7 +57,7 @@ export function Login() {
   return (
     <Box direction="Column" gap="500">
       <Text size="H2" priority="400">
-        Login
+        登录
       </Text>
       {parsedFlows.token && loginSearchParams.loginToken && (
         <TokenLogin token={loginSearchParams.loginToken} />
@@ -86,13 +86,13 @@ export function Login() {
       {!parsedFlows.password && !parsedFlows.sso && (
         <>
           <Text style={{ color: color.Critical.Main }}>
-            {`This client does not support login on "${server}" homeserver. Password and SSO based login method not found.`}
+            {`当前客户端不支持在 "${server}" 上登录，未找到密码登录或 SSO 登录方式。`}
           </Text>
           <span data-spacing-node />
         </>
       )}
       <Text align="Center">
-        Do not have an account? <Link to={getRegisterPath(server)}>Register</Link>
+        还没有账号？<Link to={getRegisterPath(server)}>注册</Link>
       </Text>
     </Box>
   );

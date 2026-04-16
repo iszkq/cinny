@@ -31,7 +31,7 @@ function LoginTokenError({ message }: { message: string }) {
     >
       <Icon size="300" filled src={Icons.Warning} />
       <Box direction="Column" gap="100">
-        <Text size="L400">Token Login</Text>
+        <Text size="L400">令牌登录</Text>
         <Text size="T300">
           <b>{message}</b>
         </Text>
@@ -68,19 +68,19 @@ export function TokenLogin({ token }: TokenLoginProps) {
       {loginState.status === AsyncStatus.Error && (
         <>
           {loginState.error.errcode === LoginError.Forbidden && (
-            <LoginTokenError message="Invalid login token." />
+            <LoginTokenError message="登录令牌无效。" />
           )}
           {loginState.error.errcode === LoginError.UserDeactivated && (
-            <LoginTokenError message="This account has been deactivated." />
+            <LoginTokenError message="该账号已被停用。" />
           )}
           {loginState.error.errcode === LoginError.InvalidRequest && (
-            <LoginTokenError message="Failed to login. Part of your request data is invalid." />
+            <LoginTokenError message="登录失败，请求中的部分数据无效。" />
           )}
           {loginState.error.errcode === LoginError.RateLimited && (
-            <LoginTokenError message="Failed to login. Your login request has been rate-limited by server, Please try after some time." />
+            <LoginTokenError message="登录失败，请求过于频繁，请稍后再试。" />
           )}
           {loginState.error.errcode === LoginError.Unknown && (
-            <LoginTokenError message="Failed to login. Unknown reason." />
+            <LoginTokenError message="登录失败，原因未知。" />
           )}
         </>
       )}
