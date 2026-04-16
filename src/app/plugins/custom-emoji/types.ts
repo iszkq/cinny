@@ -21,6 +21,7 @@ export enum ImageUsage {
 
 export const CINNY_SYNC_SOURCE_PACK_ID = 'in.cinny.source_pack_id';
 export const CINNY_SYNC_SOURCE_SHORTCODE = 'in.cinny.source_shortcode';
+export const CINNY_SOURCE_MXC = 'in.cinny.source_mxc';
 
 export type PackImage = {
   url: string;
@@ -29,6 +30,7 @@ export type PackImage = {
   info?: IImageInfo;
   [CINNY_SYNC_SOURCE_PACK_ID]?: string;
   [CINNY_SYNC_SOURCE_SHORTCODE]?: string;
+  [CINNY_SOURCE_MXC]?: string;
 };
 
 export type PackImages = Record<string, PackImage>;

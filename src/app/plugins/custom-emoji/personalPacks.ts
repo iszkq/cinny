@@ -2,6 +2,7 @@ import { MatrixClient } from 'matrix-js-sdk';
 import { AccountDataEvent } from '../../../types/matrix/accountData';
 import { suffixRename } from '../../utils/common';
 import {
+  CINNY_SOURCE_MXC,
   CINNY_SYNC_SOURCE_PACK_ID,
   CINNY_SYNC_SOURCE_SHORTCODE,
   PackContent,
@@ -108,6 +109,14 @@ const findShortcodeByUrl = (
 ): string | undefined =>
   Object.entries(images ?? {}).find(([, image]) => image?.url === url)?.[0];
 
+const findShortcodeBySourceUrl = (
+  images: NonNullable<PackContent['images']> | undefined,
+  sourceUrl: string
+): string | undefined =>
+  Object.entries(images ?? {}).find(
+    ([, image]) => image?.url === sourceUrl || image?.[CINNY_SOURCE_MXC] === sourceUrl
+  )?.[0];
+
 const buildSyncedShortcode = (
   packId: string,
   sourceShortcode: string,
@@ -140,6 +149,12 @@ export const buildSyncedDefaultPackContent = (
     Object.entries(packContent?.images ?? {}).forEach(([shortcode, image]) => {
       if (!image || typeof image !== 'object' || typeof image.url !== 'string') return;
       if (seenUrls.has(image.url)) return;
+      const effectiveUsage =
+        Array.isArray(image.usage) && image.usage.length > 0
+          ? image.usage
+          : Array.isArray(packContent.pack?.usage) && packContent.pack.usage.length > 0
+            ? packContent.pack.usage
+            : undefined;
 
       const nextShortcode = buildSyncedShortcode(packId, shortcode, (candidate) =>
         usedShortcodes.has(candidate)
@@ -149,6 +164,7 @@ export const buildSyncedDefaultPackContent = (
       seenUrls.add(image.url);
       baseImages[nextShortcode] = {
         ...stripSyncMeta(image),
+        usage: effectiveUsage,
         [CINNY_SYNC_SOURCE_PACK_ID]: packId,
         [CINNY_SYNC_SOURCE_SHORTCODE]: shortcode,
       };
@@ -163,6 +179,9 @@ export const buildSyncedDefaultPackContent = (
 
   return nextDefaultPack;
 };
+
+const packContentEqual = (pack1?: PackContent, pack2?: PackContent): boolean =>
+  JSON.stringify(clonePackContent(pack1)) === JSON.stringify(clonePackContent(pack2));
 
 const commitPersonalPackState = async (
   mx: MatrixClient,
@@ -207,6 +226,30 @@ export const setCustomUserImagePacksContent = async (
   );
 };
 
+export const isDefaultPersonalPackImageSaved = (
+  mx: MatrixClient,
+  sourceUrl: string | undefined
+): boolean => {
+  if (!sourceUrl) return false;
+
+  return !!findShortcodeBySourceUrl(getRawUserImagePackContent(mx)?.images, sourceUrl);
+};
+
+export const ensurePersonalPackSync = async (mx: MatrixClient): Promise<boolean> => {
+  const rawDefaultPack = getRawUserImagePackContent(mx);
+  const syncedDefaultPack = buildSyncedDefaultPackContent(
+    rawDefaultPack,
+    getCustomUserImagePacksContent(mx)
+  );
+
+  if (packContentEqual(rawDefaultPack, syncedDefaultPack)) {
+    return false;
+  }
+
+  await mx.setAccountData(AccountDataEvent.PoniesUserEmotes, syncedDefaultPack);
+  return true;
+};
+
 export const addImageToDefaultPersonalPack = async (
   mx: MatrixClient,
   image: PackImage,
@@ -214,23 +257,35 @@ export const addImageToDefaultPersonalPack = async (
 ): Promise<string> => {
   const nextDefaultPack = getEditableDefaultUserImagePackContent(mx);
   const existingShortcode =
-    typeof image.url === 'string' ? findShortcodeByUrl(nextDefaultPack.images, image.url) : undefined;
+    typeof image.url === 'string'
+      ? findShortcodeBySourceUrl(
+          getRawUserImagePackContent(mx)?.images,
+          image[CINNY_SOURCE_MXC] ?? image.url
+        ) ?? findShortcodeByUrl(nextDefaultPack.images, image.url)
+      : undefined;
 
   if (existingShortcode) return existingShortcode;
 
-  const nextImages = {
+  const existingImages = {
     ...(nextDefaultPack.images ?? {}),
   };
   const hasShortcode = (candidate: string) =>
-    Object.prototype.hasOwnProperty.call(nextImages, candidate);
-
+    Object.prototype.hasOwnProperty.call(existingImages, candidate);
   let nextShortcode = normalizeShortcode(preferredShortcode);
   if (hasShortcode(nextShortcode)) {
-    nextShortcode = suffixRename(nextShortcode, hasShortcode);
+    const existingImage = existingImages[nextShortcode];
+    if (existingImage?.url !== image.url) {
+      nextShortcode = suffixRename(nextShortcode, hasShortcode);
+    }
   }
 
-  nextImages[nextShortcode] = stripSyncMeta(image);
-  nextDefaultPack.images = nextImages;
+  const reorderedImages = {
+    [nextShortcode]: stripSyncMeta(image),
+  } as NonNullable<PackContent['images']>;
+  Object.entries(existingImages).forEach(([shortcode, entry]) => {
+    reorderedImages[shortcode] = entry;
+  });
+  nextDefaultPack.images = reorderedImages;
 
   await commitPersonalPackState(mx, nextDefaultPack);
 
