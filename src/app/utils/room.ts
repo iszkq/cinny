@@ -35,11 +35,89 @@ type FullyReadContent = {
 };
 
 const FULLY_READ_EVENT_TYPE = 'm.fully_read';
+const OPTIMISTIC_ROOM_READ_MARKERS_STORAGE_KEY = 'cinny:optimistic-room-read-markers';
 const optimisticRoomReadMarkers = new Map<string, string>();
 
 type RoomReadMarkerState = {
   eventId?: string;
   optimistic: boolean;
+};
+
+type OptimisticRoomReadMarkersByUser = Record<string, Record<string, string>>;
+
+const readOptimisticRoomReadMarkers = (): OptimisticRoomReadMarkersByUser => {
+  if (typeof window === 'undefined') return {};
+
+  try {
+    const storage = window.localStorage.getItem(OPTIMISTIC_ROOM_READ_MARKERS_STORAGE_KEY);
+    if (!storage) return {};
+
+    const parsed = JSON.parse(storage);
+    return parsed && typeof parsed === 'object' ? (parsed as OptimisticRoomReadMarkersByUser) : {};
+  } catch {
+    return {};
+  }
+};
+
+const writeOptimisticRoomReadMarkers = (markersByUser: OptimisticRoomReadMarkersByUser) => {
+  if (typeof window === 'undefined') return;
+
+  try {
+    if (Object.keys(markersByUser).length === 0) {
+      window.localStorage.removeItem(OPTIMISTIC_ROOM_READ_MARKERS_STORAGE_KEY);
+      return;
+    }
+
+    window.localStorage.setItem(
+      OPTIMISTIC_ROOM_READ_MARKERS_STORAGE_KEY,
+      JSON.stringify(markersByUser)
+    );
+  } catch {
+    // ignore local storage errors
+  }
+};
+
+const getPersistedOptimisticRoomReadMarker = (
+  roomId: string,
+  userId?: string | null
+): string | undefined => {
+  if (!userId) return undefined;
+
+  const roomReadMarker = readOptimisticRoomReadMarkers()[userId]?.[roomId];
+  return typeof roomReadMarker === 'string' ? roomReadMarker : undefined;
+};
+
+const setPersistedOptimisticRoomReadMarker = (
+  roomId: string,
+  eventId: string,
+  userId?: string | null
+) => {
+  if (!userId) return;
+
+  const markersByUser = readOptimisticRoomReadMarkers();
+  markersByUser[userId] = {
+    ...(markersByUser[userId] ?? {}),
+    [roomId]: eventId,
+  };
+  writeOptimisticRoomReadMarkers(markersByUser);
+};
+
+const clearPersistedOptimisticRoomReadMarker = (roomId: string, userId?: string | null) => {
+  if (!userId) return;
+
+  const markersByUser = readOptimisticRoomReadMarkers();
+  const userMarkers = markersByUser[userId];
+  if (!userMarkers || !(roomId in userMarkers)) return;
+
+  delete userMarkers[roomId];
+
+  if (Object.keys(userMarkers).length === 0) {
+    delete markersByUser[userId];
+  } else {
+    markersByUser[userId] = userMarkers;
+  }
+
+  writeOptimisticRoomReadMarkers(markersByUser);
 };
 
 export const getStateEvent = (
@@ -64,13 +142,23 @@ export const getRoomFullyReadEventId = (room: Room): string | undefined => {
   return typeof eventId === 'string' ? eventId : undefined;
 };
 
-export const setOptimisticRoomReadMarker = (roomId: string, eventId: string) => {
+export const setOptimisticRoomReadMarker = (
+  roomId: string,
+  eventId: string,
+  userId?: string | null
+) => {
   optimisticRoomReadMarkers.set(roomId, eventId);
+  setPersistedOptimisticRoomReadMarker(roomId, eventId, userId);
 };
 
-export const clearOptimisticRoomReadMarker = (roomId: string, eventId?: string) => {
+export const clearOptimisticRoomReadMarker = (
+  roomId: string,
+  eventId?: string,
+  userId?: string | null
+) => {
   if (eventId && optimisticRoomReadMarkers.get(roomId) !== eventId) return;
   optimisticRoomReadMarkers.delete(roomId);
+  clearPersistedOptimisticRoomReadMarker(roomId, userId);
 };
 
 const getStoredRoomReadMarkerEventId = (
@@ -90,7 +178,13 @@ const getLiveTimelineEventIndex = (room: Room, eventId?: string): number => {
 
 const getRoomReadMarkerState = (room: Room, userId?: string | null): RoomReadMarkerState => {
   const storedReadMarkerEventId = getStoredRoomReadMarkerEventId(room, userId);
-  const optimisticReadMarkerEventId = optimisticRoomReadMarkers.get(room.roomId);
+  const optimisticReadMarkerEventId =
+    optimisticRoomReadMarkers.get(room.roomId) ??
+    getPersistedOptimisticRoomReadMarker(room.roomId, userId);
+
+  if (optimisticReadMarkerEventId) {
+    optimisticRoomReadMarkers.set(room.roomId, optimisticReadMarkerEventId);
+  }
 
   if (!optimisticReadMarkerEventId) {
     return {
@@ -100,7 +194,7 @@ const getRoomReadMarkerState = (room: Room, userId?: string | null): RoomReadMar
   }
 
   if (storedReadMarkerEventId === optimisticReadMarkerEventId) {
-    clearOptimisticRoomReadMarker(room.roomId, optimisticReadMarkerEventId);
+    clearOptimisticRoomReadMarker(room.roomId, optimisticReadMarkerEventId, userId);
     return {
       eventId: storedReadMarkerEventId,
       optimistic: false,
@@ -109,7 +203,7 @@ const getRoomReadMarkerState = (room: Room, userId?: string | null): RoomReadMar
 
   const optimisticIndex = getLiveTimelineEventIndex(room, optimisticReadMarkerEventId);
   if (optimisticIndex === -1) {
-    clearOptimisticRoomReadMarker(room.roomId, optimisticReadMarkerEventId);
+    clearOptimisticRoomReadMarker(room.roomId, optimisticReadMarkerEventId, userId);
     return {
       eventId: storedReadMarkerEventId,
       optimistic: false,
@@ -118,7 +212,7 @@ const getRoomReadMarkerState = (room: Room, userId?: string | null): RoomReadMar
 
   const storedIndex = getLiveTimelineEventIndex(room, storedReadMarkerEventId);
   if (storedIndex >= optimisticIndex) {
-    clearOptimisticRoomReadMarker(room.roomId, optimisticReadMarkerEventId);
+    clearOptimisticRoomReadMarker(room.roomId, optimisticReadMarkerEventId, userId);
     return {
       eventId: storedReadMarkerEventId,
       optimistic: false,

@@ -1,4 +1,4 @@
-import { EventTimeline, MatrixClient, MatrixEvent, ReceiptType } from 'matrix-js-sdk';
+import { MatrixClient, MatrixEvent, ReceiptType } from 'matrix-js-sdk';
 import { getRoomFullyReadEventId, setOptimisticRoomReadMarker } from './room';
 
 export const ROOM_MARKED_AS_READ = 'cinny:room-marked-as-read';
@@ -25,38 +25,6 @@ const getLatestValidEvent = (timeline: MatrixEvent[]) => {
   return null;
 };
 
-const getPrivateReceiptPublicAnchor = (
-  room: ReturnType<MatrixClient['getRoom']>,
-  timeline: MatrixEvent[],
-  userId: string,
-  latestEventId: string,
-  publicReadEventId?: string | null
-) => {
-  for (let i = timeline.length - 1; i >= 0; i -= 1) {
-    const event = timeline[i];
-    if (event.isSending()) continue;
-    if (event.getSender() === userId && event.getId() !== latestEventId) return event;
-  }
-
-  const roomCreateEvent =
-    room
-      ?.getLiveTimeline()
-      .getState(EventTimeline.FORWARDS)
-      ?.getStateEvents('m.room.create', '') ?? undefined;
-  if (roomCreateEvent && roomCreateEvent.getId() !== latestEventId) {
-    return roomCreateEvent;
-  }
-
-  if (publicReadEventId) {
-    const publicReadEvent = timeline.find((event) => event.getId() === publicReadEventId);
-    if (publicReadEvent && !publicReadEvent.isSending() && publicReadEventId !== latestEventId) {
-      return publicReadEvent;
-    }
-  }
-
-  return timeline.find((event) => !event.isSending() && event.getId() !== latestEventId);
-};
-
 export async function markAsRead(mx: MatrixClient, roomId: string, privateReceipt: boolean) {
   const room = mx.getRoom(roomId);
   if (!room) return;
@@ -73,54 +41,33 @@ export async function markAsRead(mx: MatrixClient, roomId: string, privateReceip
   const latestEventId = latestEvent.getId();
   if (!latestEventId) return;
 
-  const publicReceiptAnchor = privateReceipt
-    ? getPrivateReceiptPublicAnchor(room, timeline, userId, latestEventId, publicReadEventId)
-    : undefined;
-  const publicReceiptEvent = privateReceipt
-    ? publicReceiptAnchor && publicReceiptAnchor.getId() !== publicReadEventId
-      ? publicReceiptAnchor
-      : undefined
-    : latestEvent;
-
   const fullyReadUpToDate = latestEventId === fullyReadEventId;
   const publicReadUpToDate = latestEventId === publicReadEventId;
-  const publicReadHidden =
-    !privateReceipt ||
-    !publicReadEventId ||
-    !publicReceiptAnchor ||
-    publicReceiptAnchor.getId() === publicReadEventId;
 
   if (
-    (privateReceipt && fullyReadUpToDate && publicReadHidden) ||
+    (privateReceipt && fullyReadUpToDate) ||
     (!privateReceipt && fullyReadUpToDate && publicReadUpToDate)
   ) {
+    setOptimisticRoomReadMarker(roomId, latestEventId, userId);
+    dispatchRoomMarkedAsRead(roomId);
+    return;
+  }
+
+  if (privateReceipt) {
+    setOptimisticRoomReadMarker(roomId, latestEventId, userId);
+    dispatchRoomMarkedAsRead(roomId);
     return;
   }
 
   try {
-    await mx.setRoomReadMarkers(
-      roomId,
-      latestEventId,
-      publicReceiptEvent,
-      privateReceipt ? latestEvent : undefined
-    );
+    await mx.setRoomReadMarkers(roomId, latestEventId, latestEvent);
   } catch (error) {
-    const requests: Promise<unknown>[] = [
+    await Promise.all([
       mx.setRoomAccountData(roomId, FULLY_READ_EVENT_TYPE, { event_id: latestEventId }),
-    ];
-
-    if (privateReceipt) {
-      if (publicReceiptEvent && publicReceiptEvent.getId() !== publicReadEventId) {
-        requests.push(mx.sendReadReceipt(publicReceiptEvent, ReceiptType.Read));
-      }
-      requests.push(mx.sendReadReceipt(latestEvent, ReceiptType.ReadPrivate));
-    } else {
-      requests.push(mx.sendReadReceipt(latestEvent, ReceiptType.Read));
-    }
-
-    await Promise.all(requests);
+      mx.sendReadReceipt(latestEvent, ReceiptType.Read),
+    ]);
   }
 
-  setOptimisticRoomReadMarker(roomId, latestEventId);
+  setOptimisticRoomReadMarker(roomId, latestEventId, userId);
   dispatchRoomMarkedAsRead(roomId);
 }
