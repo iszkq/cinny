@@ -1,5 +1,21 @@
 import React, { FormEventHandler, ReactNode, useMemo, useState } from 'react';
-import { Badge, Box, Button, Chip, Icon, Icons, Input, Text } from 'folds';
+import {
+  Badge,
+  Box,
+  Button,
+  Chip,
+  config,
+  Icon,
+  Icons,
+  Input,
+  Menu,
+  MenuItem,
+  PopOut,
+  RectCords,
+  Spinner,
+  Text,
+} from 'folds';
+import FocusTrap from 'focus-trap-react';
 import { UsageSwitcher, useUsageStr } from './UsageSwitcher';
 import { mxcUrlToHttp } from '../../utils/matrix';
 import * as css from './style.css';
@@ -9,6 +25,8 @@ import { SettingTile } from '../setting-tile';
 import { useObjectURL } from '../../hooks/useObjectURL';
 import { createUploadAtom, TUploadAtom } from '../../state/upload';
 import { replaceSpaceWithDash } from '../../utils/common';
+import { stopPropagation } from '../../utils/keyboard';
+import { PersonalImagePackTarget } from './personalPackActions';
 
 type ImageTileProps = {
   defaultShortcode: string;
@@ -19,6 +37,10 @@ type ImageTileProps = {
   onEdit?: (defaultShortcode: string, image: PackImageReader) => void;
   deleted?: boolean;
   onDeleteToggle?: (defaultShortcode: string) => void;
+  moveTargets?: PersonalImagePackTarget[];
+  canMove?: boolean;
+  moving?: boolean;
+  onMove?: (defaultShortcode: string, image: PackImageReader, targetPackId: string) => void;
 };
 export function ImageTile({
   defaultShortcode,
@@ -29,9 +51,16 @@ export function ImageTile({
   onEdit,
   onDeleteToggle,
   deleted,
+  moveTargets,
+  canMove,
+  moving,
+  onMove,
 }: ImageTileProps) {
   const mx = useMatrixClient();
   const getUsageStr = useUsageStr();
+  const [menuCords, setMenuCords] = useState<RectCords>();
+
+  const canShowMove = !!moveTargets && moveTargets.length > 0;
 
   return (
     <SettingTile
@@ -85,6 +114,67 @@ export function ImageTile({
               >
                 <Text size="B300">{'\u7f16\u8f91'}</Text>
               </Chip>
+            )}
+            {!deleted && canShowMove && (
+              <>
+                <Chip
+                  variant="Secondary"
+                  radii="Pill"
+                  aria-disabled={!canMove}
+                  onClick={
+                    canMove
+                      ? (evt) => setMenuCords(evt.currentTarget.getBoundingClientRect())
+                      : undefined
+                  }
+                >
+                  {moving ? (
+                    <Box alignItems="Center" gap="100">
+                      <Spinner size="100" />
+                      <Text size="B300">{'\u79fb\u52a8\u4e2d'}</Text>
+                    </Box>
+                  ) : (
+                    <Text size="B300">{'\u79fb\u52a8\u5230'}</Text>
+                  )}
+                </Chip>
+                <PopOut
+                  anchor={menuCords}
+                  offset={5}
+                  position="Bottom"
+                  align="End"
+                  content={
+                    <FocusTrap
+                      focusTrapOptions={{
+                        initialFocus: false,
+                        onDeactivate: () => setMenuCords(undefined),
+                        clickOutsideDeactivates: true,
+                        isKeyForward: (evt: KeyboardEvent) =>
+                          evt.key === 'ArrowDown' || evt.key === 'ArrowRight',
+                        isKeyBackward: (evt: KeyboardEvent) =>
+                          evt.key === 'ArrowUp' || evt.key === 'ArrowLeft',
+                        escapeDeactivates: stopPropagation,
+                      }}
+                    >
+                      <Menu>
+                        <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
+                          {moveTargets?.map((target) => (
+                            <MenuItem
+                              key={target.id}
+                              size="300"
+                              radii="300"
+                              onClick={() => {
+                                setMenuCords(undefined);
+                                onMove?.(defaultShortcode, image, target.id);
+                              }}
+                            >
+                              <Text size="T300">{target.label}</Text>
+                            </MenuItem>
+                          ))}
+                        </Box>
+                      </Menu>
+                    </FocusTrap>
+                  }
+                />
+              </>
             )}
           </Box>
         ) : undefined

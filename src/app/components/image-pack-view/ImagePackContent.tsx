@@ -24,15 +24,22 @@ import { getImageFileUrl, loadImageElement, renameFile } from '../../utils/dom';
 import { replaceSpaceWithDash, suffixRename } from '../../utils/common';
 import { getFileNameWithoutExt } from '../../utils/mimeTypes';
 import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
+import { PersonalImagePackTarget } from './personalPackActions';
 
 export type ImagePackContentProps = {
   imagePack: ImagePack;
   canEdit?: boolean;
   onUpdate?: (packContent: PackContent) => Promise<void>;
+  moveTargets?: PersonalImagePackTarget[];
+  onMoveImage?: (
+    shortcode: string,
+    image: PackImageReader,
+    targetPackId: string
+  ) => Promise<void>;
 };
 
 export const ImagePackContent = as<'div', ImagePackContentProps>(
-  ({ imagePack, canEdit, onUpdate, ...props }, ref) => {
+  ({ imagePack, canEdit, onUpdate, moveTargets, onMoveImage, ...props }, ref) => {
     const useAuthentication = useMediaAuthentication();
 
     const [metaEditing, setMetaEditing] = useState(false);
@@ -45,6 +52,8 @@ export const ImagePackContent = as<'div', ImagePackContentProps>(
     const [imagesEditing, setImagesEditing] = useState<Set<string>>(new Set());
     const [savedImages, setSavedImages] = useState<Map<string, PackImageReader>>(new Map());
     const [deleteImages, setDeleteImages] = useState<Set<string>>(new Set());
+    const [movingShortcode, setMovingShortcode] = useState<string>();
+    const [moveError, setMoveError] = useState<string>();
 
     const hasImageWithShortcode = useCallback(
       (shortcode: string): boolean => {
@@ -215,6 +224,33 @@ export const ImagePackContent = as<'div', ImagePackContentProps>(
       deleteImages.size > 0;
     const canApplyChanges = !metaEditing && imagesEditing.size === 0 && files.length === 0;
     const applying = applyState.status === AsyncStatus.Loading;
+    const canMoveImage =
+      !!onMoveImage &&
+      !savedChanges &&
+      !metaEditing &&
+      imagesEditing.size === 0 &&
+      files.length === 0 &&
+      !applying &&
+      !movingShortcode;
+
+    const handleMoveImage = async (
+      shortcode: string,
+      image: PackImageReader,
+      targetPackId: string
+    ) => {
+      if (!onMoveImage) return;
+
+      setMoveError(undefined);
+      setMovingShortcode(shortcode);
+
+      try {
+        await onMoveImage(shortcode, image, targetPackId);
+      } catch {
+        setMoveError('\u79fb\u52a8\u8868\u60c5\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5\u3002');
+      } finally {
+        setMovingShortcode(undefined);
+      }
+    };
 
     const renderImage = (image: PackImageReader) => (
       <SequenceCard
@@ -243,6 +279,10 @@ export const ImagePackContent = as<'div', ImagePackContentProps>(
             onEdit={handleImageEdit}
             deleted={deleteImages.has(image.shortcode)}
             onDeleteToggle={handleDeleteToggle}
+            moveTargets={moveTargets}
+            canMove={canMoveImage}
+            moving={movingShortcode === image.shortcode}
+            onMove={handleMoveImage}
           />
         )}
       </SequenceCard>
@@ -292,6 +332,11 @@ export const ImagePackContent = as<'div', ImagePackContentProps>(
               </Box>
             </Box>
           </Menu>
+        )}
+        {moveError && (
+          <Text size="T200" priority="300">
+            {moveError}
+          </Text>
         )}
         <Box direction="Column" gap="100">
           <Text size="L400">{'\u5206\u7c7b'}</Text>
