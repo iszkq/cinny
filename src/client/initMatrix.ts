@@ -13,6 +13,7 @@ type Session = {
 };
 
 const patchedReadReceiptClients = new WeakSet<MatrixClient>();
+let globalReadReceiptFetchPatched = false;
 
 const shouldBlockReadReceipts = () => !getSettings().sendReadReceipts;
 
@@ -20,6 +21,60 @@ const isReadReceiptPath = (path: string) =>
   path.includes('/receipt/') ||
   path.includes('/read_markers') ||
   path.includes('/account_data/m.fully_read');
+
+const getRequestPath = (pathOrUrl: string) => {
+  try {
+    const baseOrigin =
+      typeof window !== 'undefined' ? window.location.origin : 'https://app.cinny.in';
+    return new URL(pathOrUrl, baseOrigin).pathname;
+  } catch {
+    return pathOrUrl;
+  }
+};
+
+const shouldBlockReadReceiptRequest = (method: string | undefined, pathOrUrl: string) => {
+  const normalizedMethod = (method ?? 'GET').toUpperCase();
+  if (normalizedMethod === 'GET' || normalizedMethod === 'HEAD') return false;
+  return shouldBlockReadReceipts() && isReadReceiptPath(getRequestPath(pathOrUrl));
+};
+
+const createBlockedReadReceiptResponse = () =>
+  new Response('{}', {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+
+const patchGlobalReadReceiptFetch = () => {
+  if (globalReadReceiptFetchPatched || typeof globalThis.fetch !== 'function') return;
+  globalReadReceiptFetchPatched = true;
+
+  const originalFetch = globalThis.fetch.bind(globalThis);
+
+  globalThis.fetch = ((
+    input: RequestInfo | URL,
+    init?: RequestInit
+  ): ReturnType<typeof globalThis.fetch> => {
+    const requestUrl =
+      typeof input === 'string'
+        ? input
+        : input instanceof URL
+        ? input.toString()
+        : input.url;
+    const requestMethod =
+      init?.method ??
+      (typeof Request !== 'undefined' && input instanceof Request ? input.method : undefined);
+
+    if (shouldBlockReadReceiptRequest(requestMethod, requestUrl)) {
+      return Promise.resolve(createBlockedReadReceiptResponse()) as ReturnType<
+        typeof globalThis.fetch
+      >;
+    }
+
+    return originalFetch(input, init);
+  }) as typeof globalThis.fetch;
+};
 
 const patchReadReceiptTransport = (mx: MatrixClient) => {
   if (patchedReadReceiptClients.has(mx)) return;
@@ -81,15 +136,39 @@ const patchReadReceiptTransport = (mx: MatrixClient) => {
   mx.http.authedRequest = ((
     ...args: Parameters<typeof mx.http.authedRequest>
   ): ReturnType<typeof mx.http.authedRequest> => {
-    const [, path] = args;
-    if (typeof path === 'string' && shouldBlockReadReceipts() && isReadReceiptPath(path)) {
+    const [method, path] = args;
+    if (typeof path === 'string' && shouldBlockReadReceiptRequest(method, path)) {
       return Promise.resolve({}) as ReturnType<typeof mx.http.authedRequest>;
     }
     return originalAuthedRequest(...args);
   }) as typeof mx.http.authedRequest;
+
+  if (typeof mx.http.request === 'function') {
+    const originalRequest = mx.http.request.bind(mx.http);
+    mx.http.request = ((...args: Parameters<typeof mx.http.request>) => {
+      const [method, path] = args;
+      if (typeof path === 'string' && shouldBlockReadReceiptRequest(method, path)) {
+        return Promise.resolve({}) as ReturnType<typeof mx.http.request>;
+      }
+      return originalRequest(...args);
+    }) as typeof mx.http.request;
+  }
+
+  if (typeof mx.http.requestOtherUrl === 'function') {
+    const originalRequestOtherUrl = mx.http.requestOtherUrl.bind(mx.http);
+    mx.http.requestOtherUrl = ((...args: Parameters<typeof mx.http.requestOtherUrl>) => {
+      const [method, path] = args;
+      if (typeof path === 'string' && shouldBlockReadReceiptRequest(method, path)) {
+        return Promise.resolve({}) as ReturnType<typeof mx.http.requestOtherUrl>;
+      }
+      return originalRequestOtherUrl(...args);
+    }) as typeof mx.http.requestOtherUrl;
+  }
 };
 
 export const initClient = async (session: Session): Promise<MatrixClient> => {
+  patchGlobalReadReceiptFetch();
+
   const indexedDBStore = new IndexedDBStore({
     indexedDB: global.indexedDB,
     localStorage: global.localStorage,
