@@ -1,7 +1,7 @@
 import { useAtomValue } from 'jotai';
 import React, { ReactNode, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { RoomEvent, RoomEventHandlerMap } from 'matrix-js-sdk';
+import { ClientEvent, MatrixEvent, RoomEvent, RoomEventHandlerMap } from 'matrix-js-sdk';
 import { roomToUnreadAtom, unreadEqual, unreadInfoToUnread } from '../../state/room/roomToUnread';
 import LogoSVG from '../../../../public/res/svg/cinny.svg';
 import LogoUnreadSVG from '../../../../public/res/svg/cinny-unread.svg';
@@ -22,10 +22,12 @@ import {
   isNotificationEvent,
 } from '../../utils/room';
 import { NotificationType, UnreadInfo } from '../../../types/matrix/room';
+import { AccountDataEvent } from '../../../types/matrix/accountData';
 import { getMxIdLocalPart, mxcUrlToHttp } from '../../utils/matrix';
 import { useSelectedRoom } from '../../hooks/router/useSelectedRoom';
 import { useInboxNotificationsSelected } from '../../hooks/router/useInbox';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
+import { ensurePersonalPackSync } from '../../plugins/custom-emoji';
 
 const playAudio = (audioElement: HTMLAudioElement | null) => {
   if (!audioElement) return;
@@ -76,6 +78,31 @@ function PresenceSyncFeature() {
     });
     updatePresence?.catch(() => undefined);
   }, [mx, presenceVisibility]);
+
+  return null;
+}
+
+function PersonalPackSyncFeature() {
+  const mx = useMatrixClient();
+
+  useEffect(() => {
+    void ensurePersonalPackSync(mx).catch(() => undefined);
+
+    const handleAccountData = (mEvent: MatrixEvent) => {
+      const eventType = mEvent.getType();
+      if (
+        eventType === AccountDataEvent.CinnyUserEmojiPacks ||
+        eventType === AccountDataEvent.PoniesUserEmotes
+      ) {
+        void ensurePersonalPackSync(mx).catch(() => undefined);
+      }
+    };
+
+    mx.on(ClientEvent.AccountData, handleAccountData);
+    return () => {
+      mx.removeListener(ClientEvent.AccountData, handleAccountData);
+    };
+  }, [mx]);
 
   return null;
 }
@@ -293,6 +320,7 @@ export function ClientNonUIFeatures({ children }: ClientNonUIFeaturesProps) {
       <SystemEmojiFeature />
       <PageZoomFeature />
       <PresenceSyncFeature />
+      <PersonalPackSyncFeature />
       <FaviconUpdater />
       <InviteNotifications />
       <MessageNotifications />
