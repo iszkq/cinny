@@ -93,9 +93,7 @@ const useGroups = (
       g.push({
         id: pack.id,
         name: label ?? 'Unknown',
-        items: pack
-          .getImages(ImageUsage.Emoticon)
-          .sort((a, b) => a.shortcode.localeCompare(b.shortcode)),
+        items: pack.getImages(ImageUsage.Emoticon),
       });
     });
 
@@ -121,9 +119,7 @@ const useGroups = (
       g.push({
         id: pack.id,
         name: label ?? 'Unknown',
-        items: pack
-          .getImages(ImageUsage.Sticker)
-          .sort((a, b) => a.shortcode.localeCompare(b.shortcode)),
+        items: pack.getImages(ImageUsage.Sticker),
       });
     });
 
