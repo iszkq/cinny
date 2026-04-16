@@ -1,8 +1,9 @@
 import { Room } from 'matrix-js-sdk';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AccountDataEvent } from '../../types/matrix/accountData';
 import { StateEvent } from '../../types/matrix/room';
 import {
+  ensurePersonalPackSync,
   getCustomUserImagePack,
   getCustomUserImagePacks,
   getGlobalImagePacks,
@@ -19,6 +20,10 @@ import { useStateEventCallback } from './useStateEventCallback';
 export const useUserImagePack = (): ImagePack | undefined => {
   const mx = useMatrixClient();
   const [userPack, setUserPack] = useState(() => getUserImagePack(mx));
+
+  useEffect(() => {
+    ensurePersonalPackSync(mx).catch(() => undefined);
+  }, [mx]);
 
   useAccountDataCallback(
     mx,
@@ -38,6 +43,10 @@ export const useUserImagePack = (): ImagePack | undefined => {
 export const useCustomUserImagePacks = (): ImagePack[] => {
   const mx = useMatrixClient();
   const [userPacks, setUserPacks] = useState(() => getCustomUserImagePacks(mx));
+
+  useEffect(() => {
+    ensurePersonalPackSync(mx).catch(() => undefined);
+  }, [mx, userPacks]);
 
   useAccountDataCallback(
     mx,
