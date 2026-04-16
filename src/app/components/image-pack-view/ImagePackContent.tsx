@@ -256,11 +256,15 @@ export const ImagePackContent = as<'div', ImagePackContentProps>(
               <Box grow="Yes" direction="Column">
                 {applyState.status === AsyncStatus.Error ? (
                   <Text size="T200">
-                    <b>Failed to apply changes! Please try again.</b>
+                    <b>{'\u4fdd\u5b58\u5206\u7c7b\u53d8\u66f4\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5\u3002'}</b>
                   </Text>
                 ) : (
                   <Text size="T200">
-                    <b>Changes saved! Apply when ready.</b>
+                    <b>
+                      {
+                        '\u53d8\u66f4\u5df2\u6682\u5b58\uff0c\u786e\u8ba4\u65e0\u8bef\u540e\u70b9\u51fb\u201c\u5e94\u7528\u53d8\u66f4\u201d\u5373\u53ef\u751f\u6548\u3002'
+                      }
+                    </b>
                   </Text>
                 )}
               </Box>
@@ -273,7 +277,7 @@ export const ImagePackContent = as<'div', ImagePackContentProps>(
                   disabled={!canApplyChanges || applying}
                   onClick={handleResetSavedChanges}
                 >
-                  <Text size="B300">Reset</Text>
+                  <Text size="B300">{'\u91cd\u7f6e'}</Text>
                 </Button>
                 <Button
                   size="300"
@@ -283,7 +287,7 @@ export const ImagePackContent = as<'div', ImagePackContentProps>(
                   before={applying && <Spinner variant="Success" fill="Solid" size="100" />}
                   onClick={applyChanges}
                 >
-                  <Text size="B300">Apply Changes</Text>
+                  <Text size="B300">{'\u5e94\u7528\u53d8\u66f4'}</Text>
                 </Button>
               </Box>
             </Box>

@@ -9,10 +9,10 @@ export const useUsageStr = (): ((usage: ImageUsage[]) => string) => {
     const sticker = usage.includes(ImageUsage.Sticker);
     const emoticon = usage.includes(ImageUsage.Emoticon);
 
-    if (sticker && emoticon) return 'Both';
-    if (sticker) return 'Sticker';
-    if (emoticon) return 'Emoji';
-    return 'Both';
+    if (sticker && emoticon) return '\u8868\u60c5 + \u8d34\u7eb8';
+    if (sticker) return '\u8d34\u7eb8';
+    if (emoticon) return '\u8868\u60c5';
+    return '\u8868\u60c5 + \u8d34\u7eb8';
   };
   return getUsageStr;
 };
