@@ -34,7 +34,7 @@ import React, {
 import FocusTrap from 'focus-trap-react';
 import { useHover, useFocusWithin } from 'react-aria';
 import { EncryptedAttachmentInfo } from 'browser-encrypt-attachment';
-import { EventType, MatrixEvent, MsgType, Room, RoomEvent } from 'matrix-js-sdk';
+import { EventType, MatrixClient, MatrixEvent, MsgType, Room, RoomEvent } from 'matrix-js-sdk';
 import { Relations } from 'matrix-js-sdk/lib/models/relations';
 import classNames from 'classnames';
 import { RoomPinnedEventsEventContent } from 'matrix-js-sdk/lib/types';
@@ -63,6 +63,7 @@ import {
   getMxIdLocalPart,
   isRoomAlias,
   mxcUrlToHttp,
+  uploadContent,
 } from '../../../utils/matrix';
 import { MessageLayout, MessageSpacing, settingsAtom } from '../../../state/settings';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
@@ -88,7 +89,13 @@ import { PowerIcon } from '../../../components/power';
 import colorMXID from '../../../../util/colorMXID';
 import { getPowerTagIconSrc } from '../../../hooks/useMemberPowerTag';
 import { ForwardableMessage } from '../forwardMessages';
-import { FALLBACK_MIMETYPE, IMAGE_MIME_TYPES } from '../../../utils/mimeTypes';
+import {
+  FALLBACK_MIMETYPE,
+  IMAGE_MIME_TYPES,
+  getFileNameWithoutExt,
+  mimeTypeToExt,
+} from '../../../utils/mimeTypes';
+import { addImageToDefaultPersonalPack, PackImage } from '../../../plugins/custom-emoji';
 import {
   ensureFavoritesRoom,
   favoriteMessageToRoom,
@@ -169,6 +176,87 @@ const getClipboardImageMimeType = (mimeType?: string, blobType?: string): string
 
   return candidates.find((value) => IMAGE_MIME_TYPES.includes(value));
 };
+
+type MessageEmojiSaveSource = {
+  image: PackImage;
+  preferredShortcode: string;
+  fileName: string;
+  mimeType?: string;
+  encInfo?: EncryptedAttachmentInfo;
+};
+
+const getPackImageInfo = (info: unknown): PackImage['info'] | undefined => {
+  if (!info || typeof info !== 'object') return undefined;
+
+  const safeInfo: NonNullable<PackImage['info']> = {};
+  const imageInfo = info as Record<string, unknown>;
+
+  if (typeof imageInfo.w === 'number') safeInfo.w = imageInfo.w;
+  if (typeof imageInfo.h === 'number') safeInfo.h = imageInfo.h;
+  if (typeof imageInfo.mimetype === 'string') safeInfo.mimetype = imageInfo.mimetype;
+  if (typeof imageInfo.size === 'number') safeInfo.size = imageInfo.size;
+  if (typeof imageInfo['xyz.amorgan.blurhash'] === 'string') {
+    safeInfo['xyz.amorgan.blurhash'] = imageInfo['xyz.amorgan.blurhash'];
+  }
+
+  return Object.keys(safeInfo).length > 0 ? safeInfo : undefined;
+};
+
+const getMessageEmojiFileName = (name: string, mimeType?: string): string => {
+  const safeName = name.replace(/[\\/:*?"<>|]/g, '-').trim() || 'image';
+
+  if (safeName.lastIndexOf('.') > 0) return safeName;
+
+  const normalizedMimeType = mimeType?.split(';')[0].trim().toLowerCase();
+  const ext = normalizedMimeType ? mimeTypeToExt(normalizedMimeType) : '';
+
+  return ext ? `${safeName}.${ext}` : safeName;
+};
+
+const getMessageEmojiSaveSource = (mEvent: MatrixEvent): MessageEmojiSaveSource | undefined => {
+  if (mEvent.isRedacted()) return undefined;
+
+  const content = mEvent.getContent();
+  const sourceUrl = typeof content.file?.url === 'string' ? content.file.url : content.url;
+
+  if (typeof sourceUrl !== 'string') return undefined;
+
+  const mimeType =
+    typeof content.info?.mimetype === 'string' ? content.info.mimetype : undefined;
+  const body = typeof content.body === 'string' ? content.body : undefined;
+  const filename = typeof content.filename === 'string' ? content.filename : undefined;
+
+  if (
+    mEvent.getType() !== EventType.Sticker &&
+    (mEvent.getType() !== EventType.RoomMessage || content.msgtype !== MsgType.Image)
+  ) {
+    return undefined;
+  }
+
+  const label = filename ?? body ?? 'image';
+
+  return {
+    image: {
+      url: sourceUrl,
+      body,
+      info: getPackImageInfo(content.info),
+    },
+    preferredShortcode: getFileNameWithoutExt(label),
+    fileName: getMessageEmojiFileName(label, mimeType),
+    mimeType,
+    encInfo: content.file,
+  };
+};
+
+const uploadPackImageFile = async (mx: MatrixClient, file: File) =>
+  new Promise<string>((resolve, reject) => {
+    uploadContent(mx, file, {
+      name: file.name,
+      fileType: file.type,
+      onSuccess: resolve,
+      onError: reject,
+    });
+  });
 
 type MessageQuickReactionsProps = {
   onReaction: ReactionHandler;
@@ -682,6 +770,102 @@ export const MessageFavoriteItem = as<
         {favoriteState.status === AsyncStatus.Loading
           ? favoriteLoadingLabel
           : favoriteDefaultLabel}
+      </Text>
+    </MenuItem>
+  );
+});
+
+export const MessageSaveEmojiItem = as<
+  'button',
+  {
+    mEvent: MatrixEvent;
+    onClose?: () => void;
+  }
+>(({ mEvent, onClose, ...props }, ref) => {
+  const mx = useMatrixClient();
+  const useAuthentication = useMediaAuthentication();
+  const saveSource = getMessageEmojiSaveSource(mEvent);
+
+  const [saveState, saveEmoji] = useAsyncCallback(
+    useCallback(async () => {
+      if (!saveSource) throw new Error('Message does not contain a savable image.');
+
+      let nextImage = saveSource.image;
+
+      if (saveSource.encInfo) {
+        const mediaUrl = mxcUrlToHttp(mx, saveSource.image.url, useAuthentication);
+        if (!mediaUrl) {
+          throw new Error('Invalid media URL.');
+        }
+
+        const mediaBlob = await downloadEncryptedMedia(mediaUrl, (encBuf) =>
+          decryptFile(
+            encBuf,
+            saveSource.mimeType ?? FALLBACK_MIMETYPE,
+            saveSource.encInfo as EncryptedAttachmentInfo
+          )
+        );
+        const uploadMimeType =
+          getClipboardImageMimeType(saveSource.mimeType, mediaBlob.type) ??
+          saveSource.mimeType ??
+          mediaBlob.type ??
+          FALLBACK_MIMETYPE;
+        const uploadFile = new File([mediaBlob], saveSource.fileName, {
+          type: uploadMimeType,
+        });
+        const uploadedMxc = await uploadPackImageFile(mx, uploadFile);
+
+        nextImage = {
+          ...saveSource.image,
+          url: uploadedMxc,
+          info: {
+            ...saveSource.image.info,
+            mimetype: uploadFile.type,
+            size: uploadFile.size,
+          },
+        };
+      }
+
+      return addImageToDefaultPersonalPack(mx, nextImage, saveSource.preferredShortcode);
+    }, [mx, saveSource, useAuthentication])
+  );
+
+  if (!saveSource) return null;
+
+  const handleSave = () => {
+    if (saveState.status === AsyncStatus.Loading) return;
+
+    saveEmoji()
+      .then(() => {
+        onClose?.();
+      })
+      .catch(() => undefined);
+  };
+
+  const saveLabel =
+    saveState.status === AsyncStatus.Loading
+      ? '\u6536\u85cf\u4e2d...'
+      : saveState.status === AsyncStatus.Error
+        ? '\u6536\u85cf\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5'
+        : '\u6536\u85cf\u8868\u60c5';
+
+  return (
+    <MenuItem
+      size="300"
+      after={
+        saveState.status === AsyncStatus.Loading ? (
+          <Spinner size="100" variant="Secondary" />
+        ) : (
+          <Icon size="100" src={Icons.Sticker} />
+        )
+      }
+      radii="300"
+      onClick={handleSave}
+      {...props}
+      ref={ref}
+    >
+      <Text className={css.MessageMenuItemText} as="span" size="T300" truncate>
+        {saveLabel}
       </Text>
     </MenuItem>
   );
@@ -1537,6 +1721,7 @@ export const Message = as<'div', MessageProps>(
                           {forwardSource && room.roomId !== favoritesRoomId && (
                             <MessageFavoriteItem room={room} mEvent={mEvent} onClose={closeMenu} />
                           )}
+                          <MessageSaveEmojiItem mEvent={mEvent} onClose={closeMenu} />
                           <MessageCopyTextItem mEvent={mEvent} onClose={closeMenu} />
                           <MessageCopyLinkItem room={room} mEvent={mEvent} onClose={closeMenu} />
                           {canPinEvent && (
