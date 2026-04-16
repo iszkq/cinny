@@ -43,10 +43,8 @@ export class PackImageReader {
 
   get content(): PackImage {
     return {
+      ...this.image,
       url: this.url,
-      body: this.image.body,
-      usage: this.image.usage,
-      info: this.image.info,
     };
   }
 }

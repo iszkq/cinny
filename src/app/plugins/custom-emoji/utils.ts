@@ -1,11 +1,15 @@
 import { MatrixClient, MatrixEvent, Room } from 'matrix-js-sdk';
 import { ImagePack } from './ImagePack';
-import { EmoteRoomsContent, ImageUsage, PackContent, UserImagePacksContent } from './types';
+import { EmoteRoomsContent, ImageUsage, PackContent } from './types';
 import { StateEvent } from '../../../types/matrix/room';
 import { getAccountData, getStateEvent, getStateEvents } from '../../utils/room';
 import { AccountDataEvent } from '../../../types/matrix/accountData';
 import { PackMetaReader } from './PackMetaReader';
 import { PackAddress } from './PackAddress';
+import {
+  getCustomUserImagePacksContent,
+  getEditableDefaultUserImagePackContent,
+} from './personalPacks';
 
 export function packAddressEqual(a1?: PackAddress, a2?: PackAddress): boolean {
   if (!a1 && !a2) return true;
@@ -76,16 +80,6 @@ export function getGlobalImagePacks(mx: MatrixClient): ImagePack[] {
   return packs;
 }
 
-export function getCustomUserImagePacksContent(mx: MatrixClient): UserImagePacksContent {
-  const content = getAccountData(mx, AccountDataEvent.CinnyUserEmojiPacks)?.getContent<
-    UserImagePacksContent
-  >();
-
-  if (!content || typeof content !== 'object') return {};
-
-  return content;
-}
-
 export function getCustomUserImagePacks(mx: MatrixClient): ImagePack[] {
   const content = getCustomUserImagePacksContent(mx);
   if (!content.packs || typeof content.packs !== 'object') return [];
@@ -103,12 +97,12 @@ export function getCustomUserImagePack(mx: MatrixClient, packId: string): ImageP
 }
 
 export function getUserImagePack(mx: MatrixClient): ImagePack | undefined {
-  const packEvent = getAccountData(mx, AccountDataEvent.PoniesUserEmotes);
   const userId = mx.getUserId();
-  if (!packEvent || !userId) {
+  const userPackContent = getEditableDefaultUserImagePackContent(mx);
+
+  if (!userId || (userPackContent.pack === undefined && userPackContent.images === undefined)) {
     return undefined;
   }
 
-  const userImagePack = ImagePack.fromMatrixEvent(userId, packEvent);
-  return userImagePack;
+  return new ImagePack(userId, userPackContent, undefined);
 }

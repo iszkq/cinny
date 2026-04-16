@@ -19,11 +19,16 @@ export enum ImageUsage {
   Sticker = 'sticker',
 }
 
+export const CINNY_SYNC_SOURCE_PACK_ID = 'in.cinny.source_pack_id';
+export const CINNY_SYNC_SOURCE_SHORTCODE = 'in.cinny.source_shortcode';
+
 export type PackImage = {
   url: string;
   body?: string;
   usage?: ImageUsage[];
   info?: IImageInfo;
+  [CINNY_SYNC_SOURCE_PACK_ID]?: string;
+  [CINNY_SYNC_SOURCE_SHORTCODE]?: string;
 };
 
 export type PackImages = Record<string, PackImage>;
