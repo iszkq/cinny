@@ -1,6 +1,6 @@
 import { MatrixClient, MatrixEvent, Room } from 'matrix-js-sdk';
 import { ImagePack } from './ImagePack';
-import { EmoteRoomsContent, ImageUsage } from './types';
+import { EmoteRoomsContent, ImageUsage, PackContent, UserImagePacksContent } from './types';
 import { StateEvent } from '../../../types/matrix/room';
 import { getAccountData, getStateEvent, getStateEvents } from '../../utils/room';
 import { AccountDataEvent } from '../../../types/matrix/accountData';
@@ -74,6 +74,32 @@ export function getGlobalImagePacks(mx: MatrixClient): ImagePack[] {
   });
 
   return packs;
+}
+
+export function getCustomUserImagePacksContent(mx: MatrixClient): UserImagePacksContent {
+  const content = getAccountData(mx, AccountDataEvent.CinnyUserEmojiPacks)?.getContent<
+    UserImagePacksContent
+  >();
+
+  if (!content || typeof content !== 'object') return {};
+
+  return content;
+}
+
+export function getCustomUserImagePacks(mx: MatrixClient): ImagePack[] {
+  const content = getCustomUserImagePacksContent(mx);
+  if (!content.packs || typeof content.packs !== 'object') return [];
+
+  return Object.entries(content.packs).reduce<ImagePack[]>((packs, [packId, packContent]) => {
+    if (!packContent || typeof packContent !== 'object') return packs;
+
+    packs.push(new ImagePack(packId, packContent as PackContent, undefined));
+    return packs;
+  }, []);
+}
+
+export function getCustomUserImagePack(mx: MatrixClient, packId: string): ImagePack | undefined {
+  return getCustomUserImagePacks(mx).find((pack) => pack.id === packId);
 }
 
 export function getUserImagePack(mx: MatrixClient): ImagePack | undefined {

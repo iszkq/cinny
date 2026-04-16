@@ -39,3 +39,10 @@ export type PackContent = {
   pack?: PackMeta;
   images?: PackImages;
 };
+
+export type UserImagePacks = Record<string, PackContent>;
+
+export type UserImagePacksContent = {
+  version?: number;
+  packs?: UserImagePacks;
+};
