@@ -69,6 +69,7 @@ import { MessageLayout, MessageSpacing, settingsAtom } from '../../../state/sett
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { useRecentEmoji } from '../../../hooks/useRecentEmoji';
 import { useSetting } from '../../../state/hooks/settings';
+import { useAccountDataCallback } from '../../../hooks/useAccountDataCallback';
 import * as css from './styles.css';
 import { EventReaders } from '../../../components/event-readers';
 import { TextViewer } from '../../../components/text-viewer';
@@ -95,7 +96,14 @@ import {
   getFileNameWithoutExt,
   mimeTypeToExt,
 } from '../../../utils/mimeTypes';
-import { addImageToDefaultPersonalPack, PackImage } from '../../../plugins/custom-emoji';
+import {
+  addImageToDefaultPersonalPack,
+  CINNY_SOURCE_MXC,
+  ImageUsage,
+  isDefaultPersonalPackImageSaved,
+  PackImage,
+} from '../../../plugins/custom-emoji';
+import { AccountDataEvent } from '../../../../types/matrix/accountData';
 import {
   ensureFavoritesRoom,
   favoriteMessageToRoom,
@@ -240,6 +248,10 @@ const getMessageEmojiSaveSource = (mEvent: MatrixEvent): MessageEmojiSaveSource 
       url: sourceUrl,
       body,
       info: getPackImageInfo(content.info),
+      usage:
+        mEvent.getType() === EventType.Sticker
+          ? [ImageUsage.Sticker]
+          : [ImageUsage.Emoticon, ImageUsage.Sticker],
     },
     preferredShortcode: getFileNameWithoutExt(label),
     fileName: getMessageEmojiFileName(label, mimeType),
@@ -781,14 +793,36 @@ export const MessageSaveEmojiItem = as<
     mEvent: MatrixEvent;
     onClose?: () => void;
   }
->(({ mEvent, onClose, ...props }, ref) => {
+>(({ mEvent, ...props }, ref) => {
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
   const saveSource = getMessageEmojiSaveSource(mEvent);
+  const [saved, setSaved] = useState(() =>
+    isDefaultPersonalPackImageSaved(mx, saveSource?.image.url)
+  );
+
+  useEffect(() => {
+    setSaved(isDefaultPersonalPackImageSaved(mx, saveSource?.image.url));
+  }, [mx, saveSource]);
+
+  useAccountDataCallback(
+    mx,
+    useCallback(
+      (mEventData) => {
+        if (mEventData.getType() === AccountDataEvent.PoniesUserEmotes) {
+          setSaved(isDefaultPersonalPackImageSaved(mx, saveSource?.image.url));
+        }
+      },
+      [mx, saveSource]
+    )
+  );
 
   const [saveState, saveEmoji] = useAsyncCallback(
     useCallback(async () => {
       if (!saveSource) throw new Error('Message does not contain a savable image.');
+      if (isDefaultPersonalPackImageSaved(mx, saveSource.image.url)) {
+        return saveSource.preferredShortcode;
+      }
 
       let nextImage = saveSource.image;
 
@@ -818,6 +852,7 @@ export const MessageSaveEmojiItem = as<
         nextImage = {
           ...saveSource.image,
           url: uploadedMxc,
+          [CINNY_SOURCE_MXC]: saveSource.image.url,
           info: {
             ...saveSource.image.info,
             mimetype: uploadFile.type,
@@ -833,11 +868,11 @@ export const MessageSaveEmojiItem = as<
   if (!saveSource) return null;
 
   const handleSave = () => {
-    if (saveState.status === AsyncStatus.Loading) return;
+    if (saveState.status === AsyncStatus.Loading || saved) return;
 
     saveEmoji()
       .then(() => {
-        onClose?.();
+        setSaved(true);
       })
       .catch(() => undefined);
   };
@@ -845,6 +880,8 @@ export const MessageSaveEmojiItem = as<
   const saveLabel =
     saveState.status === AsyncStatus.Loading
       ? '\u6536\u85cf\u4e2d...'
+      : saved
+        ? '\u5df2\u6536\u85cf'
       : saveState.status === AsyncStatus.Error
         ? '\u6536\u85cf\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5'
         : '\u6536\u85cf\u8868\u60c5';
@@ -856,11 +893,16 @@ export const MessageSaveEmojiItem = as<
         saveState.status === AsyncStatus.Loading ? (
           <Spinner size="100" variant="Secondary" />
         ) : (
-          <Icon size="100" src={Icons.Sticker} />
+          <Icon
+            size="100"
+            src={saved ? Icons.Check : Icons.Sticker}
+            style={saved ? { color: color.Success.Main } : undefined}
+          />
         )
       }
       radii="300"
       onClick={handleSave}
+      aria-pressed={saved}
       {...props}
       ref={ref}
     >
