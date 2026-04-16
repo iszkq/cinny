@@ -510,7 +510,7 @@ const getReceiptTimestamp = (room: Room, userId: string): number | undefined => 
 export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimelineProps) {
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
-  const [hideActivity] = useSetting(settingsAtom, 'hideActivity');
+  const [sendReadReceipts] = useSetting(settingsAtom, 'sendReadReceipts');
   const [messageLayout] = useSetting(settingsAtom, 'messageLayout');
   const [messageSpacing] = useSetting(settingsAtom, 'messageSpacing');
   const [legacyUsernameColor] = useSetting(settingsAtom, 'legacyUsernameColor');
@@ -660,10 +660,9 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
       onEnd: handleTimelinePagination,
     });
   const visibleItems = getItems();
+  const privateReceipt = !sendReadReceipts;
 
   const messageReadReceipts = useMemo(() => {
-    if (hideActivity) return new Map<string, string[]>();
-
     const myUserId = mx.getUserId();
     if (!myUserId) return new Map<string, string[]>();
 
@@ -719,7 +718,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     }
 
     return receiptMap;
-  }, [hideActivity, ignoredUsersSet, mx, receiptTick, room, timeline.linkedTimelines, visibleItems]);
+  }, [ignoredUsersSet, mx, receiptTick, room, timeline.linkedTimelines, visibleItems]);
 
   const loadEventTimeline = useEventTimelineLoader(
     mx,
@@ -765,7 +764,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             // Check if the document is in focus (user is actively viewing the app),
             // and either there are no unread messages or the latest message is from the current user.
             // If either condition is met, trigger the markAsRead function to send a read receipt.
-            requestAnimationFrame(() => markAsRead(mx, mEvt.getRoomId()!, hideActivity));
+            requestAnimationFrame(() => markAsRead(mx, mEvt.getRoomId()!, privateReceipt));
           }
 
           if (!document.hasFocus() && !unreadInfo) {
@@ -789,7 +788,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
           setUnreadInfo(getRoomUnreadInfo(room));
         }
       },
-      [mx, room, unreadInfo, hideActivity]
+      [mx, room, unreadInfo, privateReceipt]
     )
   );
 
@@ -870,15 +869,15 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
   const tryAutoMarkAsRead = useCallback(() => {
     const readUptoEventId = readUptoEventIdRef.current;
     if (!readUptoEventId) {
-      requestAnimationFrame(() => markAsRead(mx, room.roomId, hideActivity));
+      requestAnimationFrame(() => markAsRead(mx, room.roomId, privateReceipt));
       return;
     }
     const evtTimeline = getEventTimeline(room, readUptoEventId);
     const latestTimeline = evtTimeline && getFirstLinkedTimeline(evtTimeline, Direction.Forward);
     if (latestTimeline === room.getLiveTimeline()) {
-      requestAnimationFrame(() => markAsRead(mx, room.roomId, hideActivity));
+      requestAnimationFrame(() => markAsRead(mx, room.roomId, privateReceipt));
     }
-  }, [mx, room, hideActivity]);
+  }, [mx, room, privateReceipt]);
 
   const debounceSetAtBottom = useDebounce(
     useCallback((entry: IntersectionObserverEntry) => {
@@ -1060,7 +1059,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
   };
 
   const handleMarkAsRead = () => {
-    markAsRead(mx, room.roomId, hideActivity);
+    markAsRead(mx, room.roomId, privateReceipt);
   };
 
   const handleOpenReply: MouseEventHandler = useCallback(
@@ -1274,7 +1273,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
                 />
               )
             }
-            hideReadReceipts={hideActivity}
+            hideReadReceipts={false}
             showDeveloperTools={showDeveloperTools}
             memberPowerTag={getMemberPowerTag(senderId)}
             accessibleTagColors={accessiblePowerTagColors}
@@ -1377,7 +1376,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
                 />
               )
             }
-            hideReadReceipts={hideActivity}
+            hideReadReceipts={false}
             showDeveloperTools={showDeveloperTools}
             memberPowerTag={getMemberPowerTag(mEvent.getSender() ?? '')}
             accessibleTagColors={accessiblePowerTagColors}
@@ -1503,7 +1502,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
                 />
               )
             }
-            hideReadReceipts={hideActivity}
+            hideReadReceipts={false}
             showDeveloperTools={showDeveloperTools}
             memberPowerTag={getMemberPowerTag(mEvent.getSender() ?? '')}
             accessibleTagColors={accessiblePowerTagColors}
@@ -1559,7 +1558,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             highlight={highlighted}
             messageSpacing={messageSpacing}
             canDelete={canRedact || mEvent.getSender() === mx.getUserId()}
-            hideReadReceipts={hideActivity}
+            hideReadReceipts={false}
             showDeveloperTools={showDeveloperTools}
           >
             <EventContent
@@ -1601,7 +1600,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             highlight={highlighted}
             messageSpacing={messageSpacing}
             canDelete={canRedact || mEvent.getSender() === mx.getUserId()}
-            hideReadReceipts={hideActivity}
+            hideReadReceipts={false}
             showDeveloperTools={showDeveloperTools}
           >
             <EventContent
@@ -1644,7 +1643,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             highlight={highlighted}
             messageSpacing={messageSpacing}
             canDelete={canRedact || mEvent.getSender() === mx.getUserId()}
-            hideReadReceipts={hideActivity}
+            hideReadReceipts={false}
             showDeveloperTools={showDeveloperTools}
           >
             <EventContent
@@ -1687,7 +1686,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             highlight={highlighted}
             messageSpacing={messageSpacing}
             canDelete={canRedact || mEvent.getSender() === mx.getUserId()}
-            hideReadReceipts={hideActivity}
+            hideReadReceipts={false}
             showDeveloperTools={showDeveloperTools}
           >
             <EventContent
@@ -1738,7 +1737,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             highlight={highlighted}
             messageSpacing={messageSpacing}
             canDelete={canRedact || mEvent.getSender() === mx.getUserId()}
-            hideReadReceipts={hideActivity}
+            hideReadReceipts={false}
             showDeveloperTools={showDeveloperTools}
           >
             <EventContent
@@ -1785,7 +1784,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
           highlight={highlighted}
           messageSpacing={messageSpacing}
           canDelete={canRedact || mEvent.getSender() === mx.getUserId()}
-          hideReadReceipts={hideActivity}
+          hideReadReceipts={false}
           showDeveloperTools={showDeveloperTools}
         >
           <EventContent
@@ -1835,7 +1834,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
           highlight={highlighted}
           messageSpacing={messageSpacing}
           canDelete={canRedact || mEvent.getSender() === mx.getUserId()}
-          hideReadReceipts={hideActivity}
+          hideReadReceipts={false}
           showDeveloperTools={showDeveloperTools}
         >
           <EventContent

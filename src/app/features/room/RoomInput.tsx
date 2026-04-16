@@ -137,7 +137,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const useAuthentication = useMediaAuthentication();
     const [enterForNewline] = useSetting(settingsAtom, 'enterForNewline');
     const [isMarkdown] = useSetting(settingsAtom, 'isMarkdown');
-    const [hideActivity] = useSetting(settingsAtom, 'hideActivity');
+    const [sendTypingNotifications] = useSetting(settingsAtom, 'sendTypingNotifications');
     const [legacyUsernameColor] = useSetting(settingsAtom, 'legacyUsernameColor');
     const direct = useIsDirectRoom();
     const commands = useCommands(mx, room);
@@ -190,6 +190,12 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       useState<AutocompleteQuery<AutocompletePrefix>>();
 
     const sendTypingStatus = useTypingStatusUpdater(mx, roomId);
+
+    useEffect(() => {
+      if (!sendTypingNotifications) {
+        sendTypingStatus(false);
+      }
+    }, [sendTypingStatus, sendTypingNotifications]);
 
     useInterval(
       useCallback(() => {
@@ -544,7 +550,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           return;
         }
 
-        if (!hideActivity) {
+        if (sendTypingNotifications) {
           sendTypingStatus(!isEmptyEditor(editor));
         }
 
@@ -554,7 +560,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           : undefined;
         setAutocompleteQuery(query);
       },
-      [editor, sendTypingStatus, hideActivity]
+      [editor, sendTypingStatus, sendTypingNotifications]
     );
 
     const handleCloseAutocomplete = useCallback(() => {
