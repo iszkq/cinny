@@ -22,8 +22,8 @@ import { primeCachedMediaObjectUrl, primePersistentMediaUrl } from '../utils/med
 
 const GLOBAL_IMAGE_PACK_WARM_DELAY_MS = 2500;
 const GLOBAL_IMAGE_PACK_WARM_IDLE_TIMEOUT_MS = 10000;
-const GLOBAL_IMAGE_PACK_OBJECT_WARM_DELAY_MS = 8000;
-const GLOBAL_IMAGE_PACK_OBJECT_WARM_IDLE_TIMEOUT_MS = 30000;
+const GLOBAL_IMAGE_PACK_OBJECT_WARM_DELAY_MS = 4000;
+const GLOBAL_IMAGE_PACK_OBJECT_WARM_IDLE_TIMEOUT_MS = 15000;
 
 type IdleWindow = Window &
   typeof globalThis & {
