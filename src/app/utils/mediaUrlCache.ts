@@ -1,5 +1,6 @@
 const PERSISTENT_MEDIA_CACHE = 'cinny-auth-media-v1';
 const PERSISTENT_MEDIA_PRELOAD_CONCURRENCY = 4;
+const OBJECT_URL_MEDIA_PRELOAD_CONCURRENCY = 2;
 const MAX_OBJECT_URL_MEDIA_ITEMS = 256;
 const MAX_OBJECT_URL_MEDIA_BYTES = 64 * 1024 * 1024;
 
@@ -18,10 +19,17 @@ type ObjectUrlMediaEntry = {
   size: number;
 };
 
+type ObjectUrlMediaTask = {
+  src: string;
+  resolve: (value: string | undefined) => void;
+};
+
 const objectUrlMediaCache = new Map<string, ObjectUrlMediaEntry>();
 const pendingObjectUrlMedia = new Map<string, Promise<string | undefined>>();
+const objectUrlMediaQueue: ObjectUrlMediaTask[] = [];
 let objectUrlMediaCleanupBound = false;
 let objectUrlMediaBytes = 0;
+let activeObjectUrlMediaTasks = 0;
 
 const revokeObjectUrl = (url?: string) => {
   if (url?.startsWith('blob:')) {
@@ -83,6 +91,53 @@ const setObjectUrlMediaEntry = (src: string, objectUrl: string, size: number) =>
   objectUrlMediaBytes += size;
 
   trimObjectUrlMediaCache();
+};
+
+const createObjectUrlFromMedia = async (src: string): Promise<string | undefined> => {
+  const cachedObjectUrl = touchObjectUrlMediaEntry(src)?.objectUrl;
+  if (cachedObjectUrl) {
+    return cachedObjectUrl;
+  }
+
+  const pendingPersistent = pendingPersistentMedia.get(src);
+  if (pendingPersistent) {
+    await pendingPersistent.catch(() => undefined);
+  }
+
+  const response = await ensurePersistentMedia(src);
+  if (!response) {
+    return undefined;
+  }
+
+  bindObjectUrlMediaCleanup();
+
+  const mediaBlob = await response.blob();
+  const objectUrl = URL.createObjectURL(mediaBlob);
+  setObjectUrlMediaEntry(src, objectUrl, mediaBlob.size);
+  return objectUrl;
+};
+
+const flushObjectUrlMediaQueue = () => {
+  while (
+    activeObjectUrlMediaTasks < OBJECT_URL_MEDIA_PRELOAD_CONCURRENCY &&
+    objectUrlMediaQueue.length > 0
+  ) {
+    const task = objectUrlMediaQueue.shift();
+    if (!task) return;
+
+    activeObjectUrlMediaTasks += 1;
+
+    createObjectUrlFromMedia(task.src)
+      .catch(() => undefined)
+      .then((resolvedUrl) => {
+        task.resolve(resolvedUrl);
+      })
+      .finally(() => {
+        pendingObjectUrlMedia.delete(task.src);
+        activeObjectUrlMediaTasks -= 1;
+        flushObjectUrlMediaQueue();
+      });
+  }
 };
 
 const bindObjectUrlMediaCleanup = () => {
@@ -208,29 +263,12 @@ export const primeCachedMediaObjectUrl = (
     return pendingObjectUrl;
   }
 
-  const objectUrlPromise = (async () => {
-    const pendingPersistent = pendingPersistentMedia.get(src);
-    if (pendingPersistent) {
-      await pendingPersistent.catch(() => undefined);
-    }
-
-    const response = await ensurePersistentMedia(src);
-    if (!response) {
-      return undefined;
-    }
-
-    bindObjectUrlMediaCleanup();
-
-    const mediaBlob = await response.blob();
-    const objectUrl = URL.createObjectURL(mediaBlob);
-    setObjectUrlMediaEntry(src, objectUrl, mediaBlob.size);
-    return objectUrl;
-  })();
+  const objectUrlPromise = new Promise<string | undefined>((resolve) => {
+    objectUrlMediaQueue.push({ src, resolve });
+  });
 
   pendingObjectUrlMedia.set(src, objectUrlPromise);
-  void objectUrlPromise.finally(() => {
-    pendingObjectUrlMedia.delete(src);
-  });
+  setTimeout(flushObjectUrlMediaQueue, 0);
 
   return objectUrlPromise;
 };
