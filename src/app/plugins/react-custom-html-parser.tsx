@@ -41,6 +41,7 @@ import {
 import { onEnterOrSpace } from '../utils/keyboard';
 import { copyToClipboard, tryDecodeURIComponent } from '../utils/dom';
 import { useTimeoutToggle } from '../hooks/useTimeoutToggle';
+import { useCachedMediaUrl } from '../hooks/useCachedMediaUrl';
 
 const ReactPrism = lazy(() => import('./react-prism/ReactPrism'));
 
@@ -223,6 +224,12 @@ const extractTextFromChildren = (nodes: ChildNode[]): string => {
 
   return text;
 };
+
+function CachedHtmlEmoticonImage(props: ComponentPropsWithoutRef<'img'>) {
+  const cachedMediaUrl = useCachedMediaUrl(props.src);
+
+  return <img {...props} src={cachedMediaUrl ?? props.src} />;
+}
 
 export function CodeBlock({
   children,
@@ -486,7 +493,11 @@ export const getReactCustomHtmlParser = (
             return (
               <span className={css.EmoticonBase}>
                 <span className={css.Emoticon()}>
-                  <img {...props} className={css.EmoticonImg} src={htmlSrc} />
+                  <CachedHtmlEmoticonImage
+                    {...props}
+                    className={css.EmoticonImg}
+                    src={htmlSrc}
+                  />
                 </span>
               </span>
             );
