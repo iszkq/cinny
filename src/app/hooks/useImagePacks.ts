@@ -1,7 +1,7 @@
-import { Room } from 'matrix-js-sdk';
+import { ClientEvent, Room, RoomEvent } from 'matrix-js-sdk';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AccountDataEvent } from '../../types/matrix/accountData';
-import { StateEvent } from '../../types/matrix/room';
+import { Membership, StateEvent } from '../../types/matrix/room';
 import { mxcUrlToHttp } from '../utils/matrix';
 import {
   ensurePersonalPackSync,
@@ -18,84 +18,7 @@ import { useMediaAuthentication } from './useMediaAuthentication';
 import { useMatrixClient } from './useMatrixClient';
 import { useAccountDataCallback } from './useAccountDataCallback';
 import { useStateEventCallback } from './useStateEventCallback';
-
-const IMAGE_PACK_PRELOAD_CONCURRENCY = 4;
-
-type ImagePackPreloadTask = {
-  url: string;
-  resolve: () => void;
-};
-
-const warmedImagePackUrls = new Set<string>();
-const pendingImagePackPreloads = new Map<string, Promise<void>>();
-const imagePackPreloadQueue: ImagePackPreloadTask[] = [];
-let activeImagePackPreloads = 0;
-
-const flushImagePackPreloadQueue = () => {
-  if (typeof Image === 'undefined') {
-    while (imagePackPreloadQueue.length > 0) {
-      const task = imagePackPreloadQueue.shift();
-      if (!task) continue;
-      pendingImagePackPreloads.delete(task.url);
-      task.resolve();
-    }
-    return;
-  }
-
-  while (
-    activeImagePackPreloads < IMAGE_PACK_PRELOAD_CONCURRENCY &&
-    imagePackPreloadQueue.length > 0
-  ) {
-    const task = imagePackPreloadQueue.shift();
-    if (!task) return;
-
-    activeImagePackPreloads += 1;
-
-    const img = new Image();
-    img.decoding = 'async';
-
-    let settled = false;
-    const complete = (loaded: boolean) => {
-      if (settled) return;
-      settled = true;
-
-      if (loaded) {
-        warmedImagePackUrls.add(task.url);
-      }
-
-      pendingImagePackPreloads.delete(task.url);
-      activeImagePackPreloads -= 1;
-      task.resolve();
-      flushImagePackPreloadQueue();
-    };
-
-    img.onload = () => complete(true);
-    img.onerror = () => complete(false);
-    img.src = task.url;
-
-    if (img.complete) {
-      complete(true);
-    }
-  }
-};
-
-const preloadImagePackUrl = (url: string) => {
-  if (!url || warmedImagePackUrls.has(url)) return undefined;
-
-  const existingPreload = pendingImagePackPreloads.get(url);
-  if (existingPreload) {
-    return existingPreload;
-  }
-
-  const preloadPromise = new Promise<void>((resolve) => {
-    imagePackPreloadQueue.push({ url, resolve });
-  });
-
-  pendingImagePackPreloads.set(url, preloadPromise);
-  setTimeout(flushImagePackPreloadQueue, 0);
-
-  return preloadPromise;
-};
+import { primePersistentMediaUrl } from '../utils/mediaUrlCache';
 
 const warmImagePackMedia = (
   mx: ReturnType<typeof useMatrixClient>,
@@ -124,9 +47,12 @@ const warmImagePackMedia = (
   });
 
   mediaUrls.forEach((mediaUrl) => {
-    void preloadImagePackUrl(mediaUrl);
+    void primePersistentMediaUrl(mediaUrl);
   });
 };
+
+const getJoinedRooms = (mx: ReturnType<typeof useMatrixClient>) =>
+  mx.getRooms().filter((room) => room.getMyMembership() === Membership.Join);
 
 const getRelevantPacks = (
   userPack: ImagePack | undefined,
@@ -351,4 +277,32 @@ export const useWarmImagePackMedia = (rooms: Room[]) => {
       ImageUsage.Sticker,
     ]);
   }, [mx, relevantPacks, useAuthentication]);
+};
+
+export const useWarmAllImagePackMedia = () => {
+  const mx = useMatrixClient();
+  const [rooms, setRooms] = useState<Room[]>(() => getJoinedRooms(mx));
+
+  useEffect(() => {
+    const updateRooms = () => {
+      setRooms(getJoinedRooms(mx));
+    };
+
+    const handleRoom = () => updateRooms();
+    const handleMembership = () => updateRooms();
+    const handleDeleteRoom = () => updateRooms();
+
+    updateRooms();
+    mx.on(ClientEvent.Room, handleRoom);
+    mx.on(RoomEvent.MyMembership, handleMembership);
+    mx.on(ClientEvent.DeleteRoom, handleDeleteRoom);
+
+    return () => {
+      mx.removeListener(ClientEvent.Room, handleRoom);
+      mx.removeListener(RoomEvent.MyMembership, handleMembership);
+      mx.removeListener(ClientEvent.DeleteRoom, handleDeleteRoom);
+    };
+  }, [mx]);
+
+  useWarmImagePackMedia(rooms);
 };
