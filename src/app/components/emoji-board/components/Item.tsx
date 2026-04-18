@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box } from 'folds';
 import { MatrixClient } from 'matrix-js-sdk';
+import { IImageInfo } from '../../../../types/matrix/common';
 import { EmojiItemInfo, EmojiType } from '../types';
 import * as css from './styles.css';
 import { PackImageReader } from '../../../plugins/custom-emoji';
@@ -12,6 +13,19 @@ export const getEmojiItemInfo = (element: Element): EmojiItemInfo | undefined =>
   const type = element.getAttribute('data-emoji-type') as EmojiType | undefined;
   const data = element.getAttribute('data-emoji-data');
   const shortcode = element.getAttribute('data-emoji-shortcode');
+  const infoStr = element.getAttribute('data-emoji-info');
+
+  let info: IImageInfo | undefined;
+  if (infoStr) {
+    try {
+      const parsedInfo = JSON.parse(infoStr);
+      if (parsedInfo && typeof parsedInfo === 'object') {
+        info = parsedInfo as IImageInfo;
+      }
+    } catch {
+      info = undefined;
+    }
+  }
 
   if (type && data && shortcode && label)
     return {
@@ -19,6 +33,7 @@ export const getEmojiItemInfo = (element: Element): EmojiItemInfo | undefined =>
       data,
       shortcode,
       label,
+      info,
     };
   return undefined;
 };
@@ -65,7 +80,8 @@ export function CustomEmojiItem({ mx, useAuthentication, image }: CustomEmojiIte
       data-emoji-shortcode={image.shortcode}
     >
       <img
-        loading="lazy"
+        loading="eager"
+        decoding="async"
         className={css.CustomEmojiImg}
         alt={image.body || image.shortcode}
         src={mxcUrlToHttp(mx, image.url, useAuthentication) ?? ''}
@@ -93,9 +109,11 @@ export function StickerItem({ mx, useAuthentication, image }: StickerItemProps) 
       data-emoji-type={EmojiType.Sticker}
       data-emoji-data={image.url}
       data-emoji-shortcode={image.shortcode}
+      data-emoji-info={image.info ? JSON.stringify(image.info) : undefined}
     >
       <img
-        loading="lazy"
+        loading="eager"
+        decoding="async"
         className={css.StickerImg}
         alt={image.body || image.shortcode}
         src={mxcUrlToHttp(mx, image.url, useAuthentication) ?? ''}

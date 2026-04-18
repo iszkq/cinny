@@ -15,6 +15,7 @@ import { isKeyHotkey } from 'is-hotkey';
 import { Room } from 'matrix-js-sdk';
 import { atom, PrimitiveAtom, useAtom, useSetAtom } from 'jotai';
 import { useVirtualizer } from '@tanstack/react-virtual';
+import { IImageInfo } from '../../../types/matrix/common';
 import { IEmoji, emojiGroups, emojis } from '../../plugins/emoji';
 import { useEmojiGroupLabels } from './useEmojiGroupLabels';
 import { useEmojiGroupIcons } from './useEmojiGroupIcons';
@@ -357,7 +358,7 @@ type EmojiBoardProps = {
   returnFocusOnDeactivate?: boolean;
   onEmojiSelect?: (unicode: string, shortcode: string) => void;
   onCustomEmojiSelect?: (mxc: string, shortcode: string) => void;
-  onStickerSelect?: (mxc: string, shortcode: string, label: string) => void;
+  onStickerSelect?: (mxc: string, label: string, info?: IImageInfo) => void;
   allowTextCustomEmoji?: boolean;
   addToRecentEmoji?: boolean;
 };
@@ -442,7 +443,7 @@ export function EmojiBoard({
       onCustomEmojiSelect?.(emojiInfo.data, emojiInfo.shortcode);
     }
     if (emojiInfo.type === EmojiType.Sticker) {
-      onStickerSelect?.(emojiInfo.data, emojiInfo.shortcode, emojiInfo.label);
+      onStickerSelect?.(emojiInfo.data, emojiInfo.label, emojiInfo.info);
     }
     if (!evt.altKey && !evt.shiftKey) requestClose();
   };

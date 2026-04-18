@@ -1,3 +1,5 @@
+import { IImageInfo } from '../../../types/matrix/common';
+
 export enum EmojiBoardTab {
   Emoji = 'Emoji',
   Sticker = 'Sticker',
@@ -14,4 +16,5 @@ export type EmojiItemInfo = {
   data: string;
   shortcode: string;
   label: string;
+  info?: IImageInfo;
 };
