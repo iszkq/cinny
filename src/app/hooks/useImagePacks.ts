@@ -20,6 +20,18 @@ import { useAccountDataCallback } from './useAccountDataCallback';
 import { useStateEventCallback } from './useStateEventCallback';
 import { primePersistentMediaUrl } from '../utils/mediaUrlCache';
 
+const GLOBAL_IMAGE_PACK_WARM_DELAY_MS = 2500;
+const GLOBAL_IMAGE_PACK_WARM_IDLE_TIMEOUT_MS = 10000;
+
+type IdleWindow = Window &
+  typeof globalThis & {
+    requestIdleCallback?: (
+      callback: (deadline: { didTimeout: boolean; timeRemaining: () => number }) => void,
+      options?: { timeout: number }
+    ) => number;
+    cancelIdleCallback?: (handle: number) => void;
+  };
+
 const warmImagePackMedia = (
   mx: ReturnType<typeof useMatrixClient>,
   useAuthentication: boolean,
@@ -275,7 +287,17 @@ export const useWarmImagePackMedia = (rooms: Room[]) => {
 
 export const useWarmAllImagePackMedia = () => {
   const mx = useMatrixClient();
+  const useAuthentication = useMediaAuthentication();
+  const userPack = useUserImagePack();
+  const customUserPacks = useCustomUserImagePacks();
+  const globalPacks = useGlobalImagePacks();
   const [rooms, setRooms] = useState<Room[]>(() => getJoinedRooms(mx));
+  const roomsPacks = useRoomsImagePacks(rooms);
+
+  const relevantPacks = useMemo(
+    () => getRelevantPacks(userPack, customUserPacks, globalPacks, roomsPacks),
+    [userPack, customUserPacks, globalPacks, roomsPacks]
+  );
 
   useEffect(() => {
     const updateRooms = () => {
@@ -298,5 +320,48 @@ export const useWarmAllImagePackMedia = () => {
     };
   }, [mx]);
 
-  useWarmImagePackMedia(rooms);
+  useEffect(() => {
+    if (relevantPacks.length === 0) {
+      return undefined;
+    }
+
+    let disposed = false;
+    let delayTimer: number | undefined;
+    let idleHandle: number | undefined;
+
+    const scheduleWarm = () => {
+      if (disposed) {
+        return;
+      }
+
+      warmImagePackMedia(mx, useAuthentication, relevantPacks, [
+        ImageUsage.Emoticon,
+        ImageUsage.Sticker,
+      ]);
+    };
+
+    delayTimer = window.setTimeout(() => {
+      const idleWindow = window as IdleWindow;
+      if (idleWindow.requestIdleCallback) {
+        idleHandle = idleWindow.requestIdleCallback(() => {
+          scheduleWarm();
+        }, { timeout: GLOBAL_IMAGE_PACK_WARM_IDLE_TIMEOUT_MS });
+        return;
+      }
+
+      scheduleWarm();
+    }, GLOBAL_IMAGE_PACK_WARM_DELAY_MS);
+
+    return () => {
+      disposed = true;
+      if (typeof delayTimer === 'number') {
+        window.clearTimeout(delayTimer);
+      }
+
+      const idleWindow = window as IdleWindow;
+      if (typeof idleHandle === 'number' && idleWindow.cancelIdleCallback) {
+        idleWindow.cancelIdleCallback(idleHandle);
+      }
+    };
+  }, [mx, relevantPacks, useAuthentication]);
 };
