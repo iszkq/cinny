@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Box } from 'folds';
 import { MatrixClient } from 'matrix-js-sdk';
 import { IImageInfo } from '../../../../types/matrix/common';
@@ -7,7 +7,7 @@ import * as css from './styles.css';
 import { PackImageReader } from '../../../plugins/custom-emoji';
 import { IEmoji } from '../../../plugins/emoji';
 import { mxcUrlToHttp } from '../../../utils/matrix';
-import { useAnimatedMediaPreview } from '../../../hooks/useAnimatedMediaPreview';
+import { useCachedMediaUrl } from '../../../hooks/useCachedMediaUrl';
 
 export const getEmojiItemInfo = (element: Element): EmojiItemInfo | undefined => {
   const label = element.getAttribute('title');
@@ -67,10 +67,9 @@ type CustomEmojiItemProps = {
   image: PackImageReader;
 };
 export function CustomEmojiItem({ mx, useAuthentication, image }: CustomEmojiItemProps) {
-  const [animate, setAnimate] = useState(false);
   const mediaUrl = mxcUrlToHttp(mx, image.url, useAuthentication) ?? '';
-  const staticPreviewUrl = useAnimatedMediaPreview(mediaUrl, image.info);
-  const displayUrl = animate || !staticPreviewUrl ? mediaUrl : staticPreviewUrl;
+  const cachedMediaUrl = useCachedMediaUrl(mediaUrl);
+  const displayUrl = cachedMediaUrl ?? mediaUrl;
 
   return (
     <Box
@@ -84,16 +83,12 @@ export function CustomEmojiItem({ mx, useAuthentication, image }: CustomEmojiIte
       data-emoji-type={EmojiType.CustomEmoji}
       data-emoji-data={image.url}
       data-emoji-shortcode={image.shortcode}
-      onMouseEnter={() => setAnimate(true)}
-      onMouseLeave={() => setAnimate(false)}
-      onFocus={() => setAnimate(true)}
-      onBlur={() => setAnimate(false)}
     >
       <img
         loading="eager"
         decoding="async"
         className={css.CustomEmojiImg}
-        alt={image.body || image.shortcode}
+        alt=""
         src={displayUrl}
       />
     </Box>
@@ -107,10 +102,9 @@ type StickerItemProps = {
 };
 
 export function StickerItem({ mx, useAuthentication, image }: StickerItemProps) {
-  const [animate, setAnimate] = useState(false);
   const mediaUrl = mxcUrlToHttp(mx, image.url, useAuthentication) ?? '';
-  const staticPreviewUrl = useAnimatedMediaPreview(mediaUrl, image.info);
-  const displayUrl = animate || !staticPreviewUrl ? mediaUrl : staticPreviewUrl;
+  const cachedMediaUrl = useCachedMediaUrl(mediaUrl);
+  const displayUrl = cachedMediaUrl ?? mediaUrl;
 
   return (
     <Box
@@ -125,16 +119,12 @@ export function StickerItem({ mx, useAuthentication, image }: StickerItemProps) 
       data-emoji-data={image.url}
       data-emoji-shortcode={image.shortcode}
       data-emoji-info={image.info ? JSON.stringify(image.info) : undefined}
-      onMouseEnter={() => setAnimate(true)}
-      onMouseLeave={() => setAnimate(false)}
-      onFocus={() => setAnimate(true)}
-      onBlur={() => setAnimate(false)}
     >
       <img
         loading="eager"
         decoding="async"
         className={css.StickerImg}
-        alt={image.body || image.shortcode}
+        alt=""
         src={displayUrl}
       />
     </Box>

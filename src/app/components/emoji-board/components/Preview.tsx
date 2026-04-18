@@ -5,6 +5,7 @@ import * as css from './styles.css';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { mxcUrlToHttp } from '../../../utils/matrix';
+import { useCachedMediaUrl } from '../../../hooks/useCachedMediaUrl';
 
 export type PreviewData = {
   key: string;
@@ -22,6 +23,9 @@ export function Preview({ previewAtom }: PreviewProps) {
   const useAuthentication = useMediaAuthentication();
 
   const { key, shortcode } = useAtomValue(previewAtom) ?? {};
+  const mediaUrl =
+    key && key.startsWith('mxc://') ? (mxcUrlToHttp(mx, key, useAuthentication) ?? key) : undefined;
+  const cachedMediaUrl = useCachedMediaUrl(mediaUrl);
 
   if (!shortcode) return null;
 
@@ -37,8 +41,8 @@ export function Preview({ previewAtom }: PreviewProps) {
           {key.startsWith('mxc://') ? (
             <img
               className={css.PreviewImg}
-              src={mxcUrlToHttp(mx, key, useAuthentication) ?? key}
-              alt={shortcode}
+              src={cachedMediaUrl ?? mediaUrl}
+              alt=""
             />
           ) : (
             key

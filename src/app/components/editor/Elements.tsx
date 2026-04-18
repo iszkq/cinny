@@ -15,6 +15,7 @@ import { getBeginCommand } from './utils';
 import { BlockType } from './types';
 import { mxcUrlToHttp } from '../../utils/matrix';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
+import { useCachedMediaUrl } from '../../hooks/useCachedMediaUrl';
 
 // Put this at the start and end of an inline component to work around this Chromium bug:
 // https://bugs.chromium.org/p/chromium/issues/detail?id=1249405
@@ -81,6 +82,9 @@ function RenderEmoticonElement({
   const useAuthentication = useMediaAuthentication();
   const selected = useSelected();
   const focused = useFocused();
+  const mediaUrl =
+    element.key.startsWith('mxc://') ? mxcUrlToHttp(mx, element.key, useAuthentication) : undefined;
+  const cachedMediaUrl = useCachedMediaUrl(mediaUrl);
 
   return (
     <span className={css.EmoticonBase} {...attributes}>
@@ -93,7 +97,7 @@ function RenderEmoticonElement({
         {element.key.startsWith('mxc://') ? (
           <img
             className={css.EmoticonImg}
-            src={mxcUrlToHttp(mx, element.key, useAuthentication) ?? element.key}
+            src={cachedMediaUrl ?? mediaUrl ?? element.key}
             alt={element.shortcode}
           />
         ) : (

@@ -6,6 +6,7 @@ import * as css from './Reaction.css';
 import { getHexcodeForEmoji, getShortcodeFor } from '../../plugins/emoji';
 import { getMemberDisplayName } from '../../utils/room';
 import { eventWithShortcode, getMxIdLocalPart, mxcUrlToHttp } from '../../utils/matrix';
+import { useCachedMediaUrl } from '../../hooks/useCachedMediaUrl';
 
 export const Reaction = as<
   'button',
@@ -15,35 +16,40 @@ export const Reaction = as<
     reaction: string;
     useAuthentication?: boolean;
   }
->(({ className, mx, count, reaction, useAuthentication, ...props }, ref) => (
-  <Box
-    as="button"
-    className={classNames(css.Reaction, className)}
-    alignItems="Center"
-    shrink="No"
-    gap="200"
-    {...props}
-    ref={ref}
-  >
-    <Text className={css.ReactionText} as="span" size="T400">
-      {reaction.startsWith('mxc://') ? (
-        <img
-          className={css.ReactionImg}
-          src={mxcUrlToHttp(mx, reaction, useAuthentication) ?? reaction
-          }
-          alt={reaction}
-        />
-      ) : (
-        <Text as="span" size="Inherit" truncate>
-          {reaction}
-        </Text>
-      )}
-    </Text>
-    <Text as="span" size="T300">
-      {count}
-    </Text>
-  </Box>
-));
+>(({ className, mx, count, reaction, useAuthentication, ...props }, ref) => {
+  const mediaUrl =
+    reaction.startsWith('mxc://') ? mxcUrlToHttp(mx, reaction, useAuthentication) : undefined;
+  const cachedMediaUrl = useCachedMediaUrl(mediaUrl);
+
+  return (
+    <Box
+      as="button"
+      className={classNames(css.Reaction, className)}
+      alignItems="Center"
+      shrink="No"
+      gap="200"
+      {...props}
+      ref={ref}
+    >
+      <Text className={css.ReactionText} as="span" size="T400">
+        {reaction.startsWith('mxc://') ? (
+          <img
+            className={css.ReactionImg}
+            src={cachedMediaUrl ?? mediaUrl ?? reaction}
+            alt={reaction}
+          />
+        ) : (
+          <Text as="span" size="Inherit" truncate>
+            {reaction}
+          </Text>
+        )}
+      </Text>
+      <Text as="span" size="T300">
+        {count}
+      </Text>
+    </Box>
+  );
+});
 
 type ReactionTooltipMsgProps = {
   room: Room;

@@ -17,6 +17,7 @@ import { mxcUrlToHttp } from '../../../utils/matrix';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { ImageUsage, PackImageReader } from '../../../plugins/custom-emoji';
 import { getEmoticonSearchStr } from '../../../plugins/utils';
+import { useCachedMediaUrl } from '../../../hooks/useCachedMediaUrl';
 
 type EmoticonCompleteHandler = (key: string, shortcode: string) => void;
 
@@ -34,6 +35,20 @@ const SEARCH_OPTIONS: UseAsyncSearchOptions = {
     contain: true,
   },
 };
+
+function CustomEmojiOptionMedia({ src, alt }: { src: string; alt: string }) {
+  const cachedMediaUrl = useCachedMediaUrl(src);
+
+  return (
+    <Box
+      shrink="No"
+      as="img"
+      src={cachedMediaUrl ?? src}
+      alt={alt}
+      style={{ width: toRem(24), height: toRem(24), objectFit: 'contain' }}
+    />
+  );
+}
 
 export function EmoticonAutocomplete({
   imagePackRooms,
@@ -104,13 +119,7 @@ export function EmoticonAutocomplete({
             onClick={() => handleAutocomplete(key, emoticon.shortcode)}
             before={
               isCustomEmoji && customEmojiUrl ? (
-                <Box
-                  shrink="No"
-                  as="img"
-                  src={customEmojiUrl}
-                  alt={emoticon.shortcode}
-                  style={{ width: toRem(24), height: toRem(24), objectFit: 'contain' }}
-                />
+                <CustomEmojiOptionMedia src={customEmojiUrl} alt={emoticon.shortcode} />
               ) : (
                 <Box
                   shrink="No"

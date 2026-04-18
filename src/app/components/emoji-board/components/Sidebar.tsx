@@ -14,6 +14,7 @@ import {
 } from 'folds';
 import classNames from 'classnames';
 import * as css from './styles.css';
+import { useCachedMediaUrl } from '../../../hooks/useCachedMediaUrl';
 
 export function Sidebar({ children }: { children: ReactNode }) {
   return (
@@ -118,10 +119,12 @@ export function ImageGroupIcon<T extends string>({
   url,
   onClick,
 }: ImageGroupIconProps<T>) {
+  const cachedUrl = useCachedMediaUrl(url);
+
   return (
     <SidebarBtn active={active} id={id} label={label} onClick={onClick}>
       {url ? (
-        <img className={css.SidebarBtnImg} src={url} alt={label} />
+        <img className={css.SidebarBtnImg} src={cachedUrl ?? url} alt="" />
       ) : (
         <Icon src={Icons.Photo} filled={active} />
       )}
