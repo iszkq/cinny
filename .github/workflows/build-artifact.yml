@@ -1,0 +1,45 @@
+name: Build deploy artifact
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_base_path:
+        description: 'Deployment base path, use / for root domain deployments.'
+        required: true
+        default: '/'
+      hash_router_enabled:
+        description: 'Enable hash router for environments without SPA rewrite support.'
+        required: true
+        type: boolean
+        default: false
+
+jobs:
+  build-artifact:
+    name: Build dist artifact
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup node
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version-file: '.node-version'
+          package-manager-cache: false
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build app
+        env:
+          APP_BASE_PATH: ${{ inputs.app_base_path }}
+          VITE_HASH_ROUTER_ENABLED: ${{ inputs.hash_router_enabled }}
+          NODE_OPTIONS: '--max_old_space_size=4096'
+        run: npm run build
+
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: dist
+          path: dist
+          retention-days: 7
