@@ -1,8 +1,43 @@
 const PERSISTENT_MEDIA_CACHE = 'cinny-auth-media-v1';
 const PERSISTENT_MEDIA_PRELOAD_CONCURRENCY = 4;
 const OBJECT_URL_MEDIA_PRELOAD_CONCURRENCY = 4;
-const MAX_OBJECT_URL_MEDIA_ITEMS = 512;
-const MAX_OBJECT_URL_MEDIA_BYTES = 128 * 1024 * 1024;
+
+type DeviceMemoryNavigator = Navigator & {
+  deviceMemory?: number;
+};
+
+const getObjectUrlMediaLimits = () => {
+  const deviceMemory =
+    typeof navigator === 'undefined'
+      ? undefined
+      : (navigator as DeviceMemoryNavigator).deviceMemory;
+
+  if (typeof deviceMemory === 'number') {
+    if (deviceMemory <= 4) {
+      return {
+        maxItems: 512,
+        maxBytes: 128 * 1024 * 1024,
+      };
+    }
+
+    if (deviceMemory >= 8) {
+      return {
+        maxItems: 2048,
+        maxBytes: 384 * 1024 * 1024,
+      };
+    }
+  }
+
+  return {
+    maxItems: 1024,
+    maxBytes: 256 * 1024 * 1024,
+  };
+};
+
+const {
+  maxItems: MAX_OBJECT_URL_MEDIA_ITEMS,
+  maxBytes: MAX_OBJECT_URL_MEDIA_BYTES,
+} = getObjectUrlMediaLimits();
 
 type PersistentMediaTask = {
   src: string;
@@ -22,14 +57,27 @@ type ObjectUrlMediaEntry = {
 type ObjectUrlMediaTask = {
   src: string;
   resolve: (value: string | undefined) => void;
+  priority: 'visible' | 'background';
 };
 
 const objectUrlMediaCache = new Map<string, ObjectUrlMediaEntry>();
 const pendingObjectUrlMedia = new Map<string, Promise<string | undefined>>();
-const objectUrlMediaQueue: ObjectUrlMediaTask[] = [];
+const queuedObjectUrlMediaTasks = new Map<string, ObjectUrlMediaTask>();
+const objectUrlMediaListeners = new Map<
+  string,
+  Set<(objectUrl: string | undefined) => void>
+>();
+const visibleObjectUrlMediaQueue: ObjectUrlMediaTask[] = [];
+const backgroundObjectUrlMediaQueue: ObjectUrlMediaTask[] = [];
 let objectUrlMediaCleanupBound = false;
 let objectUrlMediaBytes = 0;
 let activeObjectUrlMediaTasks = 0;
+
+const emitObjectUrlMediaChange = (src: string, objectUrl: string | undefined) => {
+  objectUrlMediaListeners.get(src)?.forEach((listener) => {
+    listener(objectUrl);
+  });
+};
 
 const revokeObjectUrl = (url?: string) => {
   if (url?.startsWith('blob:')) {
@@ -38,10 +86,9 @@ const revokeObjectUrl = (url?: string) => {
 };
 
 const clearObjectUrlMediaCache = () => {
-  objectUrlMediaCache.forEach(({ objectUrl }) => {
-    revokeObjectUrl(objectUrl);
+  Array.from(objectUrlMediaCache.keys()).forEach((src) => {
+    removeObjectUrlMediaEntry(src);
   });
-  objectUrlMediaCache.clear();
   objectUrlMediaBytes = 0;
 };
 
@@ -52,6 +99,7 @@ const removeObjectUrlMediaEntry = (src: string) => {
   objectUrlMediaCache.delete(src);
   objectUrlMediaBytes = Math.max(0, objectUrlMediaBytes - entry.size);
   revokeObjectUrl(entry.objectUrl);
+  emitObjectUrlMediaChange(src, undefined);
 };
 
 const touchObjectUrlMediaEntry = (src: string): ObjectUrlMediaEntry | undefined => {
@@ -91,6 +139,7 @@ const setObjectUrlMediaEntry = (src: string, objectUrl: string, size: number) =>
   objectUrlMediaBytes += size;
 
   trimObjectUrlMediaCache();
+  emitObjectUrlMediaChange(src, objectUrlMediaCache.get(src)?.objectUrl);
 };
 
 const createObjectUrlFromMedia = async (src: string): Promise<string | undefined> => {
@@ -117,14 +166,33 @@ const createObjectUrlFromMedia = async (src: string): Promise<string | undefined
   return objectUrl;
 };
 
+const removeQueuedObjectUrlMediaTask = (queue: ObjectUrlMediaTask[], src: string) => {
+  const queueIndex = queue.findIndex((task) => task.src === src);
+  if (queueIndex >= 0) {
+    queue.splice(queueIndex, 1);
+  }
+};
+
+const promoteObjectUrlMediaTask = (src: string) => {
+  const queuedTask = queuedObjectUrlMediaTasks.get(src);
+  if (!queuedTask || queuedTask.priority === 'visible') {
+    return;
+  }
+
+  removeQueuedObjectUrlMediaTask(backgroundObjectUrlMediaQueue, src);
+  queuedTask.priority = 'visible';
+  visibleObjectUrlMediaQueue.push(queuedTask);
+};
+
 const flushObjectUrlMediaQueue = () => {
   while (
     activeObjectUrlMediaTasks < OBJECT_URL_MEDIA_PRELOAD_CONCURRENCY &&
-    objectUrlMediaQueue.length > 0
+    (visibleObjectUrlMediaQueue.length > 0 || backgroundObjectUrlMediaQueue.length > 0)
   ) {
-    const task = objectUrlMediaQueue.shift();
+    const task = visibleObjectUrlMediaQueue.shift() ?? backgroundObjectUrlMediaQueue.shift();
     if (!task) return;
 
+    queuedObjectUrlMediaTasks.delete(task.src);
     activeObjectUrlMediaTasks += 1;
 
     createObjectUrlFromMedia(task.src)
@@ -246,8 +314,34 @@ export const primePersistentMediaUrl = (src?: string): Promise<void> | undefined
 export const getCachedMediaObjectUrl = (src?: string): string | undefined =>
   (src && touchObjectUrlMediaEntry(src)?.objectUrl) || undefined;
 
+export const subscribeCachedMediaObjectUrl = (
+  src: string | undefined,
+  listener: (objectUrl: string | undefined) => void
+): (() => void) => {
+  if (!src) {
+    return () => undefined;
+  }
+
+  const listeners = objectUrlMediaListeners.get(src) ?? new Set();
+  listeners.add(listener);
+  objectUrlMediaListeners.set(src, listeners);
+
+  return () => {
+    const currentListeners = objectUrlMediaListeners.get(src);
+    if (!currentListeners) {
+      return;
+    }
+
+    currentListeners.delete(listener);
+    if (currentListeners.size === 0) {
+      objectUrlMediaListeners.delete(src);
+    }
+  };
+};
+
 export const primeCachedMediaObjectUrl = (
-  src?: string
+  src?: string,
+  priority: 'visible' | 'background' = 'visible'
 ): Promise<string | undefined> | undefined => {
   if (!src) {
     return undefined;
@@ -260,11 +354,22 @@ export const primeCachedMediaObjectUrl = (
 
   const pendingObjectUrl = pendingObjectUrlMedia.get(src);
   if (pendingObjectUrl) {
+    if (priority === 'visible') {
+      promoteObjectUrlMediaTask(src);
+    }
     return pendingObjectUrl;
   }
 
   const objectUrlPromise = new Promise<string | undefined>((resolve) => {
-    objectUrlMediaQueue.push({ src, resolve });
+    const task: ObjectUrlMediaTask = { src, resolve, priority };
+    queuedObjectUrlMediaTasks.set(src, task);
+
+    if (priority === 'visible') {
+      visibleObjectUrlMediaQueue.push(task);
+      return;
+    }
+
+    backgroundObjectUrlMediaQueue.push(task);
   });
 
   pendingObjectUrlMedia.set(src, objectUrlPromise);
