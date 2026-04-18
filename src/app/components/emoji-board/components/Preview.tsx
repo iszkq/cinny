@@ -25,7 +25,8 @@ export function Preview({ previewAtom }: PreviewProps) {
   const { key, shortcode } = useAtomValue(previewAtom) ?? {};
   const mediaUrl =
     key && key.startsWith('mxc://') ? (mxcUrlToHttp(mx, key, useAuthentication) ?? key) : undefined;
-  const { displayUrl, hasFailed, handleLoad, handleError } = useStableMediaUrl(mediaUrl);
+  const { displayUrl, hasFailed, requestKey, handleLoad, handleError } =
+    useStableMediaUrl(mediaUrl);
 
   if (!shortcode) return null;
 
@@ -41,6 +42,7 @@ export function Preview({ previewAtom }: PreviewProps) {
           {key.startsWith('mxc://') ? (
             displayUrl && !hasFailed ? (
               <img
+                key={requestKey}
                 className={css.PreviewImg}
                 src={displayUrl}
                 alt=""

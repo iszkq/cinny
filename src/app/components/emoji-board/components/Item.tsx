@@ -68,7 +68,8 @@ type CustomEmojiItemProps = {
 };
 export function CustomEmojiItem({ mx, useAuthentication, image }: CustomEmojiItemProps) {
   const mediaUrl = mxcUrlToHttp(mx, image.url, useAuthentication) ?? '';
-  const { displayUrl, hasFailed, handleLoad, handleError } = useStableMediaUrl(mediaUrl);
+  const { displayUrl, hasFailed, requestKey, handleLoad, handleError } =
+    useStableMediaUrl(mediaUrl);
 
   return (
     <Box
@@ -85,6 +86,7 @@ export function CustomEmojiItem({ mx, useAuthentication, image }: CustomEmojiIte
     >
       {displayUrl && !hasFailed ? (
         <img
+          key={requestKey}
           loading="eager"
           decoding="async"
           className={css.CustomEmojiImg}
@@ -110,7 +112,8 @@ type StickerItemProps = {
 
 export function StickerItem({ mx, useAuthentication, image }: StickerItemProps) {
   const mediaUrl = mxcUrlToHttp(mx, image.url, useAuthentication) ?? '';
-  const { displayUrl, hasFailed, handleLoad, handleError } = useStableMediaUrl(mediaUrl);
+  const { displayUrl, hasFailed, requestKey, handleLoad, handleError } =
+    useStableMediaUrl(mediaUrl);
 
   return (
     <Box
@@ -128,6 +131,7 @@ export function StickerItem({ mx, useAuthentication, image }: StickerItemProps) 
     >
       {displayUrl && !hasFailed ? (
         <img
+          key={requestKey}
           loading="eager"
           decoding="async"
           className={css.StickerImg}

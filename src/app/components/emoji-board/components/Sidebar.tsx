@@ -121,12 +121,16 @@ export function ImageGroupIcon<T extends string>({
   fallbackUrl,
   onClick,
 }: ImageGroupIconProps<T>) {
-  const { displayUrl, hasFailed, handleLoad, handleError } = useStableMediaUrl(url, fallbackUrl);
+  const { displayUrl, hasFailed, requestKey, handleLoad, handleError } = useStableMediaUrl(
+    url,
+    fallbackUrl
+  );
 
   return (
     <SidebarBtn active={active} id={id} label={label} onClick={onClick}>
       {displayUrl && !hasFailed ? (
         <img
+          key={requestKey}
           className={css.SidebarBtnImg}
           src={displayUrl}
           alt=""

@@ -2,12 +2,15 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   getCachedMediaObjectUrl,
   primeCachedMediaObjectUrl,
+  subscribeCachedMediaObjectUrl,
 } from '../../../utils/mediaUrlCache';
 
 type MediaCandidate = {
   source: string;
   displayUrl: string;
 };
+
+const MAX_MEDIA_RETRY_COUNT = 12;
 
 const buildMediaCandidates = (...sources: Array<string | undefined>): MediaCandidate[] => {
   const candidates: MediaCandidate[] = [];
@@ -37,30 +40,98 @@ const buildMediaCandidates = (...sources: Array<string | undefined>): MediaCandi
 };
 
 export const useStableMediaUrl = (src?: string, fallbackSrc?: string) => {
-  const candidates = useMemo(() => buildMediaCandidates(src, fallbackSrc), [src, fallbackSrc]);
   const [candidateIndex, setCandidateIndex] = useState(0);
+  const [cacheVersion, setCacheVersion] = useState(0);
+  const [loadedDisplayUrl, setLoadedDisplayUrl] = useState<string | undefined>();
+  const [retryCount, setRetryCount] = useState(0);
+
+  const candidates = useMemo(
+    () => buildMediaCandidates(src, fallbackSrc),
+    [src, fallbackSrc, cacheVersion]
+  );
 
   useEffect(() => {
     setCandidateIndex(0);
+    setLoadedDisplayUrl(undefined);
+    setRetryCount(0);
+  }, [src, fallbackSrc]);
+
+  useEffect(() => {
+    if (!src && !fallbackSrc) {
+      return undefined;
+    }
+
+    const handleCachedUrlChange = () => {
+      setCacheVersion((prev) => prev + 1);
+      setCandidateIndex(0);
+    };
+
+    const unsubscribeList = [
+      subscribeCachedMediaObjectUrl(src, handleCachedUrlChange),
+      fallbackSrc && fallbackSrc !== src
+        ? subscribeCachedMediaObjectUrl(fallbackSrc, handleCachedUrlChange)
+        : undefined,
+    ].filter(Boolean) as Array<() => void>;
+
+    if (src) {
+      void primeCachedMediaObjectUrl(src);
+    }
+    if (fallbackSrc && fallbackSrc !== src) {
+      void primeCachedMediaObjectUrl(fallbackSrc);
+    }
+
+    return () => {
+      unsubscribeList.forEach((unsubscribe) => unsubscribe());
+    };
   }, [src, fallbackSrc]);
 
   const activeCandidate = candidates[candidateIndex];
+  const displayUrl = loadedDisplayUrl ?? activeCandidate?.displayUrl;
+  const hasFailed = !loadedDisplayUrl && (candidates.length === 0 || candidateIndex >= candidates.length);
+  const requestKey = `${candidateIndex}-${cacheVersion}-${retryCount}-${displayUrl ?? 'empty'}`;
+
+  useEffect(() => {
+    if (!hasFailed || loadedDisplayUrl || retryCount >= MAX_MEDIA_RETRY_COUNT) {
+      return undefined;
+    }
+
+    const retryTimer = window.setTimeout(() => {
+      setRetryCount((prev) => prev + 1);
+      setCacheVersion((prev) => prev + 1);
+      setCandidateIndex(0);
+
+      if (src) {
+        void primeCachedMediaObjectUrl(src);
+      }
+      if (fallbackSrc && fallbackSrc !== src) {
+        void primeCachedMediaObjectUrl(fallbackSrc);
+      }
+    }, Math.min(1200 * (retryCount + 1), 4000));
+
+    return () => {
+      window.clearTimeout(retryTimer);
+    };
+  }, [fallbackSrc, hasFailed, loadedDisplayUrl, retryCount, src]);
 
   const handleLoad = useCallback(() => {
     if (activeCandidate?.source) {
       void primeCachedMediaObjectUrl(activeCandidate.source);
     }
+    setLoadedDisplayUrl((prev) => prev ?? activeCandidate?.displayUrl);
   }, [activeCandidate]);
 
   const handleError = useCallback(() => {
-    setCandidateIndex((currentIndex) =>
-      Math.min(currentIndex + 1, candidates.length)
-    );
-  }, [candidates.length]);
+    if (loadedDisplayUrl) {
+      return;
+    }
+
+    setCandidateIndex((currentIndex) => Math.min(currentIndex + 1, candidates.length));
+  }, [candidates.length, loadedDisplayUrl]);
 
   return {
-    displayUrl: activeCandidate?.displayUrl,
-    hasFailed: candidates.length === 0 || candidateIndex >= candidates.length,
+    displayUrl,
+    hasFailed,
+    requestKey,
     handleLoad,
     handleError,
   };
