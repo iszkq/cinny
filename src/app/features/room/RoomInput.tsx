@@ -10,6 +10,7 @@ import React, {
 import { useAtom, useAtomValue } from 'jotai';
 import { isKeyHotkey } from 'is-hotkey';
 import { EventType, IContent, MsgType, RelationType, Room } from 'matrix-js-sdk';
+import { IImageInfo } from '../../../types/matrix/common';
 import { ReactEditor } from 'slate-react';
 import { Transforms, Editor } from 'slate';
 import {
@@ -60,9 +61,7 @@ import { UseStateProvider } from '../../components/UseStateProvider';
 import {
   TUploadContent,
   encryptFile,
-  getImageInfo,
   getMxIdLocalPart,
-  mxcUrlToHttp,
 } from '../../utils/matrix';
 import { useTypingStatusUpdater } from '../../hooks/useTypingStatusUpdater';
 import { useFilePicker } from '../../hooks/useFilePicker';
@@ -89,7 +88,6 @@ import {
   UploadSuccess,
   createUploadFamilyObserverAtom,
 } from '../../state/upload';
-import { getImageUrlBlob, loadImageElement } from '../../utils/dom';
 import { safeFile } from '../../utils/mimeTypes';
 import { fulfilledPromiseSettledResult, millisecondsToMinutesAndSeconds } from '../../utils/common';
 import { useSetting } from '../../state/hooks/settings';
@@ -107,8 +105,8 @@ import { mobileOrTablet } from '../../utils/user-agent';
 import { useElementSizeObserver } from '../../hooks/useElementSizeObserver';
 import { ReplyLayout, ThreadIndicator } from '../../components/message';
 import { roomToParentsAtom } from '../../state/room/roomToParents';
-import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 import { useImagePackRooms } from '../../hooks/useImagePackRooms';
+import { useWarmImagePackMedia } from '../../hooks/useImagePacks';
 import { usePowerLevelsContext } from '../../hooks/usePowerLevels';
 import colorMXID from '../../../util/colorMXID';
 import { useIsDirectRoom } from '../../hooks/useRoom';
@@ -134,7 +132,6 @@ interface RoomInputProps {
 export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
   ({ editor, fileDropContainerRef, roomId, room }, ref) => {
     const mx = useMatrixClient();
-    const useAuthentication = useMediaAuthentication();
     const [enterForNewline] = useSetting(settingsAtom, 'enterForNewline');
     const [isMarkdown] = useSetting(settingsAtom, 'isMarkdown');
     const [sendTypingNotifications] = useSetting(settingsAtom, 'sendTypingNotifications');
@@ -184,6 +181,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const uploadBoardHandlers = useRef<UploadBoardImperativeHandlers>();
 
     const imagePackRooms: Room[] = useImagePackRooms(roomId, roomToParents);
+    useWarmImagePackMedia(imagePackRooms);
 
     const [toolbar, setToolbar] = useSetting(settingsAtom, 'editorToolbar');
     const [autocompleteQuery, setAutocompleteQuery] =
@@ -573,19 +571,11 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       moveCursor(editor);
     };
 
-    const handleStickerSelect = async (mxc: string, shortcode: string, label: string) => {
-      const stickerUrl = mxcUrlToHttp(mx, mxc, useAuthentication);
-      if (!stickerUrl) return;
-
-      const info = await getImageInfo(
-        await loadImageElement(stickerUrl),
-        await getImageUrlBlob(stickerUrl)
-      );
-
+    const handleStickerSelect = (mxc: string, label: string, info?: IImageInfo) => {
       mx.sendEvent(roomId, EventType.Sticker, {
         body: label,
         url: mxc,
-        info,
+        ...(info ? { info } : {}),
       });
     };
 
