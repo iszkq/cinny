@@ -28,7 +28,6 @@ import { useSelectedRoom } from '../../hooks/router/useSelectedRoom';
 import { useInboxNotificationsSelected } from '../../hooks/router/useInbox';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 import { ensurePersonalPackSync } from '../../plugins/custom-emoji';
-import { useWarmAllImagePackMedia } from '../../hooks/useImagePacks';
 
 const playAudio = (audioElement: HTMLAudioElement | null) => {
   if (!audioElement) return;
@@ -104,12 +103,6 @@ function PersonalPackSyncFeature() {
       mx.removeListener(ClientEvent.AccountData, handleAccountData);
     };
   }, [mx]);
-
-  return null;
-}
-
-function ImagePackMediaWarmFeature() {
-  useWarmAllImagePackMedia();
 
   return null;
 }
@@ -328,7 +321,6 @@ export function ClientNonUIFeatures({ children }: ClientNonUIFeaturesProps) {
       <PageZoomFeature />
       <PresenceSyncFeature />
       <PersonalPackSyncFeature />
-      <ImagePackMediaWarmFeature />
       <FaviconUpdater />
       <InviteNotifications />
       <MessageNotifications />
