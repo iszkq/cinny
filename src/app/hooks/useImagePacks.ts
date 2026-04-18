@@ -20,19 +20,8 @@ import { useAccountDataCallback } from './useAccountDataCallback';
 import { useStateEventCallback } from './useStateEventCallback';
 import { primeCachedMediaObjectUrl, primePersistentMediaUrl } from '../utils/mediaUrlCache';
 
-const GLOBAL_IMAGE_PACK_WARM_DELAY_MS = 2500;
-const GLOBAL_IMAGE_PACK_WARM_IDLE_TIMEOUT_MS = 10000;
-const GLOBAL_IMAGE_PACK_OBJECT_WARM_DELAY_MS = 4000;
-const GLOBAL_IMAGE_PACK_OBJECT_WARM_IDLE_TIMEOUT_MS = 15000;
-
-type IdleWindow = Window &
-  typeof globalThis & {
-    requestIdleCallback?: (
-      callback: (deadline: { didTimeout: boolean; timeRemaining: () => number }) => void,
-      options?: { timeout: number }
-    ) => number;
-    cancelIdleCallback?: (handle: number) => void;
-  };
+const GLOBAL_IMAGE_PACK_WARM_DELAY_MS = 1000;
+const GLOBAL_IMAGE_PACK_OBJECT_WARM_DELAY_MS = 2500;
 
 const warmImagePackMedia = (
   mx: ReturnType<typeof useMatrixClient>,
@@ -56,7 +45,7 @@ const warmImagePackObjectUrls = (
   const mediaUrls = getImagePackMediaUrls(mx, useAuthentication, packs, usages);
 
   mediaUrls.forEach((mediaUrl) => {
-    void primeCachedMediaObjectUrl(mediaUrl);
+    void primeCachedMediaObjectUrl(mediaUrl, 'background');
   });
 };
 
@@ -354,69 +343,23 @@ export const useWarmAllImagePackMedia = () => {
     let disposed = false;
     let persistentDelayTimer: number | undefined;
     let objectDelayTimer: number | undefined;
-    let persistentIdleHandle: number | undefined;
-    let objectIdleHandle: number | undefined;
-
-    const scheduleWhenIdle = (
-      action: () => void,
-      delay: number,
-      timeout: number,
-      onTimer: (value: number) => void,
-      onIdle: (value: number) => void
-    ) => {
-      const timer = window.setTimeout(() => {
-        const idleWindow = window as IdleWindow;
-        if (idleWindow.requestIdleCallback) {
-          const idle = idleWindow.requestIdleCallback(() => {
-            if (!disposed) {
-              action();
-            }
-          }, { timeout });
-          onIdle(idle);
-          return;
-        }
-
-        if (!disposed) {
-          action();
-        }
-      }, delay);
-
-      onTimer(timer);
-    };
-
-    scheduleWhenIdle(
-      () => {
+    persistentDelayTimer = window.setTimeout(() => {
+      if (!disposed) {
         warmImagePackMedia(mx, useAuthentication, relevantPacks, [
           ImageUsage.Emoticon,
           ImageUsage.Sticker,
         ]);
-      },
-      GLOBAL_IMAGE_PACK_WARM_DELAY_MS,
-      GLOBAL_IMAGE_PACK_WARM_IDLE_TIMEOUT_MS,
-      (value) => {
-        persistentDelayTimer = value;
-      },
-      (value) => {
-        persistentIdleHandle = value;
       }
-    );
+    }, GLOBAL_IMAGE_PACK_WARM_DELAY_MS);
 
-    scheduleWhenIdle(
-      () => {
+    objectDelayTimer = window.setTimeout(() => {
+      if (!disposed) {
         warmImagePackObjectUrls(mx, useAuthentication, relevantPacks, [
           ImageUsage.Emoticon,
           ImageUsage.Sticker,
         ]);
-      },
-      GLOBAL_IMAGE_PACK_OBJECT_WARM_DELAY_MS,
-      GLOBAL_IMAGE_PACK_OBJECT_WARM_IDLE_TIMEOUT_MS,
-      (value) => {
-        objectDelayTimer = value;
-      },
-      (value) => {
-        objectIdleHandle = value;
       }
-    );
+    }, GLOBAL_IMAGE_PACK_OBJECT_WARM_DELAY_MS);
 
     return () => {
       disposed = true;
@@ -425,14 +368,6 @@ export const useWarmAllImagePackMedia = () => {
       }
       if (typeof objectDelayTimer === 'number') {
         window.clearTimeout(objectDelayTimer);
-      }
-
-      const idleWindow = window as IdleWindow;
-      if (typeof persistentIdleHandle === 'number' && idleWindow.cancelIdleCallback) {
-        idleWindow.cancelIdleCallback(persistentIdleHandle);
-      }
-      if (typeof objectIdleHandle === 'number' && idleWindow.cancelIdleCallback) {
-        idleWindow.cancelIdleCallback(objectIdleHandle);
       }
     };
   }, [mx, relevantPacks, useAuthentication]);
