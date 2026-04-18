@@ -199,8 +199,11 @@ function EmojiSidebar({ activeGroupAtom, packs, onScrollToGroup }: EmojiSidebarP
             if (!label)
               label = !pack.address ? '\u4e2a\u4eba\u5206\u7c7b' : mx.getRoom(pack.id)?.name;
 
-            const url =
-              mxcUrlToHttp(mx, pack.getAvatarUrl(usage) ?? '', useAuthentication) ?? undefined;
+            const avatarUrl = pack.meta.avatar
+              ? (mxcUrlToHttp(mx, pack.meta.avatar, useAuthentication) ?? undefined)
+              : undefined;
+            const fallbackUrl =
+              mxcUrlToHttp(mx, pack.getImages(usage)[0]?.url ?? '', useAuthentication) ?? undefined;
 
             return (
               <ImageGroupIcon
@@ -208,7 +211,8 @@ function EmojiSidebar({ activeGroupAtom, packs, onScrollToGroup }: EmojiSidebarP
                 active={activeGroupId === pack.id}
                 id={pack.id}
                 label={label ?? 'Unknown Pack'}
-                url={url}
+                url={avatarUrl ?? fallbackUrl}
+                fallbackUrl={fallbackUrl}
                 onClick={handleScrollToGroup}
               />
             );
@@ -263,8 +267,11 @@ function StickerSidebar({ activeGroupAtom, packs, onScrollToGroup }: StickerSide
           if (!label)
             label = !pack.address ? '\u4e2a\u4eba\u5206\u7c7b' : mx.getRoom(pack.id)?.name;
 
-          const url =
-            mxcUrlToHttp(mx, pack.getAvatarUrl(usage) ?? '', useAuthentication) ?? undefined;
+          const avatarUrl = pack.meta.avatar
+            ? (mxcUrlToHttp(mx, pack.meta.avatar, useAuthentication) ?? undefined)
+            : undefined;
+          const fallbackUrl =
+            mxcUrlToHttp(mx, pack.getImages(usage)[0]?.url ?? '', useAuthentication) ?? undefined;
 
           return (
             <ImageGroupIcon
@@ -272,7 +279,8 @@ function StickerSidebar({ activeGroupAtom, packs, onScrollToGroup }: StickerSide
               active={activeGroupId === pack.id}
               id={pack.id}
               label={label ?? 'Unknown Pack'}
-              url={url}
+              url={avatarUrl ?? fallbackUrl}
+              fallbackUrl={fallbackUrl}
               onClick={handleScrollToGroup}
             />
           );

@@ -14,8 +14,7 @@ import {
 } from 'folds';
 import classNames from 'classnames';
 import * as css from './styles.css';
-import { useCachedMediaUrl } from '../../../hooks/useCachedMediaUrl';
-import { primeCachedMediaObjectUrl } from '../../../utils/mediaUrlCache';
+import { useStableMediaUrl } from './useStableMediaUrl';
 
 export function Sidebar({ children }: { children: ReactNode }) {
   return (
@@ -111,6 +110,7 @@ type ImageGroupIconProps<T extends string> = {
   id: T;
   label: string;
   url?: string;
+  fallbackUrl?: string;
   onClick: (id: T) => void;
 };
 export function ImageGroupIcon<T extends string>({
@@ -118,23 +118,25 @@ export function ImageGroupIcon<T extends string>({
   id,
   label,
   url,
+  fallbackUrl,
   onClick,
 }: ImageGroupIconProps<T>) {
-  const cachedUrl = useCachedMediaUrl(url);
+  const { displayUrl, hasFailed, handleLoad, handleError } = useStableMediaUrl(url, fallbackUrl);
 
   return (
     <SidebarBtn active={active} id={id} label={label} onClick={onClick}>
-      {url ? (
+      {displayUrl && !hasFailed ? (
         <img
           className={css.SidebarBtnImg}
-          src={cachedUrl ?? url}
+          src={displayUrl}
           alt=""
-          onLoad={() => {
-            void primeCachedMediaObjectUrl(url);
-          }}
+          onLoad={handleLoad}
+          onError={handleError}
         />
       ) : (
-        <Icon src={Icons.Photo} filled={active} />
+        <Box className={css.SidebarBtnFallback}>
+          <Icon src={Icons.Photo} filled={active} />
+        </Box>
       )}
     </SidebarBtn>
   );

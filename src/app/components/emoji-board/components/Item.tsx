@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box } from 'folds';
+import { Box, Icon, Icons } from 'folds';
 import { MatrixClient } from 'matrix-js-sdk';
 import { IImageInfo } from '../../../../types/matrix/common';
 import { EmojiItemInfo, EmojiType } from '../types';
@@ -7,8 +7,7 @@ import * as css from './styles.css';
 import { PackImageReader } from '../../../plugins/custom-emoji';
 import { IEmoji } from '../../../plugins/emoji';
 import { mxcUrlToHttp } from '../../../utils/matrix';
-import { useCachedMediaUrl } from '../../../hooks/useCachedMediaUrl';
-import { primeCachedMediaObjectUrl } from '../../../utils/mediaUrlCache';
+import { useStableMediaUrl } from './useStableMediaUrl';
 
 export const getEmojiItemInfo = (element: Element): EmojiItemInfo | undefined => {
   const label = element.getAttribute('title');
@@ -69,8 +68,7 @@ type CustomEmojiItemProps = {
 };
 export function CustomEmojiItem({ mx, useAuthentication, image }: CustomEmojiItemProps) {
   const mediaUrl = mxcUrlToHttp(mx, image.url, useAuthentication) ?? '';
-  const cachedMediaUrl = useCachedMediaUrl(mediaUrl);
-  const displayUrl = cachedMediaUrl ?? mediaUrl;
+  const { displayUrl, hasFailed, handleLoad, handleError } = useStableMediaUrl(mediaUrl);
 
   return (
     <Box
@@ -85,16 +83,21 @@ export function CustomEmojiItem({ mx, useAuthentication, image }: CustomEmojiIte
       data-emoji-data={image.url}
       data-emoji-shortcode={image.shortcode}
     >
-      <img
-        loading="eager"
-        decoding="async"
-        className={css.CustomEmojiImg}
-        alt=""
-        src={displayUrl}
-        onLoad={() => {
-          void primeCachedMediaObjectUrl(mediaUrl);
-        }}
-      />
+      {displayUrl && !hasFailed ? (
+        <img
+          loading="eager"
+          decoding="async"
+          className={css.CustomEmojiImg}
+          alt=""
+          src={displayUrl}
+          onLoad={handleLoad}
+          onError={handleError}
+        />
+      ) : (
+        <Box className={css.CustomEmojiFallback}>
+          <Icon src={Icons.Photo} />
+        </Box>
+      )}
     </Box>
   );
 }
@@ -107,8 +110,7 @@ type StickerItemProps = {
 
 export function StickerItem({ mx, useAuthentication, image }: StickerItemProps) {
   const mediaUrl = mxcUrlToHttp(mx, image.url, useAuthentication) ?? '';
-  const cachedMediaUrl = useCachedMediaUrl(mediaUrl);
-  const displayUrl = cachedMediaUrl ?? mediaUrl;
+  const { displayUrl, hasFailed, handleLoad, handleError } = useStableMediaUrl(mediaUrl);
 
   return (
     <Box
@@ -124,16 +126,21 @@ export function StickerItem({ mx, useAuthentication, image }: StickerItemProps) 
       data-emoji-shortcode={image.shortcode}
       data-emoji-info={image.info ? JSON.stringify(image.info) : undefined}
     >
-      <img
-        loading="eager"
-        decoding="async"
-        className={css.StickerImg}
-        alt=""
-        src={displayUrl}
-        onLoad={() => {
-          void primeCachedMediaObjectUrl(mediaUrl);
-        }}
-      />
+      {displayUrl && !hasFailed ? (
+        <img
+          loading="eager"
+          decoding="async"
+          className={css.StickerImg}
+          alt=""
+          src={displayUrl}
+          onLoad={handleLoad}
+          onError={handleError}
+        />
+      ) : (
+        <Box className={css.StickerFallback}>
+          <Icon src={Icons.Photo} />
+        </Box>
+      )}
     </Box>
   );
 }

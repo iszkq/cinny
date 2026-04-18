@@ -52,6 +52,20 @@ export const SidebarBtnImg = style({
   objectFit: 'contain',
 });
 
+export const SidebarBtnFallback = style([
+  DefaultReset,
+  {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: toRem(24),
+    height: toRem(24),
+    borderRadius: config.radii.R200,
+    backgroundColor: color.SurfaceVariant.Container,
+    color: color.SurfaceVariant.OnContainer,
+  },
+]);
+
 /**
  * Preview
  */
@@ -82,6 +96,20 @@ export const PreviewImg = style([
     width: toRem(32),
     height: toRem(32),
     objectFit: 'contain',
+  },
+]);
+
+export const PreviewFallback = style([
+  DefaultReset,
+  {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: toRem(32),
+    height: toRem(32),
+    borderRadius: config.radii.R300,
+    backgroundColor: color.Surface.Container,
+    color: color.Surface.OnContainer,
   },
 ]);
 
@@ -151,11 +179,39 @@ export const CustomEmojiImg = style([
   },
 ]);
 
+export const CustomEmojiFallback = style([
+  DefaultReset,
+  {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: toRem(32),
+    height: toRem(32),
+    borderRadius: config.radii.R300,
+    backgroundColor: color.SurfaceVariant.Container,
+    color: color.SurfaceVariant.OnContainer,
+  },
+]);
+
 export const StickerImg = style([
   DefaultReset,
   {
     width: toRem(96),
     height: toRem(96),
     objectFit: 'contain',
+  },
+]);
+
+export const StickerFallback = style([
+  DefaultReset,
+  {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: toRem(96),
+    height: toRem(96),
+    borderRadius: config.radii.R300,
+    backgroundColor: color.SurfaceVariant.Container,
+    color: color.SurfaceVariant.OnContainer,
   },
 ]);

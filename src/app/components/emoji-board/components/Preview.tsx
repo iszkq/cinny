@@ -1,12 +1,11 @@
-import { Box, Text } from 'folds';
+import { Box, Icon, Icons, Text } from 'folds';
 import React from 'react';
 import { Atom, atom, useAtomValue } from 'jotai';
 import * as css from './styles.css';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { mxcUrlToHttp } from '../../../utils/matrix';
-import { useCachedMediaUrl } from '../../../hooks/useCachedMediaUrl';
-import { primeCachedMediaObjectUrl } from '../../../utils/mediaUrlCache';
+import { useStableMediaUrl } from './useStableMediaUrl';
 
 export type PreviewData = {
   key: string;
@@ -26,7 +25,7 @@ export function Preview({ previewAtom }: PreviewProps) {
   const { key, shortcode } = useAtomValue(previewAtom) ?? {};
   const mediaUrl =
     key && key.startsWith('mxc://') ? (mxcUrlToHttp(mx, key, useAuthentication) ?? key) : undefined;
-  const cachedMediaUrl = useCachedMediaUrl(mediaUrl);
+  const { displayUrl, hasFailed, handleLoad, handleError } = useStableMediaUrl(mediaUrl);
 
   if (!shortcode) return null;
 
@@ -40,14 +39,19 @@ export function Preview({ previewAtom }: PreviewProps) {
           justifyContent="Center"
         >
           {key.startsWith('mxc://') ? (
-            <img
-              className={css.PreviewImg}
-              src={cachedMediaUrl ?? mediaUrl}
-              alt=""
-              onLoad={() => {
-                void primeCachedMediaObjectUrl(mediaUrl);
-              }}
-            />
+            displayUrl && !hasFailed ? (
+              <img
+                className={css.PreviewImg}
+                src={displayUrl}
+                alt=""
+                onLoad={handleLoad}
+                onError={handleError}
+              />
+            ) : (
+              <Box className={css.PreviewFallback}>
+                <Icon src={Icons.Photo} size="100" />
+              </Box>
+            )
           ) : (
             key
           )}
