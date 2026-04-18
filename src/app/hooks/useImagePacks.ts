@@ -239,8 +239,6 @@ export const useRoomsImagePacks = (rooms: Room[]) => {
 };
 
 export const useRelevantImagePacks = (usage: ImageUsage, rooms: Room[]): ImagePack[] => {
-  const mx = useMatrixClient();
-  const useAuthentication = useMediaAuthentication();
   const userPack = useUserImagePack();
   const customUserPacks = useCustomUserImagePacks();
   const globalPacks = useGlobalImagePacks();
@@ -250,10 +248,6 @@ export const useRelevantImagePacks = (usage: ImageUsage, rooms: Room[]): ImagePa
     const packs = getRelevantPacks(userPack, customUserPacks, globalPacks, roomsPacks);
     return packs.filter((pack) => pack.getImages(usage).length > 0);
   }, [userPack, customUserPacks, globalPacks, roomsPacks, usage]);
-
-  useEffect(() => {
-    warmImagePackMedia(mx, useAuthentication, relevantPacks, [usage]);
-  }, [mx, relevantPacks, usage, useAuthentication]);
 
   return relevantPacks;
 };
