@@ -8,6 +8,7 @@ import { PackImageReader } from '../../../plugins/custom-emoji';
 import { IEmoji } from '../../../plugins/emoji';
 import { mxcUrlToHttp } from '../../../utils/matrix';
 import { useCachedMediaUrl } from '../../../hooks/useCachedMediaUrl';
+import { primeCachedMediaObjectUrl } from '../../../utils/mediaUrlCache';
 
 export const getEmojiItemInfo = (element: Element): EmojiItemInfo | undefined => {
   const label = element.getAttribute('title');
@@ -90,6 +91,9 @@ export function CustomEmojiItem({ mx, useAuthentication, image }: CustomEmojiIte
         className={css.CustomEmojiImg}
         alt=""
         src={displayUrl}
+        onLoad={() => {
+          void primeCachedMediaObjectUrl(mediaUrl);
+        }}
       />
     </Box>
   );
@@ -126,6 +130,9 @@ export function StickerItem({ mx, useAuthentication, image }: StickerItemProps) 
         className={css.StickerImg}
         alt=""
         src={displayUrl}
+        onLoad={() => {
+          void primeCachedMediaObjectUrl(mediaUrl);
+        }}
       />
     </Box>
   );

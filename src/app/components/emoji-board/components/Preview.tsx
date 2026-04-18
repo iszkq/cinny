@@ -6,6 +6,7 @@ import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { mxcUrlToHttp } from '../../../utils/matrix';
 import { useCachedMediaUrl } from '../../../hooks/useCachedMediaUrl';
+import { primeCachedMediaObjectUrl } from '../../../utils/mediaUrlCache';
 
 export type PreviewData = {
   key: string;
@@ -43,6 +44,9 @@ export function Preview({ previewAtom }: PreviewProps) {
               className={css.PreviewImg}
               src={cachedMediaUrl ?? mediaUrl}
               alt=""
+              onLoad={() => {
+                void primeCachedMediaObjectUrl(mediaUrl);
+              }}
             />
           ) : (
             key

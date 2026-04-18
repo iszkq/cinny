@@ -15,6 +15,7 @@ import {
 import classNames from 'classnames';
 import * as css from './styles.css';
 import { useCachedMediaUrl } from '../../../hooks/useCachedMediaUrl';
+import { primeCachedMediaObjectUrl } from '../../../utils/mediaUrlCache';
 
 export function Sidebar({ children }: { children: ReactNode }) {
   return (
@@ -124,7 +125,14 @@ export function ImageGroupIcon<T extends string>({
   return (
     <SidebarBtn active={active} id={id} label={label} onClick={onClick}>
       {url ? (
-        <img className={css.SidebarBtnImg} src={cachedUrl ?? url} alt="" />
+        <img
+          className={css.SidebarBtnImg}
+          src={cachedUrl ?? url}
+          alt=""
+          onLoad={() => {
+            void primeCachedMediaObjectUrl(url);
+          }}
+        />
       ) : (
         <Icon src={Icons.Photo} filled={active} />
       )}
