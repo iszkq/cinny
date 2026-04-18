@@ -1,5 +1,7 @@
 const PERSISTENT_MEDIA_CACHE = 'cinny-auth-media-v1';
 const PERSISTENT_MEDIA_PRELOAD_CONCURRENCY = 4;
+const MAX_OBJECT_URL_MEDIA_ITEMS = 256;
+const MAX_OBJECT_URL_MEDIA_BYTES = 64 * 1024 * 1024;
 
 type PersistentMediaTask = {
   src: string;
@@ -11,9 +13,15 @@ const pendingPersistentMedia = new Map<string, Promise<void>>();
 const persistentMediaQueue: PersistentMediaTask[] = [];
 let activePersistentMediaTasks = 0;
 
-const objectUrlMediaCache = new Map<string, string>();
+type ObjectUrlMediaEntry = {
+  objectUrl: string;
+  size: number;
+};
+
+const objectUrlMediaCache = new Map<string, ObjectUrlMediaEntry>();
 const pendingObjectUrlMedia = new Map<string, Promise<string | undefined>>();
 let objectUrlMediaCleanupBound = false;
+let objectUrlMediaBytes = 0;
 
 const revokeObjectUrl = (url?: string) => {
   if (url?.startsWith('blob:')) {
@@ -22,10 +30,59 @@ const revokeObjectUrl = (url?: string) => {
 };
 
 const clearObjectUrlMediaCache = () => {
-  objectUrlMediaCache.forEach((objectUrl) => {
+  objectUrlMediaCache.forEach(({ objectUrl }) => {
     revokeObjectUrl(objectUrl);
   });
   objectUrlMediaCache.clear();
+  objectUrlMediaBytes = 0;
+};
+
+const removeObjectUrlMediaEntry = (src: string) => {
+  const entry = objectUrlMediaCache.get(src);
+  if (!entry) return;
+
+  objectUrlMediaCache.delete(src);
+  objectUrlMediaBytes = Math.max(0, objectUrlMediaBytes - entry.size);
+  revokeObjectUrl(entry.objectUrl);
+};
+
+const touchObjectUrlMediaEntry = (src: string): ObjectUrlMediaEntry | undefined => {
+  const entry = objectUrlMediaCache.get(src);
+  if (!entry) {
+    return undefined;
+  }
+
+  objectUrlMediaCache.delete(src);
+  objectUrlMediaCache.set(src, entry);
+
+  return entry;
+};
+
+const trimObjectUrlMediaCache = () => {
+  while (
+    objectUrlMediaCache.size > 1 &&
+    (objectUrlMediaCache.size > MAX_OBJECT_URL_MEDIA_ITEMS ||
+      objectUrlMediaBytes > MAX_OBJECT_URL_MEDIA_BYTES)
+  ) {
+    const oldestKey = objectUrlMediaCache.keys().next().value;
+    if (!oldestKey) {
+      return;
+    }
+
+    removeObjectUrlMediaEntry(oldestKey);
+  }
+};
+
+const setObjectUrlMediaEntry = (src: string, objectUrl: string, size: number) => {
+  removeObjectUrlMediaEntry(src);
+
+  objectUrlMediaCache.set(src, {
+    objectUrl,
+    size,
+  });
+  objectUrlMediaBytes += size;
+
+  trimObjectUrlMediaCache();
 };
 
 const bindObjectUrlMediaCleanup = () => {
@@ -132,7 +189,7 @@ export const primePersistentMediaUrl = (src?: string): Promise<void> | undefined
 };
 
 export const getCachedMediaObjectUrl = (src?: string): string | undefined =>
-  (src && objectUrlMediaCache.get(src)) || undefined;
+  (src && touchObjectUrlMediaEntry(src)?.objectUrl) || undefined;
 
 export const primeCachedMediaObjectUrl = (
   src?: string
@@ -141,7 +198,7 @@ export const primeCachedMediaObjectUrl = (
     return undefined;
   }
 
-  const cachedObjectUrl = objectUrlMediaCache.get(src);
+  const cachedObjectUrl = touchObjectUrlMediaEntry(src)?.objectUrl;
   if (cachedObjectUrl) {
     return Promise.resolve(cachedObjectUrl);
   }
@@ -166,13 +223,7 @@ export const primeCachedMediaObjectUrl = (
 
     const mediaBlob = await response.blob();
     const objectUrl = URL.createObjectURL(mediaBlob);
-    const previousObjectUrl = objectUrlMediaCache.get(src);
-
-    if (previousObjectUrl && previousObjectUrl !== objectUrl) {
-      revokeObjectUrl(previousObjectUrl);
-    }
-
-    objectUrlMediaCache.set(src, objectUrl);
+    setObjectUrlMediaEntry(src, objectUrl, mediaBlob.size);
     return objectUrl;
   })();
 
