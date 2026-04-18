@@ -18,10 +18,12 @@ import { useMediaAuthentication } from './useMediaAuthentication';
 import { useMatrixClient } from './useMatrixClient';
 import { useAccountDataCallback } from './useAccountDataCallback';
 import { useStateEventCallback } from './useStateEventCallback';
-import { primePersistentMediaUrl } from '../utils/mediaUrlCache';
+import { primeCachedMediaObjectUrl, primePersistentMediaUrl } from '../utils/mediaUrlCache';
 
 const GLOBAL_IMAGE_PACK_WARM_DELAY_MS = 2500;
 const GLOBAL_IMAGE_PACK_WARM_IDLE_TIMEOUT_MS = 10000;
+const GLOBAL_IMAGE_PACK_OBJECT_WARM_DELAY_MS = 8000;
+const GLOBAL_IMAGE_PACK_OBJECT_WARM_IDLE_TIMEOUT_MS = 30000;
 
 type IdleWindow = Window &
   typeof globalThis & {
@@ -33,6 +35,32 @@ type IdleWindow = Window &
   };
 
 const warmImagePackMedia = (
+  mx: ReturnType<typeof useMatrixClient>,
+  useAuthentication: boolean,
+  packs: ImagePack[],
+  usages: ImageUsage[]
+) => {
+  const mediaUrls = getImagePackMediaUrls(mx, useAuthentication, packs, usages);
+
+  mediaUrls.forEach((mediaUrl) => {
+    void primePersistentMediaUrl(mediaUrl);
+  });
+};
+
+const warmImagePackObjectUrls = (
+  mx: ReturnType<typeof useMatrixClient>,
+  useAuthentication: boolean,
+  packs: ImagePack[],
+  usages: ImageUsage[]
+) => {
+  const mediaUrls = getImagePackMediaUrls(mx, useAuthentication, packs, usages);
+
+  mediaUrls.forEach((mediaUrl) => {
+    void primeCachedMediaObjectUrl(mediaUrl);
+  });
+};
+
+const getImagePackMediaUrls = (
   mx: ReturnType<typeof useMatrixClient>,
   useAuthentication: boolean,
   packs: ImagePack[],
@@ -58,9 +86,7 @@ const warmImagePackMedia = (
     });
   });
 
-  mediaUrls.forEach((mediaUrl) => {
-    void primePersistentMediaUrl(mediaUrl);
-  });
+  return mediaUrls;
 };
 
 const getJoinedRooms = (mx: ReturnType<typeof useMatrixClient>) =>
@@ -326,41 +352,87 @@ export const useWarmAllImagePackMedia = () => {
     }
 
     let disposed = false;
-    let delayTimer: number | undefined;
-    let idleHandle: number | undefined;
+    let persistentDelayTimer: number | undefined;
+    let objectDelayTimer: number | undefined;
+    let persistentIdleHandle: number | undefined;
+    let objectIdleHandle: number | undefined;
 
-    const scheduleWarm = () => {
-      if (disposed) {
-        return;
-      }
+    const scheduleWhenIdle = (
+      action: () => void,
+      delay: number,
+      timeout: number,
+      onTimer: (value: number) => void,
+      onIdle: (value: number) => void
+    ) => {
+      const timer = window.setTimeout(() => {
+        const idleWindow = window as IdleWindow;
+        if (idleWindow.requestIdleCallback) {
+          const idle = idleWindow.requestIdleCallback(() => {
+            if (!disposed) {
+              action();
+            }
+          }, { timeout });
+          onIdle(idle);
+          return;
+        }
 
-      warmImagePackMedia(mx, useAuthentication, relevantPacks, [
-        ImageUsage.Emoticon,
-        ImageUsage.Sticker,
-      ]);
+        if (!disposed) {
+          action();
+        }
+      }, delay);
+
+      onTimer(timer);
     };
 
-    delayTimer = window.setTimeout(() => {
-      const idleWindow = window as IdleWindow;
-      if (idleWindow.requestIdleCallback) {
-        idleHandle = idleWindow.requestIdleCallback(() => {
-          scheduleWarm();
-        }, { timeout: GLOBAL_IMAGE_PACK_WARM_IDLE_TIMEOUT_MS });
-        return;
+    scheduleWhenIdle(
+      () => {
+        warmImagePackMedia(mx, useAuthentication, relevantPacks, [
+          ImageUsage.Emoticon,
+          ImageUsage.Sticker,
+        ]);
+      },
+      GLOBAL_IMAGE_PACK_WARM_DELAY_MS,
+      GLOBAL_IMAGE_PACK_WARM_IDLE_TIMEOUT_MS,
+      (value) => {
+        persistentDelayTimer = value;
+      },
+      (value) => {
+        persistentIdleHandle = value;
       }
+    );
 
-      scheduleWarm();
-    }, GLOBAL_IMAGE_PACK_WARM_DELAY_MS);
+    scheduleWhenIdle(
+      () => {
+        warmImagePackObjectUrls(mx, useAuthentication, relevantPacks, [
+          ImageUsage.Emoticon,
+          ImageUsage.Sticker,
+        ]);
+      },
+      GLOBAL_IMAGE_PACK_OBJECT_WARM_DELAY_MS,
+      GLOBAL_IMAGE_PACK_OBJECT_WARM_IDLE_TIMEOUT_MS,
+      (value) => {
+        objectDelayTimer = value;
+      },
+      (value) => {
+        objectIdleHandle = value;
+      }
+    );
 
     return () => {
       disposed = true;
-      if (typeof delayTimer === 'number') {
-        window.clearTimeout(delayTimer);
+      if (typeof persistentDelayTimer === 'number') {
+        window.clearTimeout(persistentDelayTimer);
+      }
+      if (typeof objectDelayTimer === 'number') {
+        window.clearTimeout(objectDelayTimer);
       }
 
       const idleWindow = window as IdleWindow;
-      if (typeof idleHandle === 'number' && idleWindow.cancelIdleCallback) {
-        idleWindow.cancelIdleCallback(idleHandle);
+      if (typeof persistentIdleHandle === 'number' && idleWindow.cancelIdleCallback) {
+        idleWindow.cancelIdleCallback(persistentIdleHandle);
+      }
+      if (typeof objectIdleHandle === 'number' && idleWindow.cancelIdleCallback) {
+        idleWindow.cancelIdleCallback(objectIdleHandle);
       }
     };
   }, [mx, relevantPacks, useAuthentication]);
