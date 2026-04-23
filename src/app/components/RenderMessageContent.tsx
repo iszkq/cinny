@@ -275,7 +275,11 @@ export function RenderMessageContent({
           content={getContent()}
           renderAsFile={renderFile}
           renderAudioContent={(props) => (
-            <AudioContent {...props} renderMediaControl={(p) => <MediaControl {...p} />} />
+            <AudioContent
+              {...props}
+              transcriptionId={eventId ?? props.url}
+              renderMediaControl={(p) => <MediaControl {...p} />}
+            />
           )}
           outlined={outlineAttachment}
         />
