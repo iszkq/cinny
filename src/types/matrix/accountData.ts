@@ -7,6 +7,7 @@ export enum AccountDataEvent {
   CinnyFavorites = 'in.cinny.favorites',
   CinnyFavoriteNotes = 'in.cinny.favorite_notes',
   CinnyExploreSources = 'in.cinny.explore_sources',
+  CinnyAISettings = 'in.cinny.ai_settings',
   CinnyUserEmojiPacks = 'in.cinny.user_emoji_packs',
 
   ElementRecentEmoji = 'io.element.recent_emoji',
@@ -71,6 +72,26 @@ export type CinnyExploreSourcesContent = {
   version?: number;
   updatedAt?: number;
   sources?: CinnyExploreSource[];
+};
+
+export type CinnyAISettingsSkillContent = {
+  id?: string;
+  name?: string;
+  command?: string;
+  model?: string;
+  systemPrompt?: string;
+  includeRoomContext?: boolean;
+  maxEvents?: number;
+};
+
+export type CinnyAISettingsContent = {
+  version?: number;
+  updatedAt?: number;
+  provider?: 'aihubmix';
+  apiKey?: string;
+  baseUrl?: string;
+  modelsApiUrl?: string;
+  skills?: CinnyAISettingsSkillContent[];
 };
 
 export type SecretStorageDefaultKeyContent = {
