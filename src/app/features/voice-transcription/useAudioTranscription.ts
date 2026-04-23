@@ -2,9 +2,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { useAtomValue } from 'jotai';
 import { AsyncStatus } from '../../hooks/useAsyncCallback';
 import { AISettings, aiSettingsAtom } from '../../state/ai';
+import { useClientConfig } from '../../hooks/useClientConfig';
 import { ua } from '../../utils/user-agent';
 import {
   AIHUBMIX_AUDIO_TRANSCRIPTION_MODEL,
+  getAihubmixAudioTranscriptionApiKey,
   transcribeAudioWithAihubmix,
 } from '../../utils/ai';
 
@@ -93,8 +95,11 @@ const getSpeechRecognitionConstructor = (): SpeechRecognitionConstructor | undef
   return window.SpeechRecognition ?? window.webkitSpeechRecognition;
 };
 
-const getAudioTranscriptionSupport = (aiSettings: AISettings): AudioTranscriptionSupport => {
-  if (aiSettings.apiKey.trim()) {
+const getAudioTranscriptionSupport = (
+  aiSettings: AISettings,
+  defaultAihubmixApiKey?: string
+): AudioTranscriptionSupport => {
+  if (getAihubmixAudioTranscriptionApiKey(aiSettings, defaultAihubmixApiKey)) {
     return {
       supported: true,
       mode: 'aihubmix',
@@ -535,7 +540,9 @@ export const canTranscribeAudioInBrowser = (): boolean => {
 
 export const useAudioTranscription = (id: string | undefined) => {
   const aiSettings = useAtomValue(aiSettingsAtom);
-  const support = getAudioTranscriptionSupport(aiSettings);
+  const clientConfig = useClientConfig();
+  const defaultAihubmixApiKey = clientConfig.audioTranscription?.defaultAihubmixApiKey;
+  const support = getAudioTranscriptionSupport(aiSettings, defaultAihubmixApiKey);
   const [state, setState] = useState<AudioTranscriptionState>(() =>
     id ? getAudioTranscriptionState(id) : IDLE_STATE
   );
@@ -583,12 +590,12 @@ export const useAudioTranscription = (id: string | undefined) => {
         setAudioTranscriptionState(id, {
           status: AsyncStatus.Loading,
           text: previousText,
-          detail: '\u6b63\u5728\u4e0a\u4f20\u8bed\u97f3\u5230 AIHubMix...',
         });
 
         const promise = getBlob()
           .then((blob) =>
             transcribeAudioWithAihubmix(aiSettings, blob, {
+              apiKey: defaultAihubmixApiKey,
               model: AIHUBMIX_AUDIO_TRANSCRIPTION_MODEL,
               language: 'zh',
               temperature: 0.2,
@@ -599,7 +606,6 @@ export const useAudioTranscription = (id: string | undefined) => {
             setAudioTranscriptionState(id, {
               status: AsyncStatus.Success,
               text,
-              detail: `\u5df2\u901a\u8fc7 AIHubMix \u5b8c\u6210\u8f6c\u5199\uff08${AIHUBMIX_AUDIO_TRANSCRIPTION_MODEL}\uff09`,
             });
 
             return text;
@@ -719,7 +725,7 @@ export const useAudioTranscription = (id: string | undefined) => {
       pendingTranscriptions.set(id, promise);
       return promise;
     },
-    [aiSettings, id, support.mode, support.reason, support.supported]
+    [aiSettings, defaultAihubmixApiKey, id, support.mode, support.reason, support.supported]
   );
 
   return {
