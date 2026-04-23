@@ -52,6 +52,10 @@ jobs:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
           NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID_APP }}
         timeout-minutes: 1
+      - name: Create static zip
+        run: |
+          cd dist
+          zip -r ../cinny-${{ steps.vars.outputs.tag }}-static.zip .
       - name: Create tar.gz
         run: tar -czvf cinny-${{ steps.vars.outputs.tag }}.tar.gz dist
       - name: Sign tar.gz
@@ -69,6 +73,7 @@ jobs:
         with:
           tag_name: ${{ steps.vars.outputs.tag }}
           files: |
+            cinny-${{ steps.vars.outputs.tag }}-static.zip
             cinny-${{ steps.vars.outputs.tag }}.tar.gz
             cinny-${{ steps.vars.outputs.tag }}.tar.gz.asc
 

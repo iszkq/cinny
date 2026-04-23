@@ -37,9 +37,21 @@ jobs:
           NODE_OPTIONS: '--max_old_space_size=4096'
         run: npm run build
 
+      - name: Create static zip package
+        run: |
+          cd dist
+          zip -r ../dist-static.zip .
+
       - name: Upload dist artifact
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: dist
           path: dist
+          retention-days: 7
+
+      - name: Upload static zip artifact
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: dist-static
+          path: dist-static.zip
           retention-days: 7
