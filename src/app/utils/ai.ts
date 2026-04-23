@@ -18,6 +18,16 @@ type OpenAIChatResponse = {
   }>;
 };
 
+type OpenAIAudioTranscriptionResponse = {
+  text?: unknown;
+  error?: {
+    message?: unknown;
+  };
+};
+
+export const AIHUBMIX_AUDIO_TRANSCRIPTION_MODEL = 'whisper-large-v3-turbo';
+export const AIHUBMIX_AUDIO_TRANSCRIPTION_MAX_FILE_SIZE = 25 * 1024 * 1024;
+
 const uniqById = (models: AIModel[]): AIModel[] => {
   const seen = new Set<string>();
   return models.filter((model) => {
@@ -314,6 +324,95 @@ const extractChatText = (response: OpenAIChatResponse): string => {
       .trim();
   }
   throw new Error('The AI response did not contain any text.');
+};
+
+const extractOpenAICompatibleError = (payload: unknown): string | undefined => {
+  if (!payload || typeof payload !== 'object') return undefined;
+
+  const record = payload as Record<string, unknown>;
+  const message = record.error;
+
+  if (message && typeof message === 'object') {
+    const errorRecord = message as Record<string, unknown>;
+    if (typeof errorRecord.message === 'string' && errorRecord.message.trim()) {
+      return errorRecord.message.trim();
+    }
+  }
+
+  if (typeof record.message === 'string' && record.message.trim()) {
+    return record.message.trim();
+  }
+
+  return undefined;
+};
+
+type TranscribeAudioWithAihubmixOptions = {
+  model?: string;
+  language?: string;
+  temperature?: number;
+  filename?: string;
+  mimeType?: string;
+};
+
+export const transcribeAudioWithAihubmix = async (
+  settings: AISettings,
+  audioBlob: Blob,
+  options: TranscribeAudioWithAihubmixOptions = {}
+): Promise<string> => {
+  if (!settings.apiKey.trim()) {
+    throw new Error('Please configure your AIHubMix API key first.');
+  }
+
+  if (audioBlob.size > AIHUBMIX_AUDIO_TRANSCRIPTION_MAX_FILE_SIZE) {
+    throw new Error('AIHubMix audio transcription currently supports files up to 25MB.');
+  }
+
+  const endpoint = `${trimTrailingSlash(settings.baseUrl)}/audio/transcriptions`;
+  const formData = new FormData();
+  const fileName = options.filename?.trim() || 'voice-message.webm';
+  const model = options.model?.trim() || AIHUBMIX_AUDIO_TRANSCRIPTION_MODEL;
+
+  const uploadFile =
+    audioBlob instanceof File
+      ? audioBlob
+      : new File([audioBlob], fileName, {
+          type: options.mimeType?.trim() || audioBlob.type || 'audio/webm',
+        });
+
+  formData.append('model', model);
+  formData.append('file', uploadFile);
+  formData.append('language', options.language?.trim() || 'zh');
+  formData.append('temperature', `${options.temperature ?? 0.2}`);
+
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${settings.apiKey.trim()}`,
+    },
+    body: formData,
+  });
+
+  const rawText = await response.text();
+  let payload: OpenAIAudioTranscriptionResponse | undefined;
+  try {
+    payload = rawText ? (JSON.parse(rawText) as OpenAIAudioTranscriptionResponse) : undefined;
+  } catch {
+    payload = undefined;
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      extractOpenAICompatibleError(payload) ??
+        rawText.trim() ||
+        `AI audio transcription failed: ${response.status}`
+    );
+  }
+
+  if (typeof payload?.text !== 'string' || !payload.text.trim()) {
+    throw new Error('The audio transcription response did not contain any text.');
+  }
+
+  return payload.text.trim();
 };
 
 export const runAISkill = async (
