@@ -346,12 +346,58 @@ const extractOpenAICompatibleError = (payload: unknown): string | undefined => {
   return undefined;
 };
 
+const decodeEscapedText = (value: string): string => {
+  let nextValue = value;
+
+  for (let index = 0; index < 3; index += 1) {
+    if (!/\\[nrt"\\/]|\\u[0-9a-fA-F]{4}/.test(nextValue)) {
+      break;
+    }
+
+    try {
+      const decodedValue = JSON.parse(
+        `"${nextValue.replace(/"/g, '\\"').replace(/\r/g, '\\r').replace(/\n/g, '\\n')}"`
+      ) as string;
+
+      if (decodedValue === nextValue) {
+        break;
+      }
+
+      nextValue = decodedValue;
+    } catch {
+      break;
+    }
+  }
+
+  return nextValue.trim();
+};
+
+const normalizeAihubmixText = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') return undefined;
+
+  const trimmedValue = value.trim();
+  if (!trimmedValue) return undefined;
+
+  return decodeEscapedText(trimmedValue);
+};
+
+export const getAihubmixAudioTranscriptionApiKey = (
+  settings: Pick<AISettings, 'apiKey'>,
+  defaultApiKey?: string
+): string => {
+  const sharedApiKey = defaultApiKey?.trim();
+  if (sharedApiKey) return sharedApiKey;
+
+  return settings.apiKey.trim();
+};
+
 type TranscribeAudioWithAihubmixOptions = {
   model?: string;
   language?: string;
   temperature?: number;
   filename?: string;
   mimeType?: string;
+  apiKey?: string;
 };
 
 export const transcribeAudioWithAihubmix = async (
@@ -359,7 +405,9 @@ export const transcribeAudioWithAihubmix = async (
   audioBlob: Blob,
   options: TranscribeAudioWithAihubmixOptions = {}
 ): Promise<string> => {
-  if (!settings.apiKey.trim()) {
+  const apiKey = getAihubmixAudioTranscriptionApiKey(settings, options.apiKey);
+
+  if (!apiKey) {
     throw new Error('Please configure your AIHubMix API key first.');
   }
 
@@ -387,7 +435,7 @@ export const transcribeAudioWithAihubmix = async (
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${settings.apiKey.trim()}`,
+      Authorization: `Bearer ${apiKey}`,
     },
     body: formData,
   });
@@ -402,16 +450,18 @@ export const transcribeAudioWithAihubmix = async (
 
   if (!response.ok) {
     throw new Error(
-      extractOpenAICompatibleError(payload) ??
-        (rawText.trim() || `AI audio transcription failed: ${response.status}`)
+      normalizeAihubmixText(extractOpenAICompatibleError(payload)) ??
+        `AI audio transcription failed: ${response.status}`
     );
   }
 
-  if (typeof payload?.text !== 'string' || !payload.text.trim()) {
+  const transcriptionText = normalizeAihubmixText(payload?.text);
+
+  if (!transcriptionText) {
     throw new Error('The audio transcription response did not contain any text.');
   }
 
-  return payload.text.trim();
+  return transcriptionText;
 };
 
 export const runAISkill = async (
