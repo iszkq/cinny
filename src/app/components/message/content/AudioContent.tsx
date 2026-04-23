@@ -1,6 +1,18 @@
 /* eslint-disable jsx-a11y/media-has-caption */
 import React, { ReactNode, useCallback, useRef, useState } from 'react';
-import { Badge, Chip, Icon, IconButton, Icons, ProgressBar, Spinner, Text, toRem } from 'folds';
+import {
+  Badge,
+  Box,
+  Chip,
+  Icon,
+  IconButton,
+  Icons,
+  ProgressBar,
+  Spinner,
+  Text,
+  color,
+  toRem,
+} from 'folds';
 import { EncryptedAttachmentInfo } from 'browser-encrypt-attachment';
 import { Range } from 'react-range';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
@@ -24,6 +36,7 @@ import {
   mxcUrlToHttp,
 } from '../../../utils/matrix';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
+import { useAudioTranscription } from '../../../features/voice-transcription';
 
 const PLAY_TIME_THROTTLE_OPS = {
   wait: 500,
@@ -42,6 +55,7 @@ export type AudioContentProps = {
   url: string;
   info: IAudioInfo;
   encInfo?: EncryptedAttachmentInfo;
+  transcriptionId?: string;
   renderMediaControl: (props: RenderMediaControlProps) => ReactNode;
 };
 export function AudioContent({
@@ -49,20 +63,26 @@ export function AudioContent({
   url,
   info,
   encInfo,
+  transcriptionId,
   renderMediaControl,
 }: AudioContentProps) {
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
+  const { state: transcriptionState, supported, transcribe } = useAudioTranscription(
+    transcriptionId ?? url
+  );
+
+  const loadAudioBlob = useCallback(async (): Promise<Blob> => {
+    const mediaUrl = mxcUrlToHttp(mx, url, useAuthentication);
+    if (!mediaUrl) throw new Error('Invalid media URL');
+
+    return encInfo
+      ? downloadEncryptedMedia(mediaUrl, (encBuf) => decryptFile(encBuf, mimeType, encInfo))
+      : downloadMedia(mediaUrl);
+  }, [mx, url, useAuthentication, mimeType, encInfo]);
 
   const [srcState, loadSrc] = useAsyncCallback(
-    useCallback(async () => {
-      const mediaUrl = mxcUrlToHttp(mx, url, useAuthentication);
-      if (!mediaUrl) throw new Error('Invalid media URL');
-      const fileContent = encInfo
-        ? await downloadEncryptedMedia(mediaUrl, (encBuf) => decryptFile(encBuf, mimeType, encInfo))
-        : await downloadMedia(mediaUrl);
-      return URL.createObjectURL(fileContent);
-    }, [mx, url, useAuthentication, mimeType, encInfo])
+    useCallback(async () => URL.createObjectURL(await loadAudioBlob()), [loadAudioBlob])
   );
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -108,44 +128,113 @@ export function AudioContent({
   };
 
   const playbackRateLabel = `${Number.isInteger(playbackRate) ? playbackRate.toFixed(0) : playbackRate}x`;
+  const transcriptionText =
+    transcriptionState.status === AsyncStatus.Success ||
+    transcriptionState.status === AsyncStatus.Loading ||
+    transcriptionState.status === AsyncStatus.Error
+      ? transcriptionState.text
+      : undefined;
+  const transcriptionError =
+    transcriptionState.status === AsyncStatus.Error ? transcriptionState.error : undefined;
+  const transcriptionActionLabel =
+    transcriptionState.status === AsyncStatus.Loading
+      ? '\u8f6c\u5199\u4e2d'
+      : transcriptionState.status === AsyncStatus.Success
+        ? '\u91cd\u65b0\u8f6c\u5199'
+        : transcriptionState.status === AsyncStatus.Error
+          ? '\u91cd\u8bd5\u8f6c\u5199'
+          : '\u8f6c\u5199';
+
+  const handleTranscribe = () => {
+    transcribe({
+      getBlob: loadAudioBlob,
+    }).catch(() => undefined);
+  };
 
   return renderMediaControl({
     after: (
-      <Range
-        step={1}
-        min={0}
-        max={duration || 1}
-        values={[currentTime]}
-        onChange={(values) => seek(values[0])}
-        renderTrack={(params) => (
-          <div {...params.props}>
-            {params.children}
-            <ProgressBar
-              as="div"
-              variant="Secondary"
+      <Box direction="Column" gap="200">
+        <Range
+          step={1}
+          min={0}
+          max={duration || 1}
+          values={[currentTime]}
+          onChange={(values) => seek(values[0])}
+          renderTrack={(params) => (
+            <div {...params.props}>
+              {params.children}
+              <ProgressBar
+                as="div"
+                variant="Secondary"
+                size="300"
+                min={0}
+                max={duration}
+                value={currentTime}
+                radii="300"
+              />
+            </div>
+          )}
+          renderThumb={(params) => (
+            <Badge
               size="300"
-              min={0}
-              max={duration}
-              value={currentTime}
-              radii="300"
+              variant="Secondary"
+              fill="Solid"
+              radii="Pill"
+              outlined
+              {...params.props}
+              style={{
+                ...params.props.style,
+                zIndex: 0,
+              }}
             />
-          </div>
-        )}
-        renderThumb={(params) => (
-          <Badge
-            size="300"
-            variant="Secondary"
-            fill="Solid"
-            radii="Pill"
-            outlined
-            {...params.props}
-            style={{
-              ...params.props.style,
-              zIndex: 0,
-            }}
-          />
-        )}
-      />
+          )}
+        />
+
+        <Box direction="Column" gap="100">
+          <Box alignItems="Center" gap="200">
+            <Chip
+              variant="SurfaceVariant"
+              radii="300"
+              onClick={handleTranscribe}
+              disabled={!supported || transcriptionState.status === AsyncStatus.Loading}
+              before={
+                transcriptionState.status === AsyncStatus.Loading ? (
+                  <Spinner variant="Secondary" size="50" />
+                ) : (
+                  <Icon src={Icons.Alphabet} size="50" />
+                )
+              }
+            >
+              <Text size="B300">{transcriptionActionLabel}</Text>
+            </Chip>
+            <Text size="T200" priority="300">
+              {supported
+                ? '\u6d4f\u89c8\u5668\u539f\u751f\u666e\u901a\u8bdd\u8f6c\u5199'
+                : '\u5f53\u524d\u6d4f\u89c8\u5668\u6682\u4e0d\u652f\u6301\u8f6c\u5199'}
+            </Text>
+          </Box>
+
+          {(transcriptionState.status !== AsyncStatus.Idle || transcriptionText) && (
+            <Box direction="Column" gap="50">
+              {transcriptionText && (
+                <Text size="T300" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                  {transcriptionText}
+                </Text>
+              )}
+              {transcriptionState.status === AsyncStatus.Loading && !transcriptionText && (
+                <Text size="T200" priority="300">
+                  \u6b63\u5728\u8bc6\u522b\u8bed\u97f3\u5185\u5bb9...
+                </Text>
+              )}
+              {transcriptionError && (
+                <Text size="T200" style={{ color: color.Critical.Main }}>
+                  {transcriptionError}
+                </Text>
+              )}
+            </Box>
+          )}
+        </Box>
+      </Box>
     ),
     leftControl: (
       <>
@@ -166,7 +255,6 @@ export function AudioContent({
             {playing ? '\u6682\u505c' : '\u64ad\u653e'}
           </Text>
         </Chip>
-
         <Text size="T200">{`${secondsToMinutesAndSeconds(
           currentTime
         )} / ${secondsToMinutesAndSeconds(duration)}`}</Text>
