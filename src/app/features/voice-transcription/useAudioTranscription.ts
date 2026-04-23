@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useAtomValue } from 'jotai';
 import { AsyncStatus } from '../../hooks/useAsyncCallback';
+import { AISettings, aiSettingsAtom } from '../../state/ai';
+import { ua } from '../../utils/user-agent';
+import {
+  AIHUBMIX_AUDIO_TRANSCRIPTION_MODEL,
+  transcribeAudioWithAihubmix,
+} from '../../utils/ai';
 
 type AudioTranscriptionIdle = {
   status: AsyncStatus.Idle;
@@ -37,6 +44,12 @@ type TranscribeAudioOptions = {
 
 type SpeechRecognitionFailure = Error & {
   code?: SpeechRecognitionErrorCode;
+};
+
+type AudioTranscriptionSupport = {
+  supported: boolean;
+  mode: 'aihubmix' | 'browser' | 'none';
+  reason?: string;
 };
 
 const DEFAULT_LANG = 'zh-CN';
@@ -78,6 +91,48 @@ const getSpeechRecognitionConstructor = (): SpeechRecognitionConstructor | undef
   if (typeof window === 'undefined') return undefined;
 
   return window.SpeechRecognition ?? window.webkitSpeechRecognition;
+};
+
+const getAudioTranscriptionSupport = (aiSettings: AISettings): AudioTranscriptionSupport => {
+  if (aiSettings.apiKey.trim()) {
+    return {
+      supported: true,
+      mode: 'aihubmix',
+      reason: `AIHubMix \u4e91\u7aef\u8f6c\u5199\uff08${AIHUBMIX_AUDIO_TRANSCRIPTION_MODEL}\uff09`,
+    };
+  }
+
+  if (typeof window === 'undefined') {
+    return {
+      supported: false,
+      mode: 'none',
+      reason: '\u5f53\u524d\u73af\u5883\u6682\u4e0d\u652f\u6301\u8bed\u97f3\u8f6c\u5199\u3002',
+    };
+  }
+
+  const browserName = ua().browser.name ?? '';
+  if (browserName !== 'Chrome') {
+    return {
+      supported: false,
+      mode: 'none',
+      reason:
+        '\u8bf7\u5148\u5728 AI \u52a9\u624b\u8bbe\u7f6e\u4e2d\u914d\u7f6e AIHubMix\uff0c\u6216\u6539\u7528 Google Chrome \u7684\u6d4f\u89c8\u5668\u539f\u751f\u8f6c\u5199\u3002',
+    };
+  }
+
+  if (typeof window.AudioContext === 'undefined' || !getSpeechRecognitionConstructor()) {
+    return {
+      supported: false,
+      mode: 'none',
+      reason: '\u5f53\u524d Chrome \u73af\u5883\u7f3a\u5c11\u5fc5\u8981\u7684\u8bed\u97f3\u80fd\u529b\u3002',
+    };
+  }
+
+  return {
+    supported: true,
+    mode: 'browser',
+    reason: '\u6d4f\u89c8\u5668\u539f\u751f\u666e\u901a\u8bdd\u8f6c\u5199\uff08\u6700\u957f 5 \u5206\u949f\uff09',
+  };
 };
 
 const getSpeechRecognitionErrorMessage = (error?: SpeechRecognitionErrorCode): string => {
@@ -468,12 +523,19 @@ const transcribeAudioBlob = async (
 };
 
 export const canTranscribeAudioInBrowser = (): boolean => {
-  if (typeof window === 'undefined') return false;
-
-  return typeof window.AudioContext !== 'undefined' && !!getSpeechRecognitionConstructor();
+  return getAudioTranscriptionSupport({
+    provider: 'aihubmix',
+    apiKey: '',
+    baseUrl: '',
+    modelsApiUrl: '',
+    models: [],
+    skills: [],
+  }).supported;
 };
 
 export const useAudioTranscription = (id: string | undefined) => {
+  const aiSettings = useAtomValue(aiSettingsAtom);
+  const support = getAudioTranscriptionSupport(aiSettings);
   const [state, setState] = useState<AudioTranscriptionState>(() =>
     id ? getAudioTranscriptionState(id) : IDLE_STATE
   );
@@ -499,6 +561,12 @@ export const useAudioTranscription = (id: string | undefined) => {
   const transcribe = useCallback(
     async ({ getBlob, lang = DEFAULT_LANG }: TranscribeAudioOptions): Promise<string> => {
       if (!id) throw new Error('Missing transcription id.');
+      if (!support.supported) {
+        throw new Error(
+          support.reason ??
+            '\u5f53\u524d\u6d4f\u89c8\u5668\u6682\u4e0d\u652f\u6301\u5386\u53f2\u8bed\u97f3\u8f6c\u5199\u3002'
+        );
+      }
 
       const pending = pendingTranscriptions.get(id);
       if (pending) return pending;
@@ -510,6 +578,66 @@ export const useAudioTranscription = (id: string | undefined) => {
         previousState.status === AsyncStatus.Error
           ? previousState.text
           : undefined;
+
+      if (support.mode === 'aihubmix') {
+        setAudioTranscriptionState(id, {
+          status: AsyncStatus.Loading,
+          text: previousText,
+          detail: '\u6b63\u5728\u4e0a\u4f20\u8bed\u97f3\u5230 AIHubMix...',
+        });
+
+        const promise = getBlob()
+          .then((blob) =>
+            transcribeAudioWithAihubmix(aiSettings, blob, {
+              model: AIHUBMIX_AUDIO_TRANSCRIPTION_MODEL,
+              language: 'zh',
+              temperature: 0.2,
+              filename: 'voice-message.webm',
+            })
+          )
+          .then((text) => {
+            setAudioTranscriptionState(id, {
+              status: AsyncStatus.Success,
+              text,
+              detail: `\u5df2\u901a\u8fc7 AIHubMix \u5b8c\u6210\u8f6c\u5199\uff08${AIHUBMIX_AUDIO_TRANSCRIPTION_MODEL}\uff09`,
+            });
+
+            return text;
+          })
+          .catch((error) => {
+            const nextState = getAudioTranscriptionState(id);
+            const nextText =
+              nextState.status === AsyncStatus.Success ||
+              nextState.status === AsyncStatus.Loading ||
+              nextState.status === AsyncStatus.Error
+                ? nextState.text
+                : previousText;
+            const nextDetail =
+              nextState.status === AsyncStatus.Loading ||
+              nextState.status === AsyncStatus.Success ||
+              nextState.status === AsyncStatus.Error
+                ? nextState.detail
+                : undefined;
+
+            setAudioTranscriptionState(id, {
+              status: AsyncStatus.Error,
+              error:
+                error instanceof Error
+                  ? error.message
+                  : '\u8bed\u97f3\u8f6c\u5199\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5\u3002',
+              text: nextText,
+              detail: nextDetail,
+            });
+
+            throw error;
+          })
+          .finally(() => {
+            pendingTranscriptions.delete(id);
+          });
+
+        pendingTranscriptions.set(id, promise);
+        return promise;
+      }
 
       setAudioTranscriptionState(id, {
         status: AsyncStatus.Loading,
@@ -591,12 +719,14 @@ export const useAudioTranscription = (id: string | undefined) => {
       pendingTranscriptions.set(id, promise);
       return promise;
     },
-    [id]
+    [aiSettings, id, support.mode, support.reason, support.supported]
   );
 
   return {
     state,
-    supported: canTranscribeAudioInBrowser(),
+    supported: support.supported,
+    mode: support.mode,
+    supportReason: support.reason,
     transcribe,
   };
 };
