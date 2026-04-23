@@ -28,6 +28,7 @@ const CN = {
   title: 'AI \u52a9\u624b',
   provider: '\u63a5\u5165\u65b9\u5f0f',
   providerDesc: '\u5f53\u524d\u5148\u652f\u6301 AIHubMix\uff0c\u5efa\u8bae\u7528 OpenAI \u517c\u5bb9\u63a5\u53e3\u6a21\u5f0f\u3002',
+  accountSyncHint: '\u4fdd\u5b58\u914d\u7f6e\u3001\u521b\u5efa\u6216\u5220\u9664 Skill \u540e\u4f1a\u81ea\u52a8\u5199\u5165\u5f53\u524d\u8d26\u53f7\u3002',
   apiKey: 'API Key',
   apiBaseUrl: '\u804a\u5929\u63a5\u53e3 Base URL',
   modelsApiUrl: '\u6a21\u578b\u5217\u8868 URL',
@@ -187,6 +188,9 @@ export function AI({ requestClose }: AIProps) {
                 >
                   <Text size="T300" priority="300">
                     {CN.providerDesc}
+                  </Text>
+                  <Text size="T300" priority="300">
+                    {CN.accountSyncHint}
                   </Text>
                   <Box as="form" direction="Column" gap="300" onSubmit={handleSaveBaseConfig}>
                     <Input
