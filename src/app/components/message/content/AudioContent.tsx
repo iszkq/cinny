@@ -36,7 +36,10 @@ import {
   mxcUrlToHttp,
 } from '../../../utils/matrix';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
-import { useAudioTranscription } from '../../../features/voice-transcription';
+import {
+  MAX_AUDIO_TRANSCRIPTION_DURATION_MS,
+  useAudioTranscription,
+} from '../../../features/voice-transcription';
 
 const PLAY_TIME_THROTTLE_OPS = {
   wait: 500,
@@ -71,6 +74,8 @@ export function AudioContent({
   const { state: transcriptionState, supported, transcribe } = useAudioTranscription(
     transcriptionId ?? url
   );
+  const overDurationLimit =
+    typeof info.duration === 'number' && info.duration > MAX_AUDIO_TRANSCRIPTION_DURATION_MS;
 
   const loadAudioBlob = useCallback(async (): Promise<Blob> => {
     const mediaUrl = mxcUrlToHttp(mx, url, useAuthentication);
@@ -136,6 +141,12 @@ export function AudioContent({
       : undefined;
   const transcriptionError =
     transcriptionState.status === AsyncStatus.Error ? transcriptionState.error : undefined;
+  const transcriptionDetail =
+    transcriptionState.status === AsyncStatus.Loading ||
+    transcriptionState.status === AsyncStatus.Success ||
+    transcriptionState.status === AsyncStatus.Error
+      ? transcriptionState.detail
+      : undefined;
   const transcriptionActionLabel =
     transcriptionState.status === AsyncStatus.Loading
       ? '\u8f6c\u5199\u4e2d'
@@ -196,7 +207,9 @@ export function AudioContent({
               variant="SurfaceVariant"
               radii="300"
               onClick={handleTranscribe}
-              disabled={!supported || transcriptionState.status === AsyncStatus.Loading}
+              disabled={
+                !supported || overDurationLimit || transcriptionState.status === AsyncStatus.Loading
+              }
               before={
                 transcriptionState.status === AsyncStatus.Loading ? (
                   <Spinner variant="Secondary" size="50" />
@@ -208,9 +221,11 @@ export function AudioContent({
               <Text size="B300">{transcriptionActionLabel}</Text>
             </Chip>
             <Text size="T200" priority="300">
-              {supported
-                ? '\u6d4f\u89c8\u5668\u539f\u751f\u666e\u901a\u8bdd\u8f6c\u5199'
-                : '\u5f53\u524d\u6d4f\u89c8\u5668\u6682\u4e0d\u652f\u6301\u8f6c\u5199'}
+              {!supported
+                ? '\u5f53\u524d\u6d4f\u89c8\u5668\u6682\u4e0d\u652f\u6301\u8f6c\u5199'
+                : overDurationLimit
+                  ? '\u5f53\u524d\u7248\u672c\u6700\u957f\u652f\u6301 5 \u5206\u949f'
+                  : '\u6d4f\u89c8\u5668\u539f\u751f\u666e\u901a\u8bdd\u8f6c\u5199\uff08\u6700\u957f 5 \u5206\u949f\uff09'}
             </Text>
           </Box>
 
@@ -224,6 +239,11 @@ export function AudioContent({
               {transcriptionState.status === AsyncStatus.Loading && !transcriptionText && (
                 <Text size="T200" priority="300">
                   \u6b63\u5728\u8bc6\u522b\u8bed\u97f3\u5185\u5bb9...
+                </Text>
+              )}
+              {transcriptionDetail && (
+                <Text size="T200" priority="300">
+                  {transcriptionDetail}
                 </Text>
               )}
               {transcriptionError && (
