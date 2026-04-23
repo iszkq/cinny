@@ -1,21 +1,21 @@
-name: Build deploy artifact
+name: Build 1Panel static package
 
 on:
   workflow_dispatch:
     inputs:
       app_base_path:
-        description: 'Deployment base path, use / for root domain deployments.'
+        description: '1Panel deployment base path, use / for root domain deployments.'
         required: true
         default: '/'
       hash_router_enabled:
-        description: 'Enable hash router for environments without SPA rewrite support.'
+        description: 'Enable hash router for static hosting environments without SPA rewrite support.'
         required: true
         type: boolean
-        default: false
+        default: true
 
 jobs:
   build-artifact:
-    name: Build dist artifact
+    name: Build 1Panel artifact
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -37,16 +37,16 @@ jobs:
           NODE_OPTIONS: '--max_old_space_size=4096'
         run: npm run build
 
-      - name: Upload dist artifact
+      - name: Upload raw dist artifact
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: dist
           path: dist
           retention-days: 7
 
-      - name: Upload static site artifact
+      - name: Upload 1Panel static artifact
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
-          name: dist-static
+          name: 1panel-static
           path: dist/*
           retention-days: 7

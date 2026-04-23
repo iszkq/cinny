@@ -50,12 +50,6 @@ jobs:
           NODE_OPTIONS: --max_old_space_size=4096
         run: npm run build
 
-      - name: Upload static site artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: dist-static
-          path: dist/*
-
       - name: Upload GitHub Pages artifact
         uses: actions/upload-pages-artifact@v4
         with:
