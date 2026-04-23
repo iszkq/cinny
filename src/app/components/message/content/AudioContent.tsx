@@ -147,12 +147,16 @@ export function AudioContent({
       : undefined;
   const transcriptionError =
     transcriptionState.status === AsyncStatus.Error ? transcriptionState.error : undefined;
-  const transcriptionDetail =
-    transcriptionState.status === AsyncStatus.Loading ||
-    transcriptionState.status === AsyncStatus.Success ||
-    transcriptionState.status === AsyncStatus.Error
-      ? transcriptionState.detail
-      : undefined;
+  const helperText = !supported
+    ? supportReason ?? '\u5f53\u524d\u6d4f\u89c8\u5668\u6682\u4e0d\u652f\u6301\u8f6c\u5199'
+    : overAihubmixFileSizeLimit
+      ? 'AIHubMix \u97f3\u9891\u8f6c\u5199\u76ee\u524d\u6700\u5927\u652f\u6301 25MB'
+      : overDurationLimit
+        ? '\u5f53\u524d\u7248\u672c\u6700\u957f\u652f\u6301 5 \u5206\u949f'
+        : undefined;
+  const shouldShowTranscriptionText =
+    !!transcriptionText &&
+    (transcriptionState.status !== AsyncStatus.Loading || mode === 'browser');
   const transcriptionActionLabel =
     transcriptionState.status === AsyncStatus.Loading
       ? '\u8f6c\u5199\u4e2d'
@@ -229,34 +233,18 @@ export function AudioContent({
             >
               <Text size="B300">{transcriptionActionLabel}</Text>
             </Chip>
-            <Text size="T200" priority="300">
-              {!supported
-                ? supportReason ??
-                  '\u5f53\u524d\u6d4f\u89c8\u5668\u6682\u4e0d\u652f\u6301\u8f6c\u5199'
-                : overAihubmixFileSizeLimit
-                  ? 'AIHubMix \u97f3\u9891\u8f6c\u5199\u76ee\u524d\u6700\u5927\u652f\u6301 25MB'
-                  : overDurationLimit
-                  ? '\u5f53\u524d\u7248\u672c\u6700\u957f\u652f\u6301 5 \u5206\u949f'
-                  : supportReason ??
-                    '\u6d4f\u89c8\u5668\u539f\u751f\u666e\u901a\u8bdd\u8f6c\u5199\uff08\u6700\u957f 5 \u5206\u949f\uff09'}
-            </Text>
+            {helperText && (
+              <Text size="T200" priority="300">
+                {helperText}
+              </Text>
+            )}
           </Box>
 
-          {(transcriptionState.status !== AsyncStatus.Idle || transcriptionText) && (
+          {(transcriptionState.status !== AsyncStatus.Idle || shouldShowTranscriptionText) && (
             <Box direction="Column" gap="50">
-              {transcriptionText && (
+              {shouldShowTranscriptionText && (
                 <Text size="T300" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                   {transcriptionText}
-                </Text>
-              )}
-              {transcriptionState.status === AsyncStatus.Loading && !transcriptionText && (
-                <Text size="T200" priority="300">
-                  \u6b63\u5728\u8bc6\u522b\u8bed\u97f3\u5185\u5bb9...
-                </Text>
-              )}
-              {transcriptionDetail && (
-                <Text size="T200" priority="300">
-                  {transcriptionDetail}
                 </Text>
               )}
               {transcriptionError && (
