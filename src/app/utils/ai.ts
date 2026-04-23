@@ -403,8 +403,7 @@ export const transcribeAudioWithAihubmix = async (
   if (!response.ok) {
     throw new Error(
       extractOpenAICompatibleError(payload) ??
-        rawText.trim() ||
-        `AI audio transcription failed: ${response.status}`
+        (rawText.trim() || `AI audio transcription failed: ${response.status}`)
     );
   }
 
