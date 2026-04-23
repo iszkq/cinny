@@ -10,6 +10,10 @@ export type ClientConfig = {
   homeserverList?: string[];
   allowCustomHomeservers?: boolean;
 
+  audioTranscription?: {
+    defaultAihubmixApiKey?: string;
+  };
+
   featuredCommunities?: {
     openAsDefault?: boolean;
     spaces?: string[];
