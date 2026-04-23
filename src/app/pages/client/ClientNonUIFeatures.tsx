@@ -1,4 +1,4 @@
-import { useAtomValue } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import React, { ReactNode, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ClientEvent, MatrixEvent, RoomEvent, RoomEventHandlerMap } from 'matrix-js-sdk';
@@ -29,6 +29,13 @@ import { useInboxNotificationsSelected } from '../../hooks/router/useInbox';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 import { ensurePersonalPackSync } from '../../plugins/custom-emoji';
 import { useWarmAllImagePackMedia } from '../../hooks/useImagePacks';
+import {
+  aiSettingsAtom,
+  applyAISettingsAccountData,
+  getAISettingsAccountDataContent,
+  getAISettingsAccountDataSignature,
+} from '../../state/ai';
+import { CinnyAISettingsContent } from '../../../types/matrix/accountData';
 
 const playAudio = (audioElement: HTMLAudioElement | null) => {
   if (!audioElement) return;
@@ -104,6 +111,97 @@ function PersonalPackSyncFeature() {
       mx.removeListener(ClientEvent.AccountData, handleAccountData);
     };
   }, [mx]);
+
+  return null;
+}
+
+function AISettingsAccountDataFeature() {
+  const mx = useMatrixClient();
+  const settings = useAtomValue(aiSettingsAtom);
+  const setAISettings = useSetAtom(aiSettingsAtom);
+
+  const settingsRef = useRef(settings);
+  const hydratedRef = useRef(false);
+  const remoteSignatureRef = useRef<string>();
+  const applyingRemoteSignatureRef = useRef<string>();
+  const pendingSaveSignatureRef = useRef<string>();
+
+  useEffect(() => {
+    settingsRef.current = settings;
+
+    if (
+      applyingRemoteSignatureRef.current &&
+      getAISettingsAccountDataSignature(settings) === applyingRemoteSignatureRef.current
+    ) {
+      applyingRemoteSignatureRef.current = undefined;
+      hydratedRef.current = true;
+    }
+  }, [settings]);
+
+  useEffect(() => {
+    const applyAccountData = (content?: CinnyAISettingsContent) => {
+      const remoteSignature = content
+        ? getAISettingsAccountDataSignature(content)
+        : undefined;
+      remoteSignatureRef.current = remoteSignature;
+
+      if (
+        remoteSignature &&
+        getAISettingsAccountDataSignature(settingsRef.current) !== remoteSignature
+      ) {
+        applyingRemoteSignatureRef.current = remoteSignature;
+        setAISettings(applyAISettingsAccountData(settingsRef.current, content));
+        return;
+      }
+
+      applyingRemoteSignatureRef.current = undefined;
+      hydratedRef.current = true;
+    };
+
+    applyAccountData(
+      mx.getAccountData(AccountDataEvent.CinnyAISettings)?.getContent<CinnyAISettingsContent>()
+    );
+
+    const handleAccountData = (event: MatrixEvent) => {
+      if (event.getType() !== AccountDataEvent.CinnyAISettings) {
+        return;
+      }
+
+      applyAccountData(event.getContent<CinnyAISettingsContent>());
+    };
+
+    mx.on(ClientEvent.AccountData, handleAccountData);
+    return () => {
+      mx.removeListener(ClientEvent.AccountData, handleAccountData);
+    };
+  }, [mx, setAISettings]);
+
+  useEffect(() => {
+    if (!hydratedRef.current || applyingRemoteSignatureRef.current) {
+      return;
+    }
+
+    const signature = getAISettingsAccountDataSignature(settings);
+    if (
+      signature === remoteSignatureRef.current ||
+      signature === pendingSaveSignatureRef.current
+    ) {
+      return;
+    }
+
+    pendingSaveSignatureRef.current = signature;
+
+    mx.setAccountData(AccountDataEvent.CinnyAISettings, getAISettingsAccountDataContent(settings))
+      .then(() => {
+        remoteSignatureRef.current = signature;
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (pendingSaveSignatureRef.current === signature) {
+          pendingSaveSignatureRef.current = undefined;
+        }
+      });
+  }, [mx, settings]);
 
   return null;
 }
@@ -328,6 +426,7 @@ export function ClientNonUIFeatures({ children }: ClientNonUIFeaturesProps) {
       <PageZoomFeature />
       <PresenceSyncFeature />
       <PersonalPackSyncFeature />
+      <AISettingsAccountDataFeature />
       <ImagePackMediaWarmFeature />
       <FaviconUpdater />
       <InviteNotifications />
