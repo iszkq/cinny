@@ -40,6 +40,7 @@ import {
   MAX_AUDIO_TRANSCRIPTION_DURATION_MS,
   useAudioTranscription,
 } from '../../../features/voice-transcription';
+import { AIHUBMIX_AUDIO_TRANSCRIPTION_MAX_FILE_SIZE } from '../../../utils/ai';
 
 const PLAY_TIME_THROTTLE_OPS = {
   wait: 500,
@@ -71,11 +72,16 @@ export function AudioContent({
 }: AudioContentProps) {
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
-  const { state: transcriptionState, supported, transcribe } = useAudioTranscription(
-    transcriptionId ?? url
-  );
+  const { state: transcriptionState, supported, mode, supportReason, transcribe } =
+    useAudioTranscription(transcriptionId ?? url);
   const overDurationLimit =
-    typeof info.duration === 'number' && info.duration > MAX_AUDIO_TRANSCRIPTION_DURATION_MS;
+    mode === 'browser' &&
+    typeof info.duration === 'number' &&
+    info.duration > MAX_AUDIO_TRANSCRIPTION_DURATION_MS;
+  const overAihubmixFileSizeLimit =
+    mode === 'aihubmix' &&
+    typeof info.size === 'number' &&
+    info.size > AIHUBMIX_AUDIO_TRANSCRIPTION_MAX_FILE_SIZE;
 
   const loadAudioBlob = useCallback(async (): Promise<Blob> => {
     const mediaUrl = mxcUrlToHttp(mx, url, useAuthentication);
@@ -208,7 +214,10 @@ export function AudioContent({
               radii="300"
               onClick={handleTranscribe}
               disabled={
-                !supported || overDurationLimit || transcriptionState.status === AsyncStatus.Loading
+                !supported ||
+                overDurationLimit ||
+                overAihubmixFileSizeLimit ||
+                transcriptionState.status === AsyncStatus.Loading
               }
               before={
                 transcriptionState.status === AsyncStatus.Loading ? (
@@ -222,10 +231,14 @@ export function AudioContent({
             </Chip>
             <Text size="T200" priority="300">
               {!supported
-                ? '\u5f53\u524d\u6d4f\u89c8\u5668\u6682\u4e0d\u652f\u6301\u8f6c\u5199'
-                : overDurationLimit
+                ? supportReason ??
+                  '\u5f53\u524d\u6d4f\u89c8\u5668\u6682\u4e0d\u652f\u6301\u8f6c\u5199'
+                : overAihubmixFileSizeLimit
+                  ? 'AIHubMix \u97f3\u9891\u8f6c\u5199\u76ee\u524d\u6700\u5927\u652f\u6301 25MB'
+                  : overDurationLimit
                   ? '\u5f53\u524d\u7248\u672c\u6700\u957f\u652f\u6301 5 \u5206\u949f'
-                  : '\u6d4f\u89c8\u5668\u539f\u751f\u666e\u901a\u8bdd\u8f6c\u5199\uff08\u6700\u957f 5 \u5206\u949f\uff09'}
+                  : supportReason ??
+                    '\u6d4f\u89c8\u5668\u539f\u751f\u666e\u901a\u8bdd\u8f6c\u5199\uff08\u6700\u957f 5 \u5206\u949f\uff09'}
             </Text>
           </Box>
 
