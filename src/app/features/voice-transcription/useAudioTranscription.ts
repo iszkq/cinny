@@ -8,17 +8,20 @@ type AudioTranscriptionIdle = {
 type AudioTranscriptionLoading = {
   status: AsyncStatus.Loading;
   text?: string;
+  detail?: string;
 };
 
 type AudioTranscriptionSuccess = {
   status: AsyncStatus.Success;
   text: string;
+  detail?: string;
 };
 
 type AudioTranscriptionError = {
   status: AsyncStatus.Error;
   error: string;
   text?: string;
+  detail?: string;
 };
 
 export type AudioTranscriptionState =
@@ -32,7 +35,16 @@ type TranscribeAudioOptions = {
   lang?: string;
 };
 
+type SpeechRecognitionFailure = Error & {
+  code?: SpeechRecognitionErrorCode;
+};
+
 const DEFAULT_LANG = 'zh-CN';
+export const MAX_AUDIO_TRANSCRIPTION_DURATION_MS = 5 * 60 * 1000;
+const MAX_AUDIO_TRANSCRIPTION_DURATION_SEC = MAX_AUDIO_TRANSCRIPTION_DURATION_MS / 1000;
+const AUDIO_TRANSCRIPTION_SEGMENT_DURATION_SEC = 20;
+const AUDIO_TRANSCRIPTION_SEGMENT_COOLDOWN_MS = 150;
+const MAX_RECOGNITION_RESTARTS_PER_SEGMENT = 2;
 
 const IDLE_STATE: AudioTranscriptionState = {
   status: AsyncStatus.Idle,
@@ -54,8 +66,13 @@ const setAudioTranscriptionState = (id: string, state: AudioTranscriptionState) 
   emitChange();
 };
 
-const combineTranscript = (confirmedText = '', pendingText = ''): string =>
-  `${confirmedText} ${pendingText}`.replace(/\s+/g, ' ').trim();
+const combineTranscript = (leftText = '', rightText = ''): string =>
+  `${leftText} ${rightText}`.replace(/\s+/g, ' ').trim();
+
+const wait = (durationMs: number): Promise<void> =>
+  new Promise((resolve) => {
+    window.setTimeout(resolve, durationMs);
+  });
 
 const getSpeechRecognitionConstructor = (): SpeechRecognitionConstructor | undefined => {
   if (typeof window === 'undefined') return undefined;
@@ -91,68 +108,130 @@ const getSpeechRecognitionErrorMessage = (error?: SpeechRecognitionErrorCode): s
   return '\u5f53\u524d\u6d4f\u89c8\u5668\u6682\u4e0d\u652f\u6301\u5386\u53f2\u8bed\u97f3\u8f6c\u5199\u3002';
 };
 
-const transcribeAudioBlob = async (
-  blob: Blob,
+const createSpeechRecognitionError = (
+  code?: SpeechRecognitionErrorCode,
+  fallbackMessage?: string
+): SpeechRecognitionFailure => {
+  const error = new Error(
+    fallbackMessage ?? getSpeechRecognitionErrorMessage(code)
+  ) as SpeechRecognitionFailure;
+
+  error.code = code;
+  return error;
+};
+
+const getTranscriptionLoadingDetail = (currentSegment: number, totalSegments: number): string =>
+  `\u6b63\u5728\u8bc6\u522b\u7b2c ${currentSegment}/${totalSegments} \u6bb5...`;
+
+const getTranscriptionSuccessDetail = (totalSegments: number): string =>
+  `\u5df2\u5b8c\u6210\uff0c\u5171 ${totalSegments} \u6bb5`;
+
+const decodeAudioBlob = async (blob: Blob, audioContext: AudioContext): Promise<AudioBuffer> => {
+  if (audioContext.state === 'suspended') {
+    await audioContext.resume();
+  }
+
+  return audioContext.decodeAudioData((await blob.arrayBuffer()).slice(0));
+};
+
+const createAudioBufferSegment = (
+  audioContext: AudioContext,
+  audioBuffer: AudioBuffer,
+  startSecond: number,
+  endSecond: number
+): AudioBuffer => {
+  const startFrame = Math.max(0, Math.floor(startSecond * audioBuffer.sampleRate));
+  const endFrame = Math.min(audioBuffer.length, Math.ceil(endSecond * audioBuffer.sampleRate));
+  const frameLength = Math.max(1, endFrame - startFrame);
+
+  const segmentBuffer = audioContext.createBuffer(
+    audioBuffer.numberOfChannels,
+    frameLength,
+    audioBuffer.sampleRate
+  );
+
+  for (let channelIndex = 0; channelIndex < audioBuffer.numberOfChannels; channelIndex += 1) {
+    const sourceChannelData = audioBuffer.getChannelData(channelIndex);
+    const targetChannelData = segmentBuffer.getChannelData(channelIndex);
+    targetChannelData.set(sourceChannelData.subarray(startFrame, endFrame));
+  }
+
+  return segmentBuffer;
+};
+
+const cleanupSegmentNodes = async (
+  destination: MediaStreamAudioDestinationNode,
+  source: AudioBufferSourceNode,
+  sourceStarted: boolean,
+  sourceEnded: boolean
+) => {
+  try {
+    source.onended = null;
+    source.disconnect();
+  } catch {
+    // ignore source cleanup failures
+  }
+
+  try {
+    if (sourceStarted && !sourceEnded) {
+      source.stop(0);
+    }
+  } catch {
+    // ignore source stop failures during cleanup
+  }
+
+  destination.stream.getTracks().forEach((track) => track.stop());
+
+  try {
+    destination.disconnect();
+  } catch {
+    // ignore destination cleanup failures
+  }
+};
+
+const transcribeAudioSegment = async (
+  audioContext: AudioContext,
+  audioBufferSegment: AudioBuffer,
   lang: string,
-  onProgress: (text: string) => void,
-  preparedAudioContext?: AudioContext
+  onProgress: (text: string) => void
 ): Promise<string> => {
   const SpeechRecognitionCtor = getSpeechRecognitionConstructor();
-  if (!SpeechRecognitionCtor || typeof window.AudioContext === 'undefined') {
-    throw new Error(
+  if (!SpeechRecognitionCtor) {
+    throw createSpeechRecognitionError(
+      undefined,
       '\u5f53\u524d\u6d4f\u89c8\u5668\u6682\u4e0d\u652f\u6301\u5386\u53f2\u8bed\u97f3\u8f6c\u5199\u3002'
     );
   }
 
-  const audioContext = preparedAudioContext ?? new window.AudioContext();
   const destination = audioContext.createMediaStreamDestination();
   const source = audioContext.createBufferSource();
-
-  let sourceStarted = false;
-  let sourceEnded = false;
-
-  const cleanup = async () => {
-    try {
-      if (sourceStarted && !sourceEnded) source.stop(0);
-    } catch {
-      // ignore source stop failures during cleanup
-    }
-
-    destination.stream.getTracks().forEach((track) => track.stop());
-    await audioContext.close().catch(() => undefined);
-  };
-
-  try {
-    if (audioContext.state === 'suspended') {
-      await audioContext.resume();
-    }
-    const audioBuffer = await audioContext.decodeAudioData((await blob.arrayBuffer()).slice(0));
-    if (!Number.isFinite(audioBuffer.duration) || audioBuffer.duration <= 0) {
-      throw new Error('\u65e0\u6cd5\u89e3\u6790\u8fd9\u6761\u8bed\u97f3\u3002');
-    }
-
-    source.buffer = audioBuffer;
-    source.connect(destination);
-  } catch (error) {
-    await cleanup();
-    throw error instanceof Error
-      ? error
-      : new Error('\u65e0\u6cd5\u89e3\u6790\u8fd9\u6761\u8bed\u97f3\u3002');
-  }
+  source.buffer = audioBufferSegment;
+  source.connect(destination);
 
   const audioTrack = destination.stream.getAudioTracks()[0];
   if (!audioTrack) {
-    await cleanup();
-    throw new Error('\u5f53\u524d\u6d4f\u89c8\u5668\u65e0\u6cd5\u8bfb\u53d6\u97f3\u9891\u8f68\u9053\u3002');
+    await cleanupSegmentNodes(destination, source, false, false);
+    throw createSpeechRecognitionError('audio-capture');
   }
 
   return new Promise<string>((resolve, reject) => {
     const recognition = new SpeechRecognitionCtor();
     let settled = false;
+    let sourceStarted = false;
+    let sourceEnded = false;
     let finishedBySource = false;
-    let confirmedText = '';
-    let pendingText = '';
-    let lastError: string | undefined;
+    let restartCount = 0;
+    let settledText = '';
+    let sessionConfirmedText = '';
+    let sessionPendingText = '';
+    let lastError: SpeechRecognitionFailure | undefined;
+    let fatalError = false;
+
+    const getVisibleText = () =>
+      combineTranscript(
+        settledText,
+        combineTranscript(sessionConfirmedText, sessionPendingText)
+      );
 
     const finish = (callback: () => void) => {
       if (settled) return;
@@ -168,22 +247,29 @@ const transcribeAudioBlob = async (
         // ignore event cleanup failures
       }
 
-      cleanup()
+      cleanupSegmentNodes(destination, source, sourceStarted, sourceEnded)
         .catch(() => undefined)
         .finally(callback);
     };
 
     const resolveWithTranscript = () => {
-      const text = combineTranscript(confirmedText, pendingText);
+      const text = getVisibleText();
       if (!text) {
         reject(
-          new Error(
-            lastError ?? '\u6ca1\u6709\u8bc6\u522b\u5230\u53ef\u8f6c\u5199\u7684\u8bed\u97f3\u5185\u5bb9\u3002'
-          )
+          lastError ??
+            createSpeechRecognitionError(
+              'no-speech',
+              '\u6ca1\u6709\u8bc6\u522b\u5230\u53ef\u8f6c\u5199\u7684\u8bed\u97f3\u5185\u5bb9\u3002'
+            )
         );
         return;
       }
+
       resolve(text);
+    };
+
+    const startRecognition = () => {
+      recognition.start(audioTrack);
     };
 
     recognition.lang = lang;
@@ -200,44 +286,69 @@ const transcribeAudioBlob = async (
         if (!transcript) continue;
 
         if (event.results[index].isFinal) {
-          nextConfirmedText += transcript;
+          nextConfirmedText = combineTranscript(nextConfirmedText, transcript);
         } else {
-          nextPendingText += transcript;
+          nextPendingText = combineTranscript(nextPendingText, transcript);
         }
       }
 
-      confirmedText = nextConfirmedText;
-      pendingText = nextPendingText;
-      onProgress(combineTranscript(confirmedText, pendingText));
+      sessionConfirmedText = nextConfirmedText;
+      sessionPendingText = nextPendingText;
+      onProgress(getVisibleText());
     };
 
     recognition.onnomatch = () => {
-      lastError = '\u6ca1\u6709\u8bc6\u522b\u5230\u53ef\u8f6c\u5199\u7684\u8bed\u97f3\u5185\u5bb9\u3002';
+      lastError = createSpeechRecognitionError('no-speech');
     };
 
     recognition.onerror = (event) => {
-      const errorMessage = getSpeechRecognitionErrorMessage(event.error);
-
       if (event.error === 'aborted' && finishedBySource) {
         return;
       }
 
-      lastError = errorMessage;
+      lastError = createSpeechRecognitionError(event.error);
+      fatalError =
+        event.error === 'audio-capture' ||
+        event.error === 'language-not-supported' ||
+        event.error === 'network' ||
+        event.error === 'not-allowed' ||
+        event.error === 'service-not-allowed';
     };
 
     recognition.onend = () => {
-      finish(() => {
-        const text = combineTranscript(confirmedText, pendingText);
+      if (settled) return;
 
-        if (finishedBySource || text) {
+      settledText = combineTranscript(settledText, sessionConfirmedText);
+      sessionConfirmedText = '';
+      sessionPendingText = '';
+
+      if (!finishedBySource && !fatalError && restartCount < MAX_RECOGNITION_RESTARTS_PER_SEGMENT) {
+        restartCount += 1;
+
+        try {
+          startRecognition();
+          return;
+        } catch (error) {
+          fatalError = true;
+          lastError =
+            error instanceof Error
+              ? (error as SpeechRecognitionFailure)
+              : createSpeechRecognitionError();
+        }
+      }
+
+      finish(() => {
+        if (finishedBySource || getVisibleText()) {
           resolveWithTranscript();
           return;
         }
 
         reject(
-          new Error(
-            lastError ?? '\u5f53\u524d\u6d4f\u89c8\u5668\u6682\u4e0d\u652f\u6301\u5386\u53f2\u8bed\u97f3\u8f6c\u5199\u3002'
-          )
+          lastError ??
+            createSpeechRecognitionError(
+              undefined,
+              '\u5f53\u524d\u6d4f\u89c8\u5668\u6682\u4e0d\u652f\u6301\u5386\u53f2\u8bed\u97f3\u8f6c\u5199\u3002'
+            )
         );
       });
     };
@@ -256,21 +367,104 @@ const transcribeAudioBlob = async (
     };
 
     try {
-      recognition.start(audioTrack);
+      startRecognition();
       source.start(0);
       sourceStarted = true;
     } catch (error) {
       finish(() => {
         reject(
           error instanceof Error
-            ? error
-            : new Error(
+            ? (error as SpeechRecognitionFailure)
+            : createSpeechRecognitionError(
+                undefined,
                 '\u5f53\u524d\u6d4f\u89c8\u5668\u6682\u4e0d\u652f\u6301\u5386\u53f2\u8bed\u97f3\u8f6c\u5199\u3002'
               )
         );
       });
     }
   });
+};
+
+const transcribeAudioBlob = async (
+  blob: Blob,
+  lang: string,
+  onProgress: (text: string, detail: string) => void,
+  audioContext: AudioContext
+): Promise<{ text: string; totalSegments: number }> => {
+  const decodedAudio = await decodeAudioBlob(blob, audioContext);
+
+  if (!Number.isFinite(decodedAudio.duration) || decodedAudio.duration <= 0) {
+    throw new Error('\u65e0\u6cd5\u89e3\u6790\u8fd9\u6761\u8bed\u97f3\u3002');
+  }
+
+  if (decodedAudio.duration > MAX_AUDIO_TRANSCRIPTION_DURATION_SEC) {
+    throw new Error(
+      '\u5f53\u524d\u7248\u672c\u6700\u957f\u53ea\u652f\u6301 5 \u5206\u949f\u5185\u7684\u8bed\u97f3\u8f6c\u5199\u3002'
+    );
+  }
+
+  const totalSegments = Math.max(
+    1,
+    Math.ceil(decodedAudio.duration / AUDIO_TRANSCRIPTION_SEGMENT_DURATION_SEC)
+  );
+
+  let transcriptText = '';
+
+  for (let segmentIndex = 0; segmentIndex < totalSegments; segmentIndex += 1) {
+    const startSecond = segmentIndex * AUDIO_TRANSCRIPTION_SEGMENT_DURATION_SEC;
+    const endSecond = Math.min(
+      decodedAudio.duration,
+      startSecond + AUDIO_TRANSCRIPTION_SEGMENT_DURATION_SEC
+    );
+
+    const segmentBuffer = createAudioBufferSegment(
+      audioContext,
+      decodedAudio,
+      startSecond,
+      endSecond
+    );
+    const detail = getTranscriptionLoadingDetail(segmentIndex + 1, totalSegments);
+
+    onProgress(transcriptText, detail);
+
+    try {
+      const segmentText = await transcribeAudioSegment(
+        audioContext,
+        segmentBuffer,
+        lang,
+        (partialSegmentText) => {
+          onProgress(combineTranscript(transcriptText, partialSegmentText), detail);
+        }
+      );
+
+      transcriptText = combineTranscript(transcriptText, segmentText);
+      onProgress(transcriptText, detail);
+    } catch (error) {
+      const speechError = error as SpeechRecognitionFailure;
+
+      if (speechError.code === 'no-speech') {
+        continue;
+      }
+
+      throw error;
+    }
+
+    if (segmentIndex + 1 < totalSegments) {
+      await wait(AUDIO_TRANSCRIPTION_SEGMENT_COOLDOWN_MS);
+    }
+  }
+
+  if (!transcriptText) {
+    throw createSpeechRecognitionError(
+      'no-speech',
+      '\u6ca1\u6709\u8bc6\u522b\u5230\u53ef\u8f6c\u5199\u7684\u8bed\u97f3\u5185\u5bb9\u3002'
+    );
+  }
+
+  return {
+    text: transcriptText,
+    totalSegments,
+  };
 };
 
 export const canTranscribeAudioInBrowser = (): boolean => {
@@ -320,40 +514,45 @@ export const useAudioTranscription = (id: string | undefined) => {
       setAudioTranscriptionState(id, {
         status: AsyncStatus.Loading,
         text: previousText,
+        detail: '\u6b63\u5728\u89e3\u6790\u8bed\u97f3...',
       });
 
       const promise = (async () => {
-        const preparedAudioContext =
-          typeof window !== 'undefined' && typeof window.AudioContext !== 'undefined'
-            ? new window.AudioContext()
-            : undefined;
+        if (typeof window === 'undefined' || typeof window.AudioContext === 'undefined') {
+          throw new Error(
+            '\u5f53\u524d\u6d4f\u89c8\u5668\u6682\u4e0d\u652f\u6301\u5386\u53f2\u8bed\u97f3\u8f6c\u5199\u3002'
+          );
+        }
+
+        const audioContext = new window.AudioContext();
 
         try {
-          if (preparedAudioContext?.state === 'suspended') {
-            await preparedAudioContext.resume().catch(() => undefined);
+          if (audioContext.state === 'suspended') {
+            await audioContext.resume().catch(() => undefined);
           }
 
           const blob = await getBlob();
-          return transcribeAudioBlob(
+          return await transcribeAudioBlob(
             blob,
             lang,
-            (text) => {
+            (text, detail) => {
               setAudioTranscriptionState(id, {
                 status: AsyncStatus.Loading,
                 text,
+                detail,
               });
             },
-            preparedAudioContext
+            audioContext
           );
-        } catch (error) {
-          await preparedAudioContext?.close().catch(() => undefined);
-          throw error;
+        } finally {
+          await audioContext.close().catch(() => undefined);
         }
       })()
-        .then((text) => {
+        .then(({ text, totalSegments }) => {
           setAudioTranscriptionState(id, {
             status: AsyncStatus.Success,
             text,
+            detail: getTranscriptionSuccessDetail(totalSegments),
           });
 
           return text;
@@ -366,6 +565,12 @@ export const useAudioTranscription = (id: string | undefined) => {
             nextState.status === AsyncStatus.Error
               ? nextState.text
               : previousText;
+          const nextDetail =
+            nextState.status === AsyncStatus.Loading ||
+            nextState.status === AsyncStatus.Success ||
+            nextState.status === AsyncStatus.Error
+              ? nextState.detail
+              : undefined;
 
           setAudioTranscriptionState(id, {
             status: AsyncStatus.Error,
@@ -374,6 +579,7 @@ export const useAudioTranscription = (id: string | undefined) => {
                 ? error.message
                 : '\u8bed\u97f3\u8f6c\u5199\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5\u3002',
             text: nextText,
+            detail: nextDetail,
           });
 
           throw error;
