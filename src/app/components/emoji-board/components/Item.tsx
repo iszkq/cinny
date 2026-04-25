@@ -6,8 +6,8 @@ import { EmojiItemInfo, EmojiType } from '../types';
 import * as css from './styles.css';
 import { PackImageReader } from '../../../plugins/custom-emoji';
 import { IEmoji } from '../../../plugins/emoji';
-import { mxcUrlToHttp } from '../../../utils/matrix';
 import { useStableMediaUrl } from './useStableMediaUrl';
+import { getEmojiBoardMediaUrls } from './media';
 
 export const getEmojiItemInfo = (element: Element): EmojiItemInfo | undefined => {
   const label = element.getAttribute('title');
@@ -67,12 +67,16 @@ type CustomEmojiItemProps = {
   image: PackImageReader;
 };
 export function CustomEmojiItem({ mx, useAuthentication, image }: CustomEmojiItemProps) {
-  const mediaUrl =
-    mxcUrlToHttp(mx, image.url, useAuthentication, 64, 64, 'scale') ??
-    mxcUrlToHttp(mx, image.url, useAuthentication) ??
-    '';
+  const { primaryUrl, fallbackUrl } = getEmojiBoardMediaUrls({
+    mx,
+    mxc: image.url,
+    useAuthentication,
+    info: image.info,
+    width: 64,
+    height: 64,
+  });
   const { displayUrl, hasFailed, requestKey, handleLoad, handleError } =
-    useStableMediaUrl(mediaUrl);
+    useStableMediaUrl(primaryUrl, fallbackUrl);
 
   return (
     <Box
@@ -86,6 +90,7 @@ export function CustomEmojiItem({ mx, useAuthentication, image }: CustomEmojiIte
       data-emoji-type={EmojiType.CustomEmoji}
       data-emoji-data={image.url}
       data-emoji-shortcode={image.shortcode}
+      data-emoji-info={image.info ? JSON.stringify(image.info) : undefined}
     >
       {displayUrl && !hasFailed ? (
         <img
@@ -114,12 +119,16 @@ type StickerItemProps = {
 };
 
 export function StickerItem({ mx, useAuthentication, image }: StickerItemProps) {
-  const mediaUrl =
-    mxcUrlToHttp(mx, image.url, useAuthentication, 256, 256, 'scale') ??
-    mxcUrlToHttp(mx, image.url, useAuthentication) ??
-    '';
+  const { primaryUrl, fallbackUrl } = getEmojiBoardMediaUrls({
+    mx,
+    mxc: image.url,
+    useAuthentication,
+    info: image.info,
+    width: 256,
+    height: 256,
+  });
   const { displayUrl, hasFailed, requestKey, handleLoad, handleError } =
-    useStableMediaUrl(mediaUrl);
+    useStableMediaUrl(primaryUrl, fallbackUrl);
 
   return (
     <Box

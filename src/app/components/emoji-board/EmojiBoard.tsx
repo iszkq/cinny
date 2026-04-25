@@ -23,7 +23,6 @@ import { preventScrollWithArrowKey, stopPropagation } from '../../utils/keyboard
 import { useRelevantImagePacks } from '../../hooks/useImagePacks';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useRecentEmoji } from '../../hooks/useRecentEmoji';
-import { mxcUrlToHttp } from '../../utils/matrix';
 import { editableActiveElement, targetFromEvent } from '../../utils/dom';
 import { useAsyncSearch, UseAsyncSearchOptions } from '../../hooks/useAsyncSearch';
 import { useDebounce } from '../../hooks/useDebounce';
@@ -53,6 +52,7 @@ import {
 } from './components';
 import { EmojiBoardTab, EmojiType } from './types';
 import { VirtualTile } from '../virtualizer';
+import { getEmojiBoardMediaUrls } from './components/media';
 
 const RECENT_GROUP_ID = 'recent_group';
 const SEARCH_GROUP_ID = 'search_group';
@@ -200,21 +200,24 @@ function EmojiSidebar({ activeGroupAtom, packs, onScrollToGroup }: EmojiSidebarP
               label = !pack.address ? '\u4e2a\u4eba\u5206\u7c7b' : mx.getRoom(pack.id)?.name;
 
             const avatarUrl = pack.meta.avatar
-              ? (mxcUrlToHttp(mx, pack.meta.avatar, useAuthentication, 64, 64, 'scale') ??
-                  mxcUrlToHttp(mx, pack.meta.avatar, useAuthentication) ??
-                  undefined)
+              ? getEmojiBoardMediaUrls({
+                  mx,
+                  mxc: pack.meta.avatar,
+                  useAuthentication,
+                  width: 64,
+                  height: 64,
+                }).primaryUrl
               : undefined;
-            const fallbackUrl =
-              mxcUrlToHttp(
+            const firstImage = pack.getImages(usage)[0];
+            const { primaryUrl: fallbackUrl, fallbackUrl: fallbackOriginalUrl } =
+              getEmojiBoardMediaUrls({
                 mx,
-                pack.getImages(usage)[0]?.url ?? '',
+                mxc: firstImage?.url,
                 useAuthentication,
-                64,
-                64,
-                'scale'
-              ) ??
-              mxcUrlToHttp(mx, pack.getImages(usage)[0]?.url ?? '', useAuthentication) ??
-              undefined;
+                info: firstImage?.info,
+                width: 64,
+                height: 64,
+              });
 
             return (
               <ImageGroupIcon
@@ -223,7 +226,7 @@ function EmojiSidebar({ activeGroupAtom, packs, onScrollToGroup }: EmojiSidebarP
                 id={pack.id}
                 label={label ?? 'Unknown Pack'}
                 url={avatarUrl ?? fallbackUrl}
-                fallbackUrl={fallbackUrl}
+                fallbackUrl={avatarUrl ? fallbackUrl ?? fallbackOriginalUrl : fallbackOriginalUrl}
                 onClick={handleScrollToGroup}
               />
             );
@@ -279,21 +282,24 @@ function StickerSidebar({ activeGroupAtom, packs, onScrollToGroup }: StickerSide
             label = !pack.address ? '\u4e2a\u4eba\u5206\u7c7b' : mx.getRoom(pack.id)?.name;
 
           const avatarUrl = pack.meta.avatar
-            ? (mxcUrlToHttp(mx, pack.meta.avatar, useAuthentication, 64, 64, 'scale') ??
-                mxcUrlToHttp(mx, pack.meta.avatar, useAuthentication) ??
-                undefined)
+            ? getEmojiBoardMediaUrls({
+                mx,
+                mxc: pack.meta.avatar,
+                useAuthentication,
+                width: 64,
+                height: 64,
+              }).primaryUrl
             : undefined;
-          const fallbackUrl =
-            mxcUrlToHttp(
+          const firstImage = pack.getImages(usage)[0];
+          const { primaryUrl: fallbackUrl, fallbackUrl: fallbackOriginalUrl } =
+            getEmojiBoardMediaUrls({
               mx,
-              pack.getImages(usage)[0]?.url ?? '',
+              mxc: firstImage?.url,
               useAuthentication,
-              64,
-              64,
-              'scale'
-            ) ??
-            mxcUrlToHttp(mx, pack.getImages(usage)[0]?.url ?? '', useAuthentication) ??
-            undefined;
+              info: firstImage?.info,
+              width: 64,
+              height: 64,
+            });
 
           return (
             <ImageGroupIcon
@@ -302,7 +308,7 @@ function StickerSidebar({ activeGroupAtom, packs, onScrollToGroup }: StickerSide
               id={pack.id}
               label={label ?? 'Unknown Pack'}
               url={avatarUrl ?? fallbackUrl}
-              fallbackUrl={fallbackUrl}
+              fallbackUrl={avatarUrl ? fallbackUrl ?? fallbackOriginalUrl : fallbackOriginalUrl}
               onClick={handleScrollToGroup}
             />
           );
@@ -334,6 +340,7 @@ function EmojiGroupHolder({
       setPreviewData({
         key: emojiInfo.data,
         shortcode: emojiInfo.shortcode,
+        info: emojiInfo.info,
       });
     },
     [setPreviewData]

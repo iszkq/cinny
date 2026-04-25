@@ -2,14 +2,16 @@ import { Box, Icon, Icons, Text } from 'folds';
 import React from 'react';
 import { Atom, atom, useAtomValue } from 'jotai';
 import * as css from './styles.css';
+import { IImageInfo } from '../../../../types/matrix/common';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
-import { mxcUrlToHttp } from '../../../utils/matrix';
 import { useStableMediaUrl } from './useStableMediaUrl';
+import { getEmojiBoardMediaUrls } from './media';
 
 export type PreviewData = {
   key: string;
   shortcode: string;
+  info?: IImageInfo;
 };
 
 export const createPreviewDataAtom = (initial?: PreviewData) =>
@@ -22,15 +24,17 @@ export function Preview({ previewAtom }: PreviewProps) {
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
 
-  const { key, shortcode } = useAtomValue(previewAtom) ?? {};
-  const mediaUrl =
-    key && key.startsWith('mxc://')
-      ? (mxcUrlToHttp(mx, key, useAuthentication, 256, 256, 'scale') ??
-          mxcUrlToHttp(mx, key, useAuthentication) ??
-          key)
-      : undefined;
+  const { key, shortcode, info } = useAtomValue(previewAtom) ?? {};
+  const { primaryUrl, fallbackUrl } = getEmojiBoardMediaUrls({
+    mx,
+    mxc: key && key.startsWith('mxc://') ? key : undefined,
+    useAuthentication,
+    info,
+    width: 256,
+    height: 256,
+  });
   const { displayUrl, hasFailed, requestKey, handleLoad, handleError } =
-    useStableMediaUrl(mediaUrl);
+    useStableMediaUrl(primaryUrl, fallbackUrl);
 
   if (!shortcode) return null;
 
