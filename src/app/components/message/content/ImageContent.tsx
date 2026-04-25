@@ -110,6 +110,9 @@ export type ImageContentProps = {
   renderImage: (props: RenderImageProps) => ReactNode;
 };
 
+const VIEWER_THUMBNAIL_PRELOAD_LIMIT = 18;
+const VIEWER_THUMBNAIL_PRELOAD_DELAY_MS = 80;
+
 const revokeBlobUrl = (src?: string) => {
   if (!src?.startsWith('blob:')) return;
   if (mediaUrlCache.isCachedMediaObjectUrl?.(src) || isSessionMediaObjectUrl(src)) return;
@@ -381,6 +384,37 @@ export const ImageContent = as<'div', ImageContentProps>(
       preloadViewerItem(galleryItems[viewerIndex - 1]);
       preloadViewerItem(galleryItems[viewerIndex + 1]);
     }, [galleryItems, preloadViewerItem, viewer, viewerIndex]);
+
+    useEffect(() => {
+      if (!viewer) {
+        return undefined;
+      }
+
+      const preloadCandidates = galleryItems
+        .map((item, index) => ({ item, index }))
+        .filter(
+          ({ item }) =>
+            item.id !== currentViewerItem.id &&
+            !!item.encInfo &&
+            !viewerCacheRef.current.has(item.id) &&
+            !viewerPreloadRef.current.has(item.id)
+        )
+        .sort(
+          (itemA, itemB) =>
+            Math.abs(itemA.index - viewerIndex) - Math.abs(itemB.index - viewerIndex)
+        )
+        .slice(0, VIEWER_THUMBNAIL_PRELOAD_LIMIT);
+
+      const preloadTimers = preloadCandidates.map(({ item }, index) =>
+        window.setTimeout(() => {
+          preloadViewerItem(item);
+        }, index * VIEWER_THUMBNAIL_PRELOAD_DELAY_MS)
+      );
+
+      return () => {
+        preloadTimers.forEach((timer) => window.clearTimeout(timer));
+      };
+    }, [currentViewerItem.id, galleryItems, preloadViewerItem, viewer, viewerIndex]);
 
     useEffect(
       () => () => {
