@@ -700,6 +700,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         {autocompleteQuery?.prefix === AutocompletePrefix.Emoticon && (
           <EmoticonAutocomplete
             imagePackRooms={imagePackRooms}
+            imagePackMode="personal"
             editor={editor}
             query={autocompleteQuery}
             requestClose={handleCloseAutocomplete}
@@ -856,6 +857,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                         tab={emojiBoardTab}
                         onTabChange={setEmojiBoardTab}
                         imagePackRooms={imagePackRooms}
+                        imagePackMode="personal"
                         returnFocusOnDeactivate={false}
                         onEmojiSelect={handleEmoticonSelect}
                         onCustomEmojiSelect={handleEmoticonSelect}

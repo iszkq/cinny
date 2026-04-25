@@ -250,6 +250,7 @@ export const MessageEditor = as<'div', MessageEditorProps>(
         {autocompleteQuery?.prefix === AutocompletePrefix.Emoticon && (
           <EmoticonAutocomplete
             imagePackRooms={imagePackRooms || []}
+            imagePackMode="personal"
             editor={editor}
             query={autocompleteQuery}
             requestClose={handleCloseAutocomplete}
@@ -306,6 +307,7 @@ export const MessageEditor = as<'div', MessageEditorProps>(
                         content={
                           <EmojiBoard
                             imagePackRooms={imagePackRooms ?? []}
+                            imagePackMode="personal"
                             returnFocusOnDeactivate={false}
                             onEmojiSelect={handleEmoticonSelect}
                             onCustomEmojiSelect={handleEmoticonSelect}

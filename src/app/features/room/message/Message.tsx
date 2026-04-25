@@ -1560,6 +1560,7 @@ export const Message = as<'div', MessageProps>(
                     content={
                       <EmojiBoard
                         imagePackRooms={imagePackRooms ?? []}
+                        imagePackMode="personal"
                         returnFocusOnDeactivate={false}
                         allowTextCustomEmoji
                         onEmojiSelect={(key) => {
