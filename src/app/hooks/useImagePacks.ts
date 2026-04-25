@@ -20,8 +20,27 @@ import { useAccountDataCallback } from './useAccountDataCallback';
 import { useStateEventCallback } from './useStateEventCallback';
 import { primeCachedMediaObjectUrl, primePersistentMediaUrl } from '../utils/mediaUrlCache';
 
-const GLOBAL_IMAGE_PACK_WARM_DELAY_MS = 150;
-const GLOBAL_IMAGE_PACK_OBJECT_WARM_DELAY_MS = 450;
+const GLOBAL_IMAGE_PACK_WARM_DELAY_MS = 0;
+const GLOBAL_IMAGE_PACK_OBJECT_WARM_DELAY_MS = 120;
+const IMAGE_PACK_AVATAR_SIZE = 64;
+const IMAGE_PACK_EMOTICON_SIZE = 64;
+const IMAGE_PACK_STICKER_SIZE = 256;
+
+const getImagePackMediaPreviewUrl = (
+  mx: ReturnType<typeof useMatrixClient>,
+  useAuthentication: boolean,
+  mxcUrl: string,
+  usage?: ImageUsage
+) => {
+  const size =
+    usage === ImageUsage.Sticker ? IMAGE_PACK_STICKER_SIZE : IMAGE_PACK_EMOTICON_SIZE;
+
+  return (
+    mxcUrlToHttp(mx, mxcUrl, useAuthentication, size, size, 'scale') ??
+    mxcUrlToHttp(mx, mxcUrl, useAuthentication) ??
+    null
+  );
+};
 
 const warmImagePackMedia = (
   mx: ReturnType<typeof useMatrixClient>,
@@ -60,14 +79,24 @@ const getImagePackMediaUrls = (
   packs.forEach((pack) => {
     usages.forEach((usage) => {
       const avatarMxc = pack.getAvatarUrl(usage);
-      const avatarUrl = avatarMxc ? mxcUrlToHttp(mx, avatarMxc, useAuthentication) : null;
+      const avatarUrl = avatarMxc
+        ? mxcUrlToHttp(
+            mx,
+            avatarMxc,
+            useAuthentication,
+            IMAGE_PACK_AVATAR_SIZE,
+            IMAGE_PACK_AVATAR_SIZE,
+            'scale'
+          ) ??
+          mxcUrlToHttp(mx, avatarMxc, useAuthentication)
+        : null;
 
       if (avatarUrl) {
         mediaUrls.add(avatarUrl);
       }
 
       pack.getImages(usage).forEach((image) => {
-        const imageUrl = mxcUrlToHttp(mx, image.url, useAuthentication);
+        const imageUrl = getImagePackMediaPreviewUrl(mx, useAuthentication, image.url, usage);
         if (imageUrl) {
           mediaUrls.add(imageUrl);
         }
