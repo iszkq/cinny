@@ -83,7 +83,11 @@ function RenderEmoticonElement({
   const selected = useSelected();
   const focused = useFocused();
   const mediaUrl =
-    element.key.startsWith('mxc://') ? mxcUrlToHttp(mx, element.key, useAuthentication) : undefined;
+    element.key.startsWith('mxc://')
+      ? (mxcUrlToHttp(mx, element.key, useAuthentication, 48, 48, 'scale') ??
+          mxcUrlToHttp(mx, element.key, useAuthentication) ??
+          undefined)
+      : undefined;
   const cachedMediaUrl = useCachedMediaUrl(mediaUrl);
 
   return (
@@ -99,6 +103,7 @@ function RenderEmoticonElement({
             className={css.EmoticonImg}
             src={cachedMediaUrl ?? mediaUrl ?? element.key}
             alt={element.shortcode}
+            decoding="async"
           />
         ) : (
           element.key
