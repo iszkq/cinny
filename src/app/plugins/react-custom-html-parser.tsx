@@ -482,6 +482,8 @@ export const getReactCustomHtmlParser = (
 
         if (name === 'img') {
           const htmlSrc = mxcUrlToHttp(mx, props.src, params.useAuthentication);
+          const emoticonSrc =
+            mxcUrlToHttp(mx, props.src, params.useAuthentication, 64, 64, 'scale') ?? htmlSrc;
           if (htmlSrc && props.src.startsWith('mxc://') === false) {
             return (
               <a href={htmlSrc} target="_blank" rel="noreferrer noopener">
@@ -496,7 +498,7 @@ export const getReactCustomHtmlParser = (
                   <CachedHtmlEmoticonImage
                     {...props}
                     className={css.EmoticonImg}
-                    src={htmlSrc}
+                    src={emoticonSrc}
                   />
                 </span>
               </span>
