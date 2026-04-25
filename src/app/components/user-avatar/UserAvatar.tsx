@@ -1,8 +1,9 @@
 import { AvatarFallback, AvatarImage, color } from 'folds';
-import React, { ReactEventHandler, ReactNode, useState } from 'react';
+import React, { ReactEventHandler, ReactNode, useEffect, useState } from 'react';
 import classNames from 'classnames';
 import * as css from './UserAvatar.css';
 import colorMXID from '../../../util/colorMXID';
+import { useCachedMediaUrl } from '../../hooks/useCachedMediaUrl';
 
 type UserAvatarProps = {
   className?: string;
@@ -13,12 +14,18 @@ type UserAvatarProps = {
 };
 export function UserAvatar({ className, userId, src, alt, renderFallback }: UserAvatarProps) {
   const [error, setError] = useState(false);
+  const cachedSrc = useCachedMediaUrl(src);
+  const displaySrc = cachedSrc ?? src;
+
+  useEffect(() => {
+    setError(false);
+  }, [displaySrc]);
 
   const handleLoad: ReactEventHandler<HTMLImageElement> = (evt) => {
     evt.currentTarget.setAttribute('data-image-loaded', 'true');
   };
 
-  if (!src || error) {
+  if (!displaySrc || error) {
     return (
       <AvatarFallback
         style={{ backgroundColor: colorMXID(userId), color: color.Surface.Container }}
@@ -32,7 +39,7 @@ export function UserAvatar({ className, userId, src, alt, renderFallback }: User
   return (
     <AvatarImage
       className={classNames(css.UserAvatar, className)}
-      src={src}
+      src={displaySrc}
       alt={alt}
       onError={() => setError(true)}
       onLoad={handleLoad}
