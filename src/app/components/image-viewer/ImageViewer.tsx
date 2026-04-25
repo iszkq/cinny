@@ -452,7 +452,13 @@ export const ImageViewer = as<'div', ImageViewerProps>(
                       title={item.alt}
                     >
                       {item.previewSrc ? (
-                        <img className={css.ThumbnailImage} src={item.previewSrc} alt={item.alt} />
+                        <img
+                          className={css.ThumbnailImage}
+                          src={item.previewSrc}
+                          alt={item.alt}
+                          loading="eager"
+                          decoding="async"
+                        />
                       ) : (
                         <Box
                           className={css.ThumbnailPlaceholder}
