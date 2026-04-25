@@ -238,6 +238,71 @@ const getTimelineImageViewerItems = (linkedTimelines: EventTimeline[]): ViewerIm
   return items;
 };
 
+const getTimelineImageViewerItemsInRange = (
+  linkedTimelines: EventTimeline[],
+  range: ItemRange
+): ViewerImageItem[] => {
+  const eventsCount = getTimelinesEventsCount(linkedTimelines);
+  const start = Math.max(range.start - IMAGE_VIEWER_RANGE_BUFFER, 0);
+  const end = Math.min(range.end + IMAGE_VIEWER_RANGE_BUFFER, eventsCount);
+  const seenEventIds = new Set<string>();
+  const items: ViewerImageItem[] = [];
+
+  for (let index = start; index < end; index += 1) {
+    const [eventTimeline, baseIndex] = getTimelineAndBaseIndex(linkedTimelines, index);
+    if (!eventTimeline) {
+      continue;
+    }
+
+    const mEvent = getTimelineEvent(eventTimeline, getTimelineRelativeIndex(index, baseIndex));
+    const eventId = mEvent?.getId();
+    if (!mEvent || !eventId || seenEventIds.has(eventId) || mEvent.isRedacted()) {
+      continue;
+    }
+    seenEventIds.add(eventId);
+
+    const content = mEvent.getContent();
+    const url =
+      typeof content.file?.url === 'string'
+        ? content.file.url
+        : typeof content.url === 'string'
+          ? content.url
+          : undefined;
+    const mimeType =
+      typeof content.info?.mimetype === 'string' ? content.info.mimetype : undefined;
+    const body = typeof content.body === 'string' ? content.body : 'Image';
+
+    if (!url) {
+      continue;
+    }
+
+    if (mEvent.getType() === MessageEvent.Sticker) {
+      items.push({
+        id: eventId,
+        body,
+        mimeType,
+        url,
+        encInfo: content.file,
+      });
+      continue;
+    }
+
+    if (mEvent.getType() !== MessageEvent.RoomMessage || content.msgtype !== MsgType.Image) {
+      continue;
+    }
+
+    items.push({
+      id: eventId,
+      body,
+      mimeType,
+      url,
+      encInfo: content.file,
+    });
+  }
+
+  return items;
+};
+
 export const timelineToEventsCount = (t: EventTimeline) => t.getEvents().length;
 export const getTimelinesEventsCount = (timelines: EventTimeline[]): number => {
   const timelineEventCountReducer = (count: number, tm: EventTimeline) =>
@@ -288,6 +353,7 @@ type RoomTimelineProps = {
 };
 
 const PAGINATION_LIMIT = 80;
+const IMAGE_VIEWER_RANGE_BUFFER = 48;
 
 type Timeline = {
   linkedTimelines: EventTimeline[];
@@ -622,11 +688,8 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
   const liveTimelineLinked =
     timeline.linkedTimelines[timeline.linkedTimelines.length - 1] === liveTimeline;
   const imageViewerItems = useMemo(
-    () =>
-      getTimelineImageViewerItems(
-        liveTimelineLinked ? getLinkedTimelines(liveTimeline) : timeline.linkedTimelines
-      ),
-    [liveTimeline, liveTimelineLinked, timeline]
+    () => getTimelineImageViewerItemsInRange(timeline.linkedTimelines, timeline.range),
+    [timeline.linkedTimelines, timeline.range]
   );
   const canPaginateBack =
     typeof timeline.linkedTimelines[0]?.getPaginationToken(Direction.Backward) === 'string';
