@@ -4,6 +4,7 @@ import {
   primeCachedMediaObjectUrl,
   subscribeCachedMediaObjectUrl,
 } from '../../../utils/mediaUrlCache';
+import { releaseObjectUrl, retainObjectUrl } from '../../../utils/objectUrlRetainer';
 
 type MediaCandidate = {
   source: string;
@@ -86,6 +87,14 @@ export const useStableMediaUrl = (src?: string, fallbackSrc?: string) => {
   const activeCandidate = candidates[candidateIndex];
   const displayUrl = loadedDisplayUrl ?? activeCandidate?.displayUrl;
   const hasFailed = !loadedDisplayUrl && (candidates.length === 0 || candidateIndex >= candidates.length);
+
+  useEffect(() => {
+    retainObjectUrl(displayUrl);
+
+    return () => {
+      releaseObjectUrl(displayUrl);
+    };
+  }, [displayUrl]);
 
   useEffect(() => {
     if (!hasFailed || loadedDisplayUrl || retryCount >= 4) {
