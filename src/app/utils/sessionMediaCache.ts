@@ -1,3 +1,5 @@
+import { revokeObjectUrlWhenPossible } from './objectUrlRetainer';
+
 type DeviceMemoryNavigator = Navigator & {
   deviceMemory?: number;
 };
@@ -44,12 +46,6 @@ const pendingSessionMedia = new Map<string, Promise<string>>();
 let sessionMediaBytes = 0;
 let cleanupBound = false;
 
-const revokeObjectUrl = (url?: string) => {
-  if (url?.startsWith('blob:')) {
-    URL.revokeObjectURL(url);
-  }
-};
-
 const bindCleanup = () => {
   if (cleanupBound || typeof window === 'undefined') {
     return;
@@ -61,7 +57,7 @@ const bindCleanup = () => {
     () => {
       sessionMediaCache.forEach((entry) => {
         sessionMediaObjectUrls.delete(entry.objectUrl);
-        revokeObjectUrl(entry.objectUrl);
+        revokeObjectUrlWhenPossible(entry.objectUrl);
       });
       sessionMediaCache.clear();
       pendingSessionMedia.clear();
@@ -78,7 +74,7 @@ const removeSessionMediaEntry = (key: string) => {
   sessionMediaCache.delete(key);
   sessionMediaObjectUrls.delete(entry.objectUrl);
   sessionMediaBytes = Math.max(0, sessionMediaBytes - entry.size);
-  revokeObjectUrl(entry.objectUrl);
+  revokeObjectUrlWhenPossible(entry.objectUrl);
 };
 
 const touchSessionMediaEntry = (key: string): SessionMediaEntry | undefined => {

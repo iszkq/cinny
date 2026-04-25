@@ -1,4 +1,6 @@
-const PERSISTENT_MEDIA_CACHE = 'cinny-auth-media-v1';
+import { revokeObjectUrlWhenPossible } from './objectUrlRetainer';
+
+const PERSISTENT_MEDIA_CACHE = 'cinny-auth-media-v2';
 const PERSISTENT_MEDIA_PRELOAD_CONCURRENCY = 4;
 const OBJECT_URL_MEDIA_PRELOAD_CONCURRENCY = 4;
 
@@ -34,10 +36,36 @@ const getObjectUrlMediaLimits = () => {
   };
 };
 
+const getPersistentMediaLimits = () => {
+  const deviceMemory =
+    typeof navigator === 'undefined'
+      ? undefined
+      : (navigator as DeviceMemoryNavigator).deviceMemory;
+
+  if (typeof deviceMemory === 'number') {
+    if (deviceMemory <= 4) {
+      return {
+        maxEntries: 600,
+      };
+    }
+
+    if (deviceMemory >= 8) {
+      return {
+        maxEntries: 2400,
+      };
+    }
+  }
+
+  return {
+    maxEntries: 1200,
+  };
+};
+
 const {
   maxItems: MAX_OBJECT_URL_MEDIA_ITEMS,
   maxBytes: MAX_OBJECT_URL_MEDIA_BYTES,
 } = getObjectUrlMediaLimits();
+const { maxEntries: MAX_PERSISTENT_MEDIA_ENTRIES } = getPersistentMediaLimits();
 
 type PersistentMediaTask = {
   src: string;
@@ -61,6 +89,7 @@ type ObjectUrlMediaTask = {
 };
 
 const objectUrlMediaCache = new Map<string, ObjectUrlMediaEntry>();
+const objectUrlMediaUrls = new Set<string>();
 const pendingObjectUrlMedia = new Map<string, Promise<string | undefined>>();
 const queuedObjectUrlMediaTasks = new Map<string, ObjectUrlMediaTask>();
 const objectUrlMediaListeners = new Map<
@@ -79,12 +108,6 @@ const emitObjectUrlMediaChange = (src: string, objectUrl: string | undefined) =>
   });
 };
 
-const revokeObjectUrl = (url?: string) => {
-  if (url?.startsWith('blob:')) {
-    URL.revokeObjectURL(url);
-  }
-};
-
 const clearObjectUrlMediaCache = () => {
   Array.from(objectUrlMediaCache.keys()).forEach((src) => {
     removeObjectUrlMediaEntry(src);
@@ -97,8 +120,9 @@ const removeObjectUrlMediaEntry = (src: string) => {
   if (!entry) return;
 
   objectUrlMediaCache.delete(src);
+  objectUrlMediaUrls.delete(entry.objectUrl);
   objectUrlMediaBytes = Math.max(0, objectUrlMediaBytes - entry.size);
-  revokeObjectUrl(entry.objectUrl);
+  revokeObjectUrlWhenPossible(entry.objectUrl);
   emitObjectUrlMediaChange(src, undefined);
 };
 
@@ -136,6 +160,7 @@ const setObjectUrlMediaEntry = (src: string, objectUrl: string, size: number) =>
     objectUrl,
     size,
   });
+  objectUrlMediaUrls.add(objectUrl);
   objectUrlMediaBytes += size;
 
   trimObjectUrlMediaCache();
@@ -232,6 +257,24 @@ const getMediaCache = async (): Promise<Cache | undefined> => {
   return caches.open(PERSISTENT_MEDIA_CACHE);
 };
 
+const trimPersistentMediaCache = async (mediaCache: Cache) => {
+  const cachedRequests = await mediaCache.keys();
+  if (cachedRequests.length <= MAX_PERSISTENT_MEDIA_ENTRIES) {
+    return;
+  }
+
+  await Promise.all(
+    cachedRequests
+      .slice(0, cachedRequests.length - MAX_PERSISTENT_MEDIA_ENTRIES)
+      .map((request) => mediaCache.delete(request))
+  );
+};
+
+const touchPersistentMediaEntry = async (mediaCache: Cache, src: string, response: Response) => {
+  await mediaCache.delete(src);
+  await mediaCache.put(src, response);
+};
+
 const matchPersistentMedia = async (src: string): Promise<Response | undefined> => {
   const mediaCache = await getMediaCache();
   if (!mediaCache) {
@@ -240,6 +283,7 @@ const matchPersistentMedia = async (src: string): Promise<Response | undefined> 
 
   const cachedResponse = await mediaCache.match(src);
   if (cachedResponse) {
+    await touchPersistentMediaEntry(mediaCache, src, cachedResponse.clone());
     persistedMediaUrls.add(src);
   }
 
@@ -255,6 +299,7 @@ const fetchAndPersistMedia = async (src: string): Promise<Response | undefined> 
   const mediaCache = await getMediaCache();
   if (mediaCache) {
     await mediaCache.put(src, response.clone());
+    await trimPersistentMediaCache(mediaCache);
   }
   persistedMediaUrls.add(src);
 
@@ -313,6 +358,44 @@ export const primePersistentMediaUrl = (src?: string): Promise<void> | undefined
 
 export const getCachedMediaObjectUrl = (src?: string): string | undefined =>
   (src && touchObjectUrlMediaEntry(src)?.objectUrl) || undefined;
+
+export const getPreparedMediaUrl = async (
+  src?: string,
+  priority: 'visible' | 'background' = 'visible',
+  timeoutMs = 120
+): Promise<string | undefined> => {
+  if (!src) {
+    return undefined;
+  }
+
+  const cachedObjectUrl = touchObjectUrlMediaEntry(src)?.objectUrl;
+  if (cachedObjectUrl) {
+    return cachedObjectUrl;
+  }
+
+  const objectUrlPromise = primeCachedMediaObjectUrl(src, priority);
+  if (!objectUrlPromise) {
+    return undefined;
+  }
+
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    return await Promise.race([
+      objectUrlPromise.catch(() => undefined),
+      new Promise<undefined>((resolve) => {
+        timeoutId = setTimeout(() => resolve(undefined), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutId !== undefined) {
+      clearTimeout(timeoutId);
+    }
+  }
+};
+
+export const isCachedMediaObjectUrl = (url?: string): boolean =>
+  typeof url === 'string' && objectUrlMediaUrls.has(url);
 
 export const subscribeCachedMediaObjectUrl = (
   src: string | undefined,
