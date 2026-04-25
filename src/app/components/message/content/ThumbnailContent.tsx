@@ -4,7 +4,13 @@ import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { decryptFile, downloadEncryptedMedia, mxcUrlToHttp } from '../../../utils/matrix';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
+import {
+  getCachedMediaObjectUrl,
+  primeCachedMediaObjectUrl,
+  primePersistentMediaUrl,
+} from '../../../utils/mediaUrlCache';
 import { FALLBACK_MIMETYPE } from '../../../utils/mimeTypes';
+import { getSessionMediaCacheKey, loadSessionMediaUrl } from '../../../utils/sessionMediaCache';
 
 export type ThumbnailContentProps = {
   info: IThumbnailContent;
@@ -26,13 +32,19 @@ export function ThumbnailContent({ info, renderImage }: ThumbnailContentProps) {
       const mediaUrl = mxcUrlToHttp(mx, thumbMxcUrl, useAuthentication);
       if (!mediaUrl) throw new Error('Invalid media URL');
       if (encInfo) {
-        const fileContent = await downloadEncryptedMedia(mediaUrl, (encBuf) =>
-          decryptFile(encBuf, thumbInfo.mimetype ?? FALLBACK_MIMETYPE, encInfo)
+        return loadSessionMediaUrl(
+          getSessionMediaCacheKey('thumbnail', mediaUrl, thumbInfo.mimetype ?? FALLBACK_MIMETYPE),
+          async () =>
+            downloadEncryptedMedia(mediaUrl, (encBuf) =>
+              decryptFile(encBuf, thumbInfo.mimetype ?? FALLBACK_MIMETYPE, encInfo)
+            )
         );
-        return URL.createObjectURL(fileContent);
       }
 
-      return mediaUrl;
+      void primePersistentMediaUrl(mediaUrl);
+      void primeCachedMediaObjectUrl(mediaUrl, 'background');
+
+      return getCachedMediaObjectUrl(mediaUrl) ?? mediaUrl;
     }, [mx, info, useAuthentication])
   );
 

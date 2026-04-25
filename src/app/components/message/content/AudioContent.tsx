@@ -37,6 +37,12 @@ import {
 } from '../../../utils/matrix';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import {
+  getCachedMediaObjectUrl,
+  primeCachedMediaObjectUrl,
+  primePersistentMediaUrl,
+} from '../../../utils/mediaUrlCache';
+import { getSessionMediaCacheKey, loadSessionMediaUrl } from '../../../utils/sessionMediaCache';
+import {
   MAX_AUDIO_TRANSCRIPTION_DURATION_MS,
   useAudioTranscription,
 } from '../../../features/voice-transcription';
@@ -93,7 +99,23 @@ export function AudioContent({
   }, [mx, url, useAuthentication, mimeType, encInfo]);
 
   const [srcState, loadSrc] = useAsyncCallback(
-    useCallback(async () => URL.createObjectURL(await loadAudioBlob()), [loadAudioBlob])
+    useCallback(async () => {
+      const mediaUrl = mxcUrlToHttp(mx, url, useAuthentication);
+      if (!mediaUrl) throw new Error('Invalid media URL');
+
+      if (encInfo) {
+        return loadSessionMediaUrl(
+          getSessionMediaCacheKey('audio', mediaUrl, mimeType),
+          async () =>
+            downloadEncryptedMedia(mediaUrl, (encBuf) => decryptFile(encBuf, mimeType, encInfo))
+        );
+      }
+
+      void primePersistentMediaUrl(mediaUrl);
+      void primeCachedMediaObjectUrl(mediaUrl, 'visible');
+
+      return getCachedMediaObjectUrl(mediaUrl) ?? mediaUrl;
+    }, [mx, url, useAuthentication, mimeType, encInfo])
   );
 
   const audioRef = useRef<HTMLAudioElement | null>(null);

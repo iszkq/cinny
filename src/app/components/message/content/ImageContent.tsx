@@ -28,8 +28,19 @@ import { ModalWide } from '../../../styles/Modal.css';
 import { validBlurHash } from '../../../utils/blurHash';
 import { bytesToSize } from '../../../utils/common';
 import { stopPropagation } from '../../../utils/keyboard';
+import {
+  getCachedMediaObjectUrl,
+  isCachedMediaObjectUrl,
+  primeCachedMediaObjectUrl,
+  primePersistentMediaUrl,
+} from '../../../utils/mediaUrlCache';
 import { FALLBACK_MIMETYPE } from '../../../utils/mimeTypes';
 import { decryptFile, downloadEncryptedMedia, mxcUrlToHttp } from '../../../utils/matrix';
+import {
+  getSessionMediaCacheKey,
+  isSessionMediaObjectUrl,
+  loadSessionMediaUrl,
+} from '../../../utils/sessionMediaCache';
 import * as css from './style.css';
 
 type RenderViewerProps = {
@@ -100,9 +111,9 @@ export type ImageContentProps = {
 };
 
 const revokeBlobUrl = (src?: string) => {
-  if (src?.startsWith('blob:')) {
-    URL.revokeObjectURL(src);
-  }
+  if (!src?.startsWith('blob:')) return;
+  if (isCachedMediaObjectUrl(src) || isSessionMediaObjectUrl(src)) return;
+  URL.revokeObjectURL(src);
 };
 
 export const ImageContent = as<'div', ImageContentProps>(
@@ -184,13 +195,19 @@ export const ImageContent = as<'div', ImageContentProps>(
         if (!mediaUrl) throw new Error('Invalid media URL');
 
         if (targetEncInfo) {
-          const fileContent = await downloadEncryptedMedia(mediaUrl, (encBuf) =>
-            decryptFile(encBuf, targetMimeType ?? FALLBACK_MIMETYPE, targetEncInfo)
+          return loadSessionMediaUrl(
+            getSessionMediaCacheKey('image', mediaUrl, targetMimeType ?? FALLBACK_MIMETYPE),
+            async () =>
+              downloadEncryptedMedia(mediaUrl, (encBuf) =>
+                decryptFile(encBuf, targetMimeType ?? FALLBACK_MIMETYPE, targetEncInfo)
+              )
           );
-          return URL.createObjectURL(fileContent);
         }
 
-        return mediaUrl;
+        void primePersistentMediaUrl(mediaUrl);
+        void primeCachedMediaObjectUrl(mediaUrl, 'visible');
+
+        return getCachedMediaObjectUrl(mediaUrl) ?? mediaUrl;
       },
       [mx, useAuthentication]
     );

@@ -27,11 +27,16 @@ import { bytesToSize, millisecondsToMinutesAndSeconds } from '../../../utils/com
 import {
   decryptFile,
   downloadEncryptedMedia,
-  downloadMedia,
   mxcUrlToHttp,
 } from '../../../utils/matrix';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { validBlurHash } from '../../../utils/blurHash';
+import {
+  getCachedMediaObjectUrl,
+  primeCachedMediaObjectUrl,
+  primePersistentMediaUrl,
+} from '../../../utils/mediaUrlCache';
+import { getSessionMediaCacheKey, loadSessionMediaUrl } from '../../../utils/sessionMediaCache';
 
 type RenderVideoProps = {
   title: string;
@@ -83,12 +88,21 @@ export const VideoContent = as<'div', VideoContentProps>(
       useCallback(async () => {
         const mediaUrl = mxcUrlToHttp(mx, url, useAuthentication);
         if (!mediaUrl) throw new Error('Invalid media URL');
-        const fileContent = encInfo
-          ? await downloadEncryptedMedia(mediaUrl, (encBuf) =>
-              decryptFile(encBuf, mimeType, encInfo)
-            )
-          : await downloadMedia(mediaUrl);
-        return URL.createObjectURL(fileContent);
+
+        if (encInfo) {
+          return loadSessionMediaUrl(
+            getSessionMediaCacheKey('video', mediaUrl, mimeType),
+            async () =>
+              downloadEncryptedMedia(mediaUrl, (encBuf) =>
+                decryptFile(encBuf, mimeType, encInfo)
+              )
+          );
+        }
+
+        void primePersistentMediaUrl(mediaUrl);
+        void primeCachedMediaObjectUrl(mediaUrl, 'visible');
+
+        return getCachedMediaObjectUrl(mediaUrl) ?? mediaUrl;
       }, [mx, url, useAuthentication, mimeType, encInfo])
     );
 
