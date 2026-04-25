@@ -19,28 +19,13 @@ import { useMatrixClient } from './useMatrixClient';
 import { useAccountDataCallback } from './useAccountDataCallback';
 import { useStateEventCallback } from './useStateEventCallback';
 import { primeCachedMediaObjectUrl, primePersistentMediaUrl } from '../utils/mediaUrlCache';
+import { getEmojiBoardMediaCandidates } from '../components/emoji-board/components/media';
 
 const GLOBAL_IMAGE_PACK_WARM_DELAY_MS = 0;
 const GLOBAL_IMAGE_PACK_OBJECT_WARM_DELAY_MS = 120;
 const IMAGE_PACK_AVATAR_SIZE = 64;
 const IMAGE_PACK_EMOTICON_SIZE = 64;
 const IMAGE_PACK_STICKER_SIZE = 256;
-
-const getImagePackMediaPreviewUrl = (
-  mx: ReturnType<typeof useMatrixClient>,
-  useAuthentication: boolean,
-  mxcUrl: string,
-  usage?: ImageUsage
-) => {
-  const size =
-    usage === ImageUsage.Sticker ? IMAGE_PACK_STICKER_SIZE : IMAGE_PACK_EMOTICON_SIZE;
-
-  return (
-    mxcUrlToHttp(mx, mxcUrl, useAuthentication, size, size, 'scale') ??
-    mxcUrlToHttp(mx, mxcUrl, useAuthentication) ??
-    null
-  );
-};
 
 const warmImagePackMedia = (
   mx: ReturnType<typeof useMatrixClient>,
@@ -66,6 +51,34 @@ const warmImagePackObjectUrls = (
   mediaUrls.forEach((mediaUrl) => {
     void primeCachedMediaObjectUrl(mediaUrl, 'background');
   });
+};
+
+const useJoinedRooms = () => {
+  const mx = useMatrixClient();
+  const [rooms, setRooms] = useState<Room[]>(() => getJoinedRooms(mx));
+
+  useEffect(() => {
+    const updateRooms = () => {
+      setRooms(getJoinedRooms(mx));
+    };
+
+    const handleRoom = () => updateRooms();
+    const handleMembership = () => updateRooms();
+    const handleDeleteRoom = () => updateRooms();
+
+    updateRooms();
+    mx.on(ClientEvent.Room, handleRoom);
+    mx.on(RoomEvent.MyMembership, handleMembership);
+    mx.on(ClientEvent.DeleteRoom, handleDeleteRoom);
+
+    return () => {
+      mx.removeListener(ClientEvent.Room, handleRoom);
+      mx.removeListener(RoomEvent.MyMembership, handleMembership);
+      mx.removeListener(ClientEvent.DeleteRoom, handleDeleteRoom);
+    };
+  }, [mx]);
+
+  return rooms;
 };
 
 const getImagePackMediaUrls = (
@@ -96,10 +109,18 @@ const getImagePackMediaUrls = (
       }
 
       pack.getImages(usage).forEach((image) => {
-        const imageUrl = getImagePackMediaPreviewUrl(mx, useAuthentication, image.url, usage);
-        if (imageUrl) {
-          mediaUrls.add(imageUrl);
-        }
+        const size =
+          usage === ImageUsage.Sticker ? IMAGE_PACK_STICKER_SIZE : IMAGE_PACK_EMOTICON_SIZE;
+        getEmojiBoardMediaCandidates({
+          mx,
+          mxc: image.url,
+          useAuthentication,
+          info: image.info,
+          width: size,
+          height: size,
+        }).forEach((mediaUrl) => {
+          mediaUrls.add(mediaUrl);
+        });
       });
     });
   });
@@ -116,10 +137,21 @@ const getRelevantPacks = (
   globalPacks: ImagePack[],
   roomsPacks: ImagePack[]
 ) => {
-  const packs = userPack ? [userPack, ...customUserPacks] : customUserPacks;
-  const globalPackIds = new Set(globalPacks.map((pack) => pack.id));
+  const packs = getUniversalPacks(userPack, customUserPacks, globalPacks);
+  const packIds = new Set(packs.map((pack) => pack.id));
 
-  return packs.concat(globalPacks, roomsPacks.filter((pack) => !globalPackIds.has(pack.id)));
+  return packs.concat(roomsPacks.filter((pack) => !packIds.has(pack.id)));
+};
+
+const getUniversalPacks = (
+  userPack: ImagePack | undefined,
+  customUserPacks: ImagePack[],
+  globalPacks: ImagePack[]
+) => {
+  const packs = userPack ? [userPack, ...customUserPacks] : customUserPacks;
+  const packIds = new Set(packs.map((pack) => pack.id));
+
+  return packs.concat(globalPacks.filter((pack) => !packIds.has(pack.id)));
 };
 
 export const useUserImagePack = (): ImagePack | undefined => {
@@ -231,6 +263,10 @@ export const useRoomImagePack = (room: Room, stateKey: string): ImagePack | unde
   const mx = useMatrixClient();
   const [roomPack, setRoomPack] = useState(() => getRoomImagePack(room, stateKey));
 
+  useEffect(() => {
+    setRoomPack(getRoomImagePack(room, stateKey));
+  }, [room, stateKey]);
+
   useStateEventCallback(
     mx,
     useCallback(
@@ -254,6 +290,10 @@ export const useRoomImagePacks = (room: Room): ImagePack[] => {
   const mx = useMatrixClient();
   const [roomPacks, setRoomPacks] = useState(() => getRoomImagePacks(room));
 
+  useEffect(() => {
+    setRoomPacks(getRoomImagePacks(room));
+  }, [room]);
+
   useStateEventCallback(
     mx,
     useCallback(
@@ -276,6 +316,10 @@ export const useRoomsImagePacks = (rooms: Room[]) => {
   const mx = useMatrixClient();
   const [roomPacks, setRoomPacks] = useState(() => rooms.flatMap(getRoomImagePacks));
 
+  useEffect(() => {
+    setRoomPacks(rooms.flatMap(getRoomImagePacks));
+  }, [rooms]);
+
   useStateEventCallback(
     mx,
     useCallback(
@@ -294,11 +338,17 @@ export const useRoomsImagePacks = (rooms: Room[]) => {
   return roomPacks;
 };
 
-export const useRelevantImagePacks = (usage: ImageUsage, rooms: Room[]): ImagePack[] => {
+export const useRelevantImagePacks = (
+  usage: ImageUsage,
+  rooms: Room[],
+  includeAllJoinedRooms = false
+): ImagePack[] => {
   const userPack = useUserImagePack();
   const customUserPacks = useCustomUserImagePacks();
   const globalPacks = useGlobalImagePacks();
-  const roomsPacks = useRoomsImagePacks(rooms);
+  const joinedRooms = useJoinedRooms();
+  const roomsToUse = includeAllJoinedRooms ? joinedRooms : rooms;
+  const roomsPacks = useRoomsImagePacks(roomsToUse);
 
   const relevantPacks = useMemo(() => {
     const packs = getRelevantPacks(userPack, customUserPacks, globalPacks, roomsPacks);
@@ -306,6 +356,17 @@ export const useRelevantImagePacks = (usage: ImageUsage, rooms: Room[]): ImagePa
   }, [userPack, customUserPacks, globalPacks, roomsPacks, usage]);
 
   return relevantPacks;
+};
+
+export const useUniversalImagePacks = (usage: ImageUsage): ImagePack[] => {
+  const userPack = useUserImagePack();
+  const customUserPacks = useCustomUserImagePacks();
+  const globalPacks = useGlobalImagePacks();
+
+  return useMemo(() => {
+    const packs = getUniversalPacks(userPack, customUserPacks, globalPacks);
+    return packs.filter((pack) => pack.getImages(usage).length > 0);
+  }, [userPack, customUserPacks, globalPacks, usage]);
 };
 
 export const useWarmImagePackMedia = (rooms: Room[]) => {
@@ -335,7 +396,7 @@ export const useWarmAllImagePackMedia = () => {
   const userPack = useUserImagePack();
   const customUserPacks = useCustomUserImagePacks();
   const globalPacks = useGlobalImagePacks();
-  const [rooms, setRooms] = useState<Room[]>(() => getJoinedRooms(mx));
+  const rooms = useJoinedRooms();
   const roomsPacks = useRoomsImagePacks(rooms);
 
   const relevantPacks = useMemo(
@@ -344,25 +405,54 @@ export const useWarmAllImagePackMedia = () => {
   );
 
   useEffect(() => {
-    const updateRooms = () => {
-      setRooms(getJoinedRooms(mx));
-    };
+    if (relevantPacks.length === 0) {
+      return undefined;
+    }
 
-    const handleRoom = () => updateRooms();
-    const handleMembership = () => updateRooms();
-    const handleDeleteRoom = () => updateRooms();
+    let disposed = false;
+    let persistentDelayTimer: number | undefined;
+    let objectDelayTimer: number | undefined;
+    persistentDelayTimer = window.setTimeout(() => {
+      if (!disposed) {
+        warmImagePackMedia(mx, useAuthentication, relevantPacks, [
+          ImageUsage.Emoticon,
+          ImageUsage.Sticker,
+        ]);
+      }
+    }, GLOBAL_IMAGE_PACK_WARM_DELAY_MS);
 
-    updateRooms();
-    mx.on(ClientEvent.Room, handleRoom);
-    mx.on(RoomEvent.MyMembership, handleMembership);
-    mx.on(ClientEvent.DeleteRoom, handleDeleteRoom);
+    objectDelayTimer = window.setTimeout(() => {
+      if (!disposed) {
+        warmImagePackObjectUrls(mx, useAuthentication, relevantPacks, [
+          ImageUsage.Emoticon,
+          ImageUsage.Sticker,
+        ]);
+      }
+    }, GLOBAL_IMAGE_PACK_OBJECT_WARM_DELAY_MS);
 
     return () => {
-      mx.removeListener(ClientEvent.Room, handleRoom);
-      mx.removeListener(RoomEvent.MyMembership, handleMembership);
-      mx.removeListener(ClientEvent.DeleteRoom, handleDeleteRoom);
+      disposed = true;
+      if (typeof persistentDelayTimer === 'number') {
+        window.clearTimeout(persistentDelayTimer);
+      }
+      if (typeof objectDelayTimer === 'number') {
+        window.clearTimeout(objectDelayTimer);
+      }
     };
-  }, [mx]);
+  }, [mx, relevantPacks, useAuthentication]);
+};
+
+export const useWarmUniversalImagePackMedia = () => {
+  const mx = useMatrixClient();
+  const useAuthentication = useMediaAuthentication();
+  const userPack = useUserImagePack();
+  const customUserPacks = useCustomUserImagePacks();
+  const globalPacks = useGlobalImagePacks();
+
+  const relevantPacks = useMemo(
+    () => getUniversalPacks(userPack, customUserPacks, globalPacks),
+    [userPack, customUserPacks, globalPacks]
+  );
 
   useEffect(() => {
     if (relevantPacks.length === 0) {
