@@ -10,14 +10,14 @@ import { UseAsyncSearchOptions, useAsyncSearch } from '../../../hooks/useAsyncSe
 import { onTabPress } from '../../../utils/keyboard';
 import { createEmoticonElement, moveCursor, replaceWithElement } from '../utils';
 import { useRecentEmoji } from '../../../hooks/useRecentEmoji';
-import { useRelevantImagePacks } from '../../../hooks/useImagePacks';
+import { useUniversalImagePacks } from '../../../hooks/useImagePacks';
 import { IEmoji, emojis } from '../../../plugins/emoji';
 import { useKeyDown } from '../../../hooks/useKeyDown';
-import { mxcUrlToHttp } from '../../../utils/matrix';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { ImageUsage, PackImageReader } from '../../../plugins/custom-emoji';
 import { getEmoticonSearchStr } from '../../../plugins/utils';
 import { useCachedMediaUrl } from '../../../hooks/useCachedMediaUrl';
+import { getEmojiBoardMediaUrls } from '../../emoji-board/components/media';
 
 type EmoticonCompleteHandler = (key: string, shortcode: string) => void;
 
@@ -56,10 +56,12 @@ export function EmoticonAutocomplete({
   query,
   requestClose,
 }: EmoticonAutocompleteProps) {
+  void imagePackRooms;
+
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
 
-  const imagePacks = useRelevantImagePacks(ImageUsage.Emoticon, imagePackRooms);
+  const imagePacks = useUniversalImagePacks(ImageUsage.Emoticon);
   const recentEmoji = useRecentEmoji(mx, 20);
 
   const searchList = useMemo(() => {
@@ -106,9 +108,16 @@ export function EmoticonAutocomplete({
       {autoCompleteEmoticon.map((emoticon) => {
         const isCustomEmoji = 'url' in emoticon;
         const key = isCustomEmoji ? emoticon.url : emoticon.unicode;
-        const customEmojiUrl =
-          mxcUrlToHttp(mx, key, useAuthentication, 48, 48, 'scale') ??
-          mxcUrlToHttp(mx, key, useAuthentication);
+        const customEmojiUrl = isCustomEmoji
+          ? getEmojiBoardMediaUrls({
+              mx,
+              mxc: key,
+              useAuthentication,
+              info: emoticon.info,
+              width: 48,
+              height: 48,
+            }).primaryUrl
+          : undefined;
 
         return (
           <MenuItem
