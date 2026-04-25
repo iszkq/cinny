@@ -228,7 +228,7 @@ const extractTextFromChildren = (nodes: ChildNode[]): string => {
 function CachedHtmlEmoticonImage(props: ComponentPropsWithoutRef<'img'>) {
   const cachedMediaUrl = useCachedMediaUrl(props.src);
 
-  return <img {...props} src={cachedMediaUrl ?? props.src} />;
+  return <img {...props} src={cachedMediaUrl ?? props.src} decoding="async" />;
 }
 
 export function CodeBlock({
