@@ -12,6 +12,8 @@ type Session = {
   deviceId: string;
 };
 
+const SYNC_POLL_TIMEOUT_MS = 15000;
+
 const patchedReadReceiptClients = new WeakSet<MatrixClient>();
 let globalReadReceiptFetchPatched = false;
 
@@ -202,6 +204,7 @@ export const startClient = async (mx: MatrixClient) => {
   await mx.setSyncPresence?.(getSettings().presenceVisibility);
   await mx.startClient({
     lazyLoadMembers: true,
+    pollTimeout: SYNC_POLL_TIMEOUT_MS,
   });
 };
 
