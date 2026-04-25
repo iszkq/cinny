@@ -1,7 +1,14 @@
 import { useAtomValue, useSetAtom } from 'jotai';
 import React, { ReactNode, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ClientEvent, MatrixEvent, RoomEvent, RoomEventHandlerMap } from 'matrix-js-sdk';
+import {
+  ClientEvent,
+  ClientEventHandlerMap,
+  MatrixEvent,
+  RoomEvent,
+  RoomEventHandlerMap,
+  SyncState,
+} from 'matrix-js-sdk';
 import { roomToUnreadAtom, unreadEqual, unreadInfoToUnread } from '../../state/room/roomToUnread';
 import LogoSVG from '../../../../public/res/svg/cinny.svg';
 import LogoUnreadSVG from '../../../../public/res/svg/cinny-unread.svg';
@@ -36,6 +43,13 @@ import {
   getAISettingsAccountDataSignature,
 } from '../../state/ai';
 import { CinnyAISettingsContent } from '../../../types/matrix/accountData';
+import { startClient } from '../../../client/initMatrix';
+
+const HEALTHY_SYNC_STATES = new Set<SyncState>([
+  SyncState.Prepared,
+  SyncState.Syncing,
+  SyncState.Catchup,
+]);
 
 const playAudio = (audioElement: HTMLAudioElement | null) => {
   if (!audioElement) return;
@@ -86,6 +100,115 @@ function PresenceSyncFeature() {
     });
     updatePresence?.catch(() => undefined);
   }, [mx, presenceVisibility]);
+
+  return null;
+}
+
+function SyncRecoveryFeature() {
+  const mx = useMatrixClient();
+  const recoveryPromiseRef = useRef<Promise<void>>();
+  const lastHealthySyncRef = useRef(Date.now());
+  const lastRecoveryAttemptRef = useRef(0);
+
+  const recoverSync = useCallback(
+    (forceRestart = false) => {
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        return;
+      }
+
+      const now = Date.now();
+      if (now - lastRecoveryAttemptRef.current < 5000) {
+        return;
+      }
+
+      const syncState = mx.getSyncState();
+      if (!forceRestart && syncState && HEALTHY_SYNC_STATES.has(syncState)) {
+        return;
+      }
+
+      if (recoveryPromiseRef.current) {
+        return;
+      }
+
+      lastRecoveryAttemptRef.current = now;
+      recoveryPromiseRef.current = (async () => {
+        if (!mx.clientRunning || syncState === SyncState.Stopped || forceRestart) {
+          if (mx.clientRunning) {
+            mx.stopClient();
+          }
+          await startClient(mx);
+          return;
+        }
+
+        const retried = mx.retryImmediately();
+        if (!retried && syncState === SyncState.Error) {
+          mx.stopClient();
+          await startClient(mx);
+        }
+      })()
+        .catch(() => undefined)
+        .finally(() => {
+          recoveryPromiseRef.current = undefined;
+        });
+    },
+    [mx]
+  );
+
+  useEffect(() => {
+    const handleSync: ClientEventHandlerMap[ClientEvent.Sync] = (state) => {
+      if (state && HEALTHY_SYNC_STATES.has(state)) {
+        lastHealthySyncRef.current = Date.now();
+        return;
+      }
+
+      if (state === SyncState.Reconnecting || state === SyncState.Error) {
+        recoverSync();
+      }
+    };
+
+    mx.on(ClientEvent.Sync, handleSync);
+    return () => {
+      mx.removeListener(ClientEvent.Sync, handleSync);
+    };
+  }, [mx, recoverSync]);
+
+  useEffect(() => {
+    const handleOnline = () => recoverSync();
+    const handleFocus = () => recoverSync();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        recoverSync();
+      }
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    const recoveryTimer = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') {
+        return;
+      }
+
+      const syncState = mx.getSyncState();
+      if (syncState && HEALTHY_SYNC_STATES.has(syncState)) {
+        return;
+      }
+
+      if (Date.now() - lastHealthySyncRef.current < 45000) {
+        return;
+      }
+
+      recoverSync(syncState === SyncState.Error || syncState === SyncState.Stopped);
+    }, 15000);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.clearInterval(recoveryTimer);
+    };
+  }, [mx, recoverSync]);
 
   return null;
 }
@@ -425,6 +548,7 @@ export function ClientNonUIFeatures({ children }: ClientNonUIFeaturesProps) {
       <SystemEmojiFeature />
       <PageZoomFeature />
       <PresenceSyncFeature />
+      <SyncRecoveryFeature />
       <PersonalPackSyncFeature />
       <AISettingsAccountDataFeature />
       <ImagePackMediaWarmFeature />
