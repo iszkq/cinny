@@ -200,10 +200,21 @@ function EmojiSidebar({ activeGroupAtom, packs, onScrollToGroup }: EmojiSidebarP
               label = !pack.address ? '\u4e2a\u4eba\u5206\u7c7b' : mx.getRoom(pack.id)?.name;
 
             const avatarUrl = pack.meta.avatar
-              ? (mxcUrlToHttp(mx, pack.meta.avatar, useAuthentication) ?? undefined)
+              ? (mxcUrlToHttp(mx, pack.meta.avatar, useAuthentication, 64, 64, 'scale') ??
+                  mxcUrlToHttp(mx, pack.meta.avatar, useAuthentication) ??
+                  undefined)
               : undefined;
             const fallbackUrl =
-              mxcUrlToHttp(mx, pack.getImages(usage)[0]?.url ?? '', useAuthentication) ?? undefined;
+              mxcUrlToHttp(
+                mx,
+                pack.getImages(usage)[0]?.url ?? '',
+                useAuthentication,
+                64,
+                64,
+                'scale'
+              ) ??
+              mxcUrlToHttp(mx, pack.getImages(usage)[0]?.url ?? '', useAuthentication) ??
+              undefined;
 
             return (
               <ImageGroupIcon
@@ -268,10 +279,21 @@ function StickerSidebar({ activeGroupAtom, packs, onScrollToGroup }: StickerSide
             label = !pack.address ? '\u4e2a\u4eba\u5206\u7c7b' : mx.getRoom(pack.id)?.name;
 
           const avatarUrl = pack.meta.avatar
-            ? (mxcUrlToHttp(mx, pack.meta.avatar, useAuthentication) ?? undefined)
+            ? (mxcUrlToHttp(mx, pack.meta.avatar, useAuthentication, 64, 64, 'scale') ??
+                mxcUrlToHttp(mx, pack.meta.avatar, useAuthentication) ??
+                undefined)
             : undefined;
           const fallbackUrl =
-            mxcUrlToHttp(mx, pack.getImages(usage)[0]?.url ?? '', useAuthentication) ?? undefined;
+            mxcUrlToHttp(
+              mx,
+              pack.getImages(usage)[0]?.url ?? '',
+              useAuthentication,
+              64,
+              64,
+              'scale'
+            ) ??
+            mxcUrlToHttp(mx, pack.getImages(usage)[0]?.url ?? '', useAuthentication) ??
+            undefined;
 
           return (
             <ImageGroupIcon
