@@ -35,7 +35,7 @@ import { useSelectedRoom } from '../../hooks/router/useSelectedRoom';
 import { useInboxNotificationsSelected } from '../../hooks/router/useInbox';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 import { ensurePersonalPackSync } from '../../plugins/custom-emoji';
-import { useWarmAllImagePackMedia } from '../../hooks/useImagePacks';
+import { useWarmUniversalImagePackMedia } from '../../hooks/useImagePacks';
 import {
   aiSettingsAtom,
   applyAISettingsAccountData,
@@ -330,7 +330,7 @@ function AISettingsAccountDataFeature() {
 }
 
 function ImagePackMediaWarmFeature() {
-  useWarmAllImagePackMedia();
+  useWarmUniversalImagePackMedia();
 
   return null;
 }
