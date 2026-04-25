@@ -20,8 +20,8 @@ import { useAccountDataCallback } from './useAccountDataCallback';
 import { useStateEventCallback } from './useStateEventCallback';
 import { primeCachedMediaObjectUrl, primePersistentMediaUrl } from '../utils/mediaUrlCache';
 
-const GLOBAL_IMAGE_PACK_WARM_DELAY_MS = 300;
-const GLOBAL_IMAGE_PACK_OBJECT_WARM_DELAY_MS = 1200;
+const GLOBAL_IMAGE_PACK_WARM_DELAY_MS = 150;
+const GLOBAL_IMAGE_PACK_OBJECT_WARM_DELAY_MS = 450;
 
 const warmImagePackMedia = (
   mx: ReturnType<typeof useMatrixClient>,
