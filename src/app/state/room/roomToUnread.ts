@@ -19,6 +19,7 @@ import {
   StateEvent,
 } from '../../../types/matrix/room';
 import {
+  getRoomFullyReadEventId,
   getAllParents,
   getNotificationType,
   getUnreadInfo,
@@ -50,6 +51,8 @@ export const unreadInfoToUnread = (unreadInfo: UnreadInfo): Unread => ({
   total: unreadInfo.total,
   from: null,
 });
+
+const FULLY_READ_EVENT_TYPE = 'm.fully_read';
 
 const putUnreadInfo = (
   roomToUnread: RoomToUnread,
@@ -241,6 +244,29 @@ export const useBindRoomToUnreadAtom = (mx: MatrixClient, unreadAtom: typeof roo
     mx.on(RoomEvent.Receipt, handleReceipt);
     return () => {
       mx.removeListener(RoomEvent.Receipt, handleReceipt);
+    };
+  }, [mx, setUnreadAtom]);
+
+  useEffect(() => {
+    const handleRoomAccountData = (_mEvent: MatrixEvent, room: Room) => {
+      if (_mEvent.getType() !== FULLY_READ_EVENT_TYPE) return;
+      if (room.isSpaceRoom()) return;
+
+      if (getRoomFullyReadEventId(room)) {
+        const unreadInfo = getUnreadInfo(mx, room);
+
+        if (unreadInfo.total === 0 && unreadInfo.highlight === 0) {
+          setUnreadAtom({ type: 'DELETE', roomId: room.roomId });
+          return;
+        }
+
+        setUnreadAtom({ type: 'PUT', unreadInfo });
+      }
+    };
+
+    mx.on(RoomEvent.AccountData, handleRoomAccountData);
+    return () => {
+      mx.removeListener(RoomEvent.AccountData, handleRoomAccountData);
     };
   }, [mx, setUnreadAtom]);
 
