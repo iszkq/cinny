@@ -1,5 +1,5 @@
 /* eslint-disable jsx-a11y/media-has-caption */
-import React, { ReactNode, useCallback, useRef, useState } from 'react';
+import React, { ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import {
   Badge,
   Box,
@@ -37,10 +37,10 @@ import {
 } from '../../../utils/matrix';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import {
-  getCachedMediaObjectUrl,
-  primeCachedMediaObjectUrl,
+  getPreparedMediaUrl,
   primePersistentMediaUrl,
 } from '../../../utils/mediaUrlCache';
+import { releaseObjectUrl, retainObjectUrl } from '../../../utils/objectUrlRetainer';
 import { getSessionMediaCacheKey, loadSessionMediaUrl } from '../../../utils/sessionMediaCache';
 import {
   MAX_AUDIO_TRANSCRIPTION_DURATION_MS,
@@ -112,9 +112,7 @@ export function AudioContent({
       }
 
       void primePersistentMediaUrl(mediaUrl);
-      void primeCachedMediaObjectUrl(mediaUrl, 'visible');
-
-      return getCachedMediaObjectUrl(mediaUrl) ?? mediaUrl;
+      return (await getPreparedMediaUrl(mediaUrl, 'visible')) ?? mediaUrl;
     }, [mx, url, useAuthentication, mimeType, encInfo])
   );
 
@@ -193,6 +191,15 @@ export function AudioContent({
       getBlob: loadAudioBlob,
     }).catch(() => undefined);
   };
+
+  useEffect(() => {
+    const retainedSrc = srcState.status === AsyncStatus.Success ? srcState.data : undefined;
+    retainObjectUrl(retainedSrc);
+
+    return () => {
+      releaseObjectUrl(retainedSrc);
+    };
+  }, [srcState.status, srcState.status === AsyncStatus.Success ? srcState.data : undefined]);
 
   return renderMediaControl({
     after: (

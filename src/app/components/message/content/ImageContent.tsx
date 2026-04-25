@@ -36,6 +36,11 @@ import {
   isSessionMediaObjectUrl,
   loadSessionMediaUrl,
 } from '../../../utils/sessionMediaCache';
+import {
+  releaseObjectUrl,
+  retainObjectUrl,
+  revokeObjectUrlWhenPossible,
+} from '../../../utils/objectUrlRetainer';
 import * as css from './style.css';
 
 type RenderViewerProps = {
@@ -108,7 +113,7 @@ export type ImageContentProps = {
 const revokeBlobUrl = (src?: string) => {
   if (!src?.startsWith('blob:')) return;
   if (mediaUrlCache.isCachedMediaObjectUrl?.(src) || isSessionMediaObjectUrl(src)) return;
-  URL.revokeObjectURL(src);
+  revokeObjectUrlWhenPossible(src);
 };
 
 export const ImageContent = as<'div', ImageContentProps>(
@@ -156,6 +161,29 @@ export const ImageContent = as<'div', ImageContentProps>(
     const viewerCacheRef = useRef<Map<string, string>>(new Map());
     const viewerPreloadRef = useRef<Set<string>>(new Set());
 
+    const setViewerCachedSrc = useCallback((itemId: string, nextSrc: string) => {
+      const currentSrc = viewerCacheRef.current.get(itemId);
+      if (currentSrc === nextSrc) {
+        return;
+      }
+
+      if (currentSrc) {
+        revokeBlobUrl(currentSrc);
+        releaseObjectUrl(currentSrc);
+      }
+
+      viewerCacheRef.current.set(itemId, nextSrc);
+      retainObjectUrl(nextSrc);
+    }, []);
+
+    const clearViewerCache = useCallback(() => {
+      viewerCacheRef.current.forEach((cachedSrc) => {
+        revokeBlobUrl(cachedSrc);
+        releaseObjectUrl(cachedSrc);
+      });
+      viewerCacheRef.current.clear();
+    }, []);
+
     const baseViewerItem = useMemo<ViewerImageItem>(
       () => ({
         id: initialViewerItemKey ?? url,
@@ -200,9 +228,7 @@ export const ImageContent = as<'div', ImageContentProps>(
         }
 
         void mediaUrlCache.primePersistentMediaUrl(mediaUrl);
-        void mediaUrlCache.primeCachedMediaObjectUrl(mediaUrl, 'visible');
-
-        return mediaUrlCache.getCachedMediaObjectUrl(mediaUrl) ?? mediaUrl;
+        return (await mediaUrlCache.getPreparedMediaUrl(mediaUrl, 'visible')) ?? mediaUrl;
       },
       [mx, useAuthentication]
     );
@@ -233,7 +259,7 @@ export const ImageContent = as<'div', ImageContentProps>(
               return;
             }
 
-            viewerCacheRef.current.set(item.id, loadedSrc);
+            setViewerCachedSrc(item.id, loadedSrc);
             setViewerPreviewVersion((value) => value + 1);
           })
           .catch(() => {})
@@ -241,7 +267,7 @@ export const ImageContent = as<'div', ImageContentProps>(
             viewerPreloadRef.current.delete(item.id);
           });
       },
-      [currentViewerItem.id, loadMediaSrc]
+      [currentViewerItem.id, loadMediaSrc, setViewerCachedSrc]
     );
 
     const handleLoad = () => {
@@ -319,7 +345,7 @@ export const ImageContent = as<'div', ImageContentProps>(
             return;
           }
 
-          viewerCacheRef.current.set(currentViewerItem.id, loadedSrc);
+          setViewerCachedSrc(currentViewerItem.id, loadedSrc);
           setViewerPreviewVersion((value) => value + 1);
           setViewerMediaState({
             status: AsyncStatus.Success,
@@ -339,7 +365,15 @@ export const ImageContent = as<'div', ImageContentProps>(
       return () => {
         disposed = true;
       };
-    }, [baseViewerItem.id, currentViewerItem, loadMediaSrc, srcState, viewer, viewerLoadNonce]);
+    }, [
+      baseViewerItem.id,
+      currentViewerItem,
+      loadMediaSrc,
+      setViewerCachedSrc,
+      srcState,
+      viewer,
+      viewerLoadNonce,
+    ]);
 
     useEffect(() => {
       if (!viewer) return;
@@ -350,14 +384,20 @@ export const ImageContent = as<'div', ImageContentProps>(
 
     useEffect(
       () => () => {
-        if (srcState.status === AsyncStatus.Success) {
-          revokeBlobUrl(srcState.data);
-        }
-        viewerCacheRef.current.forEach((cachedSrc) => revokeBlobUrl(cachedSrc));
-        viewerCacheRef.current.clear();
+        clearViewerCache();
       },
-      [srcState]
+      [clearViewerCache]
     );
+
+    useEffect(() => {
+      const retainedSrc = srcState.status === AsyncStatus.Success ? srcState.data : undefined;
+      retainObjectUrl(retainedSrc);
+
+      return () => {
+        revokeBlobUrl(retainedSrc);
+        releaseObjectUrl(retainedSrc);
+      };
+    }, [srcState.status, srcState.status === AsyncStatus.Success ? srcState.data : undefined]);
 
     const activeViewerSrc =
       currentViewerItem.id === baseViewerItem.id && srcState.status === AsyncStatus.Success

@@ -37,6 +37,7 @@ export const Reaction = as<
             className={css.ReactionImg}
             src={cachedMediaUrl ?? mediaUrl ?? reaction}
             alt={reaction}
+            decoding="async"
           />
         ) : (
           <Text as="span" size="Inherit" truncate>

@@ -32,10 +32,10 @@ import {
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { validBlurHash } from '../../../utils/blurHash';
 import {
-  getCachedMediaObjectUrl,
-  primeCachedMediaObjectUrl,
+  getPreparedMediaUrl,
   primePersistentMediaUrl,
 } from '../../../utils/mediaUrlCache';
+import { releaseObjectUrl, retainObjectUrl } from '../../../utils/objectUrlRetainer';
 import { getSessionMediaCacheKey, loadSessionMediaUrl } from '../../../utils/sessionMediaCache';
 
 type RenderVideoProps = {
@@ -100,9 +100,7 @@ export const VideoContent = as<'div', VideoContentProps>(
         }
 
         void primePersistentMediaUrl(mediaUrl);
-        void primeCachedMediaObjectUrl(mediaUrl, 'visible');
-
-        return getCachedMediaObjectUrl(mediaUrl) ?? mediaUrl;
+        return (await getPreparedMediaUrl(mediaUrl, 'visible')) ?? mediaUrl;
       }, [mx, url, useAuthentication, mimeType, encInfo])
     );
 
@@ -122,6 +120,15 @@ export const VideoContent = as<'div', VideoContentProps>(
     useEffect(() => {
       if (autoPlay) loadSrc();
     }, [autoPlay, loadSrc]);
+
+    useEffect(() => {
+      const retainedSrc = srcState.status === AsyncStatus.Success ? srcState.data : undefined;
+      retainObjectUrl(retainedSrc);
+
+      return () => {
+        releaseObjectUrl(retainedSrc);
+      };
+    }, [srcState.status, srcState.status === AsyncStatus.Success ? srcState.data : undefined]);
 
     return (
       <Box className={classNames(css.RelativeBase, className)} {...props} ref={ref}>

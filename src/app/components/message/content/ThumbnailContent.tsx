@@ -5,10 +5,10 @@ import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { decryptFile, downloadEncryptedMedia, mxcUrlToHttp } from '../../../utils/matrix';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import {
-  getCachedMediaObjectUrl,
-  primeCachedMediaObjectUrl,
+  getPreparedMediaUrl,
   primePersistentMediaUrl,
 } from '../../../utils/mediaUrlCache';
+import { releaseObjectUrl, retainObjectUrl } from '../../../utils/objectUrlRetainer';
 import { FALLBACK_MIMETYPE } from '../../../utils/mimeTypes';
 import { getSessionMediaCacheKey, loadSessionMediaUrl } from '../../../utils/sessionMediaCache';
 
@@ -42,15 +42,25 @@ export function ThumbnailContent({ info, renderImage }: ThumbnailContentProps) {
       }
 
       void primePersistentMediaUrl(mediaUrl);
-      void primeCachedMediaObjectUrl(mediaUrl, 'background');
-
-      return getCachedMediaObjectUrl(mediaUrl) ?? mediaUrl;
+      return (await getPreparedMediaUrl(mediaUrl, 'visible')) ?? mediaUrl;
     }, [mx, info, useAuthentication])
   );
 
   useEffect(() => {
     loadThumbSrc();
   }, [loadThumbSrc]);
+
+  useEffect(() => {
+    const retainedSrc = thumbSrcState.status === AsyncStatus.Success ? thumbSrcState.data : undefined;
+    retainObjectUrl(retainedSrc);
+
+    return () => {
+      releaseObjectUrl(retainedSrc);
+    };
+  }, [
+    thumbSrcState.status,
+    thumbSrcState.status === AsyncStatus.Success ? thumbSrcState.data : undefined,
+  ]);
 
   return thumbSrcState.status === AsyncStatus.Success ? renderImage(thumbSrcState.data) : null;
 }
