@@ -418,6 +418,7 @@ export function EmojiBoard({
   void imagePackRooms;
 
   const mx = useMatrixClient();
+  const useAuthentication = useMediaAuthentication();
 
   const emojiTab = tab === EmojiBoardTab.Emoji;
   const usage = emojiTab ? ImageUsage.Emoticon : ImageUsage.Sticker;
