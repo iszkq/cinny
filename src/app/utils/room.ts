@@ -403,8 +403,13 @@ export const roomHaveUnread = (mx: MatrixClient, room: Room) => {
   if (!userId) return false;
   const readUpToId = getRoomReadMarkerEventId(room, userId);
   const liveEvents = room.getLiveTimeline().getEvents();
+  const readUpToIndex = getLiveTimelineEventIndex(room, readUpToId);
 
   if (liveEvents[liveEvents.length - 1]?.getSender() === userId) {
+    return false;
+  }
+
+  if (readUpToId && readUpToIndex === -1) {
     return false;
   }
 
