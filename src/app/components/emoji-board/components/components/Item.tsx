@@ -67,7 +67,10 @@ type CustomEmojiItemProps = {
   image: PackImageReader;
 };
 export function CustomEmojiItem({ mx, useAuthentication, image }: CustomEmojiItemProps) {
-  const mediaUrl = mxcUrlToHttp(mx, image.url, useAuthentication) ?? '';
+  const mediaUrl =
+    mxcUrlToHttp(mx, image.url, useAuthentication, 64, 64, 'scale') ??
+    mxcUrlToHttp(mx, image.url, useAuthentication) ??
+    '';
   const { displayUrl, hasFailed, handleLoad, handleError } = useStableMediaUrl(mediaUrl);
 
   return (
@@ -85,7 +88,7 @@ export function CustomEmojiItem({ mx, useAuthentication, image }: CustomEmojiIte
     >
       {displayUrl && !hasFailed ? (
         <img
-          loading="eager"
+          loading="lazy"
           decoding="async"
           className={css.CustomEmojiImg}
           alt=""
@@ -109,7 +112,10 @@ type StickerItemProps = {
 };
 
 export function StickerItem({ mx, useAuthentication, image }: StickerItemProps) {
-  const mediaUrl = mxcUrlToHttp(mx, image.url, useAuthentication) ?? '';
+  const mediaUrl =
+    mxcUrlToHttp(mx, image.url, useAuthentication, 256, 256, 'scale') ??
+    mxcUrlToHttp(mx, image.url, useAuthentication) ??
+    '';
   const { displayUrl, hasFailed, handleLoad, handleError } = useStableMediaUrl(mediaUrl);
 
   return (
@@ -128,7 +134,7 @@ export function StickerItem({ mx, useAuthentication, image }: StickerItemProps) 
     >
       {displayUrl && !hasFailed ? (
         <img
-          loading="eager"
+          loading="lazy"
           decoding="async"
           className={css.StickerImg}
           alt=""
