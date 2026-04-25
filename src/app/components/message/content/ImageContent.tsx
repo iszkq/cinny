@@ -28,12 +28,7 @@ import { ModalWide } from '../../../styles/Modal.css';
 import { validBlurHash } from '../../../utils/blurHash';
 import { bytesToSize } from '../../../utils/common';
 import { stopPropagation } from '../../../utils/keyboard';
-import {
-  getCachedMediaObjectUrl,
-  isCachedMediaObjectUrl,
-  primeCachedMediaObjectUrl,
-  primePersistentMediaUrl,
-} from '../../../utils/mediaUrlCache';
+import * as mediaUrlCache from '../../../utils/mediaUrlCache';
 import { FALLBACK_MIMETYPE } from '../../../utils/mimeTypes';
 import { decryptFile, downloadEncryptedMedia, mxcUrlToHttp } from '../../../utils/matrix';
 import {
@@ -112,7 +107,7 @@ export type ImageContentProps = {
 
 const revokeBlobUrl = (src?: string) => {
   if (!src?.startsWith('blob:')) return;
-  if (isCachedMediaObjectUrl(src) || isSessionMediaObjectUrl(src)) return;
+  if (mediaUrlCache.isCachedMediaObjectUrl?.(src) || isSessionMediaObjectUrl(src)) return;
   URL.revokeObjectURL(src);
 };
 
@@ -204,10 +199,10 @@ export const ImageContent = as<'div', ImageContentProps>(
           );
         }
 
-        void primePersistentMediaUrl(mediaUrl);
-        void primeCachedMediaObjectUrl(mediaUrl, 'visible');
+        void mediaUrlCache.primePersistentMediaUrl(mediaUrl);
+        void mediaUrlCache.primeCachedMediaObjectUrl(mediaUrl, 'visible');
 
-        return getCachedMediaObjectUrl(mediaUrl) ?? mediaUrl;
+        return mediaUrlCache.getCachedMediaObjectUrl(mediaUrl) ?? mediaUrl;
       },
       [mx, useAuthentication]
     );
