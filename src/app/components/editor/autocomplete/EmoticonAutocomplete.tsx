@@ -10,7 +10,7 @@ import { UseAsyncSearchOptions, useAsyncSearch } from '../../../hooks/useAsyncSe
 import { onTabPress } from '../../../utils/keyboard';
 import { createEmoticonElement, moveCursor, replaceWithElement } from '../utils';
 import { useRecentEmoji } from '../../../hooks/useRecentEmoji';
-import { useUniversalImagePacks } from '../../../hooks/useImagePacks';
+import { usePersonalImagePacks, useRelevantImagePacks } from '../../../hooks/useImagePacks';
 import { IEmoji, emojis } from '../../../plugins/emoji';
 import { useKeyDown } from '../../../hooks/useKeyDown';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
@@ -25,6 +25,7 @@ type EmoticonSearchItem = PackImageReader | IEmoji;
 
 type EmoticonAutocompleteProps = {
   imagePackRooms: Room[];
+  imagePackMode?: 'contextual' | 'personal';
   editor: Editor;
   query: AutocompleteQuery<string>;
   requestClose: () => void;
@@ -52,16 +53,17 @@ function CustomEmojiOptionMedia({ src, alt }: { src: string; alt: string }) {
 
 export function EmoticonAutocomplete({
   imagePackRooms,
+  imagePackMode = 'contextual',
   editor,
   query,
   requestClose,
 }: EmoticonAutocompleteProps) {
-  void imagePackRooms;
-
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
 
-  const imagePacks = useUniversalImagePacks(ImageUsage.Emoticon);
+  const contextualImagePacks = useRelevantImagePacks(ImageUsage.Emoticon, imagePackRooms);
+  const personalImagePacks = usePersonalImagePacks(ImageUsage.Emoticon);
+  const imagePacks = imagePackMode === 'personal' ? personalImagePacks : contextualImagePacks;
   const recentEmoji = useRecentEmoji(mx, 20);
 
   const searchList = useMemo(() => {
