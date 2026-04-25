@@ -18,7 +18,11 @@ export const Reaction = as<
   }
 >(({ className, mx, count, reaction, useAuthentication, ...props }, ref) => {
   const mediaUrl =
-    reaction.startsWith('mxc://') ? mxcUrlToHttp(mx, reaction, useAuthentication) : undefined;
+    reaction.startsWith('mxc://')
+      ? (mxcUrlToHttp(mx, reaction, useAuthentication, 48, 48, 'scale') ??
+          mxcUrlToHttp(mx, reaction, useAuthentication) ??
+          undefined)
+      : undefined;
   const cachedMediaUrl = useCachedMediaUrl(mediaUrl);
 
   return (
