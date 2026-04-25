@@ -20,7 +20,7 @@ import { IEmoji, emojiGroups, emojis } from '../../plugins/emoji';
 import { useEmojiGroupLabels } from './useEmojiGroupLabels';
 import { useEmojiGroupIcons } from './useEmojiGroupIcons';
 import { preventScrollWithArrowKey, stopPropagation } from '../../utils/keyboard';
-import { useUniversalImagePacks } from '../../hooks/useImagePacks';
+import { usePersonalImagePacks, useRelevantImagePacks } from '../../hooks/useImagePacks';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useRecentEmoji } from '../../hooks/useRecentEmoji';
 import { editableActiveElement, targetFromEvent } from '../../utils/dom';
@@ -59,6 +59,8 @@ const RECENT_GROUP_ID = 'recent_group';
 const SEARCH_GROUP_ID = 'search_group';
 const PRIORITY_PACK_PRELOAD_COUNT = 2;
 const PRIORITY_PACK_VISIBLE_URL_LIMIT = 64;
+
+type ImagePackMode = 'contextual' | 'personal';
 
 type EmojiGroupItem = {
   id: string;
@@ -394,6 +396,7 @@ type EmojiBoardProps = {
   tab?: EmojiBoardTab;
   onTabChange?: (tab: EmojiBoardTab) => void;
   imagePackRooms: Room[];
+  imagePackMode?: ImagePackMode;
   requestClose: () => void;
   returnFocusOnDeactivate?: boolean;
   onEmojiSelect?: (unicode: string, shortcode: string) => void;
@@ -407,6 +410,7 @@ export function EmojiBoard({
   tab = EmojiBoardTab.Emoji,
   onTabChange,
   imagePackRooms,
+  imagePackMode = 'contextual',
   requestClose,
   returnFocusOnDeactivate,
   onEmojiSelect,
@@ -415,8 +419,6 @@ export function EmojiBoard({
   allowTextCustomEmoji,
   addToRecentEmoji = true,
 }: EmojiBoardProps) {
-  void imagePackRooms;
-
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
 
@@ -429,7 +431,9 @@ export function EmojiBoard({
   );
   const activeGroupIdAtom = useMemo(() => atom<string | undefined>(undefined), []);
   const [activeGroupId, setActiveGroupId] = useAtom(activeGroupIdAtom);
-  const imagePacks = useUniversalImagePacks(usage);
+  const contextualImagePacks = useRelevantImagePacks(usage, imagePackRooms);
+  const personalImagePacks = usePersonalImagePacks(usage);
+  const imagePacks = imagePackMode === 'personal' ? personalImagePacks : contextualImagePacks;
   const [emojiGroupItems, stickerGroupItems] = useGroups(tab, imagePacks);
   const groups = emojiTab ? emojiGroupItems : stickerGroupItems;
   const renderItem = useItemRenderer(tab);
