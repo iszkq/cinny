@@ -106,7 +106,9 @@ export function EmoticonAutocomplete({
       {autoCompleteEmoticon.map((emoticon) => {
         const isCustomEmoji = 'url' in emoticon;
         const key = isCustomEmoji ? emoticon.url : emoticon.unicode;
-        const customEmojiUrl = mxcUrlToHttp(mx, key, useAuthentication);
+        const customEmojiUrl =
+          mxcUrlToHttp(mx, key, useAuthentication, 48, 48, 'scale') ??
+          mxcUrlToHttp(mx, key, useAuthentication);
 
         return (
           <MenuItem
