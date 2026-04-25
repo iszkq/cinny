@@ -59,3 +59,10 @@ export const getEmojiBoardMediaUrls = ({
     fallbackUrl,
   };
 };
+
+export const getEmojiBoardMediaCandidates = (
+  options: EmojiBoardMediaUrlsOptions
+): string[] => {
+  const { primaryUrl, fallbackUrl } = getEmojiBoardMediaUrls(options);
+  return Array.from(new Set([primaryUrl, fallbackUrl].filter(Boolean) as string[]));
+};

@@ -20,7 +20,7 @@ import { IEmoji, emojiGroups, emojis } from '../../plugins/emoji';
 import { useEmojiGroupLabels } from './useEmojiGroupLabels';
 import { useEmojiGroupIcons } from './useEmojiGroupIcons';
 import { preventScrollWithArrowKey, stopPropagation } from '../../utils/keyboard';
-import { useRelevantImagePacks } from '../../hooks/useImagePacks';
+import { useUniversalImagePacks } from '../../hooks/useImagePacks';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useRecentEmoji } from '../../hooks/useRecentEmoji';
 import { editableActiveElement, targetFromEvent } from '../../utils/dom';
@@ -31,6 +31,7 @@ import { addRecentEmoji } from '../../plugins/recent-emoji';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 import { ImagePack, ImageUsage, PackImageReader } from '../../plugins/custom-emoji';
 import { getEmoticonSearchStr } from '../../plugins/utils';
+import { primeCachedMediaObjectUrl, primePersistentMediaUrl } from '../../utils/mediaUrlCache';
 import {
   SearchInput,
   EmojiBoardTabs,
@@ -52,10 +53,12 @@ import {
 } from './components';
 import { EmojiBoardTab, EmojiType } from './types';
 import { VirtualTile } from '../virtualizer';
-import { getEmojiBoardMediaUrls } from './components/media';
+import { getEmojiBoardMediaCandidates, getEmojiBoardMediaUrls } from './components/media';
 
 const RECENT_GROUP_ID = 'recent_group';
 const SEARCH_GROUP_ID = 'search_group';
+const PRIORITY_PACK_PRELOAD_COUNT = 2;
+const PRIORITY_PACK_VISIBLE_URL_LIMIT = 64;
 
 type EmojiGroupItem = {
   id: string;
@@ -412,6 +415,8 @@ export function EmojiBoard({
   allowTextCustomEmoji,
   addToRecentEmoji = true,
 }: EmojiBoardProps) {
+  void imagePackRooms;
+
   const mx = useMatrixClient();
 
   const emojiTab = tab === EmojiBoardTab.Emoji;
@@ -422,8 +427,8 @@ export function EmojiBoard({
     [emojiTab]
   );
   const activeGroupIdAtom = useMemo(() => atom<string | undefined>(undefined), []);
-  const setActiveGroupId = useSetAtom(activeGroupIdAtom);
-  const imagePacks = useRelevantImagePacks(usage, imagePackRooms);
+  const [activeGroupId, setActiveGroupId] = useAtom(activeGroupIdAtom);
+  const imagePacks = useUniversalImagePacks(usage);
   const [emojiGroupItems, stickerGroupItems] = useGroups(tab, imagePacks);
   const groups = emojiTab ? emojiGroupItems : stickerGroupItems;
   const renderItem = useItemRenderer(tab);
@@ -442,6 +447,57 @@ export function EmojiBoard({
   );
 
   const searchedItems = result?.items.slice(0, 100);
+
+  const getPackMediaUrls = useCallback(
+    (pack: ImagePack) => {
+      const size = usage === ImageUsage.Sticker ? 256 : 64;
+      const mediaUrls = new Set<string>();
+      const avatarMxc = pack.getAvatarUrl(usage);
+
+      if (avatarMxc) {
+        getEmojiBoardMediaCandidates({
+          mx,
+          mxc: avatarMxc,
+          useAuthentication,
+          width: 64,
+          height: 64,
+        }).forEach((url) => {
+          mediaUrls.add(url);
+        });
+      }
+
+      pack.getImages(usage).forEach((image) => {
+        getEmojiBoardMediaCandidates({
+          mx,
+          mxc: image.url,
+          useAuthentication,
+          info: image.info,
+          width: size,
+          height: size,
+        }).forEach((url) => {
+          mediaUrls.add(url);
+        });
+      });
+
+      return Array.from(mediaUrls);
+    },
+    [mx, usage, useAuthentication]
+  );
+
+  const priorityPacks = useMemo(() => {
+    const packs: ImagePack[] = [];
+    const pushPack = (pack: ImagePack | undefined) => {
+      if (!pack || packs.find((item) => item.id === pack.id)) {
+        return;
+      }
+      packs.push(pack);
+    };
+
+    pushPack(imagePacks.find((pack) => pack.id === activeGroupId));
+    imagePacks.slice(0, PRIORITY_PACK_PRELOAD_COUNT).forEach(pushPack);
+
+    return packs;
+  }, [activeGroupId, imagePacks]);
 
   const handleOnChange: ChangeEventHandler<HTMLInputElement> = useDebounce(
     useCallback(
@@ -494,6 +550,36 @@ export function EmojiBoard({
     const groupIndex = groups.findIndex((group) => group.id === groupId);
     virtualizer.scrollToIndex(groupIndex, { align: 'start' });
   };
+
+  useEffect(() => {
+    if (priorityPacks.length === 0) {
+      return undefined;
+    }
+
+    let disposed = false;
+    const preloadTimer = window.setTimeout(() => {
+      if (disposed) {
+        return;
+      }
+
+      priorityPacks.forEach((pack, packIndex) => {
+        getPackMediaUrls(pack).forEach((mediaUrl, mediaIndex) => {
+          void primePersistentMediaUrl(mediaUrl);
+          void primeCachedMediaObjectUrl(
+            mediaUrl,
+            packIndex === 0 && mediaIndex < PRIORITY_PACK_VISIBLE_URL_LIMIT
+              ? 'visible'
+              : 'background'
+          );
+        });
+      });
+    }, 0);
+
+    return () => {
+      disposed = true;
+      window.clearTimeout(preloadTimer);
+    };
+  }, [getPackMediaUrls, priorityPacks]);
 
   // sync active sidebar tab with scroll
   useEffect(() => {
