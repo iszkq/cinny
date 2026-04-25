@@ -148,10 +148,26 @@ const getUniversalPacks = (
   customUserPacks: ImagePack[],
   globalPacks: ImagePack[]
 ) => {
-  const packs = userPack ? [userPack, ...customUserPacks] : customUserPacks;
+  const packs = getPersonalPacks(userPack, customUserPacks);
   const packIds = new Set(packs.map((pack) => pack.id));
 
   return packs.concat(globalPacks.filter((pack) => !packIds.has(pack.id)));
+};
+
+const getPersonalPacks = (
+  userPack: ImagePack | undefined,
+  customUserPacks: ImagePack[]
+) => {
+  const packs = userPack ? [userPack, ...customUserPacks] : customUserPacks;
+
+  return packs.reduce<ImagePack[]>((list, pack) => {
+    if (pack.deleted || list.find((item) => item.id === pack.id)) {
+      return list;
+    }
+
+    list.push(pack);
+    return list;
+  }, []);
 };
 
 export const useUserImagePack = (): ImagePack | undefined => {
@@ -369,6 +385,16 @@ export const useUniversalImagePacks = (usage: ImageUsage): ImagePack[] => {
   }, [userPack, customUserPacks, globalPacks, usage]);
 };
 
+export const usePersonalImagePacks = (usage: ImageUsage): ImagePack[] => {
+  const userPack = useUserImagePack();
+  const customUserPacks = useCustomUserImagePacks();
+
+  return useMemo(() => {
+    const packs = getPersonalPacks(userPack, customUserPacks);
+    return packs.filter((pack) => pack.getImages(usage).length > 0);
+  }, [userPack, customUserPacks, usage]);
+};
+
 export const useWarmImagePackMedia = (rooms: Room[]) => {
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
@@ -452,6 +478,55 @@ export const useWarmUniversalImagePackMedia = () => {
   const relevantPacks = useMemo(
     () => getUniversalPacks(userPack, customUserPacks, globalPacks),
     [userPack, customUserPacks, globalPacks]
+  );
+
+  useEffect(() => {
+    if (relevantPacks.length === 0) {
+      return undefined;
+    }
+
+    let disposed = false;
+    let persistentDelayTimer: number | undefined;
+    let objectDelayTimer: number | undefined;
+    persistentDelayTimer = window.setTimeout(() => {
+      if (!disposed) {
+        warmImagePackMedia(mx, useAuthentication, relevantPacks, [
+          ImageUsage.Emoticon,
+          ImageUsage.Sticker,
+        ]);
+      }
+    }, GLOBAL_IMAGE_PACK_WARM_DELAY_MS);
+
+    objectDelayTimer = window.setTimeout(() => {
+      if (!disposed) {
+        warmImagePackObjectUrls(mx, useAuthentication, relevantPacks, [
+          ImageUsage.Emoticon,
+          ImageUsage.Sticker,
+        ]);
+      }
+    }, GLOBAL_IMAGE_PACK_OBJECT_WARM_DELAY_MS);
+
+    return () => {
+      disposed = true;
+      if (typeof persistentDelayTimer === 'number') {
+        window.clearTimeout(persistentDelayTimer);
+      }
+      if (typeof objectDelayTimer === 'number') {
+        window.clearTimeout(objectDelayTimer);
+      }
+    };
+  }, [mx, relevantPacks, useAuthentication]);
+};
+
+export const useWarmPersonalImagePackMedia = () => {
+  const mx = useMatrixClient();
+  const useAuthentication = useMediaAuthentication();
+  const userPack = useUserImagePack();
+  const customUserPacks = useCustomUserImagePacks();
+
+  const relevantPacks = useMemo(
+    () => getPersonalPacks(userPack, customUserPacks),
+    [userPack, customUserPacks]
   );
 
   useEffect(() => {
