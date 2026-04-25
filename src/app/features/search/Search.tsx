@@ -34,8 +34,8 @@ import { mDirectAtom } from '../../state/mDirectList';
 import { allRoomsAtom } from '../../state/room-list/roomList';
 import {
   SearchItemStrGetter,
-  useAsyncSearch,
   UseAsyncSearchOptions,
+  useAsyncSearch,
 } from '../../hooks/useAsyncSearch';
 import { useAllJoinedRoomsSet, useGetRoom } from '../../hooks/useGetRoom';
 import { RoomAvatar, RoomIcon } from '../../components/room-avatar';
@@ -60,6 +60,7 @@ import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 import { KeySymbol } from '../../utils/key-symbol';
 import { isMacOS } from '../../utils/user-agent';
 import { useFavoritesRoomId } from '../../hooks/useFavoritesRoom';
+import { stopPropagation } from '../../utils/keyboard';
 
 enum SearchRoomType {
   Rooms = '#',
@@ -142,8 +143,7 @@ export function Search({ requestClose }: SearchProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const { navigateRoom, navigateSpace } = useRoomNavigate();
   const roomToUnread = useAtomValue(roomToUnreadAtom);
-
-  const [searchRoomType, setSearchRoomType] = useState<SearchRoomType>();
+  const [searchInput, setSearchInput] = useState('');
 
   const allRoomsSet = useAllJoinedRoomsSet();
   const getRoom = useGetRoom(allRoomsSet);
@@ -164,8 +164,21 @@ export function Search({ requestClose }: SearchProps) {
     [allDirects, favoritesRoomId]
   );
 
-  const topActiveRooms = useTopActiveRooms(searchRoomType, rooms, directs, spaces);
-  const targetRooms = useSearchTargetRooms(searchRoomType, rooms, directs, spaces);
+  const parsedSearch = useMemo(() => {
+    const trimmedValue = searchInput.trim();
+    const prefix = trimmedValue.match(/^[#@*]/)?.[0];
+    const derivedSearchRoomType =
+      typeof prefix === 'string' ? getSearchPrefixToRoomType(prefix) : undefined;
+    const rawQuery = derivedSearchRoomType ? trimmedValue.slice(1) : trimmedValue;
+
+    return {
+      searchRoomType: derivedSearchRoomType,
+      rawQuery,
+    };
+  }, [searchInput]);
+
+  const topActiveRooms = useTopActiveRooms(parsedSearch.searchRoomType, rooms, directs, spaces);
+  const targetRooms = useSearchTargetRooms(parsedSearch.searchRoomType, rooms, directs, spaces);
 
   const getTargetStr: SearchItemStrGetter<string> = useCallback(
     (roomId: string) => {
@@ -180,13 +193,25 @@ export function Search({ requestClose }: SearchProps) {
     [getRoom, mDirects, mx]
   );
 
-  const [result, search, resetSearch] = useAsyncSearch(targetRooms, getTargetStr, SEARCH_OPTIONS);
+  const [result, searchRoom, resetSearch] = useAsyncSearch(targetRooms, getTargetStr, SEARCH_OPTIONS);
+
   const roomsToRender = result ? result.items : topActiveRooms;
   const listFocus = useListFocusIndex(roomsToRender.length, 0);
 
   const queryHighlighRegex = result?.query
     ? makeHighlightRegex(result.query.split(' '))
     : undefined;
+  const focusTrapOptions = useMemo(
+    () => ({
+      initialFocus: () => inputRef.current,
+      returnFocusOnDeactivate: false,
+      allowOutsideClick: true,
+      clickOutsideDeactivates: true,
+      onDeactivate: requestClose,
+      escapeDeactivates: stopPropagation,
+    }),
+    [requestClose]
+  );
 
   const openRoomId = (roomId: string, isSpace: boolean) => {
     if (isSpace) navigateSpace(roomId);
@@ -196,24 +221,17 @@ export function Search({ requestClose }: SearchProps) {
 
   const handleInputChange: ChangeEventHandler<HTMLInputElement> = (evt) => {
     listFocus.reset();
+    setSearchInput(evt.currentTarget.value);
+  };
 
-    const target = evt.currentTarget;
-    let value = target.value.trim();
-    const prefix = value.match(/^[#@*]/)?.[0];
-    const searchType = typeof prefix === 'string' && getSearchPrefixToRoomType(prefix);
-    if (searchType) {
-      value = value.slice(1);
-      setSearchRoomType(searchType);
-    } else {
-      setSearchRoomType(undefined);
-    }
-
-    if (value === '') {
+  useEffect(() => {
+    if (!parsedSearch.rawQuery) {
       resetSearch();
       return;
     }
-    search(value);
-  };
+
+    searchRoom(parsedSearch.rawQuery);
+  }, [parsedSearch.rawQuery, resetSearch, searchRoom]);
 
   const handleInputKeyDown: KeyboardEventHandler<HTMLInputElement> = (evt) => {
     const roomId = roomsToRender[listFocus.index];
@@ -254,19 +272,7 @@ export function Search({ requestClose }: SearchProps) {
   return (
     <Overlay open>
       <OverlayCenter>
-        <FocusTrap
-          focusTrapOptions={{
-            initialFocus: () => inputRef.current,
-            returnFocusOnDeactivate: false,
-            allowOutsideClick: true,
-            clickOutsideDeactivates: true,
-            onDeactivate: requestClose,
-            escapeDeactivates: (evt) => {
-              evt.stopPropagation();
-              return true;
-            },
-          }}
-        >
+        <FocusTrap focusTrapOptions={focusTrapOptions}>
           <Modal size="400" style={{ maxHeight: toRem(400), borderRadius: config.radii.R500 }}>
             <Box
               shrink="No"
