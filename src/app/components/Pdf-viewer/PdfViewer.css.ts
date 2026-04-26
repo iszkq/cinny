@@ -68,6 +68,9 @@ export const PdfViewerCanvasShell = style([
     minWidth: '100%',
     minHeight: '100%',
     padding: config.space.S400,
+    userSelect: 'none',
+    WebkitUserSelect: 'none',
+    touchAction: 'none',
   },
 ]);
 

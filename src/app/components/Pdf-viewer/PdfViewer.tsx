@@ -4,6 +4,7 @@ import React, {
   MouseEventHandler,
   PointerEventHandler,
   WheelEventHandler,
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -31,6 +32,7 @@ import FocusTrap from 'focus-trap-react';
 import FileSaver from 'file-saver';
 import * as css from './PdfViewer.css';
 import { AsyncStatus } from '../../hooks/useAsyncCallback';
+import { useDragScroll } from '../../hooks/useDragScroll';
 import { useZoom } from '../../hooks/useZoom';
 import { createPage, usePdfDocumentLoader, usePdfJSLoader } from '../../plugins/pdfjs-dist';
 import { stopPropagation } from '../../utils/keyboard';
@@ -55,6 +57,9 @@ export const PdfViewer = as<'div', PdfViewerProps>(
       pointerId: number;
       startX: number;
       startY: number;
+      startScrollLeft: number;
+      startScrollTop: number;
+      pointerType: string;
       triggered: boolean;
     }>();
     const { zoom, zoomIn, zoomOut, setZoom } = useZoom(ZOOM_STEP, MIN_ZOOM, MAX_ZOOM);
@@ -70,7 +75,27 @@ export const PdfViewer = as<'div', PdfViewerProps>(
       pdfJSState.status === AsyncStatus.Error || docState.status === AsyncStatus.Error;
     const [pageNo, setPageNo] = useState(1);
     const [jumpAnchor, setJumpAnchor] = useState<RectCords>();
-    const [pointerDragging, setPointerDragging] = useState(false);
+    const [panAvailable, setPanAvailable] = useState(false);
+    const { cursor, onMouseDown: handleMouseDragStart } = useDragScroll(
+      scrollRef,
+      panAvailable,
+      `${src}:${pageNo}:${zoom}`
+    );
+
+    const updatePanAvailability = useCallback(() => {
+      const viewport = scrollRef.current;
+      const content = containerRef.current;
+      if (!viewport || !content) {
+        setPanAvailable(false);
+        return;
+      }
+
+      const nextPanAvailable =
+        viewport.scrollWidth > viewport.clientWidth + 1 ||
+        viewport.scrollHeight > viewport.clientHeight + 1;
+
+      setPanAvailable(nextPanAvailable);
+    }, []);
 
     useEffect(() => {
       loadPdfJS().catch(() => undefined);
@@ -85,9 +110,17 @@ export const PdfViewer = as<'div', PdfViewerProps>(
     useEffect(() => {
       setZoom(1);
       setPageNo(1);
-      setPointerDragging(false);
+      setPanAvailable(false);
       gestureRef.current = undefined;
     }, [setZoom, src]);
+
+    useEffect(() => {
+      window.addEventListener('resize', updatePanAvailability);
+
+      return () => {
+        window.removeEventListener('resize', updatePanAvailability);
+      };
+    }, [updatePanAvailability]);
 
     const canPrev = docState.status === AsyncStatus.Success && pageNo > 1;
     const canNext = docState.status === AsyncStatus.Success && pageNo < docState.data.numPages;
@@ -114,6 +147,7 @@ export const PdfViewer = as<'div', PdfViewerProps>(
       if (pageNo < 1 || pageNo > doc.numPages) return undefined;
 
       let cancelled = false;
+      let frameId: number | undefined;
 
       createPage(doc, pageNo, { scale: zoom })
         .then((canvas) => {
@@ -128,13 +162,21 @@ export const PdfViewer = as<'div', PdfViewerProps>(
             top: 0,
             left: 0,
           });
+          frameId = window.requestAnimationFrame(() => {
+            if (!cancelled) {
+              updatePanAvailability();
+            }
+          });
         })
         .catch(() => undefined);
 
       return () => {
         cancelled = true;
+        if (typeof frameId === 'number') {
+          window.cancelAnimationFrame(frameId);
+        }
       };
-    }, [docState, pageNo, zoom]);
+    }, [docState, pageNo, updatePanAvailability, zoom]);
 
     const handleDownload = () => {
       FileSaver.saveAs(src, name);
@@ -177,25 +219,40 @@ export const PdfViewer = as<'div', PdfViewerProps>(
 
     const clearGesture = () => {
       gestureRef.current = undefined;
-      setPointerDragging(false);
     };
 
     const handlePointerDown: PointerEventHandler<HTMLDivElement> = (evt) => {
-      if (docState.status !== AsyncStatus.Success || evt.button !== 0) return;
+      const viewport = scrollRef.current;
+      if (docState.status !== AsyncStatus.Success || evt.button !== 0 || !viewport) return;
+      if (panAvailable && evt.pointerType === 'mouse') return;
 
       gestureRef.current = {
         pointerId: evt.pointerId,
         startX: evt.clientX,
         startY: evt.clientY,
+        startScrollLeft: viewport.scrollLeft,
+        startScrollTop: viewport.scrollTop,
+        pointerType: evt.pointerType,
         triggered: false,
       };
-      setPointerDragging(true);
       evt.currentTarget.setPointerCapture?.(evt.pointerId);
     };
 
     const handlePointerMove: PointerEventHandler<HTMLDivElement> = (evt) => {
       const gesture = gestureRef.current;
-      if (!gesture || gesture.pointerId !== evt.pointerId || gesture.triggered) return;
+      if (!gesture || gesture.pointerId !== evt.pointerId) return;
+
+      if (panAvailable && gesture.pointerType !== 'mouse') {
+        const viewport = scrollRef.current;
+        if (!viewport) return;
+
+        evt.preventDefault();
+        viewport.scrollLeft = gesture.startScrollLeft - (evt.clientX - gesture.startX);
+        viewport.scrollTop = gesture.startScrollTop - (evt.clientY - gesture.startY);
+        return;
+      }
+
+      if (gesture.triggered) return;
 
       const deltaX = evt.clientX - gesture.startX;
       const deltaY = evt.clientY - gesture.startY;
@@ -209,8 +266,8 @@ export const PdfViewer = as<'div', PdfViewerProps>(
       }
 
       gesture.triggered = true;
-      setPointerDragging(false);
       evt.currentTarget.releasePointerCapture?.(evt.pointerId);
+      clearGesture();
     };
 
     const handlePointerUp: PointerEventHandler<HTMLDivElement> = (evt) => {
@@ -421,13 +478,14 @@ export const PdfViewer = as<'div', PdfViewerProps>(
               >
                 <Box
                   className={css.PdfViewerCanvasShell}
+                  onMouseDown={handleMouseDragStart}
                   alignItems="Center"
                   justifyContent="Center"
                   onPointerDown={handlePointerDown}
                   onPointerMove={handlePointerMove}
                   onPointerUp={handlePointerUp}
                   onPointerCancel={handlePointerCancel}
-                  style={{ cursor: pointerDragging ? 'grabbing' : 'grab' }}
+                  style={{ cursor: panAvailable ? cursor : 'default' }}
                 >
                   <div
                     className={css.PdfViewerContent}
