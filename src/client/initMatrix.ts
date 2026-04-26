@@ -1,4 +1,10 @@
-import { createClient, MatrixClient, IndexedDBStore, IndexedDBCryptoStore } from 'matrix-js-sdk';
+import {
+  createClient,
+  MatrixClient,
+  IndexedDBStore,
+  IndexedDBCryptoStore,
+  ReceiptType,
+} from 'matrix-js-sdk';
 
 import { cryptoCallbacks } from './secretStorageKeys';
 import { getSettings } from '../app/state/settings';
@@ -13,6 +19,7 @@ type Session = {
 };
 
 const SYNC_POLL_TIMEOUT_MS = 15000;
+const PRIVATE_RECEIPT_TYPE = 'm.read.private' as ReceiptType;
 
 const patchedReadReceiptClients = new WeakSet<MatrixClient>();
 let globalReadReceiptFetchPatched = false;
@@ -20,9 +27,7 @@ let globalReadReceiptFetchPatched = false;
 const shouldBlockReadReceipts = () => !getSettings().sendReadReceipts;
 
 const isReadReceiptPath = (path: string) =>
-  path.includes('/receipt/') ||
-  path.includes('/read_markers') ||
-  path.includes('/account_data/m.fully_read');
+  path.includes('/receipt/m.read') && !path.includes('/receipt/m.read.private');
 
 const getRequestPath = (pathOrUrl: string) => {
   try {
@@ -86,9 +91,14 @@ const patchReadReceiptTransport = (mx: MatrixClient) => {
   mx.sendReceipt = ((
     ...args: Parameters<MatrixClient['sendReceipt']>
   ): ReturnType<MatrixClient['sendReceipt']> => {
-    const [, receiptType] = args;
-    if (shouldBlockReadReceipts() && (receiptType === 'm.read' || receiptType === 'm.read.private')) {
-      return Promise.resolve({}) as ReturnType<MatrixClient['sendReceipt']>;
+    const [event, receiptType, body, unthreaded] = args;
+    if (shouldBlockReadReceipts() && receiptType === ReceiptType.Read) {
+      return originalSendReceipt(
+        event,
+        PRIVATE_RECEIPT_TYPE,
+        body,
+        unthreaded
+      ) as ReturnType<MatrixClient['sendReceipt']>;
     }
     return originalSendReceipt(...args);
   }) as MatrixClient['sendReceipt'];
@@ -97,8 +107,13 @@ const patchReadReceiptTransport = (mx: MatrixClient) => {
   mx.sendReadReceipt = ((
     ...args: Parameters<MatrixClient['sendReadReceipt']>
   ): ReturnType<MatrixClient['sendReadReceipt']> => {
-    if (shouldBlockReadReceipts()) {
-      return Promise.resolve({}) as ReturnType<MatrixClient['sendReadReceipt']>;
+    const [event, receiptType, unthreaded] = args;
+    if (shouldBlockReadReceipts() && (!receiptType || receiptType === ReceiptType.Read)) {
+      return originalSendReadReceipt(
+        event,
+        PRIVATE_RECEIPT_TYPE,
+        unthreaded
+      ) as ReturnType<MatrixClient['sendReadReceipt']>;
     }
     return originalSendReadReceipt(...args);
   }) as MatrixClient['sendReadReceipt'];
@@ -108,7 +123,13 @@ const patchReadReceiptTransport = (mx: MatrixClient) => {
     ...args: Parameters<MatrixClient['setRoomReadMarkers']>
   ): ReturnType<MatrixClient['setRoomReadMarkers']> => {
     if (shouldBlockReadReceipts()) {
-      return Promise.resolve({}) as ReturnType<MatrixClient['setRoomReadMarkers']>;
+      const [roomId, rmEventId, rrEvent, rpEvent] = args;
+      return originalSetRoomReadMarkers(
+        roomId,
+        rmEventId,
+        undefined,
+        rpEvent ?? rrEvent
+      ) as ReturnType<MatrixClient['setRoomReadMarkers']>;
     }
     return originalSetRoomReadMarkers(...args);
   }) as MatrixClient['setRoomReadMarkers'];
@@ -118,21 +139,16 @@ const patchReadReceiptTransport = (mx: MatrixClient) => {
     ...args: Parameters<MatrixClient['setRoomReadMarkersHttpRequest']>
   ): ReturnType<MatrixClient['setRoomReadMarkersHttpRequest']> => {
     if (shouldBlockReadReceipts()) {
-      return Promise.resolve({}) as ReturnType<MatrixClient['setRoomReadMarkersHttpRequest']>;
+      const [roomId, rmEventId, rrEventId, rpEventId] = args;
+      return originalSetRoomReadMarkersHttpRequest(
+        roomId,
+        rmEventId,
+        undefined,
+        rpEventId ?? rrEventId
+      ) as ReturnType<MatrixClient['setRoomReadMarkersHttpRequest']>;
     }
     return originalSetRoomReadMarkersHttpRequest(...args);
   }) as MatrixClient['setRoomReadMarkersHttpRequest'];
-
-  const originalSetRoomAccountData = mx.setRoomAccountData.bind(mx);
-  mx.setRoomAccountData = ((
-    ...args: Parameters<MatrixClient['setRoomAccountData']>
-  ): ReturnType<MatrixClient['setRoomAccountData']> => {
-    const [, eventType] = args;
-    if (shouldBlockReadReceipts() && eventType === 'm.fully_read') {
-      return Promise.resolve({}) as ReturnType<MatrixClient['setRoomAccountData']>;
-    }
-    return originalSetRoomAccountData(...args);
-  }) as MatrixClient['setRoomAccountData'];
 
   const originalAuthedRequest = mx.http.authedRequest.bind(mx.http);
   mx.http.authedRequest = ((
