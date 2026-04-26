@@ -3,6 +3,7 @@ import { getRoomFullyReadEventId, setOptimisticRoomReadMarker } from './room';
 
 export const ROOM_MARKED_AS_READ = 'cinny:room-marked-as-read';
 const FULLY_READ_EVENT_TYPE = 'm.fully_read';
+const PRIVATE_RECEIPT_TYPE = 'm.read.private' as ReceiptType;
 
 type RoomMarkedAsReadDetail = {
   roomId: string;
@@ -54,18 +55,27 @@ export async function markAsRead(mx: MatrixClient, roomId: string, privateReceip
   }
 
   if (privateReceipt) {
-    setOptimisticRoomReadMarker(roomId, latestEventId, userId);
-    dispatchRoomMarkedAsRead(roomId);
-    return;
-  }
-
-  try {
-    await mx.setRoomReadMarkers(roomId, latestEventId, latestEvent);
-  } catch (error) {
-    await Promise.all([
-      mx.setRoomAccountData(roomId, FULLY_READ_EVENT_TYPE, { event_id: latestEventId }),
-      mx.sendReadReceipt(latestEvent, ReceiptType.Read),
-    ]);
+    try {
+      await mx.setRoomReadMarkers(roomId, latestEventId, undefined, latestEvent);
+    } catch (error) {
+      await Promise.all([
+        mx
+          .setRoomAccountData(roomId, FULLY_READ_EVENT_TYPE, { event_id: latestEventId })
+          .catch(() => undefined),
+        mx.sendReceipt(latestEvent, PRIVATE_RECEIPT_TYPE).catch(() => undefined),
+      ]);
+    }
+  } else {
+    try {
+      await mx.setRoomReadMarkers(roomId, latestEventId, latestEvent);
+    } catch (error) {
+      await Promise.all([
+        mx
+          .setRoomAccountData(roomId, FULLY_READ_EVENT_TYPE, { event_id: latestEventId })
+          .catch(() => undefined),
+        mx.sendReadReceipt(latestEvent, ReceiptType.Read).catch(() => undefined),
+      ]);
+    }
   }
 
   setOptimisticRoomReadMarker(roomId, latestEventId, userId);
