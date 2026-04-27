@@ -156,7 +156,16 @@ self.addEventListener('message', (event: ExtendableMessageEvent) => {
   }
 });
 
-const MEDIA_PATHS = ['/_matrix/client/v1/media/download', '/_matrix/client/v1/media/thumbnail'];
+const MEDIA_PATHS = [
+  '/_matrix/client/v1/media/download',
+  '/_matrix/client/v1/media/thumbnail',
+  '/_matrix/media/v1/download',
+  '/_matrix/media/v1/thumbnail',
+  '/_matrix/media/v3/download',
+  '/_matrix/media/v3/thumbnail',
+  '/_matrix/media/r0/download',
+  '/_matrix/media/r0/thumbnail',
+];
 
 function mediaPath(url: string): boolean {
   try {
