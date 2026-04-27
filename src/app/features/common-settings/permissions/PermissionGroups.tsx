@@ -114,7 +114,7 @@ export function PermissionGroups({
 
     return (
       <Box direction="Column" gap="100">
-        <Text size="L400">Users</Text>
+        <Text size="L400">用户</Text>
         <SequenceCard
           variant="SurfaceVariant"
           className={SequenceCardStyle}
@@ -122,8 +122,8 @@ export function PermissionGroups({
           gap="400"
         >
           <SettingTile
-            title="Default Power"
-            description="Default power level for all users."
+            title="默认权限"
+            description="所有用户的默认权限等级。"
             after={
               <PowerSwitcher
                 powerLevelTags={powerLevelTags}
@@ -220,7 +220,7 @@ export function PermissionGroups({
                           <Text size="B300" truncate>
                             {tag.name}
                           </Text>
-                          {value < maxPower && <Text size="T200">& Above</Text>}
+                          {value < maxPower && <Text size="T200">及以上</Text>}
                         </Chip>
                       )}
                     </PowerSwitcher>
@@ -249,11 +249,11 @@ export function PermissionGroups({
             <Box grow="Yes" direction="Column">
               {applyState.status === AsyncStatus.Error ? (
                 <Text size="T200">
-                  <b>Failed to apply changes! Please try again.</b>
+                  <b>应用更改失败，请重试。</b>
                 </Text>
               ) : (
                 <Text size="T200">
-                  <b>Changes saved! Apply when ready.</b>
+                  <b>更改已保存，准备好后即可应用。</b>
                 </Text>
               )}
             </Box>
@@ -266,7 +266,7 @@ export function PermissionGroups({
                 disabled={applyingChanges}
                 onClick={resetChanges}
               >
-                <Text size="B300">Reset</Text>
+                <Text size="B300">重置</Text>
               </Button>
               <Button
                 size="300"
@@ -276,7 +276,7 @@ export function PermissionGroups({
                 before={applyingChanges && <Spinner variant="Success" fill="Solid" size="100" />}
                 onClick={handleApplyChanges}
               >
-                <Text size="B300">Apply Changes</Text>
+                <Text size="B300">应用更改</Text>
               </Button>
             </Box>
           </Box>

@@ -83,7 +83,7 @@ function PeekPermissions({ powerLevels, power, permissionGroups, children }: Pee
                                 color: hasPower ? undefined : color.Critical.Main,
                               }}
                             >
-                              {hasPower ? '✅' : '❌'} {item.name}
+                              {hasPower ? '已包含' : '未包含'} {item.name}
                             </Text>
                           );
                         })}
@@ -127,8 +127,8 @@ export function Powers({ powerLevels, permissionGroups, onEdit }: PowersProps) {
           gap="400"
         >
           <SettingTile
-            title="Founders"
-            description="Founding members has all permissions and can only be changed during upgrade."
+            title="创始人"
+            description="创始成员拥有全部权限，且只能在升级时变更。"
           />
 
           <SettingTile>
@@ -155,8 +155,8 @@ export function Powers({ powerLevels, permissionGroups, onEdit }: PowersProps) {
         gap="400"
       >
         <SettingTile
-          title="Power Levels"
-          description="Manage and customize incremental power levels for users."
+          title="权限等级"
+          description="管理并自定义面向用户逐级递增的权限等级。"
           after={
             onEdit && (
               <Box gap="200">
@@ -168,7 +168,7 @@ export function Powers({ powerLevels, permissionGroups, onEdit }: PowersProps) {
                   outlined
                   onClick={onEdit}
                 >
-                  <Text size="B300">Edit</Text>
+                  <Text size="B300">编辑</Text>
                 </Button>
               </Box>
             )

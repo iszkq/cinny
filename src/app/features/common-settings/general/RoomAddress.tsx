@@ -61,19 +61,19 @@ export function RoomPublishedAddresses({ permissions }: RoomPublishedAddressesPr
       gap="400"
     >
       <SettingTile
-        title="Published Addresses"
+        title="已发布地址"
         description={
           <span>
-            If access is <b>Public</b>, Published addresses will be used to join by anyone.
+            如果访问权限为 <b>公开</b>，任何人都可以通过已发布地址加入。
           </span>
         }
       />
       <CutoutCard variant="Surface" style={{ padding: config.space.S300 }}>
         {publishedAliases.length === 0 ? (
           <Box direction="Column" gap="100">
-            <Text size="L400">No Addresses</Text>
+            <Text size="L400">暂无地址</Text>
             <Text size="T200">
-              To publish an address, it needs to be set as a local address first
+              要发布地址，请先将其设置为本地地址。
             </Text>
           </Box>
         ) : (
@@ -86,7 +86,7 @@ export function RoomPublishedAddresses({ permissions }: RoomPublishedAddressesPr
                   </Text>
                   {alias === canonicalAlias && (
                     <Badge variant="Success" fill="Solid" size="500">
-                      <Text size="L400">Main</Text>
+                      <Text size="L400">主地址</Text>
                     </Badge>
                   )}
                 </Box>
@@ -100,7 +100,7 @@ export function RoomPublishedAddresses({ permissions }: RoomPublishedAddressesPr
                         disabled={loading}
                         onClick={() => setMain(undefined)}
                       >
-                        <Text size="B300">Unset Main</Text>
+                        <Text size="B300">取消主地址</Text>
                       </Chip>
                     ) : (
                       <Chip
@@ -110,7 +110,7 @@ export function RoomPublishedAddresses({ permissions }: RoomPublishedAddressesPr
                         disabled={loading}
                         onClick={() => setMain(alias)}
                       >
-                        <Text size="B300">Set Main</Text>
+                        <Text size="B300">设为主地址</Text>
                       </Chip>
                     )}
                   </Box>
@@ -183,14 +183,14 @@ function LocalAddressInput({ addLocalAlias }: { addLocalAlias: (alias: string) =
             disabled={adding}
             before={adding && <Spinner size="100" variant="Success" fill="Solid" />}
           >
-            <Text size="B400">Save</Text>
+            <Text size="B400">保存</Text>
           </Button>
         </Box>
       </Box>
       {addState.status === AsyncStatus.Error && (
         <Text style={{ color: color.Critical.Main }} size="T200">
           {(addState.error as MatrixError).httpStatus === 409
-            ? 'Address is already in use!'
+            ? '该地址已被占用！'
             : (addState.error as MatrixError).message}
         </Text>
       )}
@@ -271,7 +271,7 @@ function LocalAddressesList({
       {selectedAliases.length > 0 && (
         <Box gap="200">
           <Box grow="Yes">
-            <Text size="L400">{selectedAliases.length} Selected</Text>
+            <Text size="L400">已选择 {selectedAliases.length} 项</Text>
           </Box>
           <Box shrink="No" gap="Inherit">
             {canEditCanonical &&
@@ -287,7 +287,7 @@ function LocalAddressesList({
                     )
                   }
                 >
-                  <Text size="B300">Unpublish</Text>
+                  <Text size="B300">取消发布</Text>
                 </Chip>
               ) : (
                 <Chip
@@ -301,7 +301,7 @@ function LocalAddressesList({
                     )
                   }
                 >
-                  <Text size="B300">Publish</Text>
+                  <Text size="B300">发布</Text>
                 </Chip>
               ))}
             <Chip
@@ -315,7 +315,7 @@ function LocalAddressesList({
                 )
               }
             >
-              <Text size="B300">Delete</Text>
+              <Text size="B300">删除</Text>
             </Chip>
           </Box>
         </Box>
@@ -343,7 +343,7 @@ function LocalAddressesList({
             <Box shrink="No" gap="100">
               {published && (
                 <Badge variant="Success" fill="Soft" size="500">
-                  <Text size="L400">Published</Text>
+                  <Text size="L400">已发布</Text>
                 </Badge>
               )}
             </Box>
@@ -380,8 +380,8 @@ export function RoomLocalAddresses({ permissions }: { permissions: RoomPermissio
       gap="400"
     >
       <SettingTile
-        title="Local Addresses"
-        description="Set local address so users can join through your homeserver."
+        title="本地地址"
+        description="设置本地地址后，用户即可通过你的归属服务器加入。"
         after={
           <Button
             type="button"
@@ -396,7 +396,7 @@ export function RoomLocalAddresses({ permissions }: { permissions: RoomPermissio
             }
           >
             <Text as="span" size="B300" truncate>
-              {expand ? 'Collapse' : 'Expand'}
+              {expand ? '收起' : '展开'}
             </Text>
           </Button>
         }
@@ -406,13 +406,13 @@ export function RoomLocalAddresses({ permissions }: { permissions: RoomPermissio
           {localAliasesState.status === AsyncStatus.Loading && (
             <Box gap="100">
               <Spinner variant="Secondary" size="100" />
-              <Text size="T200">Loading...</Text>
+              <Text size="T200">加载中...</Text>
             </Box>
           )}
           {localAliasesState.status === AsyncStatus.Success &&
             (localAliasesState.data.length === 0 ? (
               <Box direction="Column" gap="100">
-                <Text size="L400">No Addresses</Text>
+                <Text size="L400">暂无地址</Text>
               </Box>
             ) : (
               <LocalAddressesList
