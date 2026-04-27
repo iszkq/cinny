@@ -20,6 +20,7 @@ import {
   UIAFlow,
   createClient,
 } from 'matrix-js-sdk';
+import { APP_WEB_DEVICE_NAME } from '../../../constants/branding';
 import { PasswordInput } from '../../../components/password-input';
 import {
   getLoginTermUrl,
@@ -109,7 +110,7 @@ function RegisterUIAFlow({
         auth: authDict,
         password,
         username,
-        initial_device_display_name: 'Cinny Web',
+        initial_device_display_name: APP_WEB_DEVICE_NAME,
       });
     },
     [onRegister, formData]
@@ -250,7 +251,7 @@ export function PasswordRegisterForm({
       auth: {
         session: authData.session,
       },
-      initial_device_display_name: 'Cinny Web',
+      initial_device_display_name: APP_WEB_DEVICE_NAME,
     });
   };
 
