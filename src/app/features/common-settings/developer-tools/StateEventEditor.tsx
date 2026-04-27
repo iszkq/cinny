@@ -118,7 +118,7 @@ function StateEventEdit({ type, stateKey, content, requestClose }: StateEventEdi
       aria-disabled={submitting}
     >
       <Box shrink="No" direction="Column" gap="100">
-        <Text size="L400">State Event</Text>
+        <Text size="L400">状态事件</Text>
         <SequenceCard
           className={SequenceCardStyle}
           variant="SurfaceVariant"
@@ -138,7 +138,7 @@ function StateEventEdit({ type, stateKey, content, requestClose }: StateEventEdi
                   disabled={submitting}
                   before={submitting && <Spinner variant="Primary" fill="Solid" size="300" />}
                 >
-                  <Text size="B300">Save</Text>
+                  <Text size="B300">保存</Text>
                 </Button>
                 <Button
                   variant="Secondary"
@@ -148,7 +148,7 @@ function StateEventEdit({ type, stateKey, content, requestClose }: StateEventEdi
                   onClick={requestClose}
                   disabled={submitting}
                 >
-                  <Text size="B300">Cancel</Text>
+                  <Text size="B300">取消</Text>
                 </Button>
               </Box>
             }
@@ -163,7 +163,7 @@ function StateEventEdit({ type, stateKey, content, requestClose }: StateEventEdi
       </Box>
       <Box grow="Yes" direction="Column" gap="100">
         <Box shrink="No">
-          <Text size="L400">JSON Content</Text>
+          <Text size="L400">JSON 内容</Text>
         </Box>
         <TextAreaComponent
           ref={textAreaRef}
@@ -199,7 +199,7 @@ function StateEventView({ content, eventJSONStr, onEditContent }: StateEventView
       <Box grow="Yes" direction="Column" gap="100">
         <Box gap="200" alignItems="End">
           <Box grow="Yes">
-            <Text size="L400">State Event</Text>
+            <Text size="L400">状态事件</Text>
           </Box>
           {onEditContent && (
             <Box shrink="No" gap="200">
@@ -210,7 +210,7 @@ function StateEventView({ content, eventJSONStr, onEditContent }: StateEventView
                 outlined
                 onClick={() => onEditContent(content)}
               >
-                <Text size="B300">Edit</Text>
+                <Text size="B300">编辑</Text>
               </Chip>
             </Box>
           )}
@@ -271,7 +271,7 @@ export function StateEventEditor({ type, stateKey, requestClose }: StateEventEdi
               onClick={requestClose}
               before={<Icon size="100" src={Icons.ArrowLeft} />}
             >
-              <Text size="T300">Developer Tools</Text>
+              <Text size="T300">开发工具</Text>
             </Chip>
           </Box>
           <Box shrink="No">

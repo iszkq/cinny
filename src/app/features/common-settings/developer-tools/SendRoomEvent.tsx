@@ -114,7 +114,7 @@ export function SendRoomEvent({ type, stateKey, requestClose }: SendRoomEventPro
               onClick={requestClose}
               before={<Icon size="100" src={Icons.ArrowLeft} />}
             >
-              <Text size="T300">Developer Tools</Text>
+              <Text size="T300">开发工具</Text>
             </Chip>
           </Box>
           <Box shrink="No">
@@ -135,7 +135,7 @@ export function SendRoomEvent({ type, stateKey, requestClose }: SendRoomEventPro
           aria-disabled={submitting}
         >
           <Box shrink="No" direction="Column" gap="100">
-            <Text size="L400">{composeStateEvent ? 'State Event Type' : 'Message Event Type'}</Text>
+            <Text size="L400">{composeStateEvent ? '状态事件类型' : '消息事件类型'}</Text>
             <Box gap="300">
               <Box grow="Yes" direction="Column">
                 <Input
@@ -156,7 +156,7 @@ export function SendRoomEvent({ type, stateKey, requestClose }: SendRoomEventPro
                 disabled={submitting}
                 before={submitting && <Spinner variant="Primary" fill="Solid" size="300" />}
               >
-                <Text size="B400">Send</Text>
+                <Text size="B400">发送</Text>
               </Button>
             </Box>
 
@@ -168,7 +168,7 @@ export function SendRoomEvent({ type, stateKey, requestClose }: SendRoomEventPro
           </Box>
           {composeStateEvent && (
             <Box shrink="No" direction="Column" gap="100">
-              <Text size="L400">State Key (Optional)</Text>
+              <Text size="L400">状态键（可选）</Text>
               <Input
                 variant="Background"
                 name="stateKeyInput"
@@ -181,7 +181,7 @@ export function SendRoomEvent({ type, stateKey, requestClose }: SendRoomEventPro
           )}
           <Box grow="Yes" direction="Column" gap="100">
             <Box shrink="No">
-              <Text size="L400">JSON Content</Text>
+              <Text size="L400">JSON 内容</Text>
             </Box>
             <TextAreaComponent
               ref={textAreaRef}

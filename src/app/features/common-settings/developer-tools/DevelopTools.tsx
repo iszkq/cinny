@@ -111,7 +111,7 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
                   gap="400"
                 >
                   <SettingTile
-                title="启用开发工具"
+                    title="启用开发工具"
                     after={
                       <Switch
                         variant="Primary"
@@ -129,7 +129,7 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
                     gap="400"
                   >
                     <SettingTile
-                title="房间 ID"
+                      title="房间 ID"
                       description={`\u5c06\u623f\u95f4 ID \u590d\u5236\u5230\u526a\u8d34\u677f\u3002("${room.roomId}")`}
                       after={
                         <Button
@@ -159,8 +159,8 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
                     gap="400"
                   >
                     <SettingTile
-                title="新消息事件"
-                description="在当前房间中创建并发送新的消息事件。"
+                      title="新消息事件"
+                      description="在当前房间中创建并发送新的消息事件。"
                       after={
                         <Button
                           onClick={() => setComposeEvent({})}
@@ -170,7 +170,7 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
                           radii="300"
                           outlined
                         >
-                          <Text size="B300">{'\u7f16\u5199'}</Text>
+                          <Text size="B300">发送</Text>
                         </Button>
                       }
                     />
@@ -182,8 +182,8 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
                     gap="400"
                   >
                     <SettingTile
-                title="房间状态"
-                description="查看和编辑房间的状态事件。"
+                      title="房间状态"
+                      description="查看和编辑房间的状态事件。"
                       after={
                         <Button
                           onClick={() => setExpandState(!expandState)}
@@ -321,8 +321,8 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
                     gap="400"
                   >
                     <SettingTile
-                title="账号数据"
-                description="查看和编辑存储在房间内的私有账号数据。"
+                      title="账号数据"
+                      description="查看和编辑存储在房间内的私有账号数据。"
                       after={
                         <Button
                           onClick={() => setExpandAccountData(!expandAccountData)}
