@@ -17,10 +17,9 @@ import {
 } from 'folds';
 import { AUTHOR_CONTACT_ID } from '../constants/projectInfo';
 import { stopPropagation } from '../utils/keyboard';
+import AuthorContactQR from '../../../public/res/author-contact-qr.png';
 
 type AuthorContactButtonProps = Omit<React.ComponentProps<typeof Button>, 'onClick'>;
-
-const AUTHOR_CONTACT_QR_URL = `${import.meta.env.BASE_URL}res/author-contact-qr.png`;
 
 export function AuthorContactButton({
   children,
@@ -70,7 +69,7 @@ export function AuthorContactButton({
                 >
                   <Box direction="Column" gap="300" alignItems="Center">
                     <img
-                      src={AUTHOR_CONTACT_QR_URL}
+                      src={AuthorContactQR}
                       alt="作者联系二维码"
                       style={{
                         width: '100%',
