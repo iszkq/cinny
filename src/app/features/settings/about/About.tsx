@@ -2,11 +2,11 @@ import React from 'react';
 import { Box, Text, IconButton, Icon, Icons, Scroll, Button, config, toRem } from 'folds';
 import { Page, PageContent, PageHeader } from '../../../components/page';
 import { AuthorContactButton } from '../../../components/AuthorContactButton';
+import { APP_DISPLAY_NAME, APP_LOGO_URL, APP_TAGLINE } from '../../../constants/branding';
 import { SequenceCard } from '../../../components/sequence-card';
 import { SequenceCardStyle } from '../styles.css';
 import { SettingTile } from '../../../components/setting-tile';
 import { FEATURE_UPDATE_NOTES, PROJECT_SOURCE_URL } from '../../../constants/projectInfo';
-import CinnySVG from '../../../../../public/res/svg/cinny.svg';
 import { clearCacheAndReload } from '../../../../client/initMatrix';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 
@@ -40,17 +40,17 @@ export function About({ requestClose }: AboutProps) {
                 <Box shrink="No">
                   <img
                     style={{ width: toRem(60), height: toRem(60) }}
-                    src={CinnySVG}
-                    alt="Cinny logo"
+                    src={APP_LOGO_URL}
+                    alt={`${APP_DISPLAY_NAME} logo`}
                   />
                 </Box>
                 <Box direction="Column" gap="300">
                   <Box direction="Column" gap="100">
                     <Box gap="100" alignItems="End">
-                      <Text size="H3">Cinny</Text>
+                      <Text size="H3">{APP_DISPLAY_NAME}</Text>
                       <Text size="T200">v4.11.1</Text>
                     </Box>
-                    <Text>面向中文使用场景优化的 Matrix 客户端。</Text>
+                    <Text>{APP_TAGLINE}</Text>
                   </Box>
 
                   <Box gap="200" wrap="Wrap">
