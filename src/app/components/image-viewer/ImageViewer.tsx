@@ -6,6 +6,7 @@ import { Box, Chip, Header, Icon, IconButton, Icons, Text, as } from 'folds';
 import * as css from './ImageViewer.css';
 import { usePan } from '../../hooks/usePan';
 import { useZoom } from '../../hooks/useZoom';
+import { fetchMediaWithAuth } from '../../utils/matrix';
 
 export type ImageViewerItem = {
   id: string;
@@ -73,7 +74,7 @@ export const ImageViewer = as<'div', ImageViewerProps>(
     const [transitionVisible, setTransitionVisible] = useState(false);
 
     const handleDownload = async () => {
-      const response = await fetch(src);
+      const response = await fetchMediaWithAuth(src);
       const fileContent = await response.blob();
       FileSaver.saveAs(fileContent, alt);
     };
