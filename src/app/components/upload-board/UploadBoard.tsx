@@ -24,14 +24,14 @@ export const UploadBoard = as<'div', UploadBoardProps>(({ header, children, ...p
   </Box>
 ));
 
-export type UploadBoardImperativeHandlers = { handleSend: () => Promise<void> };
+export type UploadBoardImperativeHandlers = { handleSend: () => Promise<boolean> };
 
 type UploadBoardHeaderProps = {
   open: boolean;
   onToggle: () => void;
   uploadFamilyObserverAtom: TUploadFamilyObserverAtom;
   onCancel: (uploads: Upload[]) => void;
-  onSend: (uploads: UploadSuccess[]) => Promise<void>;
+  onSend: (uploads: UploadSuccess[]) => Promise<boolean>;
   imperativeHandlerRef: MutableRefObject<UploadBoardImperativeHandlers | undefined>;
 };
 
@@ -63,12 +63,15 @@ export function UploadBoardHeader({
   );
 
   const handleSend = async () => {
-    if (sendingRef.current) return;
+    if (sendingRef.current) return false;
     sendingRef.current = true;
-    await onSend(
-      uploads.filter((upload) => upload.status === UploadStatus.Success) as UploadSuccess[]
-    );
-    sendingRef.current = false;
+    try {
+      return await onSend(
+        uploads.filter((upload) => upload.status === UploadStatus.Success) as UploadSuccess[]
+      );
+    } finally {
+      sendingRef.current = false;
+    }
   };
 
   useImperativeHandle(imperativeHandlerRef, () => ({
@@ -88,24 +91,26 @@ export function UploadBoardHeader({
         gap="100"
       >
         <Icon src={open ? Icons.ChevronTop : Icons.ChevronRight} size="50" />
-        <Text size="H6">Files</Text>
+        <Text size="H6">文件</Text>
       </Box>
       <Box className={css.UploadBoardHeaderContent} alignItems="Center" gap="100">
         {isSuccess && (
           <Chip
             as="button"
-            onClick={handleSend}
+            onClick={() => {
+              handleSend().catch(() => undefined);
+            }}
             variant="Primary"
             radii="Pill"
             outlined
             after={<Icon src={Icons.Send} size="50" filled />}
           >
-            <Text size="B300">Send</Text>
+            <Text size="B300">发送</Text>
           </Chip>
         )}
         {isError && !open && (
           <Badge variant="Critical" fill="Solid" radii="300">
-            <Text size="L400">Upload Failed</Text>
+            <Text size="L400">上传失败</Text>
           </Badge>
         )}
         {!isSuccess && !isError && !open && (
@@ -124,7 +129,7 @@ export function UploadBoardHeader({
             radii="Pill"
             after={<Icon src={Icons.Cross} size="50" />}
           >
-            <Text size="B300">{uploads.length === 1 ? 'Remove' : 'Remove All'}</Text>
+            <Text size="B300">{uploads.length === 1 ? '移除' : '全部移除'}</Text>
           </Chip>
         )}
       </Box>
