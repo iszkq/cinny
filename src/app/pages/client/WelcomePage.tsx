@@ -1,6 +1,8 @@
 import React from 'react';
 import { Box, Button, Icon, Icons, Text, config, toRem } from 'folds';
 import { Page, PageHero, PageHeroSection } from '../../components/page';
+import { AuthorContactButton } from '../../components/AuthorContactButton';
+import { PROJECT_SOURCE_URL } from '../../constants/projectInfo';
 import CinnySVG from '../../../../public/res/svg/cinny.svg';
 
 export function WelcomePage() {
@@ -15,15 +17,11 @@ export function WelcomePage() {
         <PageHeroSection>
           <PageHero
             icon={<img width="70" height="70" src={CinnySVG} alt="Cinny Logo" />}
-            title="Welcome to Cinny"
+            title="欢迎使用 Cinny"
             subTitle={
               <span>
-                Yet another matrix client.{' '}
-                <a
-                  href="https://github.com/cinnyapp/cinny/releases"
-                  target="_blank"
-                  rel="noreferrer noopener"
-                >
+                面向中文使用场景优化的 Matrix 客户端。{' '}
+                <a href={PROJECT_SOURCE_URL} target="_blank" rel="noreferrer noopener">
                   v4.11.1
                 </a>
               </span>
@@ -33,27 +31,20 @@ export function WelcomePage() {
               <Box grow="Yes" style={{ maxWidth: toRem(300) }} direction="Column" gap="300">
                 <Button
                   as="a"
-                  href="https://github.com/cinnyapp/cinny"
+                  href={PROJECT_SOURCE_URL}
                   target="_blank"
                   rel="noreferrer noopener"
                   before={<Icon size="200" src={Icons.Code} />}
                 >
                   <Text as="span" size="B400" truncate>
-                    Source Code
+                    源码地址
                   </Text>
                 </Button>
-                <Button
-                  as="a"
-                  href="https://cinny.in/#sponsor"
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  fill="Soft"
-                  before={<Icon size="200" src={Icons.Heart} />}
-                >
+                <AuthorContactButton fill="Soft" before={<Icon size="200" src={Icons.User} />}>
                   <Text as="span" size="B400" truncate>
-                    Support
+                    联系作者
                   </Text>
-                </Button>
+                </AuthorContactButton>
               </Box>
             </Box>
           </PageHero>
