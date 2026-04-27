@@ -47,31 +47,31 @@ export const getUsedPowers = (powerLevels: IPowerLevels): Set<number> => {
 
 const DEFAULT_TAGS: PowerLevelTags = {
   9001: {
-    name: 'Goku',
+    name: '悟空',
     color: '#ff6a00',
   },
   150: {
-    name: 'Manager',
+    name: '经理',
     color: '#ff6a7f',
   },
   101: {
-    name: 'Founder',
+    name: '创始人',
     color: '#0000ff',
   },
   100: {
-    name: 'Admin',
+    name: '管理员',
     color: '#0088ff',
   },
   50: {
-    name: 'Moderator',
+    name: '版主',
     color: '#1fd81f',
   },
   0: {
-    name: 'Member',
+    name: '成员',
     color: '#91cfdf',
   },
   [-1]: {
-    name: 'Muted',
+    name: '禁言',
     color: '#888888',
   },
 };
@@ -83,7 +83,7 @@ const generateFallbackTag = (powerLevelTags: PowerLevelTags, power: number): Mem
   const tag = typeof tagPower === 'number' ? powerLevelTags[tagPower] : undefined;
 
   return {
-    name: tag ? `${tag.name} ${power}` : `Team ${power}`,
+    name: tag ? `${tag.name} ${power}` : `权限组 ${power}`,
   };
 };
 
