@@ -1,6 +1,7 @@
 import { IImageInfo } from '../../types/matrix/common';
 import { getThumbnail, loadImageElement } from './dom';
 import { getNormalizedMimeType } from './mimeTypes';
+import { fetchMediaWithAuth } from './matrix';
 
 const STATIC_PREVIEW_MIME_TYPES = new Set([
   'image/avif',
@@ -79,7 +80,7 @@ const createAnimatedMediaPreview = async (
 ): Promise<string | undefined> => {
   if (typeof document === 'undefined') return undefined;
 
-  const response = await fetch(src, { method: 'GET' });
+  const response = await fetchMediaWithAuth(src, { method: 'GET' });
   if (!response.ok) return undefined;
 
   const mediaBlob = await response.blob();
