@@ -6,6 +6,7 @@ import { SequenceCardStyle } from '../styles.css';
 import { SettingTile } from '../../../components/setting-tile';
 import { useSetting } from '../../../state/hooks/settings';
 import { settingsAtom } from '../../../state/settings';
+import { APP_DISPLAY_NAME } from '../../../constants/branding';
 import { getNotificationState, usePermissionState } from '../../../hooks/usePermission';
 import { useEmailNotifications } from '../../../hooks/useEmailNotifications';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
@@ -27,7 +28,7 @@ function EmailNotification() {
             device_display_name: email,
             lang: 'en',
             data: {
-              brand: 'Cinny',
+              brand: APP_DISPLAY_NAME,
             },
             append: true,
           });
