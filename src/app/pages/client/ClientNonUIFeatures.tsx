@@ -10,11 +10,9 @@ import {
   SyncState,
 } from 'matrix-js-sdk';
 import { roomToUnreadAtom, unreadEqual, unreadInfoToUnread } from '../../state/room/roomToUnread';
-import LogoSVG from '../../../../public/res/svg/cinny.svg';
-import LogoUnreadSVG from '../../../../public/res/svg/cinny-unread.svg';
-import LogoHighlightSVG from '../../../../public/res/svg/cinny-highlight.svg';
 import NotificationSound from '../../../../public/sound/notification.ogg';
 import InviteSound from '../../../../public/sound/invite.ogg';
+import { APP_LOGO_URL } from '../../constants/branding';
 import { notificationPermission, setFavicon } from '../../utils/dom';
 import { useSetting } from '../../state/hooks/settings';
 import { settingsAtom } from '../../state/settings';
@@ -350,11 +348,11 @@ function FaviconUpdater() {
       }
     });
 
-    if (notification) {
-      setFavicon(highlight ? LogoHighlightSVG : LogoUnreadSVG);
-    } else {
-      setFavicon(LogoSVG);
+    if (notification || highlight) {
+      setFavicon(APP_LOGO_URL);
+      return;
     }
+    setFavicon(APP_LOGO_URL);
   }, [roomToUnread]);
 
   return null;
@@ -373,8 +371,8 @@ function InviteNotifications() {
   const notify = useCallback(
     (count: number) => {
       const noti = new window.Notification('Invitation', {
-        icon: LogoSVG,
-        badge: LogoSVG,
+        icon: APP_LOGO_URL,
+        badge: APP_LOGO_URL,
         body: `You have ${count} new invitation request.`,
         silent: true,
       });
