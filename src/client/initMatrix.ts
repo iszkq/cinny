@@ -9,6 +9,7 @@ import {
 import { cryptoCallbacks } from './secretStorageKeys';
 import { getSettings } from '../app/state/settings';
 import { clearNavToActivePathStore } from '../app/state/navToActivePath';
+import { attachMediaAccessToken } from '../app/utils/matrix';
 import { pushSessionToSW } from '../sw-session';
 
 type Session = {
@@ -184,6 +185,21 @@ const patchReadReceiptTransport = (mx: MatrixClient) => {
   }
 };
 
+const patchMediaUrlBuilder = (mx: MatrixClient, session: Session) => {
+  const originalMxcUrlToHttp = mx.mxcUrlToHttp.bind(mx);
+
+  mx.mxcUrlToHttp = ((...args: Parameters<MatrixClient['mxcUrlToHttp']>) => {
+    const mediaUrl = originalMxcUrlToHttp(...args);
+    const useAuthentication = Boolean(args[6]);
+
+    return attachMediaAccessToken(
+      mediaUrl,
+      useAuthentication ? session.accessToken : undefined,
+      session.baseUrl
+    );
+  }) as MatrixClient['mxcUrlToHttp'];
+};
+
 export const initClient = async (session: Session): Promise<MatrixClient> => {
   patchGlobalReadReceiptFetch();
 
@@ -206,6 +222,8 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
     cryptoCallbacks: cryptoCallbacks as any,
     verificationMethods: ['m.sas.v1'],
   });
+
+  patchMediaUrlBuilder(mx, session);
 
   await indexedDBStore.startup();
   await mx.initRustCrypto();
