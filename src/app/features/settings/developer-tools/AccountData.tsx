@@ -27,7 +27,7 @@ export function AccountData({ expand, onExpandToggle, onSelect }: AccountDataPro
 
   return (
     <Box direction="Column" gap="100">
-      <Text size="L400">Account Data</Text>
+      <Text size="L400">账号数据</Text>
       <SequenceCard
         className={SequenceCardStyle}
         variant="SurfaceVariant"
@@ -35,8 +35,8 @@ export function AccountData({ expand, onExpandToggle, onSelect }: AccountDataPro
         gap="400"
       >
         <SettingTile
-          title="Global"
-          description="Data stored in your global account data."
+          title="全局"
+          description="存储在全局账号数据中的内容。"
           after={
             <Button
               onClick={() => onExpandToggle(!expand)}
@@ -49,15 +49,15 @@ export function AccountData({ expand, onExpandToggle, onSelect }: AccountDataPro
                 <Icon src={expand ? Icons.ChevronTop : Icons.ChevronBottom} size="100" filled />
               }
             >
-              <Text size="B300">{expand ? 'Collapse' : 'Expand'}</Text>
+              <Text size="B300">{expand ? '收起' : '展开'}</Text>
             </Button>
           }
         />
         {expand && (
           <Box direction="Column" gap="100">
             <Box justifyContent="SpaceBetween">
-              <Text size="L400">Events</Text>
-              <Text size="L400">Total: {accountDataTypes.length}</Text>
+              <Text size="L400">事件</Text>
+              <Text size="L400">总数：{accountDataTypes.length}</Text>
             </Box>
             <CutoutCard>
               <MenuItem
@@ -70,7 +70,7 @@ export function AccountData({ expand, onExpandToggle, onSelect }: AccountDataPro
               >
                 <Box grow="Yes">
                   <Text size="T200" truncate>
-                    Add New
+                    新增
                   </Text>
                 </Box>
               </MenuItem>

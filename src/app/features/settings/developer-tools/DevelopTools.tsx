@@ -47,7 +47,7 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
         <Box grow="Yes" gap="200">
           <Box grow="Yes" alignItems="Center" gap="200">
             <Text size="H3" truncate>
-              Developer Tools
+              开发工具
             </Text>
           </Box>
           <Box shrink="No">
@@ -62,7 +62,7 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
           <PageContent>
             <Box direction="Column" gap="700">
               <Box direction="Column" gap="100">
-                <Text size="L400">Options</Text>
+                <Text size="L400">选项</Text>
                 <SequenceCard
                   className={SequenceCardStyle}
                   variant="SurfaceVariant"
@@ -70,7 +70,7 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
                   gap="400"
                 >
                   <SettingTile
-                    title="Enable Developer Tools"
+                    title="启用开发工具"
                     after={
                       <Switch
                         variant="Primary"
@@ -88,8 +88,8 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
                     gap="400"
                   >
                     <SettingTile
-                      title="Access Token"
-                      description="Copy access token to clipboard."
+                      title="访问令牌"
+                      description="将访问令牌复制到剪贴板。"
                       after={
                         <Button
                           onClick={() =>
@@ -101,7 +101,7 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
                           radii="300"
                           outlined
                         >
-                          <Text size="B300">Copy</Text>
+                          <Text size="B300">复制</Text>
                         </Button>
                       }
                     />
