@@ -1,4 +1,5 @@
 import { revokeObjectUrlWhenPossible } from './objectUrlRetainer';
+import { fetchMediaWithAuth } from './matrix';
 
 const PERSISTENT_MEDIA_CACHE = 'cinny-auth-media-v2';
 const PERSISTENT_MEDIA_PRELOAD_CONCURRENCY = 4;
@@ -291,7 +292,7 @@ const matchPersistentMedia = async (src: string): Promise<Response | undefined> 
 };
 
 const fetchAndPersistMedia = async (src: string): Promise<Response | undefined> => {
-  const response = await fetch(src, { method: 'GET' });
+  const response = await fetchMediaWithAuth(src, { method: 'GET' });
   if (!response.ok) {
     return undefined;
   }
