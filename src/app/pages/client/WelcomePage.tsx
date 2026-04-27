@@ -2,8 +2,8 @@ import React from 'react';
 import { Box, Button, Icon, Icons, Text, config, toRem } from 'folds';
 import { Page, PageHero, PageHeroSection } from '../../components/page';
 import { AuthorContactButton } from '../../components/AuthorContactButton';
+import { APP_DISPLAY_NAME, APP_LOGO_URL, APP_TAGLINE } from '../../constants/branding';
 import { PROJECT_SOURCE_URL } from '../../constants/projectInfo';
-import CinnySVG from '../../../../public/res/svg/cinny.svg';
 
 export function WelcomePage() {
   return (
@@ -16,11 +16,13 @@ export function WelcomePage() {
       >
         <PageHeroSection>
           <PageHero
-            icon={<img width="70" height="70" src={CinnySVG} alt="Cinny Logo" />}
-            title="欢迎使用 Cinny"
+            icon={
+              <img width="70" height="70" src={APP_LOGO_URL} alt={`${APP_DISPLAY_NAME} Logo`} />
+            }
+            title={`欢迎使用 ${APP_DISPLAY_NAME}`}
             subTitle={
               <span>
-                面向中文使用场景优化的 Matrix 客户端。{' '}
+                {APP_TAGLINE}{' '}
                 <a href={PROJECT_SOURCE_URL} target="_blank" rel="noreferrer noopener">
                   v4.11.1
                 </a>
