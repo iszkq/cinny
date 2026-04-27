@@ -18,9 +18,9 @@ import {
   clientDefaultServer,
   useClientConfig,
 } from '../../hooks/useClientConfig';
+import { APP_DISPLAY_NAME, APP_LOGO_URL, APP_TAGLINE } from '../../constants/branding';
 import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
 import { LOGIN_PATH, REGISTER_PATH, RESET_PASSWORD_PATH } from '../paths';
-import CinnySVG from '../../../../public/res/svg/cinny.svg';
 import { ServerPicker } from './ServerPicker';
 import { AutoDiscoveryAction, autoDiscovery } from '../../cs-api';
 import { SpecVersionsLoader } from '../../components/SpecVersionsLoader';
@@ -134,8 +134,13 @@ export function AuthLayout() {
         <Box direction="Column" className={css.AuthCard}>
           <Header className={css.AuthHeader} size="600" variant="Surface">
             <Box grow="Yes" direction="Row" gap="300" alignItems="Center">
-              <img className={css.AuthLogo} src={CinnySVG} alt="Cinny Logo" />
-              <Text size="H3">Cinny</Text>
+              <img className={css.AuthLogo} src={APP_LOGO_URL} alt={`${APP_DISPLAY_NAME} Logo`} />
+              <Box direction="Column" gap="50">
+                <Text size="H3">{APP_DISPLAY_NAME}</Text>
+                <Text size="T200" priority="300">
+                  {APP_TAGLINE}
+                </Text>
+              </Box>
             </Box>
           </Header>
           <Box className={css.AuthCardContent} direction="Column">
