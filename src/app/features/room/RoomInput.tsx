@@ -12,7 +12,7 @@ import { isKeyHotkey } from 'is-hotkey';
 import { EventType, IContent, MsgType, RelationType, Room } from 'matrix-js-sdk';
 import { IImageInfo } from '../../../types/matrix/common';
 import { ReactEditor } from 'slate-react';
-import { Transforms, Editor } from 'slate';
+import { Descendant, Editor, Transforms } from 'slate';
 import {
   Box,
   Dialog,
@@ -128,6 +128,40 @@ interface RoomInputProps {
   roomId: string;
   room: Room;
 }
+
+const cloneEditorDraft = (draft: Descendant[]): Descendant[] =>
+  JSON.parse(JSON.stringify(draft)) as Descendant[];
+
+const restoreEditorDraft = (editor: Editor, draft: Descendant[]) => {
+  if (draft.length === 0) return;
+
+  resetEditor(editor);
+  Transforms.insertFragment(editor, draft);
+  moveCursor(editor);
+  resetEditorHistory(editor);
+};
+
+const getSendErrorMessage = (error: unknown): string => {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    return '当前网络已断开，这条消息还没有真正发送出去。';
+  }
+
+  const matrixError = error as {
+    data?: { error?: string };
+    message?: string;
+  };
+
+  if (typeof matrixError?.data?.error === 'string' && matrixError.data.error.trim()) {
+    return `发送失败：${matrixError.data.error}`;
+  }
+
+  if (typeof matrixError?.message === 'string' && matrixError.message.trim()) {
+    return `发送失败：${matrixError.message}`;
+  }
+
+  return '发送失败，这条消息目前可能只有你自己可见，请重试。';
+};
+
 export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
   ({ editor, fileDropContainerRef, roomId, room }, ref) => {
     const mx = useMatrixClient();
@@ -145,6 +179,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const [msgDraft, setMsgDraft] = useAtom(roomIdToMsgDraftAtomFamily(roomId));
     const [replyDraft, setReplyDraft] = useAtom(roomIdToReplyDraftAtomFamily(roomId));
     const replyUserID = replyDraft?.userId;
+    const replyDraftRef = useRef(replyDraft);
+    replyDraftRef.current = replyDraft;
 
     const powerLevelTags = usePowerLevelTags(room, powerLevels);
     const creatorsTag = useRoomCreatorsTag();
@@ -173,6 +209,9 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const [recording, setRecording] = useState(false);
     const [recordingMs, setRecordingMs] = useState(0);
     const [recordingError, setRecordingError] = useState<string>();
+    const [sendError, setSendError] = useState<string>();
+    const [sendingMessage, setSendingMessage] = useState(false);
+    const sendingMessageRef = useRef(false);
     const uploadFamilyObserverAtom = createUploadFamilyObserverAtom(
       roomUploadAtomFamily,
       selectedFiles.map((f) => f.file)
@@ -414,29 +453,58 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       handleRemoveUpload(uploads.map((upload) => upload.file));
     };
 
-    const handleSendUpload = async (uploads: UploadSuccess[]) => {
-      const contentsPromises = uploads.map(async (upload) => {
-        const fileItem = selectedFiles.find((f) => f.file === upload.file);
-        if (!fileItem) throw new Error('Broken upload');
+    const handleSendUpload = async (uploads: UploadSuccess[]): Promise<boolean> => {
+      if (uploads.length === 0) return true;
 
-        if (fileItem.file.type.startsWith('image')) {
-          return getImageMsgContent(mx, fileItem, upload.mxc);
+      setSendError(undefined);
+      const sentUploads: UploadSuccess[] = [];
+
+      for (const upload of uploads) {
+        const fileItem = selectedFiles.find((f) => f.file === upload.file);
+        if (!fileItem) {
+          if (sentUploads.length > 0) {
+            handleRemoveUpload(sentUploads.map((item) => item.file));
+          }
+          setSendError('附件状态异常，未发出的附件已保留，请重新发送。');
+          return false;
         }
-        if (fileItem.file.type.startsWith('video')) {
-          return getVideoMsgContent(mx, fileItem, upload.mxc);
+
+        try {
+          let content: IContent;
+          if (fileItem.file.type.startsWith('image')) {
+            content = await getImageMsgContent(mx, fileItem, upload.mxc);
+          } else if (fileItem.file.type.startsWith('video')) {
+            content = await getVideoMsgContent(mx, fileItem, upload.mxc);
+          } else if (fileItem.file.type.startsWith('audio')) {
+            content = await getAudioMsgContent(fileItem, upload.mxc);
+          } else {
+            content = await getFileMsgContent(fileItem, upload.mxc);
+          }
+
+          await mx.sendMessage(roomId, content as never);
+          sentUploads.push(upload);
+        } catch (error) {
+          if (sentUploads.length > 0) {
+            handleRemoveUpload(sentUploads.map((item) => item.file));
+          }
+          setSendError(
+            sentUploads.length > 0
+              ? '部分附件发送失败，未发出的附件已保留，请重试。'
+              : getSendErrorMessage(error)
+          );
+          return false;
         }
-        if (fileItem.file.type.startsWith('audio')) {
-          return getAudioMsgContent(fileItem, upload.mxc);
-        }
-        return getFileMsgContent(fileItem, upload.mxc);
-      });
-      handleCancelUpload(uploads);
-      const contents = fulfilledPromiseSettledResult(await Promise.allSettled(contentsPromises));
-      contents.forEach((content) => mx.sendMessage(roomId, content as any));
+      }
+
+      handleRemoveUpload(sentUploads.map((item) => item.file));
+      return true;
     };
 
-    const submit = useCallback(() => {
-      uploadBoardHandlers.current?.handleSend();
+    const submit = useCallback(async () => {
+      if (sendingMessageRef.current) return;
+
+      const uploadSendSuccess = await uploadBoardHandlers.current?.handleSend();
+      if (uploadSendSuccess === false) return;
 
       const commandName = getBeginCommand(editor);
       let plainText = toPlainText(editor.children, isMarkdown).trim();
@@ -479,6 +547,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
 
       if (plainText === '') return;
 
+      const draftSnapshot = cloneEditorDraft(editor.children);
+      const replyDraftSnapshot = replyDraft;
       const body = plainText;
       const formattedBody = customHtml;
       const mentionData = getMentions(mx, roomId, editor);
@@ -511,12 +581,43 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           content['m.relates_to'].is_falling_back = false;
         }
       }
-      mx.sendMessage(roomId, content as any);
+      setSendError(undefined);
       resetEditor(editor);
       resetEditorHistory(editor);
       setReplyDraft(undefined);
+      replyDraftRef.current = undefined;
       sendTypingStatus(false);
-    }, [mx, roomId, editor, replyDraft, sendTypingStatus, setReplyDraft, isMarkdown, commands]);
+      sendingMessageRef.current = true;
+      setSendingMessage(true);
+
+      try {
+        await mx.sendMessage(roomId, content as never);
+      } catch (error) {
+        if (isEmptyEditor(editor)) {
+          restoreEditorDraft(editor, draftSnapshot);
+        }
+        if (!replyDraftRef.current && replyDraftSnapshot) {
+          setReplyDraft(replyDraftSnapshot);
+        }
+        if (sendTypingNotifications && !isEmptyEditor(editor)) {
+          sendTypingStatus(true);
+        }
+        setSendError(getSendErrorMessage(error));
+      } finally {
+        sendingMessageRef.current = false;
+        setSendingMessage(false);
+      }
+    }, [
+      commands,
+      editor,
+      isMarkdown,
+      mx,
+      replyDraft,
+      roomId,
+      sendTypingNotifications,
+      sendTypingStatus,
+      setReplyDraft,
+    ]);
 
     const handleKeyDown: KeyboardEventHandler = useCallback(
       (evt) => {
@@ -525,7 +626,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           !isComposing(evt)
         ) {
           evt.preventDefault();
-          submit();
+          submit().catch(() => undefined);
         }
         if (isKeyHotkey('escape', evt)) {
           evt.preventDefault();
@@ -569,12 +670,17 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       moveCursor(editor);
     };
 
-    const handleStickerSelect = (mxc: string, label: string, info?: IImageInfo) => {
-      mx.sendEvent(roomId, EventType.Sticker, {
-        body: label,
-        url: mxc,
-        ...(info ? { info } : {}),
-      });
+    const handleStickerSelect = async (mxc: string, label: string, info?: IImageInfo) => {
+      setSendError(undefined);
+      try {
+        await mx.sendEvent(roomId, EventType.Sticker, {
+          body: label,
+          url: mxc,
+          ...(info ? { info } : {}),
+        });
+      } catch (error) {
+        setSendError(getSendErrorMessage(error));
+      }
     };
 
     const closePollDialog = useCallback(() => {
@@ -600,10 +706,16 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           }
         }
 
-        await mx.sendMessage(roomId, content as never);
-        setReplyDraft(undefined);
-        sendTypingStatus(false);
-        closePollDialog();
+        setSendError(undefined);
+
+        try {
+          await mx.sendMessage(roomId, content as never);
+          setReplyDraft(undefined);
+          sendTypingStatus(false);
+          closePollDialog();
+        } catch (error) {
+          setSendError(getSendErrorMessage(error));
+        }
       },
       [closePollDialog, mx, replyDraft, roomId, sendTypingStatus, setReplyDraft]
     );
@@ -722,7 +834,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           onKeyUp={handleKeyUp}
           onPaste={handlePaste}
           top={
-            (replyDraft || recording || recordingError) && (
+            (replyDraft || recording || recordingError || sendError) && (
               <div>
                 {replyDraft && (
                   <Box
@@ -786,6 +898,17 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                         {recordingError}
                       </Text>
                     )}
+                  </Box>
+                )}
+                {sendError && (
+                  <Box
+                    alignItems="Center"
+                    gap="300"
+                    style={{ padding: `${config.space.S200} ${config.space.S300} 0` }}
+                  >
+                    <Text size="T300" style={{ color: color.Critical.Main }}>
+                      {sendError}
+                    </Text>
                   </Box>
                 )}
               </div>
@@ -909,11 +1032,18 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                 )}
               </UseStateProvider>
               <IconButton
-                onClick={recording ? undefined : submit}
+                onClick={
+                  recording
+                    ? undefined
+                    : () => {
+                        submit().catch(() => undefined);
+                      }
+                }
                 variant="SurfaceVariant"
                 size="300"
                 radii="300"
-                aria-disabled={recording}
+                disabled={recording || sendingMessage}
+                aria-disabled={recording || sendingMessage}
               >
                 <Icon src={Icons.Send} />
               </IconButton>

@@ -814,6 +814,24 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     }, [alive, room])
   );
 
+  useEffect(() => {
+    const handleLocalEchoUpdated: RoomEventHandlerMap[RoomEvent.LocalEchoUpdated] = (
+      _event,
+      eventRoom
+    ) => {
+      if (eventRoom?.roomId !== room.roomId) return;
+
+      // Local echo status/id changes do not always emit a fresh timeline event,
+      // so we trigger a lightweight rerender here to keep send states accurate.
+      setTimeline((currentTimeline) => ({ ...currentTimeline }));
+    };
+
+    room.on(RoomEvent.LocalEchoUpdated, handleLocalEchoUpdated);
+    return () => {
+      room.removeListener(RoomEvent.LocalEchoUpdated, handleLocalEchoUpdated);
+    };
+  }, [room]);
+
   useLiveEventArrive(
     room,
     useCallback(

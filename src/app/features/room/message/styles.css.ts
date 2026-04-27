@@ -64,6 +64,13 @@ export const MessageReadReceiptsRow = style({
   paddingTop: config.space.S200,
 });
 
+export const MessageSendStatus = style({
+  display: 'flex',
+  alignItems: 'center',
+  gap: config.space.S200,
+  paddingTop: config.space.S200,
+});
+
 export const MessageReadReceiptsButton = style([
   DefaultReset,
   {

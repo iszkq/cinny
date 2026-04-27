@@ -1306,6 +1306,102 @@ export type MessageProps = {
   dateFormatString: string;
   readReceiptUserIds?: string[];
 };
+
+type PendingMessageStatus = 'encrypting' | 'queued' | 'sending' | 'not_sent' | 'cancelled';
+
+const getPendingMessageStatus = (mEvent: MatrixEvent): PendingMessageStatus | undefined => {
+  const status = (mEvent as MatrixEvent & { status?: unknown }).status;
+  return typeof status === 'string' ? (status as PendingMessageStatus) : undefined;
+};
+
+function MessageSendStatus({ room, mEvent }: { room: Room; mEvent: MatrixEvent }) {
+  const mx = useMatrixClient();
+  const status = getPendingMessageStatus(mEvent);
+
+  const [retryState, retrySend] = useAsyncCallback<void, Error, []>(
+    useCallback(async () => {
+      const resendEvent = (
+        mx as MatrixClient & {
+          resendEvent?: (event: MatrixEvent, eventRoom: Room) => Promise<unknown>;
+        }
+      ).resendEvent;
+
+      if (typeof resendEvent !== 'function') {
+        throw new Error('当前版本暂不支持重新发送失败消息。');
+      }
+
+      await resendEvent.call(mx, mEvent, room);
+    }, [mx, mEvent, room])
+  );
+
+  if (!status || mEvent.getSender() !== mx.getUserId()) {
+    return null;
+  }
+
+  let statusText: string | undefined;
+  let statusColor = color.Warning.Main;
+
+  if (retryState.status === AsyncStatus.Loading && status === 'not_sent') {
+    statusText = '正在重新发送...';
+  } else if (retryState.status === AsyncStatus.Error && status === 'not_sent') {
+    statusText =
+      retryState.error.message || '重新发送失败，这条消息目前可能只有你自己可见。';
+    statusColor = color.Critical.Main;
+  } else {
+    switch (status) {
+      case 'encrypting':
+        statusText = '正在加密并发送...';
+        break;
+      case 'queued':
+        statusText = '已加入发送队列...';
+        break;
+      case 'sending':
+        statusText = '发送中...';
+        break;
+      case 'not_sent':
+        statusText = '发送失败，这条消息目前可能只有你自己可见。';
+        statusColor = color.Critical.Main;
+        break;
+      case 'cancelled':
+        statusText = '这条消息已取消发送。';
+        break;
+      default:
+        statusText = undefined;
+    }
+  }
+
+  if (!statusText) return null;
+
+  return (
+    <Box className={css.MessageSendStatus}>
+      <Text size="T200" style={{ color: statusColor }}>
+        {statusText}
+      </Text>
+      {status === 'not_sent' && (
+        <Button
+          size="300"
+          variant="Critical"
+          fill="None"
+          radii="Pill"
+          disabled={retryState.status === AsyncStatus.Loading}
+          onClick={() => {
+            retrySend().catch(() => undefined);
+          }}
+          before={
+            retryState.status === AsyncStatus.Loading ? (
+              <Spinner fill="Solid" variant="Critical" size="100" />
+            ) : undefined
+          }
+        >
+          <Text size="B300">
+            {retryState.status === AsyncStatus.Loading ? '重试中...' : '重试'}
+          </Text>
+        </Button>
+      )}
+    </Box>
+  );
+}
+
 export const Message = as<'div', MessageProps>(
   (
     {
@@ -1461,6 +1557,7 @@ export const Message = as<'div', MessageProps>(
           children
         )}
         {reactions}
+        <MessageSendStatus room={room} mEvent={mEvent} />
         {!hideReadReceipts && readReceiptUserIds && readReceiptUserIds.length > 0 && (
           <MessageInlineReadReceipts
             room={room}
