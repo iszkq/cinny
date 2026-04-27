@@ -1,5 +1,5 @@
 import { useAtomValue, useSetAtom } from 'jotai';
-import React, { ReactNode, useCallback, useEffect, useRef } from 'react';
+import React, { ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ClientEvent,
@@ -13,7 +13,7 @@ import { roomToUnreadAtom, unreadEqual, unreadInfoToUnread } from '../../state/r
 import NotificationSound from '../../../../public/sound/notification.ogg';
 import InviteSound from '../../../../public/sound/invite.ogg';
 import { APP_LOGO_URL } from '../../constants/branding';
-import { notificationPermission, setFavicon } from '../../utils/dom';
+import { loadImageElement, notificationPermission, setFavicon } from '../../utils/dom';
 import { useSetting } from '../../state/hooks/settings';
 import { settingsAtom } from '../../state/settings';
 import { allInvitesAtom } from '../../state/room-list/inviteList';
@@ -48,6 +48,36 @@ const HEALTHY_SYNC_STATES = new Set<SyncState>([
   SyncState.Syncing,
   SyncState.Catchup,
 ]);
+
+const createFaviconUrl = async (logoUrl: string, badgeColor?: string): Promise<string> => {
+  const img = await loadImageElement(logoUrl);
+  const size = 32;
+  const badgeRadius = 6;
+  const badgeCenter = size - badgeRadius - 2;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return logoUrl;
+
+  ctx.clearRect(0, 0, size, size);
+  ctx.drawImage(img, 0, 0, size, size);
+
+  if (badgeColor) {
+    ctx.beginPath();
+    ctx.arc(badgeCenter, badgeCenter, badgeRadius + 1.5, 0, Math.PI * 2);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(badgeCenter, badgeCenter, badgeRadius, 0, Math.PI * 2);
+    ctx.fillStyle = badgeColor;
+    ctx.fill();
+  }
+
+  return canvas.toDataURL('image/png');
+};
 
 const playAudio = (audioElement: HTMLAudioElement | null) => {
   if (!audioElement) return;
@@ -335,6 +365,30 @@ function ImagePackMediaWarmFeature() {
 
 function FaviconUpdater() {
   const roomToUnread = useAtomValue(roomToUnreadAtom);
+  const [faviconUrls, setFaviconUrls] = useState({
+    normal: APP_LOGO_URL,
+    unread: APP_LOGO_URL,
+    highlight: APP_LOGO_URL,
+  });
+
+  useEffect(() => {
+    let mounted = true;
+
+    Promise.all([
+      createFaviconUrl(APP_LOGO_URL),
+      createFaviconUrl(APP_LOGO_URL, '#989898'),
+      createFaviconUrl(APP_LOGO_URL, '#45B83B'),
+    ])
+      .then(([normal, unread, highlight]) => {
+        if (!mounted) return;
+        setFaviconUrls({ normal, unread, highlight });
+      })
+      .catch(() => undefined);
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     let notification = false;
@@ -348,12 +402,16 @@ function FaviconUpdater() {
       }
     });
 
-    if (notification || highlight) {
-      setFavicon(APP_LOGO_URL);
+    if (highlight) {
+      setFavicon(faviconUrls.highlight);
       return;
     }
-    setFavicon(APP_LOGO_URL);
-  }, [roomToUnread]);
+    if (notification) {
+      setFavicon(faviconUrls.unread);
+      return;
+    }
+    setFavicon(faviconUrls.normal);
+  }, [roomToUnread, faviconUrls]);
 
   return null;
 }
