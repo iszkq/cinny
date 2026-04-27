@@ -1,6 +1,7 @@
 import { Box, Text } from 'folds';
 import React, { ReactNode } from 'react';
 import classNames from 'classnames';
+import { APP_DISPLAY_NAME, APP_TAGLINE } from '../../constants/branding';
 import * as patternsCSS from '../../styles/Patterns.css';
 import * as css from './SplashScreen.css';
 
@@ -20,9 +21,14 @@ export function SplashScreen({ children }: SplashScreenProps) {
         alignItems="Center"
         justifyContent="Center"
       >
-        <Text size="H2" align="Center">
-          Cinny
-        </Text>
+        <Box direction="Column" gap="50" alignItems="Center">
+          <Text size="H2" align="Center">
+            {APP_DISPLAY_NAME}
+          </Text>
+          <Text size="T200" align="Center" priority="300">
+            {APP_TAGLINE}
+          </Text>
+        </Box>
       </Box>
     </Box>
   );
