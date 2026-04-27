@@ -29,7 +29,7 @@ export function General({ requestClose }: GeneralProps) {
         <Box grow="Yes" gap="200">
           <Box grow="Yes" alignItems="Center" gap="200">
             <Text size="H3" truncate>
-              General
+              常规
             </Text>
           </Box>
           <Box shrink="No">
@@ -45,17 +45,17 @@ export function General({ requestClose }: GeneralProps) {
             <Box direction="Column" gap="700">
               <RoomProfile permissions={permissions} />
               <Box direction="Column" gap="100">
-                <Text size="L400">Options</Text>
+                <Text size="L400">选项</Text>
                 <RoomJoinRules permissions={permissions} />
                 <RoomPublish permissions={permissions} />
               </Box>
               <Box direction="Column" gap="100">
-                <Text size="L400">Addresses</Text>
+                <Text size="L400">地址</Text>
                 <RoomPublishedAddresses permissions={permissions} />
                 <RoomLocalAddresses permissions={permissions} />
               </Box>
               <Box direction="Column" gap="100">
-                <Text size="L400">Advanced Options</Text>
+                <Text size="L400">高级选项</Text>
                 <RoomUpgrade permissions={permissions} requestClose={requestClose} />
               </Box>
             </Box>
