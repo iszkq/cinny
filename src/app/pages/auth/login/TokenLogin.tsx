@@ -12,6 +12,7 @@ import {
 } from 'folds';
 import React, { useCallback, useEffect } from 'react';
 import { MatrixError } from 'matrix-js-sdk';
+import { APP_WEB_DEVICE_NAME } from '../../../constants/branding';
 import { useAutoDiscoveryInfo } from '../../../hooks/useAutoDiscoveryInfo';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { CustomLoginResponse, LoginError, login, useLoginComplete } from './loginUtil';
@@ -57,7 +58,7 @@ export function TokenLogin({ token }: TokenLoginProps) {
     startLogin(baseUrl, {
       type: 'm.login.token',
       token,
-      initial_device_display_name: 'Cinny Web',
+      initial_device_display_name: APP_WEB_DEVICE_NAME,
     });
   }, [baseUrl, token, startLogin]);
 
