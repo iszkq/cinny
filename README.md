@@ -72,12 +72,6 @@ npm run lint
 - 服务端和探索页相关配置可在 `config.json` 中调整。
 - 子目录部署可结合 `build.config.ts` 进一步配置。
 
-## 联系与源码
-
-- 当前源码仓库：[https://github.com/iszkq/cinny](https://github.com/iszkq/cinny)
-- 作者 Matrix 联系方式：`@iszkq5:mtx01.cc`
-
-![作者联系二维码](./public/res/author-contact-qr.png)
 
 ## 说明
 
