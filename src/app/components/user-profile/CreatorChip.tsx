@@ -70,7 +70,7 @@ export function CreatorChip() {
                   close();
                 }}
               >
-                <Text size="B300">Manage Powers</Text>
+                <Text size="B300">管理权限</Text>
               </MenuItem>
             </div>
           </Menu>

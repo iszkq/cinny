@@ -27,7 +27,7 @@ export function UserKickAlert({ reason, kickedBy, ts }: UserKickAlertProps) {
       <SettingTile>
         <Box direction="Column" gap="200">
           <Box gap="200" justifyContent="SpaceBetween">
-            <Text size="L400">Kicked User</Text>
+            <Text size="L400">已被移出</Text>
             {time && date && (
               <Text size="T200">
                 {date} {time}
@@ -37,16 +37,16 @@ export function UserKickAlert({ reason, kickedBy, ts }: UserKickAlertProps) {
           <Box direction="Column">
             {kickedBy && (
               <Text size="T200">
-                Kicked by: <b>{kickedBy}</b>
+                操作人：<b>{kickedBy}</b>
               </Text>
             )}
             <Text size="T200">
               {reason ? (
                 <>
-                  Reason: <b>{reason}</b>
+                  原因：<b>{reason}</b>
                 </>
               ) : (
-                <i>No Reason Provided.</i>
+                <i>未提供原因。</i>
               )}
             </Text>
           </Box>
@@ -85,7 +85,7 @@ export function UserBanAlert({ userId, reason, canUnban, bannedBy, ts }: UserBan
       <SettingTile>
         <Box direction="Column" gap="200">
           <Box gap="200" justifyContent="SpaceBetween">
-            <Text size="L400">Banned User</Text>
+            <Text size="L400">已被封禁</Text>
             {time && date && (
               <Text size="T200">
                 {date} {time}
@@ -95,16 +95,16 @@ export function UserBanAlert({ userId, reason, canUnban, bannedBy, ts }: UserBan
           <Box direction="Column">
             {bannedBy && (
               <Text size="T200">
-                Banned by: <b>{bannedBy}</b>
+                封禁人：<b>{bannedBy}</b>
               </Text>
             )}
             <Text size="T200">
               {reason ? (
                 <>
-                  Reason: <b>{reason}</b>
+                  原因：<b>{reason}</b>
                 </>
               ) : (
-                <i>No Reason Provided.</i>
+                <i>未提供原因。</i>
               )}
             </Text>
           </Box>
@@ -122,7 +122,7 @@ export function UserBanAlert({ userId, reason, canUnban, bannedBy, ts }: UserBan
               before={banning && <Spinner size="100" variant="Critical" fill="Solid" />}
               disabled={banning}
             >
-              <Text size="B300">Unban</Text>
+              <Text size="B300">解除封禁</Text>
             </Button>
           )}
         </Box>
@@ -160,7 +160,7 @@ export function UserInviteAlert({ userId, reason, canKick, invitedBy, ts }: User
       <SettingTile>
         <Box direction="Column" gap="200">
           <Box gap="200" justifyContent="SpaceBetween">
-            <Text size="L400">Invited User</Text>
+            <Text size="L400">已邀请用户</Text>
             {time && date && (
               <Text size="T200">
                 {date} {time}
@@ -170,16 +170,16 @@ export function UserInviteAlert({ userId, reason, canKick, invitedBy, ts }: User
           <Box direction="Column">
             {invitedBy && (
               <Text size="T200">
-                Invited by: <b>{invitedBy}</b>
+                邀请人：<b>{invitedBy}</b>
               </Text>
             )}
             <Text size="T200">
               {reason ? (
                 <>
-                  Reason: <b>{reason}</b>
+                  原因：<b>{reason}</b>
                 </>
               ) : (
-                <i>No Reason Provided.</i>
+                <i>未提供原因。</i>
               )}
             </Text>
           </Box>
@@ -199,7 +199,7 @@ export function UserInviteAlert({ userId, reason, canKick, invitedBy, ts }: User
               before={kicking && <Spinner size="100" variant="Success" fill="Soft" />}
               disabled={kicking}
             >
-              <Text size="B300">Cancel Invite</Text>
+              <Text size="B300">撤销邀请</Text>
             </Button>
           )}
         </Box>
@@ -256,10 +256,10 @@ export function UserModeration({ userId, canKick, canBan, canInvite }: UserModer
     <Box direction="Column" gap="400">
       <Box direction="Column" gap="200">
         <Box grow="Yes" direction="Column" gap="100">
-          <Text size="L400">Moderation</Text>
+          <Text size="L400">管理操作</Text>
           <Input
             ref={reasonInputRef}
-            placeholder="Reason"
+            placeholder="原因"
             size="300"
             variant="Background"
             radii="300"
@@ -299,7 +299,7 @@ export function UserModeration({ userId, canKick, canBan, canInvite }: UserModer
               onClick={invite}
               disabled={disabled}
             >
-              <Text size="B300">Invite</Text>
+              <Text size="B300">邀请</Text>
             </Button>
           )}
           {canKick && (
@@ -319,7 +319,7 @@ export function UserModeration({ userId, canKick, canBan, canInvite }: UserModer
               onClick={kick}
               disabled={disabled}
             >
-              <Text size="B300">Kick</Text>
+              <Text size="B300">移出</Text>
             </Button>
           )}
           {canBan && (
@@ -339,7 +339,7 @@ export function UserModeration({ userId, canKick, canBan, canInvite }: UserModer
               onClick={ban}
               disabled={disabled}
             >
-              <Text size="B300">Ban</Text>
+              <Text size="B300">封禁</Text>
             </Button>
           )}
         </Box>

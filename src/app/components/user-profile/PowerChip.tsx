@@ -68,7 +68,7 @@ function SelfDemoteAlert({ power, onCancel, onChange }: SelfDemoteAlertProps) {
               size="500"
             >
               <Box grow="Yes">
-                <Text size="H4">Self Demotion</Text>
+                <Text size="H4">降低自己的权限</Text>
               </Box>
               <IconButton size="300" onClick={onCancel} radii="300">
                 <Icon src={Icons.Cross} />
@@ -77,13 +77,12 @@ function SelfDemoteAlert({ power, onCancel, onChange }: SelfDemoteAlertProps) {
             <Box style={{ padding: config.space.S400, paddingTop: 0 }} direction="Column" gap="500">
               <Box direction="Column" gap="200">
                 <Text priority="400">
-                  You are about to demote yourself! You will not be able to regain this power
-                  yourself. Are you sure?
+                  你即将降低自己的权限，之后将无法自行恢复。确定继续吗？
                 </Text>
               </Box>
               <Box direction="Column" gap="200">
                 <Button type="submit" variant="Warning" onClick={() => onChange(power)}>
-                  <Text size="B400">Demote</Text>
+                  <Text size="B400">确认降低</Text>
                 </Button>
               </Box>
             </Box>
@@ -118,7 +117,7 @@ function SharedPowerAlert({ power, onCancel, onChange }: SharedPowerAlertProps) 
               size="500"
             >
               <Box grow="Yes">
-                <Text size="H4">Shared Power</Text>
+                <Text size="H4">共享同级权限</Text>
               </Box>
               <IconButton size="300" onClick={onCancel} radii="300">
                 <Icon src={Icons.Cross} />
@@ -127,13 +126,12 @@ function SharedPowerAlert({ power, onCancel, onChange }: SharedPowerAlertProps) 
             <Box style={{ padding: config.space.S400, paddingTop: 0 }} direction="Column" gap="500">
               <Box direction="Column" gap="200">
                 <Text priority="400">
-                  You are promoting the user to have the same power as yourself! You will not be
-                  able to change their power afterward. Are you sure?
+                  你即将把这位用户提升到与你相同的权限等级，之后你将无法再更改对方的权限。确定继续吗？
                 </Text>
               </Box>
               <Box direction="Column" gap="200">
                 <Button type="submit" variant="Warning" onClick={() => onChange(power)}>
-                  <Text size="B400">Promote</Text>
+                  <Text size="B400">确认提升</Text>
                 </Button>
               </Box>
             </Box>
@@ -309,7 +307,7 @@ export function PowerChip({ userId }: { userId: string }) {
                     close();
                   }}
                 >
-                  <Text size="B300">Manage Powers</Text>
+                  <Text size="B300">管理权限</Text>
                 </MenuItem>
               </div>
             </Menu>

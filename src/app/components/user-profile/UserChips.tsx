@@ -183,7 +183,7 @@ export function ShareChip({ userId }: { userId: string }) {
                   close();
                 }}
               >
-                <Text size="B300">Copy User ID</Text>
+                <Text size="B300">复制用户 ID</Text>
               </MenuItem>
               <MenuItem
                 variant="Surface"
@@ -196,7 +196,7 @@ export function ShareChip({ userId }: { userId: string }) {
                   close();
                 }}
               >
-                <Text size="B300">Copy User Link</Text>
+                <Text size="B300">复制用户链接</Text>
               </MenuItem>
             </div>
           </Menu>
@@ -217,7 +217,7 @@ export function ShareChip({ userId }: { userId: string }) {
         aria-pressed={!!cords}
       >
         <Text size="B300" truncate>
-          Share
+          分享
         </Text>
       </Chip>
     </PopOut>
@@ -370,7 +370,7 @@ export function MutualRoomsChip({ userId }: { userId: string }) {
                     {mutual.spaces.length > 0 && (
                       <Box direction="Column" gap="100">
                         <Text style={{ paddingLeft: config.space.S100 }} size="L400">
-                          Spaces
+                          空间
                         </Text>
                         {mutual.spaces.map(renderItem)}
                       </Box>
@@ -378,7 +378,7 @@ export function MutualRoomsChip({ userId }: { userId: string }) {
                     {mutual.rooms.length > 0 && (
                       <Box direction="Column" gap="100">
                         <Text style={{ paddingLeft: config.space.S100 }} size="L400">
-                          Rooms
+                          房间
                         </Text>
                         {mutual.rooms.map(renderItem)}
                       </Box>
@@ -386,7 +386,7 @@ export function MutualRoomsChip({ userId }: { userId: string }) {
                     {mutual.directs.length > 0 && (
                       <Box direction="Column" gap="100">
                         <Text style={{ paddingLeft: config.space.S100 }} size="L400">
-                          Direct Messages
+                          私聊
                         </Text>
                         {mutual.directs.map(renderItem)}
                       </Box>
@@ -411,8 +411,8 @@ export function MutualRoomsChip({ userId }: { userId: string }) {
       >
         <Text size="B300">
           {mutualRoomsState.status === AsyncStatus.Success &&
-            `${mutualRoomsState.data.length} Mutual Rooms`}
-          {mutualRoomsState.status === AsyncStatus.Loading && 'Mutual Rooms'}
+            `${mutualRoomsState.data.length} 个共同房间`}
+          {mutualRoomsState.status === AsyncStatus.Loading && '共同房间'}
         </Text>
       </Chip>
     </PopOut>
@@ -425,10 +425,10 @@ export function IgnoredUserAlert() {
       <SettingTile>
         <Box direction="Column" gap="200">
           <Box gap="200" justifyContent="SpaceBetween">
-            <Text size="L400">Blocked User</Text>
+            <Text size="L400">已屏蔽用户</Text>
           </Box>
           <Box direction="Column">
-            <Text size="T200">You do not receive any messages or invites from this user.</Text>
+            <Text size="T200">你将不会收到此用户的任何消息或邀请。</Text>
           </Box>
         </Box>
       </SettingTile>
@@ -495,7 +495,7 @@ export function OptionsChip({ userId }: { userId: string }) {
                 }
                 disabled={ignoring}
               >
-                <Text size="B300">{ignored ? 'Unblock User' : 'Block User'}</Text>
+                <Text size="B300">{ignored ? '取消屏蔽用户' : '屏蔽用户'}</Text>
               </MenuItem>
             </div>
           </Menu>
