@@ -3,7 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
     <title>星火</title>
     <meta name="name" content="星火" />
     <meta name="author" content="Ajay Bura" />
@@ -88,6 +91,23 @@
   <body id="appBody">
     <script>
       window.global ||= window;
+      (() => {
+        const applyViewportSize = () => {
+          const viewport = window.visualViewport;
+          const appHeight = Math.round(viewport?.height ?? window.innerHeight);
+          const appWidth = Math.round(viewport?.width ?? window.innerWidth);
+
+          document.documentElement.style.setProperty('--app-height', `${appHeight}px`);
+          document.documentElement.style.setProperty('--app-width', `${appWidth}px`);
+        };
+
+        applyViewportSize();
+        window.addEventListener('resize', applyViewportSize, { passive: true });
+        window.addEventListener('orientationchange', applyViewportSize, { passive: true });
+        window.addEventListener('pageshow', applyViewportSize, { passive: true });
+        window.visualViewport?.addEventListener('resize', applyViewportSize, { passive: true });
+        window.visualViewport?.addEventListener('scroll', applyViewportSize, { passive: true });
+      })();
     </script>
     <div id="root"></div>
     <div id="portalContainer"></div>
