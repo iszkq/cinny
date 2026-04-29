@@ -19,6 +19,34 @@ export const PageNav = recipe({
 });
 export type PageNavVariants = RecipeVariants<typeof PageNav>;
 
+export const PageNavResizeHandle = style({
+  position: 'absolute',
+  top: 0,
+  right: toRem(-4),
+  width: toRem(8),
+  height: '100%',
+  cursor: 'col-resize',
+  touchAction: 'none',
+  userSelect: 'none',
+  zIndex: 1,
+});
+
+export const PageNavResizeHandleLine = style({
+  position: 'absolute',
+  top: 0,
+  right: toRem(3),
+  width: 1,
+  height: '100%',
+  backgroundColor: color.Background.ContainerLine,
+  opacity: 0,
+  transition: 'opacity 120ms ease',
+  selectors: {
+    [`${PageNavResizeHandle}:hover &, ${PageNavResizeHandle}[data-active=true] &`]: {
+      opacity: 1,
+    },
+  },
+});
+
 export const PageNavHeader = recipe({
   base: {
     padding: `0 ${config.space.S200} 0 ${config.space.S300}`,

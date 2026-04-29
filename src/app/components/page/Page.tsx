@@ -1,11 +1,18 @@
-import React, { ComponentProps, MutableRefObject, ReactNode } from 'react';
+import React, {
+  ComponentProps,
+  MutableRefObject,
+  PointerEventHandler,
+  ReactNode,
+  useRef,
+  useState,
+} from 'react';
 import { Box, Header, Line, Scroll, Text, as } from 'folds';
-import { useAtomValue } from 'jotai';
+import { useAtom } from 'jotai';
 import classNames from 'classnames';
 import { ContainerColor } from '../../styles/ContainerColor.css';
 import * as css from './style.css';
 import { ScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
-import { desktopPageNavCollapsedAtom } from '../../state/desktopPageNav';
+import { desktopPageNavWidthAtom } from '../../state/desktopPageNav';
 
 type PageRootProps = {
   nav: ReactNode;
@@ -14,10 +21,6 @@ type PageRootProps = {
 
 export function PageRoot({ nav, children }: PageRootProps) {
   const screenSize = useScreenSizeContext();
-  const desktopPageNavCollapsed = useAtomValue(desktopPageNavCollapsedAtom);
-  const showPageNav = !(
-    screenSize === ScreenSize.Desktop && desktopPageNavCollapsed
-  );
 
   return (
     <Box
@@ -25,8 +28,8 @@ export function PageRoot({ nav, children }: PageRootProps) {
       className={ContainerColor({ variant: 'Background' })}
       style={{ position: 'relative', minWidth: 0 }}
     >
-      {showPageNav && nav}
-      {showPageNav && screenSize === ScreenSize.Desktop && (
+      {nav}
+      {nav && screenSize === ScreenSize.Desktop && (
         <Line variant="Background" size="300" direction="Vertical" />
       )}
       {children}
@@ -36,20 +39,104 @@ export function PageRoot({ nav, children }: PageRootProps) {
 
 type ClientDrawerLayoutProps = {
   children: ReactNode;
+  resizable?: boolean;
 };
-export function PageNav({ size, children }: ClientDrawerLayoutProps & css.PageNavVariants) {
+
+const DESKTOP_PAGE_NAV_MIN_WIDTH = 208;
+const DESKTOP_PAGE_NAV_MAX_WIDTH = 420;
+
+const clampDesktopPageNavWidth = (width: number): number =>
+  Math.min(DESKTOP_PAGE_NAV_MAX_WIDTH, Math.max(DESKTOP_PAGE_NAV_MIN_WIDTH, width));
+
+export function PageNav({
+  size,
+  children,
+  resizable,
+}: ClientDrawerLayoutProps & css.PageNavVariants) {
   const screenSize = useScreenSizeContext();
   const isMobile = screenSize === ScreenSize.Mobile;
+  const isDesktop = screenSize === ScreenSize.Desktop;
+  const [desktopPageNavWidth, setDesktopPageNavWidth] = useAtom(desktopPageNavWidthAtom);
+  const [resizing, setResizing] = useState(false);
+  const resizeRef = useRef<
+    { pointerId: number; startX: number; startWidth: number } | undefined
+  >(undefined);
+
+  const handleResizePointerDown: PointerEventHandler<HTMLDivElement> = (evt) => {
+    if (!resizable || !isDesktop) return;
+
+    evt.preventDefault();
+    evt.stopPropagation();
+    const startWidth = clampDesktopPageNavWidth(desktopPageNavWidth);
+    resizeRef.current = {
+      pointerId: evt.pointerId,
+      startX: evt.clientX,
+      startWidth,
+    };
+    setDesktopPageNavWidth(startWidth);
+    setResizing(true);
+    evt.currentTarget.setPointerCapture?.(evt.pointerId);
+  };
+
+  const handleResizePointerMove: PointerEventHandler<HTMLDivElement> = (evt) => {
+    const state = resizeRef.current;
+    if (!state || evt.pointerId !== state.pointerId) return;
+
+    setDesktopPageNavWidth(
+      clampDesktopPageNavWidth(state.startWidth + evt.clientX - state.startX)
+    );
+  };
+
+  const handleResizePointerEnd: PointerEventHandler<HTMLDivElement> = (evt) => {
+    const state = resizeRef.current;
+    if (!state || evt.pointerId !== state.pointerId) return;
+
+    resizeRef.current = undefined;
+    setResizing(false);
+    evt.currentTarget.releasePointerCapture?.(evt.pointerId);
+  };
+
+  const desktopWidth =
+    resizable && isDesktop ? clampDesktopPageNavWidth(desktopPageNavWidth) : undefined;
 
   return (
     <Box
       grow={isMobile ? 'Yes' : undefined}
       className={css.PageNav({ size })}
       shrink={isMobile ? 'Yes' : 'No'}
+      style={{
+        position: 'relative',
+        ...(desktopWidth
+          ? {
+              flexBasis: `${desktopWidth}px`,
+              width: `${desktopWidth}px`,
+              minWidth: `${desktopWidth}px`,
+              maxWidth: `${desktopWidth}px`,
+            }
+          : undefined),
+      }}
     >
       <Box grow="Yes" direction="Column">
         {children}
       </Box>
+      {resizable && isDesktop && (
+        <div
+          className={css.PageNavResizeHandle}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize section list"
+          aria-valuemin={DESKTOP_PAGE_NAV_MIN_WIDTH}
+          aria-valuemax={DESKTOP_PAGE_NAV_MAX_WIDTH}
+          aria-valuenow={desktopWidth}
+          data-active={resizing}
+          onPointerDown={handleResizePointerDown}
+          onPointerMove={handleResizePointerMove}
+          onPointerUp={handleResizePointerEnd}
+          onPointerCancel={handleResizePointerEnd}
+        >
+          <div className={css.PageNavResizeHandleLine} />
+        </div>
+      )}
     </Box>
   );
 }
