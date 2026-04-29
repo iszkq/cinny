@@ -409,42 +409,79 @@ export const ImageViewer = as<'div', ImageViewerProps>(
         ref={ref}
       >
         <Header className={css.ImageViewerHeader} size="400">
-          <Box grow="Yes" alignItems="Center" gap="200" style={{ minWidth: 0 }}>
-            <IconButton
-              size="300"
-              radii="300"
-              onClick={requestClose}
-              aria-label={'\u5173\u95ed\u9884\u89c8'}
-            >
-              <Icon size="50" src={mobile ? Icons.Cross : Icons.ArrowLeft} />
-            </IconButton>
-            <Text size="T300" truncate title={alt}>
-              {alt}
-            </Text>
-          </Box>
+          {mobile ? (
+            <Box direction="Column" gap="200" style={{ width: '100%', minWidth: 0 }}>
+              <Box alignItems="Center" gap="200" style={{ width: '100%', minWidth: 0 }}>
+                <IconButton
+                  size="300"
+                  radii="300"
+                  onClick={requestClose}
+                  aria-label={'\u5173\u95ed\u9884\u89c8'}
+                >
+                  <Icon size="50" src={Icons.Cross} />
+                </IconButton>
+                <Text size="T300" truncate title={alt}>
+                  {alt}
+                </Text>
+              </Box>
 
-          <Box
-            shrink="No"
-            alignItems="Center"
-            gap="200"
-            style={{ flexWrap: 'wrap', justifyContent: 'flex-end' }}
-          >
-            {mobile ? (
-              <>
-                {hasThumbnailRail && items && (
-                  <Text size="T200" priority="300">
-                    {`${viewerIndex + 1} / ${items.length}`}
-                  </Text>
-                )}
-                <Chip variant="SurfaceVariant" radii="Pill" onClick={rotateLeft}>
-                  <Text size="B300">{'\u5de6\u8f6c'}</Text>
-                </Chip>
-                <Chip variant="SurfaceVariant" radii="Pill" onClick={rotateRight}>
-                  <Text size="B300">{'\u53f3\u8f6c'}</Text>
-                </Chip>
-              </>
-            ) : (
-              <>
+              <Box
+                alignItems="Center"
+                gap="200"
+                justifyContent="SpaceBetween"
+                style={{ width: '100%', minWidth: 0, flexWrap: 'wrap' }}
+              >
+                <Box alignItems="Center" gap="200" style={{ minWidth: 0 }}>
+                  {hasThumbnailRail && items && (
+                    <Text size="T200" priority="300">
+                      {`${viewerIndex + 1} / ${items.length}`}
+                    </Text>
+                  )}
+                  <Chip
+                    variant={displayRotation !== 0 ? 'Success' : 'SurfaceVariant'}
+                    radii="Pill"
+                    onClick={() => setRotation(0)}
+                  >
+                    <Text size="B300">{`${displayRotation}\u00b0`}</Text>
+                  </Chip>
+                </Box>
+
+                <Box
+                  alignItems="Center"
+                  gap="200"
+                  style={{ flexWrap: 'wrap', justifyContent: 'flex-end' }}
+                >
+                  <Chip variant="SurfaceVariant" radii="Pill" onClick={rotateLeft}>
+                    <Text size="B300">{'\u5de6\u8f6c'}</Text>
+                  </Chip>
+                  <Chip variant="SurfaceVariant" radii="Pill" onClick={rotateRight}>
+                    <Text size="B300">{'\u53f3\u8f6c'}</Text>
+                  </Chip>
+                </Box>
+              </Box>
+            </Box>
+          ) : (
+            <>
+              <Box grow="Yes" alignItems="Center" gap="200" style={{ minWidth: 0 }}>
+                <IconButton
+                  size="300"
+                  radii="300"
+                  onClick={requestClose}
+                  aria-label={'\u5173\u95ed\u9884\u89c8'}
+                >
+                  <Icon size="50" src={Icons.ArrowLeft} />
+                </IconButton>
+                <Text size="T300" truncate title={alt}>
+                  {alt}
+                </Text>
+              </Box>
+
+              <Box
+                shrink="No"
+                alignItems="Center"
+                gap="200"
+                style={{ flexWrap: 'wrap', justifyContent: 'flex-end' }}
+              >
                 <IconButton
                   variant={zoom < 1 ? 'Success' : 'SurfaceVariant'}
                   outlined={zoom < 1}
@@ -505,9 +542,9 @@ export const ImageViewer = as<'div', ImageViewerProps>(
                 >
                   <Text size="B300">{'\u4e0b\u8f7d'}</Text>
                 </Chip>
-              </>
-            )}
-          </Box>
+              </Box>
+            </>
+          )}
         </Header>
 
         <Box grow="Yes" className={css.ImageViewerContent} direction="Column" gap="200">
