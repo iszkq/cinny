@@ -55,6 +55,8 @@ html {
 body {
   margin: 0;
   padding: 0;
+  position: fixed;
+  inset: 0;
   width: 100%;
   height: var(--app-height, 100dvh);
   min-height: var(--app-height, 100dvh);
@@ -75,9 +77,11 @@ body {
   min-height: var(--app-height, 100dvh);
 }
 #root {
+  position: relative;
   padding-top: var(--safe-area-top);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 *,
