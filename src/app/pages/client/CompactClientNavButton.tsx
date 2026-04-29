@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import FocusTrap from 'focus-trap-react';
 import {
   Box,
@@ -17,6 +17,24 @@ import { SidebarNav } from './SidebarNav';
 export function CompactClientNavButton() {
   const screenSize = useScreenSizeContext();
   const [open, setOpen] = useState(false);
+  const closeDrawer = useCallback(() => setOpen(false), []);
+
+  const handleBackdropPointerDown = useCallback(
+    (evt: React.PointerEvent<HTMLDivElement>) => {
+      evt.preventDefault();
+      evt.stopPropagation();
+    },
+    []
+  );
+
+  const handleBackdropClick = useCallback(
+    (evt: React.MouseEvent<HTMLDivElement>) => {
+      evt.preventDefault();
+      evt.stopPropagation();
+      closeDrawer();
+    },
+    [closeDrawer]
+  );
 
   if (screenSize === ScreenSize.Desktop) {
     return null;
@@ -32,12 +50,20 @@ export function CompactClientNavButton() {
       >
         <Icon src={Icons.UnorderList} />
       </IconButton>
-      <Overlay open={open} backdrop={<OverlayBackdrop />}>
+      <Overlay
+        open={open}
+        backdrop={
+          <OverlayBackdrop
+            onPointerDown={handleBackdropPointerDown}
+            onClick={handleBackdropClick}
+          />
+        }
+      >
         <FocusTrap
           focusTrapOptions={{
             initialFocus: false,
-            onDeactivate: () => setOpen(false),
-            clickOutsideDeactivates: true,
+            onDeactivate: closeDrawer,
+            clickOutsideDeactivates: false,
             escapeDeactivates: stopPropagation,
           }}
         >
@@ -49,8 +75,8 @@ export function CompactClientNavButton() {
               left: 0,
               width: 'fit-content',
               maxWidth: 'calc(100vw - 24px)',
-              height: '100dvh',
-              maxHeight: '100dvh',
+              height: 'var(--app-height, 100dvh)',
+              maxHeight: 'var(--app-height, 100dvh)',
               display: 'flex',
               padding: 0,
               border: 'none',
@@ -59,6 +85,8 @@ export function CompactClientNavButton() {
               boxShadow: 'none',
               borderRadius: `0 ${config.radii.R500} ${config.radii.R500} 0`,
             }}
+            onPointerDown={(evt: React.PointerEvent) => evt.stopPropagation()}
+            onClick={(evt: React.MouseEvent) => evt.stopPropagation()}
           >
             <Box
               direction="Column"
