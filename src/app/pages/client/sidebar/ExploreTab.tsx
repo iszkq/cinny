@@ -1,7 +1,7 @@
 import React from 'react';
 import { Icon, Icons } from 'folds';
 import { useNavigate } from 'react-router-dom';
-import { useAtomValue } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { SidebarAvatar, SidebarItem, SidebarItemTooltip } from '../../../components/sidebar';
 import { useExploreSelected } from '../../../hooks/router/useExploreSelected';
 import {
@@ -15,12 +15,14 @@ import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { getMxIdServer } from '../../../utils/matrix';
 import { isCompactScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
 import { useNavToActivePathAtom } from '../../../state/hooks/navToActivePath';
+import { desktopPageNavCollapsedAtom } from '../../../state/desktopPageNav';
 
 export function ExploreTab() {
   const mx = useMatrixClient();
   const screenSize = useScreenSizeContext();
   const clientConfig = useClientConfig();
   const navigate = useNavigate();
+  const setDesktopPageNavCollapsed = useSetAtom(desktopPageNavCollapsedAtom);
   const navToActivePath = useAtomValue(useNavToActivePathAtom());
 
   const exploreSelected = useExploreSelected();
@@ -28,6 +30,11 @@ export function ExploreTab() {
   const handleExploreClick = () => {
     if (isCompactScreenSize(screenSize)) {
       navigate(getExplorePath());
+      return;
+    }
+
+    setDesktopPageNavCollapsed(false);
+    if (exploreSelected) {
       return;
     }
 

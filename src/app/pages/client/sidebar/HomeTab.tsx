@@ -1,7 +1,7 @@
 import React, { MouseEventHandler, forwardRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Box, Icon, Icons, Menu, MenuItem, PopOut, RectCords, Text, config, toRem } from 'folds';
-import { useAtomValue } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import FocusTrap from 'focus-trap-react';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { roomToUnreadAtom } from '../../../state/room/roomToUnread';
@@ -22,6 +22,7 @@ import { markAsRead } from '../../../utils/notifications';
 import { stopPropagation } from '../../../utils/keyboard';
 import { useSetting } from '../../../state/hooks/settings';
 import { settingsAtom } from '../../../state/settings';
+import { desktopPageNavCollapsedAtom } from '../../../state/desktopPageNav';
 
 type HomeMenuProps = {
   requestClose: () => void;
@@ -60,6 +61,7 @@ const HomeMenu = forwardRef<HTMLDivElement, HomeMenuProps>(({ requestClose }, re
 export function HomeTab() {
   const navigate = useNavigate();
   const screenSize = useScreenSizeContext();
+  const setDesktopPageNavCollapsed = useSetAtom(desktopPageNavCollapsedAtom);
   const navToActivePath = useAtomValue(useNavToActivePathAtom());
 
   const orphanRooms = useHomeRooms();
@@ -68,6 +70,13 @@ export function HomeTab() {
   const [menuAnchor, setMenuAnchor] = useState<RectCords>();
 
   const handleHomeClick = () => {
+    if (!isCompactScreenSize(screenSize)) {
+      setDesktopPageNavCollapsed(false);
+      if (homeSelected) {
+        return;
+      }
+    }
+
     const activePath = navToActivePath.get('home');
     if (activePath && !isCompactScreenSize(screenSize)) {
       navigate(joinPathComponent(activePath));

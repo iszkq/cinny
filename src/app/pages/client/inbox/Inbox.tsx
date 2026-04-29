@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Avatar, Box, Icon, IconButton, Icons, Text } from 'folds';
-import { useAtomValue } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { NavCategory, NavItem, NavItemContent, NavLink } from '../../../components/nav';
 import { getInboxInvitesPath, getInboxNotificationsPath } from '../../pathUtils';
 import {
@@ -13,6 +13,7 @@ import { useNavToActivePathMapper } from '../../../hooks/useNavToActivePathMappe
 import { PageNav, PageNavContent, PageNavHeader } from '../../../components/page';
 import { CompactClientNavButton } from '../CompactClientNavButton';
 import { ScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
+import { desktopPageNavCollapsedAtom } from '../../../state/desktopPageNav';
 
 function InvitesNavItem() {
   const invitesSelected = useInboxInvitesSelected();
@@ -48,26 +49,22 @@ function InvitesNavItem() {
 export function Inbox() {
   const screenSize = useScreenSizeContext();
   const desktop = screenSize === ScreenSize.Desktop;
+  const setDesktopPageNavCollapsed = useSetAtom(desktopPageNavCollapsedAtom);
   useNavToActivePathMapper('inbox');
   const notificationsSelected = useInboxNotificationsSelected();
-  const [collapsed, setCollapsed] = useState(false);
 
   return (
-    <PageNav
-      collapsed={desktop && collapsed}
-      onToggleCollapsed={() => setCollapsed((state) => !state)}
-      collapsedLabel="Show inbox sections"
-    >
+    <PageNav>
       <PageNavHeader>
         <Box grow="Yes" alignItems="Center" gap="300">
           <Box shrink="No">
             {desktop ? (
               <IconButton
-                aria-label="Hide inbox sections"
+                aria-label="Back to main sidebar"
                 variant="Background"
-                onClick={() => setCollapsed((state) => !state)}
+                onClick={() => setDesktopPageNavCollapsed(true)}
               >
-                <Icon src={Icons.UnorderList} size="200" />
+                <Icon src={Icons.ArrowLeft} size="200" />
               </IconButton>
             ) : (
               <CompactClientNavButton />

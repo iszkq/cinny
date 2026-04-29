@@ -2,7 +2,7 @@ import React, { MouseEventHandler, forwardRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Box, Icon, Icons, Menu, MenuItem, PopOut, RectCords, Text, config, toRem } from 'folds';
 import FocusTrap from 'focus-trap-react';
-import { useAtomValue } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { roomToUnreadAtom } from '../../../state/room/roomToUnread';
 import { getDirectPath, joinPathComponent } from '../../pathUtils';
@@ -22,6 +22,7 @@ import { markAsRead } from '../../../utils/notifications';
 import { stopPropagation } from '../../../utils/keyboard';
 import { settingsAtom } from '../../../state/settings';
 import { useSetting } from '../../../state/hooks/settings';
+import { desktopPageNavCollapsedAtom } from '../../../state/desktopPageNav';
 
 type DirectMenuProps = {
   requestClose: () => void;
@@ -60,6 +61,7 @@ const DirectMenu = forwardRef<HTMLDivElement, DirectMenuProps>(({ requestClose }
 export function DirectTab() {
   const navigate = useNavigate();
   const screenSize = useScreenSizeContext();
+  const setDesktopPageNavCollapsed = useSetAtom(desktopPageNavCollapsedAtom);
   const navToActivePath = useAtomValue(useNavToActivePathAtom());
 
   const directs = useDirectRooms();
@@ -69,6 +71,13 @@ export function DirectTab() {
   const directSelected = useDirectSelected();
 
   const handleDirectClick = () => {
+    if (!isCompactScreenSize(screenSize)) {
+      setDesktopPageNavCollapsed(false);
+      if (directSelected) {
+        return;
+      }
+    }
+
     const activePath = navToActivePath.get('direct');
     if (activePath && !isCompactScreenSize(screenSize)) {
       navigate(joinPathComponent(activePath));

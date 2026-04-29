@@ -24,7 +24,7 @@ import {
   config,
   toRem,
 } from 'folds';
-import { useAtom, useAtomValue } from 'jotai';
+import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { Room } from 'matrix-js-sdk';
 import {
   draggable,
@@ -93,6 +93,7 @@ import { useOpenSpaceSettings } from '../../../state/hooks/spaceSettings';
 import { useRoomCreators } from '../../../hooks/useRoomCreators';
 import { useRoomPermissions } from '../../../hooks/useRoomPermissions';
 import { InviteUserPrompt } from '../../../components/invite-user-prompt';
+import { desktopPageNavCollapsedAtom } from '../../../state/desktopPageNav';
 
 type SpaceMenuProps = {
   room: Room;
@@ -614,6 +615,7 @@ export function SpaceTabs({ scrollRef }: SpaceTabsProps) {
   const navigate = useNavigate();
   const mx = useMatrixClient();
   const screenSize = useScreenSizeContext();
+  const setDesktopPageNavCollapsed = useSetAtom(desktopPageNavCollapsedAtom);
   const roomToParents = useAtomValue(roomToParentsAtom);
   const orphanSpaces = useOrphanSpaces(mx, allRoomsAtom, roomToParents);
   const [sidebarItems, localEchoSidebarItem] = useSidebarItems(orphanSpaces);
@@ -764,6 +766,11 @@ export function SpaceTabs({ scrollRef }: SpaceTabsProps) {
     const spacePath = getSpacePath(getCanonicalAliasOrRoomId(mx, targetSpaceId));
     if (isCompactScreenSize(screenSize)) {
       navigate(spacePath);
+      return;
+    }
+
+    setDesktopPageNavCollapsed(false);
+    if (selectedSpaceId === targetSpaceId) {
       return;
     }
 

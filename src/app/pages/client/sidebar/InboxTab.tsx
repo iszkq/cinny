@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Icon, Icons } from 'folds';
-import { useAtomValue } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import {
   SidebarAvatar,
   SidebarItem,
@@ -19,10 +19,12 @@ import { useInboxSelected } from '../../../hooks/router/useInbox';
 import { UnreadBadge } from '../../../components/unread-badge';
 import { isCompactScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
 import { useNavToActivePathAtom } from '../../../state/hooks/navToActivePath';
+import { desktopPageNavCollapsedAtom } from '../../../state/desktopPageNav';
 
 export function InboxTab() {
   const screenSize = useScreenSizeContext();
   const navigate = useNavigate();
+  const setDesktopPageNavCollapsed = useSetAtom(desktopPageNavCollapsedAtom);
   const navToActivePath = useAtomValue(useNavToActivePathAtom());
   const inboxSelected = useInboxSelected();
   const allInvites = useAtomValue(allInvitesAtom);
@@ -31,6 +33,10 @@ export function InboxTab() {
   const handleInboxClick = () => {
     if (isCompactScreenSize(screenSize)) {
       navigate(getInboxPath());
+      return;
+    }
+    setDesktopPageNavCollapsed(false);
+    if (inboxSelected) {
       return;
     }
     const activePath = navToActivePath.get('inbox');

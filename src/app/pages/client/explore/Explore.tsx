@@ -1,6 +1,7 @@
 import React, { FormEventHandler, MouseEventHandler, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import FocusTrap from 'focus-trap-react';
+import { useSetAtom } from 'jotai';
 import {
   Avatar,
   Box,
@@ -64,6 +65,7 @@ import {
 } from './customSources';
 import { CompactClientNavButton } from '../CompactClientNavButton';
 import { ScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
+import { desktopPageNavCollapsedAtom } from '../../../state/desktopPageNav';
 
 const PROBE_TIMEOUT_MS = 2500;
 
@@ -598,6 +600,7 @@ export function Explore() {
   const mx = useMatrixClient();
   const screenSize = useScreenSizeContext();
   const desktop = screenSize === ScreenSize.Desktop;
+  const setDesktopPageNavCollapsed = useSetAtom(desktopPageNavCollapsedAtom);
   useNavToActivePathMapper('explore');
   const navigate = useNavigate();
   const userId = mx.getUserId();
@@ -649,7 +652,6 @@ export function Explore() {
   const selectedNavSourceId = useExploreNavSourceId();
 
   const [deletingSourceId, setDeletingSourceId] = useState<string>();
-  const [collapsed, setCollapsed] = useState(false);
   const [removeState, removeSource] = useAsyncCallback(async (sourceId: string) => {
     await removeExploreCustomSource(mx, sourceId);
     return sourceId;
@@ -715,21 +717,17 @@ export function Explore() {
   };
 
   return (
-    <PageNav
-      collapsed={desktop && collapsed}
-      onToggleCollapsed={() => setCollapsed((state) => !state)}
-      collapsedLabel="Show explore sections"
-    >
+    <PageNav>
       <PageNavHeader>
         <Box grow="Yes" alignItems="Center" gap="300">
           <Box shrink="No">
             {desktop ? (
               <IconButton
-                aria-label="Hide explore sections"
+                aria-label="Back to main sidebar"
                 variant="Background"
-                onClick={() => setCollapsed((state) => !state)}
+                onClick={() => setDesktopPageNavCollapsed(true)}
               >
-                <Icon src={Icons.UnorderList} size="200" />
+                <Icon src={Icons.ArrowLeft} size="200" />
               </IconButton>
             ) : (
               <CompactClientNavButton />

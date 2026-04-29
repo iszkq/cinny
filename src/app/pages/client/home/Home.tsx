@@ -16,7 +16,7 @@ import {
   toRem,
 } from 'folds';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { useAtom, useAtomValue } from 'jotai';
+import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import FocusTrap from 'focus-trap-react';
 import { factoryRoomIdByActivity, factoryRoomIdByAtoZ } from '../../../utils/sort';
 import {
@@ -67,6 +67,7 @@ import { JoinAddressPrompt } from '../../../components/join-address-prompt';
 import { _RoomSearchParams } from '../../paths';
 import { CompactClientNavButton } from '../CompactClientNavButton';
 import { ScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
+import { desktopPageNavCollapsedAtom } from '../../../state/desktopPageNav';
 
 type HomeMenuProps = {
   requestClose: () => void;
@@ -102,9 +103,10 @@ const HomeMenu = forwardRef<HTMLDivElement, HomeMenuProps>(({ requestClose }, re
   );
 });
 
-function HomeHeader({ onToggleCollapsed }: { onToggleCollapsed: () => void }) {
+function HomeHeader() {
   const screenSize = useScreenSizeContext();
   const desktop = screenSize === ScreenSize.Desktop;
+  const setDesktopPageNavCollapsed = useSetAtom(desktopPageNavCollapsedAtom);
   const [menuAnchor, setMenuAnchor] = useState<RectCords>();
 
   const handleOpenMenu: MouseEventHandler<HTMLButtonElement> = (evt) => {
@@ -116,7 +118,7 @@ function HomeHeader({ onToggleCollapsed }: { onToggleCollapsed: () => void }) {
   };
   const handleToggleCollapsed = () => {
     setMenuAnchor(undefined);
-    onToggleCollapsed();
+    setDesktopPageNavCollapsed(true);
   };
 
   return (
@@ -125,8 +127,8 @@ function HomeHeader({ onToggleCollapsed }: { onToggleCollapsed: () => void }) {
         <Box alignItems="Center" grow="Yes" gap="300">
           <Box shrink="No">
             {desktop ? (
-              <IconButton aria-label="Hide home sections" variant="Background" onClick={handleToggleCollapsed}>
-                <Icon src={Icons.UnorderList} size="200" />
+              <IconButton aria-label="Back to main sidebar" variant="Background" onClick={handleToggleCollapsed}>
+                <Icon src={Icons.ArrowLeft} size="200" />
               </IconButton>
             ) : (
               <CompactClientNavButton />
@@ -213,8 +215,6 @@ function HomeEmpty() {
 const DEFAULT_CATEGORY_ID = makeNavCategoryId('home', 'room');
 export function Home() {
   const mx = useMatrixClient();
-  const screenSize = useScreenSizeContext();
-  const desktop = screenSize === ScreenSize.Desktop;
   useNavToActivePathMapper('home');
   const scrollRef = useRef<HTMLDivElement>(null);
   const rooms = useHomeRooms();
@@ -227,7 +227,6 @@ export function Home() {
   const searchSelected = useHomeSearchSelected();
   const noRoomToDisplay = rooms.length === 0;
   const [closedCategories, setClosedCategories] = useAtom(useClosedNavCategoriesAtom());
-  const [collapsed, setCollapsed] = useState(false);
 
   const sortedRooms = useMemo(() => {
     const items = Array.from(rooms).sort(
@@ -253,12 +252,8 @@ export function Home() {
   );
 
   return (
-    <PageNav
-      collapsed={desktop && collapsed}
-      onToggleCollapsed={() => setCollapsed((state) => !state)}
-      collapsedLabel="Show home sections"
-    >
-      <HomeHeader onToggleCollapsed={() => setCollapsed((state) => !state)} />
+    <PageNav>
+      <HomeHeader />
       {noRoomToDisplay ? (
         <HomeEmpty />
       ) : (
