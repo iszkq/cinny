@@ -1021,6 +1021,43 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     tryAutoMarkAsRead();
   }, [privateReceipt, tryAutoMarkAsRead]);
 
+  useEffect(() => {
+    if (screenSize !== ScreenSize.Mobile) {
+      return undefined;
+    }
+
+    const syncFocusedInputViewport = () => {
+      const activeEditable =
+        document.activeElement?.getAttribute('data-editable-name') === 'RoomInput';
+      if (!activeEditable) return;
+
+      window.scrollTo(0, 0);
+      const scrollElement = scrollRef.current;
+      if (!scrollElement) return;
+
+      window.requestAnimationFrame(() => {
+        window.scrollTo(0, 0);
+        if (atBottomRef.current) {
+          scrollToBottom(scrollElement);
+        }
+      });
+    };
+
+    const handleFocusIn = () => {
+      window.requestAnimationFrame(syncFocusedInputViewport);
+    };
+
+    document.addEventListener('focusin', handleFocusIn);
+    window.visualViewport?.addEventListener('resize', syncFocusedInputViewport);
+    window.visualViewport?.addEventListener('scroll', syncFocusedInputViewport);
+
+    return () => {
+      document.removeEventListener('focusin', handleFocusIn);
+      window.visualViewport?.removeEventListener('resize', syncFocusedInputViewport);
+      window.visualViewport?.removeEventListener('scroll', syncFocusedInputViewport);
+    };
+  }, [screenSize]);
+
   // Handle up arrow edit
   useKeyDown(
     window,

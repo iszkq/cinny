@@ -1623,17 +1623,9 @@ export const Message = as<'div', MessageProps>(
 
     const handleOpenEmojiBoardPointerDown: PointerEventHandler<HTMLButtonElement> = (evt) => {
       emojiBoardTriggerAtRef.current = Date.now();
-      evt.preventDefault();
-      evt.stopPropagation();
-      toggleEmojiBoardAnchor(evt.currentTarget);
     };
 
     const handleOpenEmojiBoard: MouseEventHandler<HTMLButtonElement> = (evt) => {
-      if (Date.now() - emojiBoardTriggerAtRef.current < 1000) {
-        emojiBoardTriggerAtRef.current = 0;
-        return;
-      }
-
       toggleEmojiBoardAnchor(evt.currentTarget);
     };
     const handleAddReactions: MouseEventHandler<HTMLButtonElement> = () => {
@@ -1706,6 +1698,14 @@ export const Message = as<'div', MessageProps>(
                           setEmojiBoardAnchor(undefined);
                         }}
                         requestClose={() => {
+                          const now = Date.now();
+                          if (
+                            now - emojiBoardTriggerAtRef.current <
+                            MESSAGE_EMOJI_REOPEN_SUPPRESS_MS
+                          ) {
+                            emojiBoardSuppressOpenUntilRef.current =
+                              now + MESSAGE_EMOJI_REOPEN_SUPPRESS_MS;
+                          }
                           setEmojiBoardAnchor(undefined);
                         }}
                       />

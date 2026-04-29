@@ -683,6 +683,10 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     };
 
     const closeEmojiBoard = useCallback(() => {
+      const now = Date.now();
+      if (now - emojiBoardTouchTriggerRef.current < EMOJI_BOARD_REOPEN_SUPPRESS_MS) {
+        emojiBoardSuppressOpenUntilRef.current = now + EMOJI_BOARD_REOPEN_SUPPRESS_MS;
+      }
       setEmojiBoardOpen(false);
       if (!mobileOrTablet()) ReactEditor.focus(editor);
     }, [editor]);
@@ -723,23 +727,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       [closeEmojiBoard, hideStickerBtn]
     );
 
-    const handleEmojiBoardTriggerPointerDown = (
-      nextTab: EmojiBoardTab,
-      evt: React.PointerEvent<HTMLButtonElement>
-    ) => {
+    const handleEmojiBoardTriggerPointerDown = () => {
       emojiBoardTouchTriggerRef.current = Date.now();
-      evt.preventDefault();
-      evt.stopPropagation();
-      toggleEmojiBoardTab(nextTab);
-    };
-
-    const handleEmojiBoardTriggerClick = (nextTab: EmojiBoardTab) => {
-      if (Date.now() - emojiBoardTouchTriggerRef.current < 1000) {
-        emojiBoardTouchTriggerRef.current = 0;
-        return;
-      }
-
-      toggleEmojiBoardTab(nextTab);
     };
 
     const handleStickerSelect = async (mxc: string, label: string, info?: IImageInfo) => {
@@ -1060,10 +1049,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                 {!hideStickerBtn && (
                   <IconButton
                     aria-pressed={emojiBoardOpen && emojiBoardTab === EmojiBoardTab.Sticker}
-                    onPointerDown={(evt) =>
-                      handleEmojiBoardTriggerPointerDown(EmojiBoardTab.Sticker, evt)
-                    }
-                    onClick={() => handleEmojiBoardTriggerClick(EmojiBoardTab.Sticker)}
+                    onPointerDown={handleEmojiBoardTriggerPointerDown}
+                    onClick={() => toggleEmojiBoardTab(EmojiBoardTab.Sticker)}
                     variant="SurfaceVariant"
                     size="300"
                     radii="300"
@@ -1081,10 +1068,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                       ? emojiBoardOpen
                       : emojiBoardOpen && emojiBoardTab === EmojiBoardTab.Emoji
                   }
-                  onPointerDown={(evt) =>
-                    handleEmojiBoardTriggerPointerDown(EmojiBoardTab.Emoji, evt)
-                  }
-                  onClick={() => handleEmojiBoardTriggerClick(EmojiBoardTab.Emoji)}
+                  onPointerDown={handleEmojiBoardTriggerPointerDown}
+                  onClick={() => toggleEmojiBoardTab(EmojiBoardTab.Emoji)}
                   variant="SurfaceVariant"
                   size="300"
                   radii="300"

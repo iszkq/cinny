@@ -212,6 +212,24 @@ export const MessageEditor = as<'div', MessageEditorProps>(
       moveCursor(editor);
     };
 
+    const closeEmojiBoard = useCallback(
+      (
+        setAnchor: React.Dispatch<React.SetStateAction<RectCords | undefined>>,
+        returnFocus = true
+      ) => {
+        const now = Date.now();
+        if (now - emojiBoardTouchTriggerRef.current < EMOJI_BOARD_REOPEN_SUPPRESS_MS) {
+          emojiBoardSuppressOpenUntilRef.current = now + EMOJI_BOARD_REOPEN_SUPPRESS_MS;
+        }
+
+        setAnchor((current) => {
+          if (current && returnFocus && !mobileOrTablet()) ReactEditor.focus(editor);
+          return undefined;
+        });
+      },
+      [editor]
+    );
+
     const toggleEmojiBoardAnchor = useCallback(
       (
         setAnchor: React.Dispatch<React.SetStateAction<RectCords | undefined>>,
@@ -342,15 +360,7 @@ export const MessageEditor = as<'div', MessageEditorProps>(
                             returnFocusOnDeactivate={false}
                             onEmojiSelect={handleEmoticonSelect}
                             onCustomEmojiSelect={handleEmoticonSelect}
-                            requestClose={() => {
-                              setAnchor((v) => {
-                                if (v) {
-                                  if (!mobileOrTablet()) ReactEditor.focus(editor);
-                                  return undefined;
-                                }
-                                return v;
-                              });
-                            }}
+                            requestClose={() => closeEmojiBoard(setAnchor)}
                           />
                         }
                       >
@@ -358,20 +368,9 @@ export const MessageEditor = as<'div', MessageEditorProps>(
                           aria-pressed={anchor !== undefined}
                           onPointerDown={(evt) => {
                             emojiBoardTouchTriggerRef.current = Date.now();
-                            evt.preventDefault();
-                            evt.stopPropagation();
-                            toggleEmojiBoardAnchor(
-                              setAnchor,
-                              evt.currentTarget.getBoundingClientRect()
-                            );
                           }}
                           onClick={
                             ((evt) => {
-                              if (Date.now() - emojiBoardTouchTriggerRef.current < 1000) {
-                                emojiBoardTouchTriggerRef.current = 0;
-                                return;
-                              }
-
                               toggleEmojiBoardAnchor(
                                 setAnchor,
                                 evt.currentTarget.getBoundingClientRect()
