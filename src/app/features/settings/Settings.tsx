@@ -17,7 +17,7 @@ import {
 import FocusTrap from 'focus-trap-react';
 import { General } from './general';
 import { PageNav, PageNavContent, PageNavHeader, PageRoot } from '../../components/page';
-import { ScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
+import { isCompactScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
 import { Account } from './account';
 import { useUserProfile } from '../../hooks/useUserProfile';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
@@ -114,14 +114,15 @@ export function Settings({ initialPage, requestClose }: SettingsProps) {
     : undefined;
 
   const screenSize = useScreenSizeContext();
+  const compact = isCompactScreenSize(screenSize);
   const [activePage, setActivePage] = useState<SettingsPages | undefined>(() => {
     if (initialPage) return initialPage;
-    return screenSize === ScreenSize.Mobile ? undefined : SettingsPages.GeneralPage;
+    return compact ? undefined : SettingsPages.GeneralPage;
   });
   const menuItems = useSettingsMenuItems();
 
   const handlePageRequestClose = () => {
-    if (screenSize === ScreenSize.Mobile) {
+    if (compact) {
       setActivePage(undefined);
       return;
     }
@@ -131,7 +132,7 @@ export function Settings({ initialPage, requestClose }: SettingsProps) {
   return (
     <PageRoot
       nav={
-        screenSize === ScreenSize.Mobile && activePage !== undefined ? undefined : (
+        compact && activePage !== undefined ? undefined : (
           <PageNav size="300">
             <PageNavHeader outlined={false}>
               <Box grow="Yes" gap="200">
@@ -147,7 +148,7 @@ export function Settings({ initialPage, requestClose }: SettingsProps) {
                 </Text>
               </Box>
               <Box shrink="No">
-                {screenSize === ScreenSize.Mobile && (
+                {compact && (
                   <IconButton onClick={requestClose} variant="Background">
                     <Icon src={Icons.Cross} />
                   </IconButton>
