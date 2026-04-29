@@ -46,7 +46,7 @@ import { roomToUnreadAtom } from '../../state/room/roomToUnread';
 import { copyToClipboard } from '../../utils/dom';
 import { LeaveRoomPrompt } from '../../components/leave-room-prompt';
 import { useRoomAvatar, useRoomName, useRoomTopic } from '../../hooks/useRoomMeta';
-import { ScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
+import { isCompactScreenSize, ScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
 import { stopPropagation } from '../../utils/keyboard';
 import { getMatrixToRoom } from '../../plugins/matrix-to';
 import { getViaServers } from '../../plugins/via-servers';
@@ -275,6 +275,7 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
     : undefined;
 
   const [peopleDrawer, setPeopleDrawer] = useSetting(settingsAtom, 'isPeopleDrawer');
+  const compact = isCompactScreenSize(screenSize);
 
   const handleSearchClick = () => {
     const searchParams: _SearchPathSearchParams = {
@@ -307,10 +308,10 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
   return (
     <PageHeader
       className={ContainerColor({ variant: 'Surface' })}
-      balance={screenSize === ScreenSize.Mobile}
+      balance={compact}
     >
-      <Box grow="Yes" gap="300">
-        {screenSize === ScreenSize.Mobile && (
+      <Box grow="Yes" gap="300" style={{ minWidth: 0 }}>
+        {compact && (
           <BackRouteHandler>
             {(onBack) => (
               <Box shrink="No" alignItems="Center">
@@ -321,8 +322,8 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
             )}
           </BackRouteHandler>
         )}
-        <Box grow="Yes" alignItems="Center" gap="300">
-          {screenSize !== ScreenSize.Mobile && (
+        <Box grow="Yes" alignItems="Center" gap="300" style={{ minWidth: 0 }}>
+          {!compact && (
             <Avatar size="300">
               <RoomAvatar
                 roomId={room.roomId}
@@ -334,7 +335,7 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
               />
             </Avatar>
           )}
-          <Box direction="Column">
+          <Box direction="Column" style={{ minWidth: 0 }}>
             <Text size={topic ? 'H5' : 'H3'} truncate>
               {name}
             </Text>

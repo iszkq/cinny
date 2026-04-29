@@ -20,6 +20,7 @@ import { editableActiveElement } from '../../utils/dom';
 import { useRoomPermissions } from '../../hooks/useRoomPermissions';
 import { useRoomCreators } from '../../hooks/useRoomCreators';
 import { useRoom } from '../../hooks/useRoom';
+import { isCompactScreenSize, ScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
 
 const FN_KEYS_REGEX = /^F\d+$/;
 const shouldFocusMessageField = (evt: KeyboardEvent): boolean => {
@@ -59,6 +60,7 @@ export function RoomView({ eventId }: { eventId?: string }) {
   const room = useRoom();
   const { roomId } = room;
   const editor = useEditor();
+  const screenSize = useScreenSizeContext();
 
   const mx = useMatrixClient();
 
@@ -99,7 +101,14 @@ export function RoomView({ eventId }: { eventId?: string }) {
         <RoomViewTyping room={room} />
       </Box>
       <Box shrink="No" direction="Column">
-        <div style={{ padding: `0 ${config.space.S400}` }}>
+        <div
+          style={{
+            paddingLeft: isCompactScreenSize(screenSize) ? config.space.S200 : config.space.S400,
+            paddingRight: isCompactScreenSize(screenSize) ? config.space.S200 : config.space.S400,
+            paddingBottom:
+              screenSize === ScreenSize.Mobile ? 'env(safe-area-inset-bottom, 0px)' : undefined,
+          }}
+        >
           {tombstoneEvent ? (
             <RoomTombstone
               roomId={roomId}
