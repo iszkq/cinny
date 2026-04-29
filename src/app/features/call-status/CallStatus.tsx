@@ -7,7 +7,7 @@ import { CallRoomName } from './CallRoomName';
 import { CallControl } from './CallControl';
 import { ContainerColor } from '../../styles/ContainerColor.css';
 import { useCallMembers, useCallSession } from '../../hooks/useCall';
-import { ScreenSize, useScreenSize } from '../../hooks/useScreenSize';
+import { isCompactScreenSize, useScreenSize } from '../../hooks/useScreenSize';
 import { MemberGlance } from './MemberGlance';
 import { StatusDivider } from './components';
 import { CallEmbed } from '../../plugins/call/CallEmbed';
@@ -27,7 +27,7 @@ export function CallStatus({ callEmbed }: CallStatusProps) {
   const callJoined = useCallJoined(callEmbed);
   const speakers = useCallSpeakers(callEmbed);
 
-  const compact = screenSize === ScreenSize.Mobile;
+  const compact = isCompactScreenSize(screenSize);
 
   const memberVisible = callJoined && callMembers.length > 0;
 

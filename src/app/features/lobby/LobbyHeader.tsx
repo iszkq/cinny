@@ -30,7 +30,7 @@ import { IPowerLevels } from '../../hooks/usePowerLevels';
 import { UseStateProvider } from '../../components/UseStateProvider';
 import { LeaveSpacePrompt } from '../../components/leave-space-prompt';
 import { stopPropagation } from '../../utils/keyboard';
-import { ScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
+import { isCompactScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
 import { BackRouteHandler } from '../../components/BackRouteHandler';
 import { mxcUrlToHttp } from '../../utils/matrix';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
@@ -156,11 +156,12 @@ export function LobbyHeader({ showProfile, powerLevels }: LobbyHeaderProps) {
   const handleOpenMenu: MouseEventHandler<HTMLButtonElement> = (evt) => {
     setMenuAnchor(evt.currentTarget.getBoundingClientRect());
   };
+  const compact = isCompactScreenSize(screenSize);
 
   return (
     <PageHeader className={showProfile ? undefined : css.Header} balance>
       <Box grow="Yes" alignItems="Center" gap="200">
-        {screenSize === ScreenSize.Mobile ? (
+        {compact ? (
           <>
             <Box shrink="No">
               <BackRouteHandler>
@@ -203,11 +204,11 @@ export function LobbyHeader({ showProfile, powerLevels }: LobbyHeaderProps) {
         )}
         <Box
           shrink="No"
-          grow={screenSize === ScreenSize.Mobile ? 'No' : 'Yes'}
-          basis={screenSize === ScreenSize.Mobile ? 'Yes' : 'No'}
+          grow={compact ? 'No' : 'Yes'}
+          basis={compact ? 'Yes' : 'No'}
           justifyContent="End"
         >
-          {screenSize !== ScreenSize.Mobile && (
+          {!compact && (
             <TooltipProvider
               position="Bottom"
               offset={4}
