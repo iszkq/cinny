@@ -26,9 +26,11 @@ import {
 import React, {
   FormEventHandler,
   MouseEventHandler,
+  PointerEventHandler,
   ReactNode,
   useEffect,
   useCallback,
+  useRef,
   useState,
 } from 'react';
 import FocusTrap from 'focus-trap-react';
@@ -117,6 +119,7 @@ export type ReactionHandler = (keyOrMxc: string, shortcode: string) => void;
 const DEFAULT_INLINE_READ_RECEIPTS = 7;
 const MIN_INLINE_READ_RECEIPTS = 1;
 const MAX_INLINE_READ_RECEIPTS = 50;
+const MESSAGE_EMOJI_REOPEN_SUPPRESS_MS = 400;
 
 const getMessageCopyText = (mEvent: MatrixEvent): string | undefined => {
   if (mEvent.isRedacted()) return undefined;
@@ -1452,6 +1455,8 @@ export const Message = as<'div', MessageProps>(
     const { focusWithinProps } = useFocusWithin({ onFocusWithinChange: setHover });
     const [menuAnchor, setMenuAnchor] = useState<RectCords>();
     const [emojiBoardAnchor, setEmojiBoardAnchor] = useState<RectCords>();
+    const emojiBoardTriggerAtRef = useRef(0);
+    const emojiBoardSuppressOpenUntilRef = useRef(0);
 
     const senderDisplayName =
       getMemberDisplayName(room, senderId) ?? getMxIdLocalPart(senderId) ?? senderId;
@@ -1595,10 +1600,41 @@ export const Message = as<'div', MessageProps>(
       setMenuAnchor(undefined);
     };
 
+    const toggleEmojiBoardAnchor = useCallback((target: HTMLElement) => {
+      const rect =
+        target.parentElement?.parentElement?.getBoundingClientRect() ??
+        target.getBoundingClientRect();
+      const now = Date.now();
+
+      setEmojiBoardAnchor((current) => {
+        if (current) {
+          emojiBoardSuppressOpenUntilRef.current = now + MESSAGE_EMOJI_REOPEN_SUPPRESS_MS;
+          return undefined;
+        }
+
+        if (now < emojiBoardSuppressOpenUntilRef.current) {
+          return current;
+        }
+
+        emojiBoardSuppressOpenUntilRef.current = 0;
+        return rect;
+      });
+    }, []);
+
+    const handleOpenEmojiBoardPointerDown: PointerEventHandler<HTMLButtonElement> = (evt) => {
+      emojiBoardTriggerAtRef.current = Date.now();
+      evt.preventDefault();
+      evt.stopPropagation();
+      toggleEmojiBoardAnchor(evt.currentTarget);
+    };
+
     const handleOpenEmojiBoard: MouseEventHandler<HTMLButtonElement> = (evt) => {
-      const target = evt.currentTarget.parentElement?.parentElement ?? evt.currentTarget;
-      const rect = target.getBoundingClientRect();
-      setEmojiBoardAnchor((current) => (current ? undefined : rect));
+      if (Date.now() - emojiBoardTriggerAtRef.current < 1000) {
+        emojiBoardTriggerAtRef.current = 0;
+        return;
+      }
+
+      toggleEmojiBoardAnchor(evt.currentTarget);
     };
     const handleAddReactions: MouseEventHandler<HTMLButtonElement> = () => {
       const rect = menuAnchor;
@@ -1676,6 +1712,7 @@ export const Message = as<'div', MessageProps>(
                     }
                   >
                     <IconButton
+                      onPointerDown={handleOpenEmojiBoardPointerDown}
                       onClick={handleOpenEmojiBoard}
                       variant="SurfaceVariant"
                       size="300"

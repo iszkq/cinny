@@ -63,6 +63,9 @@ type MessageEditorProps = {
   imagePackRooms?: Room[];
   onCancel: () => void;
 };
+
+const EMOJI_BOARD_REOPEN_SUPPRESS_MS = 400;
+
 export const MessageEditor = as<'div', MessageEditorProps>(
   ({ room, roomId, mEvent, imagePackRooms, onCancel, ...props }, ref) => {
     const mx = useMatrixClient();
@@ -73,6 +76,7 @@ export const MessageEditor = as<'div', MessageEditorProps>(
     const [toolbar, setToolbar] = useState(globalToolbar);
     const isComposing = useComposingCheck();
     const emojiBoardTouchTriggerRef = useRef(0);
+    const emojiBoardSuppressOpenUntilRef = useRef(0);
 
     const [autocompleteQuery, setAutocompleteQuery] =
       useState<AutocompleteQuery<AutocompletePrefix>>();
@@ -213,12 +217,20 @@ export const MessageEditor = as<'div', MessageEditorProps>(
         setAnchor: React.Dispatch<React.SetStateAction<RectCords | undefined>>,
         nextAnchor: RectCords
       ) => {
+        const now = Date.now();
         setAnchor((current) => {
           if (current) {
+            emojiBoardSuppressOpenUntilRef.current =
+              now + EMOJI_BOARD_REOPEN_SUPPRESS_MS;
             if (!mobileOrTablet()) ReactEditor.focus(editor);
             return undefined;
           }
 
+          if (now < emojiBoardSuppressOpenUntilRef.current) {
+            return current;
+          }
+
+          emojiBoardSuppressOpenUntilRef.current = 0;
           return nextAnchor;
         });
       },
@@ -345,10 +357,9 @@ export const MessageEditor = as<'div', MessageEditorProps>(
                         <IconButton
                           aria-pressed={anchor !== undefined}
                           onPointerDown={(evt) => {
-                            if (evt.pointerType === 'mouse') return;
-
                             emojiBoardTouchTriggerRef.current = Date.now();
                             evt.preventDefault();
+                            evt.stopPropagation();
                             toggleEmojiBoardAnchor(
                               setAnchor,
                               evt.currentTarget.getBoundingClientRect()

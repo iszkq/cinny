@@ -132,6 +132,8 @@ interface RoomInputProps {
 const cloneEditorDraft = (draft: Descendant[]): Descendant[] =>
   JSON.parse(JSON.stringify(draft)) as Descendant[];
 
+const EMOJI_BOARD_REOPEN_SUPPRESS_MS = 400;
+
 const restoreEditorDraft = (editor: Editor, draft: Descendant[]) => {
   if (draft.length === 0) return;
 
@@ -230,6 +232,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const emojiBoardOpenRef = useRef(emojiBoardOpen);
     const emojiBoardTabRef = useRef(emojiBoardTab);
     const emojiBoardTouchTriggerRef = useRef(0);
+    const emojiBoardSuppressOpenUntilRef = useRef(0);
     emojiBoardOpenRef.current = emojiBoardOpen;
     emojiBoardTabRef.current = emojiBoardTab;
 
@@ -686,25 +689,34 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
 
     const toggleEmojiBoardTab = useCallback(
       (nextTab: EmojiBoardTab) => {
+        const now = Date.now();
         const currentOpen = emojiBoardOpenRef.current;
         const currentTab = emojiBoardTabRef.current;
 
+        if (!currentOpen && now < emojiBoardSuppressOpenUntilRef.current) {
+          return;
+        }
+
         if (hideStickerBtn) {
           if (currentOpen) {
+            emojiBoardSuppressOpenUntilRef.current = now + EMOJI_BOARD_REOPEN_SUPPRESS_MS;
             closeEmojiBoard();
             return;
           }
 
+          emojiBoardSuppressOpenUntilRef.current = 0;
           setEmojiBoardTab(EmojiBoardTab.Emoji);
           setEmojiBoardOpen(true);
           return;
         }
 
         if (currentOpen && currentTab === nextTab) {
+          emojiBoardSuppressOpenUntilRef.current = now + EMOJI_BOARD_REOPEN_SUPPRESS_MS;
           closeEmojiBoard();
           return;
         }
 
+        emojiBoardSuppressOpenUntilRef.current = 0;
         setEmojiBoardTab(nextTab);
         setEmojiBoardOpen(true);
       },
@@ -715,10 +727,9 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       nextTab: EmojiBoardTab,
       evt: React.PointerEvent<HTMLButtonElement>
     ) => {
-      if (evt.pointerType === 'mouse') return;
-
       emojiBoardTouchTriggerRef.current = Date.now();
       evt.preventDefault();
+      evt.stopPropagation();
       toggleEmojiBoardTab(nextTab);
     };
 
