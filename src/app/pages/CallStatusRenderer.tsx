@@ -2,7 +2,7 @@ import React from 'react';
 import { useCallEmbed } from '../hooks/useCallEmbed';
 import { CallStatus } from '../features/call-status';
 import { useSelectedRoom } from '../hooks/router/useSelectedRoom';
-import { ScreenSize, useScreenSizeContext } from '../hooks/useScreenSize';
+import { isCompactScreenSize, useScreenSizeContext } from '../hooks/useScreenSize';
 
 export function CallStatusRenderer() {
   const callEmbed = useCallEmbed();
@@ -12,7 +12,7 @@ export function CallStatusRenderer() {
 
   if (!callEmbed) return null;
 
-  if (screenSize === ScreenSize.Mobile && callEmbed.roomId === selectedRoom) return null;
+  if (isCompactScreenSize(screenSize) && callEmbed.roomId === selectedRoom) return null;
 
   return <CallStatus callEmbed={callEmbed} />;
 }

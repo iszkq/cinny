@@ -55,7 +55,7 @@ import { Lobby } from '../features/lobby';
 import { WelcomePage } from './client/WelcomePage';
 import { SidebarNav } from './client/SidebarNav';
 import { PageRoot } from '../components/page';
-import { ScreenSize } from '../hooks/useScreenSize';
+import { isCompactScreenSize, ScreenSize } from '../hooks/useScreenSize';
 import { MobileFriendlyPageNav, MobileFriendlyClientNav } from './MobileFriendly';
 import { ClientInitStorageAtom } from './client/ClientInitStorageAtom';
 import { ClientNonUIFeatures } from './client/ClientNonUIFeatures';
@@ -77,7 +77,7 @@ import { CallEmbedProvider } from '../components/CallEmbedProvider';
 
 export const createRouter = (clientConfig: ClientConfig, screenSize: ScreenSize) => {
   const { hashRouter } = clientConfig;
-  const mobile = screenSize === ScreenSize.Mobile;
+  const compact = isCompactScreenSize(screenSize);
 
   const routes = createRoutesFromElements(
     <Route>
@@ -172,7 +172,7 @@ export const createRouter = (clientConfig: ClientConfig, screenSize: ScreenSize)
             </PageRoot>
           }
         >
-          {mobile ? null : <Route index element={<WelcomePage />} />}
+          {compact ? null : <Route index element={<WelcomePage />} />}
           <Route path={_CREATE_PATH} element={<HomeCreateRoom />} />
           <Route path={_JOIN_PATH} element={<p>join</p>} />
           <Route path={_SEARCH_PATH} element={<HomeSearch />} />
@@ -199,7 +199,7 @@ export const createRouter = (clientConfig: ClientConfig, screenSize: ScreenSize)
             </PageRoot>
           }
         >
-          {mobile ? null : <Route index element={<WelcomePage />} />}
+          {compact ? null : <Route index element={<WelcomePage />} />}
           <Route path={_CREATE_PATH} element={<DirectCreate />} />
           <Route
             path={_ROOM_PATH}
@@ -227,7 +227,7 @@ export const createRouter = (clientConfig: ClientConfig, screenSize: ScreenSize)
             </RouteSpaceProvider>
           }
         >
-          {mobile ? null : (
+          {compact ? null : (
             <Route
               index
               loader={({ params }) => {
@@ -265,7 +265,7 @@ export const createRouter = (clientConfig: ClientConfig, screenSize: ScreenSize)
             </PageRoot>
           }
         >
-          {mobile ? null : (
+          {compact ? null : (
             <Route
               index
               loader={() => redirect(getExploreFeaturedPath())}
@@ -292,7 +292,7 @@ export const createRouter = (clientConfig: ClientConfig, screenSize: ScreenSize)
             </PageRoot>
           }
         >
-          {mobile ? null : (
+          {compact ? null : (
             <Route
               index
               loader={() => redirect(getInboxNotificationsPath())}

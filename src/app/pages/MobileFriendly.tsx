@@ -1,6 +1,6 @@
 import { ReactNode } from 'react';
 import { useMatch } from 'react-router-dom';
-import { ScreenSize, useScreenSizeContext } from '../hooks/useScreenSize';
+import { isCompactScreenSize, useScreenSizeContext } from '../hooks/useScreenSize';
 import { DIRECT_PATH, EXPLORE_PATH, FAVORITES_PATH, HOME_PATH, INBOX_PATH, SPACE_PATH } from './paths';
 
 type MobileFriendlyClientNavProps = {
@@ -16,7 +16,7 @@ export function MobileFriendlyClientNav({ children }: MobileFriendlyClientNavPro
   const inboxMatch = useMatch({ path: INBOX_PATH, caseSensitive: true, end: true });
 
   if (
-    screenSize === ScreenSize.Mobile &&
+    isCompactScreenSize(screenSize) &&
     !(homeMatch || directMatch || spaceMatch || exploreMatch || favoritesMatch || inboxMatch)
   ) {
     return null;
@@ -37,7 +37,7 @@ export function MobileFriendlyPageNav({ path, children }: MobileFriendlyPageNavP
     end: true,
   });
 
-  if (screenSize === ScreenSize.Mobile && !exactPath) {
+  if (isCompactScreenSize(screenSize) && !exactPath) {
     return null;
   }
 
