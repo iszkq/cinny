@@ -1,5 +1,5 @@
 import React, { ComponentProps, MutableRefObject, ReactNode } from 'react';
-import { Box, Header, Line, Scroll, Text, as } from 'folds';
+import { Box, Header, Icon, IconButton, Icons, Line, Scroll, Text, as, config } from 'folds';
 import classNames from 'classnames';
 import { ContainerColor } from '../../styles/ContainerColor.css';
 import * as css from './style.css';
@@ -14,7 +14,11 @@ export function PageRoot({ nav, children }: PageRootProps) {
   const screenSize = useScreenSizeContext();
 
   return (
-    <Box grow="Yes" className={ContainerColor({ variant: 'Background' })}>
+    <Box
+      grow="Yes"
+      className={ContainerColor({ variant: 'Background' })}
+      style={{ position: 'relative', minWidth: 0 }}
+    >
       {nav}
       {screenSize === ScreenSize.Desktop && (
         <Line variant="Background" size="300" direction="Vertical" />
@@ -26,20 +30,56 @@ export function PageRoot({ nav, children }: PageRootProps) {
 
 type ClientDrawerLayoutProps = {
   children: ReactNode;
+  collapsed?: boolean;
+  onToggleCollapsed?: () => void;
+  collapsedLabel?: string;
 };
-export function PageNav({ size, children }: ClientDrawerLayoutProps & css.PageNavVariants) {
+export function PageNav({
+  size,
+  children,
+  collapsed,
+  onToggleCollapsed,
+  collapsedLabel = 'Show sections',
+}: ClientDrawerLayoutProps & css.PageNavVariants) {
   const screenSize = useScreenSizeContext();
   const isMobile = screenSize === ScreenSize.Mobile;
+  const desktopCollapsed = !isMobile && !!collapsed;
 
   return (
     <Box
       grow={isMobile ? 'Yes' : undefined}
       className={css.PageNav({ size })}
       shrink={isMobile ? 'Yes' : 'No'}
+      style={{
+        width: desktopCollapsed ? '56px' : undefined,
+        minWidth: desktopCollapsed ? '56px' : undefined,
+        overflow: 'hidden',
+        transition: 'width 180ms ease, min-width 180ms ease',
+      }}
     >
-      <Box grow="Yes" direction="Column">
-        {children}
-      </Box>
+      {desktopCollapsed ? (
+        <Box
+          grow="Yes"
+          direction="Column"
+          alignItems="Center"
+          style={{ paddingTop: config.space.S200 }}
+        >
+          {onToggleCollapsed && (
+            <IconButton
+              aria-label={collapsedLabel}
+              aria-pressed={desktopCollapsed}
+              variant="Background"
+              onClick={onToggleCollapsed}
+            >
+              <Icon src={Icons.UnorderList} size="200" />
+            </IconButton>
+          )}
+        </Box>
+      ) : (
+        <Box grow="Yes" direction="Column">
+          {children}
+        </Box>
+      )}
     </Box>
   );
 }

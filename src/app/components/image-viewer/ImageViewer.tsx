@@ -57,6 +57,8 @@ const ZOOM_STEP = 0.2;
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 5;
 const SWIPE_TRIGGER_PX = 120;
+const DOUBLE_TAP_INTERVAL_MS = 280;
+const MAX_TAP_MOVEMENT_PX = 24;
 const INITIAL_TOUCH_PAN = {
   translateX: 0,
   translateY: 0,
@@ -106,8 +108,10 @@ export const ImageViewer = as<'div', ImageViewerProps>(
     const panEnabled = viewMode === 'actual' || zoom !== 1 || rotated;
     const { pan, cursor, onMouseDown } = usePan(panEnabled, `${src}-${rotation}-${viewMode}`);
     const [touchPan, setTouchPan] = useState(INITIAL_TOUCH_PAN);
+    const [touchInteractionActive, setTouchInteractionActive] = useState(false);
     const [swiping, setSwiping] = useState(false);
     const [swipeOffsetX, setSwipeOffsetX] = useState(0);
+    const [swipeOffsetY, setSwipeOffsetY] = useState(0);
     const displayRotation = ((rotation % 360) + 360) % 360;
     const resolvedActiveItemId = activeItemId ?? src;
     const viewerIndex = Math.max(
@@ -120,7 +124,16 @@ export const ImageViewer = as<'div', ImageViewerProps>(
     const swipeCleanupRef = useRef<(() => void) | null>(null);
     const transitionTimerRef = useRef<number | null>(null);
     const hasThumbnailRail = !!items && items.length > 1;
-    const swipeEnabled = !panEnabled && Boolean(onPrev || onNext);
+    const lastTapRef = useRef<
+      | {
+          time: number;
+          x: number;
+          y: number;
+        }
+      | undefined
+    >();
+    const mouseSwipeEnabled = !panEnabled && Boolean(onPrev || onNext);
+    const touchSwipeEnabled = !panEnabled;
     const [displaySrc, setDisplaySrc] = useState(src);
     const [transitionSrc, setTransitionSrc] = useState<string>();
     const [transitionVisible, setTransitionVisible] = useState(false);
@@ -156,13 +169,35 @@ export const ImageViewer = as<'div', ImageViewerProps>(
       swipeCleanupRef.current = null;
     }, []);
 
+    const resetViewport = useCallback(() => {
+      clearSwipeListeners();
+      touchGestureRef.current = undefined;
+      setTouchInteractionActive(false);
+      setSwiping(false);
+      setSwipeOffsetX(0);
+      setSwipeOffsetY(0);
+      swipeDeltaRef.current = { x: 0, y: 0 };
+      setTouchPan(INITIAL_TOUCH_PAN);
+      setZoom(1);
+      setRotation(0);
+      setViewMode('fit');
+      lastTapRef.current = undefined;
+    }, [clearSwipeListeners, setZoom]);
+
     const finishSwipe = useCallback(() => {
       clearSwipeListeners();
 
       const { x, y } = swipeDeltaRef.current;
       setSwiping(false);
       setSwipeOffsetX(0);
+      setSwipeOffsetY(0);
+      setTouchInteractionActive(false);
       swipeDeltaRef.current = { x: 0, y: 0 };
+
+      if (y < -SWIPE_TRIGGER_PX && Math.abs(y) > Math.abs(x) * 1.15) {
+        requestClose();
+        return;
+      }
 
       if (Math.abs(x) < SWIPE_TRIGGER_PX || Math.abs(x) <= Math.abs(y) * 1.15) {
         return;
@@ -177,7 +212,7 @@ export const ImageViewer = as<'div', ImageViewerProps>(
 
     const handleSwipeMouseDown = useCallback<React.MouseEventHandler<HTMLImageElement>>(
       (evt) => {
-        if (!swipeEnabled) return;
+        if (!mouseSwipeEnabled) return;
 
         evt.preventDefault();
         const startX = evt.clientX;
@@ -186,6 +221,7 @@ export const ImageViewer = as<'div', ImageViewerProps>(
         swipeDeltaRef.current = { x: 0, y: 0 };
         setSwiping(true);
         setSwipeOffsetX(0);
+        setSwipeOffsetY(0);
 
         const handleMouseMove = (moveEvt: MouseEvent) => {
           const deltaX = moveEvt.clientX - startX;
@@ -206,13 +242,15 @@ export const ImageViewer = as<'div', ImageViewerProps>(
           document.removeEventListener('mouseup', handleMouseUp);
         };
       },
-      [finishSwipe, swipeEnabled]
+      [finishSwipe, mouseSwipeEnabled]
     );
 
     const resetTouchGesture = useCallback(() => {
       touchGestureRef.current = undefined;
+      setTouchInteractionActive(false);
       setSwiping(false);
       setSwipeOffsetX(0);
+      setSwipeOffsetY(0);
       swipeDeltaRef.current = { x: 0, y: 0 };
     }, []);
 
@@ -222,6 +260,7 @@ export const ImageViewer = as<'div', ImageViewerProps>(
           const distance = getTouchDistance(evt.touches);
           if (!distance) return;
 
+          setTouchInteractionActive(true);
           touchGestureRef.current = {
             mode: 'pinch',
             startDistance: distance,
@@ -230,6 +269,7 @@ export const ImageViewer = as<'div', ImageViewerProps>(
           setViewMode('actual');
           setSwiping(false);
           setSwipeOffsetX(0);
+          setSwipeOffsetY(0);
           swipeDeltaRef.current = { x: 0, y: 0 };
           return;
         }
@@ -239,6 +279,7 @@ export const ImageViewer = as<'div', ImageViewerProps>(
 
         const startPoint = getTouchPoint(touch);
         if (panEnabled) {
+          setTouchInteractionActive(true);
           touchGestureRef.current = {
             mode: 'pan',
             startPoint,
@@ -247,17 +288,19 @@ export const ImageViewer = as<'div', ImageViewerProps>(
           return;
         }
 
-        if (swipeEnabled) {
+        if (touchSwipeEnabled) {
+          setTouchInteractionActive(true);
           touchGestureRef.current = {
             mode: 'swipe',
             startPoint,
           };
           setSwiping(true);
           setSwipeOffsetX(0);
+          setSwipeOffsetY(0);
           swipeDeltaRef.current = { x: 0, y: 0 };
         }
       },
-      [panEnabled, swipeEnabled, touchPan, zoom]
+      [panEnabled, touchPan, touchSwipeEnabled, zoom]
     );
 
     const handleImageTouchMove = useCallback<React.TouchEventHandler<HTMLImageElement>>(
@@ -293,24 +336,56 @@ export const ImageViewer = as<'div', ImageViewerProps>(
         evt.preventDefault();
         swipeDeltaRef.current = { x: deltaX, y: deltaY };
         setSwipeOffsetX(deltaX);
+        setSwipeOffsetY(deltaY);
       },
       [setZoom]
     );
 
     const handleImageTouchEnd = useCallback<React.TouchEventHandler<HTMLImageElement>>(
-      () => {
+      (evt) => {
         const gesture = touchGestureRef.current;
+        const { x, y } = swipeDeltaRef.current;
+        const couldBeTap =
+          !!gesture &&
+          gesture.mode !== 'pinch' &&
+          Math.abs(x) < MAX_TAP_MOVEMENT_PX &&
+          Math.abs(y) < MAX_TAP_MOVEMENT_PX;
         touchGestureRef.current = undefined;
 
         if (gesture?.mode === 'swipe') {
           finishSwipe();
+        } else {
+          setTouchInteractionActive(false);
+          setSwiping(false);
+          setSwipeOffsetX(0);
+          setSwipeOffsetY(0);
+          swipeDeltaRef.current = { x: 0, y: 0 };
+        }
+
+        if (!couldBeTap) {
+          lastTapRef.current = undefined;
           return;
         }
 
-        setSwiping(false);
-        setSwipeOffsetX(0);
+        const touch = evt.changedTouches[0];
+        if (!touch) return;
+
+        const now = Date.now();
+        const point = getTouchPoint(touch);
+        const lastTap = lastTapRef.current;
+        if (
+          lastTap &&
+          now - lastTap.time <= DOUBLE_TAP_INTERVAL_MS &&
+          Math.abs(point.x - lastTap.x) < MAX_TAP_MOVEMENT_PX &&
+          Math.abs(point.y - lastTap.y) < MAX_TAP_MOVEMENT_PX
+        ) {
+          resetViewport();
+          return;
+        }
+
+        lastTapRef.current = { time: now, x: point.x, y: point.y };
       },
-      [finishSwipe]
+      [finishSwipe, resetViewport]
     );
 
     useEffect(() => {
@@ -342,6 +417,7 @@ export const ImageViewer = as<'div', ImageViewerProps>(
       () => () => {
         clearSwipeListeners();
         resetTouchGesture();
+        lastTapRef.current = undefined;
         if (transitionTimerRef.current) {
           window.clearTimeout(transitionTimerRef.current);
         }
@@ -362,16 +438,8 @@ export const ImageViewer = as<'div', ImageViewerProps>(
     }, [displaySrc, src]);
 
     useLayoutEffect(() => {
-      clearSwipeListeners();
-      resetTouchGesture();
-      setTouchPan(INITIAL_TOUCH_PAN);
-      setSwiping(false);
-      setSwipeOffsetX(0);
-      swipeDeltaRef.current = { x: 0, y: 0 };
-      setZoom(1);
-      setRotation(0);
-      setViewMode('fit');
-    }, [clearSwipeListeners, resetTouchGesture, setZoom, src]);
+      resetViewport();
+    }, [resetViewport, src]);
 
     useEffect(() => {
       if (!panEnabled) {
@@ -394,12 +462,18 @@ export const ImageViewer = as<'div', ImageViewerProps>(
       }, 180);
     };
 
-    const imageCursor = panEnabled ? cursor : swipeEnabled ? (swiping ? 'grabbing' : 'grab') : 'default';
+    const imageCursor = panEnabled
+      ? cursor
+      : mouseSwipeEnabled
+        ? swiping
+          ? 'grabbing'
+          : 'grab'
+        : 'default';
     const handleImageMouseDown = (
-      panEnabled ? onMouseDown : swipeEnabled ? handleSwipeMouseDown : undefined
+      panEnabled ? onMouseDown : mouseSwipeEnabled ? handleSwipeMouseDown : undefined
     ) as React.MouseEventHandler<HTMLImageElement> | undefined;
     const translateX = pan.translateX + touchPan.translateX + swipeOffsetX;
-    const translateY = pan.translateY + touchPan.translateY;
+    const translateY = pan.translateY + touchPan.translateY + swipeOffsetY;
 
     return (
       <Box
@@ -586,7 +660,10 @@ export const ImageViewer = as<'div', ImageViewerProps>(
                   maxWidth: viewMode === 'fit' ? '100%' : 'none',
                   maxHeight: viewMode === 'fit' ? '100%' : 'none',
                   transform: `translate(${translateX}px, ${translateY}px) rotate(${rotation}deg) scale(${zoom})`,
-                  transition: swiping || cursor === 'grabbing' ? 'none' : undefined,
+                  transition:
+                    swiping || cursor === 'grabbing' || touchInteractionActive
+                      ? 'none'
+                      : undefined,
                   touchAction: 'none',
                   WebkitTouchCallout: 'default',
                 }}
@@ -615,7 +692,10 @@ export const ImageViewer = as<'div', ImageViewerProps>(
                     maxWidth: viewMode === 'fit' ? '100%' : 'none',
                     maxHeight: viewMode === 'fit' ? '100%' : 'none',
                     transform: `translate(${translateX}px, ${translateY}px) rotate(${rotation}deg) scale(${zoom})`,
-                    transition: swiping || cursor === 'grabbing' ? 'none' : undefined,
+                    transition:
+                      swiping || cursor === 'grabbing' || touchInteractionActive
+                        ? 'none'
+                        : undefined,
                     touchAction: 'none',
                     WebkitTouchCallout: 'default',
                   }}
@@ -665,9 +745,9 @@ export const ImageViewer = as<'div', ImageViewerProps>(
           {hasThumbnailRail && items && (
             <Box className={css.ThumbnailRail} direction="Column" gap="100">
             <Box className={css.ThumbnailHeader} alignItems="Center" justifyContent="SpaceBetween">
-              <Text size="T200" priority="300">
+                <Text size="T200" priority="300">
                 {mobile
-                  ? '\u53cc\u6307\u7f29\u653e\uff0c\u5de6\u53f3\u6ed1\u52a8\u53ef\u5207\u56fe'
+                  ? '\u53cc\u51fb\u8fd8\u539f\uff0c\u53cc\u6307\u7f29\u653e\uff0c\u4e0a\u6ed1\u5173\u95ed\uff0c\u5de6\u53f3\u6ed1\u52a8\u5207\u56fe'
                   : '\u53cc\u51fb\u6216\u53cc\u6307\u7f29\u653e\uff0c\u5de6\u53f3\u6ed1\u52a8\u53ef\u5207\u56fe'}
               </Text>
                 <Text size="T200" priority="300">
