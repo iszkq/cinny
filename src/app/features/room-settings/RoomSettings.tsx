@@ -3,7 +3,7 @@ import { useAtomValue } from 'jotai';
 import { Avatar, Box, config, Icon, IconButton, Icons, IconSrc, MenuItem, Text } from 'folds';
 import { JoinRule } from 'matrix-js-sdk';
 import { PageNav, PageNavContent, PageNavHeader, PageRoot } from '../../components/page';
-import { ScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
+import { isCompactScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { mxcUrlToHttp } from '../../utils/matrix';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
@@ -75,14 +75,15 @@ export function RoomSettings({ initialPage, requestClose }: RoomSettingsProps) {
     : undefined;
 
   const screenSize = useScreenSizeContext();
+  const compact = isCompactScreenSize(screenSize);
   const [activePage, setActivePage] = useState<RoomSettingsPage | undefined>(() => {
     if (initialPage) return initialPage;
-    return screenSize === ScreenSize.Mobile ? undefined : RoomSettingsPage.GeneralPage;
+    return compact ? undefined : RoomSettingsPage.GeneralPage;
   });
   const menuItems = useRoomSettingsMenuItems();
 
   const handlePageRequestClose = () => {
-    if (screenSize === ScreenSize.Mobile) {
+    if (compact) {
       setActivePage(undefined);
       return;
     }
@@ -92,7 +93,7 @@ export function RoomSettings({ initialPage, requestClose }: RoomSettingsProps) {
   return (
     <PageRoot
       nav={
-        screenSize === ScreenSize.Mobile && activePage !== undefined ? undefined : (
+        compact && activePage !== undefined ? undefined : (
           <PageNav size="300">
             <PageNavHeader outlined={false}>
               <Box grow="Yes" gap="200">
@@ -116,7 +117,7 @@ export function RoomSettings({ initialPage, requestClose }: RoomSettingsProps) {
                 </Text>
               </Box>
               <Box shrink="No">
-                {screenSize === ScreenSize.Mobile && (
+                {compact && (
                   <IconButton onClick={requestClose} variant="Background">
                     <Icon src={Icons.Cross} />
                   </IconButton>
