@@ -13,6 +13,19 @@ export const Sidebar = style([
     display: 'flex',
     flexDirection: 'column',
     color: color.Background.OnContainer,
+    '@media': {
+      'screen and (max-width: 750px)': {
+        width: '100%',
+        minHeight: toRem(66),
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderRight: 'none',
+        borderBottom: `${config.borderWidth.B300} solid ${color.Background.ContainerLine}`,
+        paddingTop: `max(${config.space.S100}, env(safe-area-inset-top))`,
+        paddingLeft: `max(${config.space.S100}, env(safe-area-inset-left))`,
+        paddingRight: `max(${config.space.S100}, env(safe-area-inset-right))`,
+      },
+    },
   },
 ]);
 
@@ -26,6 +39,15 @@ export const SidebarStack = style([
     alignItems: 'center',
     gap: config.space.S300,
     padding: `${config.space.S300} 0`,
+    '@media': {
+      'screen and (max-width: 750px)': {
+        width: 'max-content',
+        flexDirection: 'row',
+        justifyContent: 'flex-start',
+        gap: config.space.S200,
+        padding: `${config.space.S100} ${config.space.S200}`,
+      },
+    },
   },
 ]);
 
@@ -95,6 +117,30 @@ export const SidebarItem = recipe({
           width: toRem(3),
         },
       },
+      '@media': {
+        'screen and (max-width: 750px)': {
+          minWidth: toRem(42),
+          minHeight: toRem(42),
+          transition: 'transform 200ms cubic-bezier(0, 0.8, 0.67, 0.97)',
+          selectors: {
+            '&:hover': {
+              transform: `translateY(${toRem(-1)})`,
+            },
+            '&::before': {
+              left: '50%',
+              bottom: toRem(-8),
+              top: 'auto',
+              width: toRem(20),
+              height: toRem(3),
+              borderRadius: `${toRem(4)} ${toRem(4)} 0 0`,
+              transform: 'translateX(-50%)',
+            },
+            '&:hover::before': {
+              width: toRem(20),
+            },
+          },
+        },
+      },
     },
     Disabled,
     DropTarget,
@@ -109,6 +155,19 @@ export const SidebarItem = recipe({
           },
           '&:hover::before': {
             width: toRem(3 + PUSH_X),
+          },
+        },
+        '@media': {
+          'screen and (max-width: 750px)': {
+            selectors: {
+              '&::before': {
+                height: toRem(3),
+                width: toRem(20),
+              },
+              '&:hover::before': {
+                width: toRem(20),
+              },
+            },
           },
         },
       },
