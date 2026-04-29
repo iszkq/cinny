@@ -57,7 +57,6 @@ import {
   getMentions,
 } from '../../components/editor';
 import { EmojiBoard, EmojiBoardTab } from '../../components/emoji-board';
-import { UseStateProvider } from '../../components/UseStateProvider';
 import {
   TUploadContent,
   encryptFile,
@@ -121,6 +120,7 @@ import { getAudioInfo } from '../../utils/matrix';
 import { CreatePollModal } from './CreatePollModal';
 import { createPollMessageContent, CreatePollInput } from '../../utils/polls';
 import { BibleModal } from '../bible';
+import { ScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
 
 interface RoomInputProps {
   editor: Editor;
@@ -165,6 +165,8 @@ const getSendErrorMessage = (error: unknown): string => {
 export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
   ({ editor, fileDropContainerRef, roomId, room }, ref) => {
     const mx = useMatrixClient();
+    const screenSize = useScreenSizeContext();
+    const compactScreen = screenSize !== ScreenSize.Desktop;
     const [enterForNewline] = useSetting(settingsAtom, 'enterForNewline');
     const [isMarkdown] = useSetting(settingsAtom, 'isMarkdown');
     const [sendTypingNotifications] = useSetting(settingsAtom, 'sendTypingNotifications');
@@ -223,6 +225,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const [toolbar, setToolbar] = useSetting(settingsAtom, 'editorToolbar');
     const [autocompleteQuery, setAutocompleteQuery] =
       useState<AutocompleteQuery<AutocompletePrefix>>();
+    const [emojiBoardTab, setEmojiBoardTab] = useState(EmojiBoardTab.Emoji);
+    const [emojiBoardOpen, setEmojiBoardOpen] = useState(false);
 
     const sendTypingStatus = useTypingStatusUpdater(mx, roomId);
 
@@ -671,15 +675,35 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     };
 
     const toggleEmojiBoardTab = useCallback(
-      (
-        currentTab: EmojiBoardTab | undefined,
-        nextTab: EmojiBoardTab,
-        setEmojiBoardTab: (tab: EmojiBoardTab | undefined) => void
-      ) => {
-        setEmojiBoardTab(currentTab === nextTab ? undefined : nextTab);
+      (nextTab: EmojiBoardTab) => {
+        if (hideStickerBtn) {
+          if (emojiBoardOpen) {
+            setEmojiBoardOpen(false);
+            if (!mobileOrTablet()) ReactEditor.focus(editor);
+            return;
+          }
+
+          setEmojiBoardTab(EmojiBoardTab.Emoji);
+          setEmojiBoardOpen(true);
+          return;
+        }
+
+        if (emojiBoardOpen && emojiBoardTab === nextTab) {
+          setEmojiBoardOpen(false);
+          if (!mobileOrTablet()) ReactEditor.focus(editor);
+          return;
+        }
+
+        setEmojiBoardTab(nextTab);
+        setEmojiBoardOpen(true);
       },
-      []
+      [editor, emojiBoardOpen, emojiBoardTab, hideStickerBtn]
     );
+
+    const closeEmojiBoard = useCallback(() => {
+      setEmojiBoardOpen(false);
+      if (!mobileOrTablet()) ReactEditor.focus(editor);
+    }, [editor]);
 
     const handleStickerSelect = async (mxc: string, label: string, info?: IImageInfo) => {
       setSendError(undefined);
@@ -947,16 +971,18 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
               >
                 <Icon src={Icons.OrderList} />
               </IconButton>
-              <IconButton
-                onClick={() => setBibleDialog(true)}
-                variant="SurfaceVariant"
-                size="300"
-                radii="300"
-                disabled={recording}
-                aria-disabled={recording}
-              >
-                <Text size="B300">{'\u7ecf'}</Text>
-              </IconButton>
+              {!compactScreen && (
+                <IconButton
+                  onClick={() => setBibleDialog(true)}
+                  variant="SurfaceVariant"
+                  size="300"
+                  radii="300"
+                  disabled={recording}
+                  aria-disabled={recording}
+                >
+                  <Text size="B300">{'\u7ecf'}</Text>
+                </IconButton>
+              )}
               <IconButton
                 onClick={recording ? stopVoiceRecording : startVoiceRecording}
                 variant={recording ? 'Primary' : 'SurfaceVariant'}
@@ -974,82 +1000,62 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
               >
                 <Icon src={toolbar ? Icons.AlphabetUnderline : Icons.Alphabet} />
               </IconButton>
-              <UseStateProvider initial={undefined}>
-                {(emojiBoardTab: EmojiBoardTab | undefined, setEmojiBoardTab) => (
-                  <PopOut
-                    offset={16}
-                    alignOffset={-44}
-                    position="Top"
-                    align="End"
-                    anchor={
-                      emojiBoardTab === undefined
-                        ? undefined
-                        : emojiBtnRef.current?.getBoundingClientRect() ?? undefined
-                    }
-                    content={
-                      <EmojiBoard
-                        tab={emojiBoardTab}
-                        onTabChange={setEmojiBoardTab}
-                        imagePackRooms={imagePackRooms}
-                        imagePackMode="personal"
-                        returnFocusOnDeactivate={false}
-                        onEmojiSelect={handleEmoticonSelect}
-                        onCustomEmojiSelect={handleEmoticonSelect}
-                        onStickerSelect={handleStickerSelect}
-                        requestClose={() => {
-                          setEmojiBoardTab((t) => {
-                            if (t) {
-                              if (!mobileOrTablet()) ReactEditor.focus(editor);
-                              return undefined;
-                            }
-                            return t;
-                          });
-                        }}
-                      />
-                    }
+              <PopOut
+                offset={16}
+                alignOffset={-44}
+                position="Top"
+                align="End"
+                anchor={emojiBoardOpen ? emojiBtnRef.current?.getBoundingClientRect() : undefined}
+                content={
+                  <EmojiBoard
+                    tab={emojiBoardTab}
+                    onTabChange={setEmojiBoardTab}
+                    imagePackRooms={imagePackRooms}
+                    imagePackMode="personal"
+                    returnFocusOnDeactivate={false}
+                    onEmojiSelect={handleEmoticonSelect}
+                    onCustomEmojiSelect={handleEmoticonSelect}
+                    onStickerSelect={handleStickerSelect}
+                    requestClose={closeEmojiBoard}
+                  />
+                }
+              >
+                {!hideStickerBtn && (
+                  <IconButton
+                    aria-pressed={emojiBoardOpen && emojiBoardTab === EmojiBoardTab.Sticker}
+                    onClick={() => toggleEmojiBoardTab(EmojiBoardTab.Sticker)}
+                    variant="SurfaceVariant"
+                    size="300"
+                    radii="300"
                   >
-                    {!hideStickerBtn && (
-                      <IconButton
-                        aria-pressed={emojiBoardTab === EmojiBoardTab.Sticker}
-                        onClick={() =>
-                          toggleEmojiBoardTab(
-                            emojiBoardTab,
-                            EmojiBoardTab.Sticker,
-                            setEmojiBoardTab
-                          )
-                        }
-                        variant="SurfaceVariant"
-                        size="300"
-                        radii="300"
-                      >
-                        <Icon
-                          src={Icons.Sticker}
-                          filled={emojiBoardTab === EmojiBoardTab.Sticker}
-                        />
-                      </IconButton>
-                    )}
-                    <IconButton
-                      ref={emojiBtnRef}
-                      aria-pressed={
-                        hideStickerBtn ? !!emojiBoardTab : emojiBoardTab === EmojiBoardTab.Emoji
-                      }
-                      onClick={() =>
-                        toggleEmojiBoardTab(emojiBoardTab, EmojiBoardTab.Emoji, setEmojiBoardTab)
-                      }
-                      variant="SurfaceVariant"
-                      size="300"
-                      radii="300"
-                    >
-                      <Icon
-                        src={Icons.Smile}
-                        filled={
-                          hideStickerBtn ? !!emojiBoardTab : emojiBoardTab === EmojiBoardTab.Emoji
-                        }
-                      />
-                    </IconButton>
-                  </PopOut>
+                    <Icon
+                      src={Icons.Sticker}
+                      filled={emojiBoardOpen && emojiBoardTab === EmojiBoardTab.Sticker}
+                    />
+                  </IconButton>
                 )}
-              </UseStateProvider>
+                <IconButton
+                  ref={emojiBtnRef}
+                  aria-pressed={
+                    hideStickerBtn
+                      ? emojiBoardOpen
+                      : emojiBoardOpen && emojiBoardTab === EmojiBoardTab.Emoji
+                  }
+                  onClick={() => toggleEmojiBoardTab(EmojiBoardTab.Emoji)}
+                  variant="SurfaceVariant"
+                  size="300"
+                  radii="300"
+                >
+                  <Icon
+                    src={Icons.Smile}
+                    filled={
+                      hideStickerBtn
+                        ? emojiBoardOpen
+                        : emojiBoardOpen && emojiBoardTab === EmojiBoardTab.Emoji
+                    }
+                  />
+                </IconButton>
+              </PopOut>
               <IconButton
                 onClick={
                   recording
