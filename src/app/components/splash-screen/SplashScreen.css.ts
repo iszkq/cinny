@@ -2,11 +2,14 @@ import { style } from '@vanilla-extract/css';
 import { color, config } from 'folds';
 
 export const SplashScreen = style({
-  minHeight: '100%',
+  minHeight: 'var(--app-height, 100dvh)',
   backgroundColor: color.Background.Container,
   color: color.Background.OnContainer,
 });
 
 export const SplashScreenFooter = style({
-  padding: config.space.S400,
+  paddingTop: config.space.S400,
+  paddingRight: `max(${config.space.S400}, env(safe-area-inset-right, 0px))`,
+  paddingBottom: `max(${config.space.S400}, env(safe-area-inset-bottom, 0px))`,
+  paddingLeft: `max(${config.space.S400}, env(safe-area-inset-left, 0px))`,
 });
