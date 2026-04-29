@@ -42,7 +42,6 @@ export function CompactClientNavButton() {
           onPointerDown={(evt: React.PointerEvent<HTMLDivElement>) => {
             evt.preventDefault();
             evt.stopPropagation();
-            closeDrawer();
           }}
           onClick={(evt: React.MouseEvent<HTMLDivElement>) => {
             evt.preventDefault();

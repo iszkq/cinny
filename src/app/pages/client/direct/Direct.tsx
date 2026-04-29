@@ -52,6 +52,7 @@ import {
 } from '../../../hooks/useRoomsNotificationPreferences';
 import { useDirectCreateSelected } from '../../../hooks/router/useDirectSelected';
 import { CompactClientNavButton } from '../CompactClientNavButton';
+import { ScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
 
 type DirectMenuProps = {
   requestClose: () => void;
@@ -87,7 +88,9 @@ const DirectMenu = forwardRef<HTMLDivElement, DirectMenuProps>(({ requestClose }
   );
 });
 
-function DirectHeader() {
+function DirectHeader({ onToggleCollapsed }: { onToggleCollapsed: () => void }) {
+  const screenSize = useScreenSizeContext();
+  const desktop = screenSize === ScreenSize.Desktop;
   const [menuAnchor, setMenuAnchor] = useState<RectCords>();
 
   const handleOpenMenu: MouseEventHandler<HTMLButtonElement> = (evt) => {
@@ -97,13 +100,27 @@ function DirectHeader() {
       return cords;
     });
   };
+  const handleToggleCollapsed = () => {
+    setMenuAnchor(undefined);
+    onToggleCollapsed();
+  };
 
   return (
     <>
       <PageNavHeader>
         <Box alignItems="Center" grow="Yes" gap="300">
           <Box shrink="No">
-            <CompactClientNavButton />
+            {desktop ? (
+              <IconButton
+                aria-label="Hide direct sections"
+                variant="Background"
+                onClick={handleToggleCollapsed}
+              >
+                <Icon src={Icons.UnorderList} size="200" />
+              </IconButton>
+            ) : (
+              <CompactClientNavButton />
+            )}
           </Box>
           <Box grow="Yes">
             <Text size="H4" truncate>
@@ -174,6 +191,8 @@ function DirectEmpty() {
 const DEFAULT_CATEGORY_ID = makeNavCategoryId('direct', 'direct');
 export function Direct() {
   const mx = useMatrixClient();
+  const screenSize = useScreenSizeContext();
+  const desktop = screenSize === ScreenSize.Desktop;
   useNavToActivePathMapper('direct');
   const scrollRef = useRef<HTMLDivElement>(null);
   const directs = useDirectRooms();
@@ -186,6 +205,7 @@ export function Direct() {
   const selectedRoomId = useSelectedRoom();
   const noRoomToDisplay = directs.length === 0;
   const [closedCategories, setClosedCategories] = useAtom(useClosedNavCategoriesAtom());
+  const [collapsed, setCollapsed] = useState(false);
 
   const sortedDirects = useMemo(() => {
     const items = Array.from(directs).sort(factoryRoomIdByActivity(mx));
@@ -207,8 +227,12 @@ export function Direct() {
   );
 
   return (
-    <PageNav>
-      <DirectHeader />
+    <PageNav
+      collapsed={desktop && collapsed}
+      onToggleCollapsed={() => setCollapsed((state) => !state)}
+      collapsedLabel="Show direct sections"
+    >
+      <DirectHeader onToggleCollapsed={() => setCollapsed((state) => !state)} />
       {noRoomToDisplay ? (
         <DirectEmpty />
       ) : (

@@ -256,6 +256,7 @@ function SpaceHeader({
   const space = useSpace();
   const screenSize = useScreenSizeContext();
   const desktop = screenSize === ScreenSize.Desktop;
+  const navCollapsed = desktop && collapsed;
   const spaceName = useRoomName(space);
   const [menuAnchor, setMenuAnchor] = useState<RectCords>();
 
@@ -279,7 +280,7 @@ function SpaceHeader({
           <Box shrink="No">
             {desktop ? (
               <IconButton
-                aria-pressed={collapsed}
+                aria-pressed={navCollapsed}
                 variant="Background"
                 onClick={onToggleCollapsed}
               >
@@ -289,7 +290,7 @@ function SpaceHeader({
               <CompactClientNavButton />
             )}
           </Box>
-          {!collapsed && (
+          {!navCollapsed && (
             <>
               <Box grow="Yes" alignItems="Center" gap="100">
                 <Text size="H4" truncate>
@@ -310,7 +311,7 @@ function SpaceHeader({
           )}
         </Box>
       </PageNavHeader>
-      {menuAnchor && !collapsed && (
+      {menuAnchor && !navCollapsed && (
         <PopOut
           anchor={menuAnchor}
           position="Bottom"
@@ -474,125 +475,114 @@ export function Space() {
     getSpaceRoomPath(spaceIdOrAlias, getCanonicalAliasOrRoomId(mx, roomId));
 
   return (
-    <div
-      style={
-        desktop
-          ? {
-              width: collapsed ? toRem(72) : toRem(256),
-              minWidth: collapsed ? toRem(72) : toRem(256),
-              overflow: 'hidden',
-              transition: 'width 180ms ease, min-width 180ms ease',
-            }
-          : undefined
-      }
+    <PageNav
+      collapsed={desktop && collapsed}
+      onToggleCollapsed={() => setCollapsed((state) => !state)}
+      collapsedLabel="Show space sections"
     >
-      <PageNav>
-        <SpaceHeader collapsed={collapsed} onToggleCollapsed={() => setCollapsed((v) => !v)} />
-        {!collapsed && (
-          <PageNavContent scrollRef={scrollRef}>
-            <Box direction="Column" gap="300">
-              {tombstoneEvent && (
-                <SpaceTombstone
-                  roomId={space.roomId}
-                  replacementRoomId={tombstoneEvent.getContent().replacement_room}
-                />
-              )}
-              <NavCategory>
-                <NavItem variant="Background" radii="400" aria-selected={lobbySelected}>
-                  <NavLink to={getSpaceLobbyPath(getCanonicalAliasOrRoomId(mx, space.roomId))}>
-                    <NavItemContent>
-                      <Box as="span" grow="Yes" alignItems="Center" gap="200">
-                        <Avatar size="200" radii="400">
-                          <Icon src={Icons.Flag} size="100" filled={lobbySelected} />
-                        </Avatar>
-                        <Box as="span" grow="Yes">
-                          <Text as="span" size="Inherit" truncate>
-                            {'\u5927\u5385'}
-                          </Text>
-                        </Box>
-                      </Box>
-                    </NavItemContent>
-                  </NavLink>
-                </NavItem>
-                <NavItem variant="Background" radii="400" aria-selected={searchSelected}>
-                  <NavLink to={getSpaceSearchPath(getCanonicalAliasOrRoomId(mx, space.roomId))}>
-                    <NavItemContent>
-                      <Box as="span" grow="Yes" alignItems="Center" gap="200">
-                        <Avatar size="200" radii="400">
-                          <Icon src={Icons.Search} size="100" filled={searchSelected} />
-                        </Avatar>
-                        <Box as="span" grow="Yes">
-                          <Text as="span" size="Inherit" truncate>
-                            {'\u6d88\u606f\u641c\u7d22'}
-                          </Text>
-                        </Box>
-                      </Box>
-                    </NavItemContent>
-                  </NavLink>
-                </NavItem>
-              </NavCategory>
-              <NavCategory
-                style={{
-                  height: virtualizer.getTotalSize(),
-                  position: 'relative',
-                }}
-              >
-                {virtualizer.getVirtualItems().map((vItem) => {
-                  const { roomId } = hierarchy[vItem.index] ?? {};
-                  const room = mx.getRoom(roomId);
-                  if (!room) return null;
+      <SpaceHeader collapsed={collapsed} onToggleCollapsed={() => setCollapsed((v) => !v)} />
+      <PageNavContent scrollRef={scrollRef}>
+        <Box direction="Column" gap="300">
+          {tombstoneEvent && (
+            <SpaceTombstone
+              roomId={space.roomId}
+              replacementRoomId={tombstoneEvent.getContent().replacement_room}
+            />
+          )}
+          <NavCategory>
+            <NavItem variant="Background" radii="400" aria-selected={lobbySelected}>
+              <NavLink to={getSpaceLobbyPath(getCanonicalAliasOrRoomId(mx, space.roomId))}>
+                <NavItemContent>
+                  <Box as="span" grow="Yes" alignItems="Center" gap="200">
+                    <Avatar size="200" radii="400">
+                      <Icon src={Icons.Flag} size="100" filled={lobbySelected} />
+                    </Avatar>
+                    <Box as="span" grow="Yes">
+                      <Text as="span" size="Inherit" truncate>
+                        {'\u5927\u5385'}
+                      </Text>
+                    </Box>
+                  </Box>
+                </NavItemContent>
+              </NavLink>
+            </NavItem>
+            <NavItem variant="Background" radii="400" aria-selected={searchSelected}>
+              <NavLink to={getSpaceSearchPath(getCanonicalAliasOrRoomId(mx, space.roomId))}>
+                <NavItemContent>
+                  <Box as="span" grow="Yes" alignItems="Center" gap="200">
+                    <Avatar size="200" radii="400">
+                      <Icon src={Icons.Search} size="100" filled={searchSelected} />
+                    </Avatar>
+                    <Box as="span" grow="Yes">
+                      <Text as="span" size="Inherit" truncate>
+                        {'\u6d88\u606f\u641c\u7d22'}
+                      </Text>
+                    </Box>
+                  </Box>
+                </NavItemContent>
+              </NavLink>
+            </NavItem>
+          </NavCategory>
+          <NavCategory
+            style={{
+              height: virtualizer.getTotalSize(),
+              position: 'relative',
+            }}
+          >
+            {virtualizer.getVirtualItems().map((vItem) => {
+              const { roomId } = hierarchy[vItem.index] ?? {};
+              const room = mx.getRoom(roomId);
+              if (!room) return null;
 
-                  if (room.isSpaceRoom()) {
-                    const categoryId = makeNavCategoryId(space.roomId, roomId);
+              if (room.isSpaceRoom()) {
+                const categoryId = makeNavCategoryId(space.roomId, roomId);
 
-                    return (
-                      <VirtualTile
-                        virtualItem={vItem}
-                        key={vItem.index}
-                        ref={virtualizer.measureElement}
-                      >
-                        <div
-                          style={{ paddingTop: vItem.index === 0 ? undefined : config.space.S400 }}
-                        >
-                          <NavCategoryHeader>
-                            <RoomNavCategoryButton
-                              data-category-id={categoryId}
-                              onClick={handleCategoryClick}
-                              closed={closedCategories.has(categoryId)}
-                            >
-                              {roomId === space.roomId ? '\u623f\u95f4' : room?.name}
-                            </RoomNavCategoryButton>
-                          </NavCategoryHeader>
-                        </div>
-                      </VirtualTile>
-                    );
-                  }
-
-                  return (
-                    <VirtualTile
-                      virtualItem={vItem}
-                      key={vItem.index}
-                      ref={virtualizer.measureElement}
+                return (
+                  <VirtualTile
+                    virtualItem={vItem}
+                    key={vItem.index}
+                    ref={virtualizer.measureElement}
+                  >
+                    <div
+                      style={{ paddingTop: vItem.index === 0 ? undefined : config.space.S400 }}
                     >
-                      <RoomNavItem
-                        room={room}
-                        selected={selectedRoomId === roomId}
-                        showAvatar={mDirects.has(roomId)}
-                        direct={mDirects.has(roomId)}
-                        linkPath={getToLink(roomId)}
-                        notificationMode={getRoomNotificationMode(
-                          notificationPreferences,
-                          room.roomId
-                        )}
-                      />
-                    </VirtualTile>
-                  );
-                })}
-              </NavCategory>
-            </Box>
-          </PageNavContent>
-        )}
-      </PageNav>
-    </div>
+                      <NavCategoryHeader>
+                        <RoomNavCategoryButton
+                          data-category-id={categoryId}
+                          onClick={handleCategoryClick}
+                          closed={closedCategories.has(categoryId)}
+                        >
+                          {roomId === space.roomId ? '\u623f\u95f4' : room?.name}
+                        </RoomNavCategoryButton>
+                      </NavCategoryHeader>
+                    </div>
+                  </VirtualTile>
+                );
+              }
+
+              return (
+                <VirtualTile
+                  virtualItem={vItem}
+                  key={vItem.index}
+                  ref={virtualizer.measureElement}
+                >
+                  <RoomNavItem
+                    room={room}
+                    selected={selectedRoomId === roomId}
+                    showAvatar={mDirects.has(roomId)}
+                    direct={mDirects.has(roomId)}
+                    linkPath={getToLink(roomId)}
+                    notificationMode={getRoomNotificationMode(
+                      notificationPreferences,
+                      room.roomId
+                    )}
+                  />
+                </VirtualTile>
+              );
+            })}
+          </NavCategory>
+        </Box>
+      </PageNavContent>
+    </PageNav>
   );
 }

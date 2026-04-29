@@ -63,6 +63,7 @@ import {
   upsertExploreCustomSource,
 } from './customSources';
 import { CompactClientNavButton } from '../CompactClientNavButton';
+import { ScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
 
 const PROBE_TIMEOUT_MS = 2500;
 
@@ -595,6 +596,8 @@ function CustomSourceNavItem({
 
 export function Explore() {
   const mx = useMatrixClient();
+  const screenSize = useScreenSizeContext();
+  const desktop = screenSize === ScreenSize.Desktop;
   useNavToActivePathMapper('explore');
   const navigate = useNavigate();
   const userId = mx.getUserId();
@@ -646,6 +649,7 @@ export function Explore() {
   const selectedNavSourceId = useExploreNavSourceId();
 
   const [deletingSourceId, setDeletingSourceId] = useState<string>();
+  const [collapsed, setCollapsed] = useState(false);
   const [removeState, removeSource] = useAsyncCallback(async (sourceId: string) => {
     await removeExploreCustomSource(mx, sourceId);
     return sourceId;
@@ -711,11 +715,25 @@ export function Explore() {
   };
 
   return (
-    <PageNav>
+    <PageNav
+      collapsed={desktop && collapsed}
+      onToggleCollapsed={() => setCollapsed((state) => !state)}
+      collapsedLabel="Show explore sections"
+    >
       <PageNavHeader>
         <Box grow="Yes" alignItems="Center" gap="300">
           <Box shrink="No">
-            <CompactClientNavButton />
+            {desktop ? (
+              <IconButton
+                aria-label="Hide explore sections"
+                variant="Background"
+                onClick={() => setCollapsed((state) => !state)}
+              >
+                <Icon src={Icons.UnorderList} size="200" />
+              </IconButton>
+            ) : (
+              <CompactClientNavButton />
+            )}
           </Box>
           <Box grow="Yes">
             <Text size="H4" truncate>

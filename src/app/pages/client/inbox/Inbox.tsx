@@ -1,5 +1,5 @@
-import React from 'react';
-import { Avatar, Box, Icon, Icons, Text } from 'folds';
+import React, { useState } from 'react';
+import { Avatar, Box, Icon, IconButton, Icons, Text } from 'folds';
 import { useAtomValue } from 'jotai';
 import { NavCategory, NavItem, NavItemContent, NavLink } from '../../../components/nav';
 import { getInboxInvitesPath, getInboxNotificationsPath } from '../../pathUtils';
@@ -12,6 +12,7 @@ import { allInvitesAtom } from '../../../state/room-list/inviteList';
 import { useNavToActivePathMapper } from '../../../hooks/useNavToActivePathMapper';
 import { PageNav, PageNavContent, PageNavHeader } from '../../../components/page';
 import { CompactClientNavButton } from '../CompactClientNavButton';
+import { ScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
 
 function InvitesNavItem() {
   const invitesSelected = useInboxInvitesSelected();
@@ -45,15 +46,32 @@ function InvitesNavItem() {
 }
 
 export function Inbox() {
+  const screenSize = useScreenSizeContext();
+  const desktop = screenSize === ScreenSize.Desktop;
   useNavToActivePathMapper('inbox');
   const notificationsSelected = useInboxNotificationsSelected();
+  const [collapsed, setCollapsed] = useState(false);
 
   return (
-    <PageNav>
+    <PageNav
+      collapsed={desktop && collapsed}
+      onToggleCollapsed={() => setCollapsed((state) => !state)}
+      collapsedLabel="Show inbox sections"
+    >
       <PageNavHeader>
         <Box grow="Yes" alignItems="Center" gap="300">
           <Box shrink="No">
-            <CompactClientNavButton />
+            {desktop ? (
+              <IconButton
+                aria-label="Hide inbox sections"
+                variant="Background"
+                onClick={() => setCollapsed((state) => !state)}
+              >
+                <Icon src={Icons.UnorderList} size="200" />
+              </IconButton>
+            ) : (
+              <CompactClientNavButton />
+            )}
           </Box>
           <Box grow="Yes">
             <Text size="H4" truncate>

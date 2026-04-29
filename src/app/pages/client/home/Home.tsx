@@ -66,6 +66,7 @@ import { UseStateProvider } from '../../../components/UseStateProvider';
 import { JoinAddressPrompt } from '../../../components/join-address-prompt';
 import { _RoomSearchParams } from '../../paths';
 import { CompactClientNavButton } from '../CompactClientNavButton';
+import { ScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
 
 type HomeMenuProps = {
   requestClose: () => void;
@@ -101,7 +102,9 @@ const HomeMenu = forwardRef<HTMLDivElement, HomeMenuProps>(({ requestClose }, re
   );
 });
 
-function HomeHeader() {
+function HomeHeader({ onToggleCollapsed }: { onToggleCollapsed: () => void }) {
+  const screenSize = useScreenSizeContext();
+  const desktop = screenSize === ScreenSize.Desktop;
   const [menuAnchor, setMenuAnchor] = useState<RectCords>();
 
   const handleOpenMenu: MouseEventHandler<HTMLButtonElement> = (evt) => {
@@ -111,13 +114,23 @@ function HomeHeader() {
       return cords;
     });
   };
+  const handleToggleCollapsed = () => {
+    setMenuAnchor(undefined);
+    onToggleCollapsed();
+  };
 
   return (
     <>
       <PageNavHeader>
         <Box alignItems="Center" grow="Yes" gap="300">
           <Box shrink="No">
-            <CompactClientNavButton />
+            {desktop ? (
+              <IconButton aria-label="Hide home sections" variant="Background" onClick={handleToggleCollapsed}>
+                <Icon src={Icons.UnorderList} size="200" />
+              </IconButton>
+            ) : (
+              <CompactClientNavButton />
+            )}
           </Box>
           <Box grow="Yes">
             <Text size="H4" truncate>
@@ -200,6 +213,8 @@ function HomeEmpty() {
 const DEFAULT_CATEGORY_ID = makeNavCategoryId('home', 'room');
 export function Home() {
   const mx = useMatrixClient();
+  const screenSize = useScreenSizeContext();
+  const desktop = screenSize === ScreenSize.Desktop;
   useNavToActivePathMapper('home');
   const scrollRef = useRef<HTMLDivElement>(null);
   const rooms = useHomeRooms();
@@ -212,6 +227,7 @@ export function Home() {
   const searchSelected = useHomeSearchSelected();
   const noRoomToDisplay = rooms.length === 0;
   const [closedCategories, setClosedCategories] = useAtom(useClosedNavCategoriesAtom());
+  const [collapsed, setCollapsed] = useState(false);
 
   const sortedRooms = useMemo(() => {
     const items = Array.from(rooms).sort(
@@ -237,8 +253,12 @@ export function Home() {
   );
 
   return (
-    <PageNav>
-      <HomeHeader />
+    <PageNav
+      collapsed={desktop && collapsed}
+      onToggleCollapsed={() => setCollapsed((state) => !state)}
+      collapsedLabel="Show home sections"
+    >
+      <HomeHeader onToggleCollapsed={() => setCollapsed((state) => !state)} />
       {noRoomToDisplay ? (
         <HomeEmpty />
       ) : (
