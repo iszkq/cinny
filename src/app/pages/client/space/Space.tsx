@@ -6,7 +6,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { useAtom, useAtomValue } from 'jotai';
+import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import {
   Avatar,
   Box,
@@ -87,6 +87,7 @@ import { InviteUserPrompt } from '../../../components/invite-user-prompt';
 import { useCallEmbed } from '../../../hooks/useCallEmbed';
 import { CompactClientNavButton } from '../CompactClientNavButton';
 import { ScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
+import { desktopPageNavCollapsedAtom } from '../../../state/desktopPageNav';
 
 type SpaceMenuProps = {
   room: Room;
@@ -246,17 +247,11 @@ const SpaceMenu = forwardRef<HTMLDivElement, SpaceMenuProps>(({ room, requestClo
   );
 });
 
-function SpaceHeader({
-  collapsed,
-  onToggleCollapsed,
-}: {
-  collapsed: boolean;
-  onToggleCollapsed: () => void;
-}) {
+function SpaceHeader() {
   const space = useSpace();
   const screenSize = useScreenSizeContext();
   const desktop = screenSize === ScreenSize.Desktop;
-  const navCollapsed = desktop && collapsed;
+  const setDesktopPageNavCollapsed = useSetAtom(desktopPageNavCollapsedAtom);
   const spaceName = useRoomName(space);
   const [menuAnchor, setMenuAnchor] = useState<RectCords>();
 
@@ -273,6 +268,11 @@ function SpaceHeader({
     });
   };
 
+  const handleToggleCollapsed = () => {
+    setMenuAnchor(undefined);
+    setDesktopPageNavCollapsed(true);
+  };
+
   return (
     <>
       <PageNavHeader>
@@ -280,38 +280,34 @@ function SpaceHeader({
           <Box shrink="No">
             {desktop ? (
               <IconButton
-                aria-pressed={navCollapsed}
+                aria-label="Back to main sidebar"
                 variant="Background"
-                onClick={onToggleCollapsed}
+                onClick={handleToggleCollapsed}
               >
-                <Icon src={Icons.UnorderList} size="200" />
+                <Icon src={Icons.ArrowLeft} size="200" />
               </IconButton>
             ) : (
               <CompactClientNavButton />
             )}
           </Box>
-          {!navCollapsed && (
-            <>
-              <Box grow="Yes" alignItems="Center" gap="100">
-                <Text size="H4" truncate>
-                  {spaceName}
-                </Text>
-                {joinRules?.join_rule !== JoinRule.Public && <Icon src={Icons.Lock} size="50" />}
-              </Box>
-              <Box shrink="No">
-                <IconButton
-                  aria-pressed={!!menuAnchor}
-                  variant="Background"
-                  onClick={handleOpenMenu}
-                >
-                  <Icon src={Icons.VerticalDots} size="200" />
-                </IconButton>
-              </Box>
-            </>
-          )}
+          <Box grow="Yes" alignItems="Center" gap="100">
+            <Text size="H4" truncate>
+              {spaceName}
+            </Text>
+            {joinRules?.join_rule !== JoinRule.Public && <Icon src={Icons.Lock} size="50" />}
+          </Box>
+          <Box shrink="No">
+            <IconButton
+              aria-pressed={!!menuAnchor}
+              variant="Background"
+              onClick={handleOpenMenu}
+            >
+              <Icon src={Icons.VerticalDots} size="200" />
+            </IconButton>
+          </Box>
         </Box>
       </PageNavHeader>
-      {menuAnchor && !navCollapsed && (
+      {menuAnchor && (
         <PopOut
           anchor={menuAnchor}
           position="Bottom"
@@ -410,8 +406,6 @@ export function SpaceTombstone({ roomId, replacementRoomId }: SpaceTombstoneProp
 export function Space() {
   const mx = useMatrixClient();
   const space = useSpace();
-  const screenSize = useScreenSizeContext();
-  const desktop = screenSize === ScreenSize.Desktop;
   useNavToActivePathMapper(space.roomId);
   const spaceIdOrAlias = getCanonicalAliasOrRoomId(mx, space.roomId);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -428,7 +422,6 @@ export function Space() {
   const callEmbed = useCallEmbed();
 
   const [closedCategories, setClosedCategories] = useAtom(useClosedNavCategoriesAtom());
-  const [collapsed, setCollapsed] = useState(false);
 
   const getRoom = useCallback(
     (rId: string): Room | undefined => {
@@ -475,12 +468,8 @@ export function Space() {
     getSpaceRoomPath(spaceIdOrAlias, getCanonicalAliasOrRoomId(mx, roomId));
 
   return (
-    <PageNav
-      collapsed={desktop && collapsed}
-      onToggleCollapsed={() => setCollapsed((state) => !state)}
-      collapsedLabel="Show space sections"
-    >
-      <SpaceHeader collapsed={collapsed} onToggleCollapsed={() => setCollapsed((v) => !v)} />
+    <PageNav>
+      <SpaceHeader />
       <PageNavContent scrollRef={scrollRef}>
         <Box direction="Column" gap="300">
           {tombstoneEvent && (
