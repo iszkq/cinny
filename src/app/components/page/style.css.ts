@@ -23,6 +23,7 @@ export const PageNavHeader = recipe({
   base: {
     padding: `0 ${config.space.S200} 0 ${config.space.S300}`,
     flexShrink: 0,
+    minWidth: 0,
     selectors: {
       'button&': {
         cursor: 'pointer',
@@ -57,17 +58,31 @@ export const PageNavContent = style({
   padding: config.space.S200,
   paddingRight: 0,
   paddingBottom: config.space.S700,
+  '@media': {
+    'screen and (max-width: 1124px)': {
+      padding: config.space.S100,
+      paddingRight: 0,
+      paddingBottom: `calc(${config.space.S400} + env(safe-area-inset-bottom))`,
+    },
+  },
 });
 
 export const PageHeader = recipe({
   base: {
-    paddingLeft: config.space.S400,
-    paddingRight: config.space.S200,
+    paddingLeft: `max(${config.space.S400}, env(safe-area-inset-left))`,
+    paddingRight: `max(${config.space.S200}, env(safe-area-inset-right))`,
+    minWidth: 0,
+    '@media': {
+      'screen and (max-width: 1124px)': {
+        paddingLeft: `max(${config.space.S200}, env(safe-area-inset-left))`,
+        paddingRight: `max(${config.space.S200}, env(safe-area-inset-right))`,
+      },
+    },
   },
   variants: {
     balance: {
       true: {
-        paddingLeft: config.space.S200,
+        paddingLeft: `max(${config.space.S200}, env(safe-area-inset-left))`,
       },
     },
     outlined: {
@@ -86,9 +101,17 @@ export const PageContent = style([
   DefaultReset,
   {
     paddingTop: config.space.S400,
-    paddingLeft: config.space.S400,
-    paddingRight: 0,
-    paddingBottom: toRem(100),
+    paddingLeft: `max(${config.space.S400}, env(safe-area-inset-left))`,
+    paddingRight: `max(${config.space.S200}, env(safe-area-inset-right))`,
+    paddingBottom: `max(${toRem(100)}, env(safe-area-inset-bottom))`,
+    '@media': {
+      'screen and (max-width: 1124px)': {
+        paddingTop: config.space.S300,
+        paddingLeft: `max(${config.space.S200}, env(safe-area-inset-left))`,
+        paddingRight: `max(${config.space.S200}, env(safe-area-inset-right))`,
+        paddingBottom: `max(${config.space.S700}, env(safe-area-inset-bottom))`,
+      },
+    },
   },
 ]);
 
@@ -98,6 +121,11 @@ export const PageHeroEmpty = style([
     padding: config.space.S400,
     borderRadius: config.radii.R400,
     minHeight: toRem(450),
+    '@media': {
+      'screen and (max-width: 1124px)': {
+        minHeight: toRem(320),
+      },
+    },
   },
 ]);
 
@@ -108,6 +136,11 @@ export const PageHeroSection = style([
     maxWidth: toRem(466),
     width: '100%',
     margin: 'auto',
+    '@media': {
+      'screen and (max-width: 1124px)': {
+        padding: '24px 0',
+      },
+    },
   },
 ]);
 
