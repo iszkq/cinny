@@ -7,8 +7,9 @@ import { toRem, color, config, DefaultReset, FocusOutline } from 'folds';
 
 export const Base = style({
   maxWidth: toRem(432),
-  width: `min(${toRem(432)}, calc(100vw - 2 * ${config.space.S400}))`,
-  height: `min(${toRem(450)}, calc(100dvh - ${config.space.S400} - env(safe-area-inset-top) - env(safe-area-inset-bottom)))`,
+  width: `min(${toRem(432)}, calc(var(--app-width, 100vw) - 2 * ${config.space.S400}))`,
+  height:
+    `min(${toRem(450)}, calc(var(--app-height, 100dvh) - ${config.space.S400} - env(safe-area-inset-top) - env(safe-area-inset-bottom)))`,
   backgroundColor: color.Surface.Container,
   color: color.Surface.OnContainer,
   border: `${config.borderWidth.B300} solid ${color.Surface.ContainerLine}`,
@@ -17,9 +18,9 @@ export const Base = style({
   overflow: 'hidden',
   '@media': {
     'screen and (max-width: 750px)': {
-      width: `calc(100vw - 2 * ${config.space.S200})`,
+      width: `calc(var(--app-width, 100vw) - 2 * ${config.space.S200})`,
       height:
-        `min(${toRem(420)}, calc(100dvh - ${config.space.S300} - env(safe-area-inset-top) - env(safe-area-inset-bottom)))`,
+        `min(${toRem(420)}, calc(var(--app-height, 100dvh) - ${config.space.S300} - env(safe-area-inset-top) - env(safe-area-inset-bottom)))`,
     },
   },
 });
