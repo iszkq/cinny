@@ -110,6 +110,10 @@ export const ImageViewer = as<'div', ImageViewerProps>(
     const [swipeOffsetX, setSwipeOffsetX] = useState(0);
     const displayRotation = ((rotation % 360) + 360) % 360;
     const resolvedActiveItemId = activeItemId ?? src;
+    const viewerIndex = Math.max(
+      items?.findIndex((item) => item.id === resolvedActiveItemId) ?? 0,
+      0
+    );
     const thumbnailRefs = useRef<Record<string, HTMLButtonElement | null>>({});
     const swipeDeltaRef = useRef({ x: 0, y: 0 });
     const touchGestureRef = useRef<TouchGesture>();
