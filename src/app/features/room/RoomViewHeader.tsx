@@ -310,7 +310,7 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
       className={ContainerColor({ variant: 'Surface' })}
       balance={compact}
     >
-      <Box grow="Yes" gap="300" style={{ minWidth: 0 }}>
+      <Box grow="Yes" gap={compact ? '200' : '300'} style={{ minWidth: 0 }}>
         {compact && (
           <BackRouteHandler>
             {(onBack) => (
@@ -322,7 +322,12 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
             )}
           </BackRouteHandler>
         )}
-        <Box grow="Yes" alignItems="Center" gap="300" style={{ minWidth: 0 }}>
+        <Box
+          grow="Yes"
+          alignItems="Center"
+          gap={compact ? '200' : '300'}
+          style={{ minWidth: 0 }}
+        >
           {!compact && (
             <Avatar size="300">
               <RoomAvatar
@@ -336,7 +341,7 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
             </Avatar>
           )}
           <Box direction="Column" style={{ minWidth: 0 }}>
-            <Text size={topic ? 'H5' : 'H3'} truncate>
+            <Text size={compact ? 'H4' : topic ? 'H5' : 'H3'} truncate>
               {name}
             </Text>
             {topic && (

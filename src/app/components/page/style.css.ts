@@ -26,7 +26,6 @@ export const PageNavHeader = recipe({
     minWidth: 0,
     '@media': {
       'screen and (max-width: 1124px)': {
-        paddingTop: `max(${config.space.S100}, env(safe-area-inset-top))`,
         paddingLeft: `max(${config.space.S200}, env(safe-area-inset-left))`,
         paddingRight: `max(${config.space.S200}, env(safe-area-inset-right))`,
       },
@@ -86,9 +85,6 @@ export const PageHeader = recipe({
       'screen and (max-width: 1124px)': {
         paddingLeft: `max(${config.space.S200}, env(safe-area-inset-left))`,
         paddingRight: `max(${config.space.S200}, env(safe-area-inset-right))`,
-      },
-      'screen and (max-width: 1124px)': {
-        paddingTop: `max(${config.space.S100}, env(safe-area-inset-top))`,
       },
     },
   },

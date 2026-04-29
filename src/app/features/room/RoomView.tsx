@@ -61,6 +61,7 @@ export function RoomView({ eventId }: { eventId?: string }) {
   const { roomId } = room;
   const editor = useEditor();
   const screenSize = useScreenSizeContext();
+  const compact = isCompactScreenSize(screenSize);
 
   const mx = useMatrixClient();
 
@@ -89,8 +90,8 @@ export function RoomView({ eventId }: { eventId?: string }) {
   );
 
   return (
-    <Page ref={roomViewRef}>
-      <Box grow="Yes" direction="Column">
+    <Page ref={roomViewRef} style={{ minHeight: 0 }}>
+      <Box grow="Yes" direction="Column" style={{ minHeight: 0 }}>
         <RoomTimeline
           key={roomId}
           room={room}
@@ -103,8 +104,8 @@ export function RoomView({ eventId }: { eventId?: string }) {
       <Box shrink="No" direction="Column">
         <div
           style={{
-            paddingLeft: isCompactScreenSize(screenSize) ? config.space.S200 : config.space.S400,
-            paddingRight: isCompactScreenSize(screenSize) ? config.space.S200 : config.space.S400,
+            paddingLeft: compact ? config.space.S200 : config.space.S400,
+            paddingRight: compact ? config.space.S200 : config.space.S400,
             paddingBottom:
               screenSize === ScreenSize.Mobile
                 ? `max(${config.space.S100}, env(safe-area-inset-bottom, 0px))`
@@ -140,7 +141,7 @@ export function RoomView({ eventId }: { eventId?: string }) {
             </>
           )}
         </div>
-        <RoomViewFollowing room={room} />
+        {screenSize !== ScreenSize.Mobile && <RoomViewFollowing room={room} />}
       </Box>
     </Page>
   );

@@ -2042,7 +2042,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
   };
 
   return (
-    <Box grow="Yes" style={{ position: 'relative' }}>
+    <Box grow="Yes" style={{ position: 'relative', minHeight: 0 }}>
       {forwardDialog && selectedForwardCount > 0 && (
         <ForwardMessagesModal
           messages={Object.values(forwardMessages)}
