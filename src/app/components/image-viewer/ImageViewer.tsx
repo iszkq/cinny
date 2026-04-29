@@ -7,6 +7,7 @@ import * as css from './ImageViewer.css';
 import { usePan } from '../../hooks/usePan';
 import { useZoom } from '../../hooks/useZoom';
 import { fetchMediaWithAuth } from '../../utils/matrix';
+import { ScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
 
 export type ImageViewerItem = {
   id: string;
@@ -96,6 +97,8 @@ export const ImageViewer = as<'div', ImageViewerProps>(
     },
     ref
   ) => {
+    const screenSize = useScreenSizeContext();
+    const mobile = screenSize === ScreenSize.Mobile;
     const [rotation, setRotation] = useState(0);
     const [viewMode, setViewMode] = useState<ViewMode>('fit');
     const { zoom, zoomIn, zoomOut, setZoom } = useZoom(ZOOM_STEP, MIN_ZOOM, MAX_ZOOM);
@@ -409,7 +412,7 @@ export const ImageViewer = as<'div', ImageViewerProps>(
               onClick={requestClose}
               aria-label={'\u5173\u95ed\u9884\u89c8'}
             >
-              <Icon size="50" src={Icons.ArrowLeft} />
+              <Icon size="50" src={mobile ? Icons.Cross : Icons.ArrowLeft} />
             </IconButton>
             <Text size="T300" truncate title={alt}>
               {alt}
@@ -422,66 +425,84 @@ export const ImageViewer = as<'div', ImageViewerProps>(
             gap="200"
             style={{ flexWrap: 'wrap', justifyContent: 'flex-end' }}
           >
-            <IconButton
-              variant={zoom < 1 ? 'Success' : 'SurfaceVariant'}
-              outlined={zoom < 1}
-              size="300"
-              radii="Pill"
-              onClick={zoomOut}
-              aria-label={'\u7f29\u5c0f'}
-            >
-              <Icon size="50" src={Icons.Minus} />
-            </IconButton>
+            {mobile ? (
+              <>
+                {hasThumbnailRail && items && (
+                  <Text size="T200" priority="300">
+                    {`${viewerIndex + 1} / ${items.length}`}
+                  </Text>
+                )}
+                <Chip variant="SurfaceVariant" radii="Pill" onClick={rotateLeft}>
+                  <Text size="B300">{'\u5de6\u8f6c'}</Text>
+                </Chip>
+                <Chip variant="SurfaceVariant" radii="Pill" onClick={rotateRight}>
+                  <Text size="B300">{'\u53f3\u8f6c'}</Text>
+                </Chip>
+              </>
+            ) : (
+              <>
+                <IconButton
+                  variant={zoom < 1 ? 'Success' : 'SurfaceVariant'}
+                  outlined={zoom < 1}
+                  size="300"
+                  radii="Pill"
+                  onClick={zoomOut}
+                  aria-label={'\u7f29\u5c0f'}
+                >
+                  <Icon size="50" src={Icons.Minus} />
+                </IconButton>
 
-            <Chip variant="SurfaceVariant" radii="Pill" onClick={() => setZoom(1)}>
-              <Text size="B300">{Math.round(zoom * 100)}%</Text>
-            </Chip>
+                <Chip variant="SurfaceVariant" radii="Pill" onClick={() => setZoom(1)}>
+                  <Text size="B300">{Math.round(zoom * 100)}%</Text>
+                </Chip>
 
-            <IconButton
-              variant={zoom > 1 ? 'Success' : 'SurfaceVariant'}
-              outlined={zoom > 1}
-              size="300"
-              radii="Pill"
-              onClick={zoomIn}
-              aria-label={'\u653e\u5927'}
-            >
-              <Icon size="50" src={Icons.Plus} />
-            </IconButton>
+                <IconButton
+                  variant={zoom > 1 ? 'Success' : 'SurfaceVariant'}
+                  outlined={zoom > 1}
+                  size="300"
+                  radii="Pill"
+                  onClick={zoomIn}
+                  aria-label={'\u653e\u5927'}
+                >
+                  <Icon size="50" src={Icons.Plus} />
+                </IconButton>
 
-            <Chip
-              variant={viewMode === 'actual' ? 'Success' : 'SurfaceVariant'}
-              radii="Pill"
-              onClick={toggleViewMode}
-            >
-              <Text size="B300">
-                {viewMode === 'fit' ? '\u9002\u5e94\u7a97\u53e3' : '\u539f\u59cb\u5927\u5c0f'}
-              </Text>
-            </Chip>
+                <Chip
+                  variant={viewMode === 'actual' ? 'Success' : 'SurfaceVariant'}
+                  radii="Pill"
+                  onClick={toggleViewMode}
+                >
+                  <Text size="B300">
+                    {viewMode === 'fit' ? '\u9002\u5e94\u7a97\u53e3' : '\u539f\u59cb\u5927\u5c0f'}
+                  </Text>
+                </Chip>
 
-            <Chip variant="SurfaceVariant" radii="Pill" onClick={rotateLeft}>
-              <Text size="B300">{'\u5de6\u8f6c'}</Text>
-            </Chip>
+                <Chip variant="SurfaceVariant" radii="Pill" onClick={rotateLeft}>
+                  <Text size="B300">{'\u5de6\u8f6c'}</Text>
+                </Chip>
 
-            <Chip
-              variant={displayRotation !== 0 ? 'Success' : 'SurfaceVariant'}
-              radii="Pill"
-              onClick={() => setRotation(0)}
-            >
-              <Text size="B300">{`${displayRotation}\u00b0`}</Text>
-            </Chip>
+                <Chip
+                  variant={displayRotation !== 0 ? 'Success' : 'SurfaceVariant'}
+                  radii="Pill"
+                  onClick={() => setRotation(0)}
+                >
+                  <Text size="B300">{`${displayRotation}\u00b0`}</Text>
+                </Chip>
 
-            <Chip variant="SurfaceVariant" radii="Pill" onClick={rotateRight}>
-              <Text size="B300">{'\u53f3\u8f6c'}</Text>
-            </Chip>
+                <Chip variant="SurfaceVariant" radii="Pill" onClick={rotateRight}>
+                  <Text size="B300">{'\u53f3\u8f6c'}</Text>
+                </Chip>
 
-            <Chip
-              variant="Primary"
-              onClick={handleDownload}
-              radii="300"
-              before={<Icon size="50" src={Icons.Download} />}
-            >
-              <Text size="B300">{'\u4e0b\u8f7d'}</Text>
-            </Chip>
+                <Chip
+                  variant="Primary"
+                  onClick={handleDownload}
+                  radii="300"
+                  before={<Icon size="50" src={Icons.Download} />}
+                >
+                  <Text size="B300">{'\u4e0b\u8f7d'}</Text>
+                </Chip>
+              </>
+            )}
           </Box>
         </Header>
 
@@ -496,7 +517,7 @@ export const ImageViewer = as<'div', ImageViewerProps>(
               <IconButton
                 className={classNames(css.NavButton, css.NavButtonLeft)}
                 variant="SurfaceVariant"
-                size="400"
+                size={mobile ? '300' : '400'}
                 radii="Pill"
                 onClick={onPrev}
                 disabled={!canPrev}
@@ -526,6 +547,7 @@ export const ImageViewer = as<'div', ImageViewerProps>(
                   transform: `translate(${translateX}px, ${translateY}px) rotate(${rotation}deg) scale(${zoom})`,
                   transition: swiping || cursor === 'grabbing' ? 'none' : undefined,
                   touchAction: 'none',
+                  WebkitTouchCallout: 'default',
                 }}
                 src={displaySrc}
                 alt={alt}
@@ -554,6 +576,7 @@ export const ImageViewer = as<'div', ImageViewerProps>(
                     transform: `translate(${translateX}px, ${translateY}px) rotate(${rotation}deg) scale(${zoom})`,
                     transition: swiping || cursor === 'grabbing' ? 'none' : undefined,
                     touchAction: 'none',
+                    WebkitTouchCallout: 'default',
                   }}
                   src={transitionSrc}
                   alt={alt}
@@ -587,7 +610,7 @@ export const ImageViewer = as<'div', ImageViewerProps>(
               <IconButton
                 className={classNames(css.NavButton, css.NavButtonRight)}
                 variant="SurfaceVariant"
-                size="400"
+                size={mobile ? '300' : '400'}
                 radii="Pill"
                 onClick={onNext}
                 disabled={!canNext}
@@ -600,10 +623,12 @@ export const ImageViewer = as<'div', ImageViewerProps>(
 
           {hasThumbnailRail && items && (
             <Box className={css.ThumbnailRail} direction="Column" gap="100">
-              <Box className={css.ThumbnailHeader} alignItems="Center" justifyContent="SpaceBetween">
-                <Text size="T200" priority="300">
-                  {'\u53cc\u51fb\u6216\u53cc\u6307\u7f29\u653e\uff0c\u5de6\u53f3\u6ed1\u52a8\u53ef\u5207\u56fe'}
-                </Text>
+            <Box className={css.ThumbnailHeader} alignItems="Center" justifyContent="SpaceBetween">
+              <Text size="T200" priority="300">
+                {mobile
+                  ? '\u53cc\u6307\u7f29\u653e\uff0c\u5de6\u53f3\u6ed1\u52a8\u53ef\u5207\u56fe'
+                  : '\u53cc\u51fb\u6216\u53cc\u6307\u7f29\u653e\uff0c\u5de6\u53f3\u6ed1\u52a8\u53ef\u5207\u56fe'}
+              </Text>
                 <Text size="T200" priority="300">
                   {`${items.findIndex((item) => item.id === resolvedActiveItemId) + 1} / ${items.length}`}
                 </Text>

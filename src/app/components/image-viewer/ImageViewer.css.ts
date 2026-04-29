@@ -12,6 +12,11 @@ export const ImageViewer = style([
     backgroundColor: 'rgba(7, 10, 16, 0.96)',
     color: '#fff',
     boxShadow: '0 28px 80px rgba(7, 10, 16, 0.4)',
+    '@media': {
+      'screen and (max-width: 750px)': {
+        borderRadius: 0,
+      },
+    },
   },
 ]);
 
@@ -29,6 +34,9 @@ export const ImageViewerHeader = style([
         paddingTop: `max(${config.space.S100}, env(safe-area-inset-top))`,
         paddingLeft: `max(${config.space.S200}, env(safe-area-inset-left))`,
         paddingRight: `max(${config.space.S200}, env(safe-area-inset-right))`,
+      },
+      'screen and (max-width: 750px)': {
+        paddingBottom: config.space.S100,
       },
     },
   },
@@ -48,8 +56,8 @@ export const ImageViewerContent = style([
       'radial-gradient(circle at top, rgba(59, 130, 246, 0.08), transparent 32%), rgba(7, 10, 16, 0.98)',
     '@media': {
       'screen and (max-width: 750px)': {
-        padding: config.space.S200,
-        paddingBottom: `max(${config.space.S200}, env(safe-area-inset-bottom))`,
+        padding: config.space.S100,
+        paddingBottom: 0,
       },
     },
   },
@@ -80,6 +88,11 @@ export const ImageViewerViewport = style([
     overflow: 'hidden',
     borderRadius: config.radii.R400,
     background: 'rgba(255, 255, 255, 0.02)',
+    '@media': {
+      'screen and (max-width: 750px)': {
+        borderRadius: config.radii.R200,
+      },
+    },
   },
 ]);
 
@@ -171,6 +184,7 @@ export const ThumbnailRail = style([
     borderTop: '1px solid rgba(255, 255, 255, 0.08)',
     '@media': {
       'screen and (max-width: 750px)': {
+        paddingTop: config.space.S100,
         paddingBottom: `max(${config.space.S100}, env(safe-area-inset-bottom))`,
       },
     },
@@ -181,6 +195,11 @@ export const ThumbnailHeader = style([
   DefaultReset,
   {
     padding: `0 ${config.space.S100}`,
+    '@media': {
+      'screen and (max-width: 750px)': {
+        paddingBottom: config.space.S100,
+      },
+    },
   },
 ]);
 
@@ -192,6 +211,11 @@ export const ThumbnailList = style([
     overflowX: 'auto',
     padding: `${config.space.S100} ${config.space.S100} ${config.space.S200}`,
     scrollbarWidth: 'thin',
+    '@media': {
+      'screen and (max-width: 750px)': {
+        padding: `0 ${config.space.S100} ${config.space.S100}`,
+      },
+    },
   },
 ]);
 
@@ -216,6 +240,12 @@ export const ThumbnailButton = style([
         transform: 'translateY(-1px)',
         borderColor: 'rgba(255, 255, 255, 0.18)',
         background: 'rgba(255, 255, 255, 0.07)',
+      },
+    },
+    '@media': {
+      'screen and (max-width: 750px)': {
+        width: '72px',
+        height: '54px',
       },
     },
   },
