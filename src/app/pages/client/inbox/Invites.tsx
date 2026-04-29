@@ -727,13 +727,13 @@ export function Invites() {
   }, [mx, allRooms, invitesData]);
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const [compact, setCompact] = useState(document.body.clientWidth <= COMPACT_CARD_WIDTH);
+  const [compactCards, setCompactCards] = useState(document.body.clientWidth <= COMPACT_CARD_WIDTH);
   useElementSizeObserver(
     useCallback(() => containerRef.current, []),
-    useCallback((width) => setCompact(width <= COMPACT_CARD_WIDTH), [])
+    useCallback((width) => setCompactCards(width <= COMPACT_CARD_WIDTH), [])
   );
   const screenSize = useScreenSizeContext();
-  const compact = isCompactScreenSize(screenSize);
+  const compactScreen = isCompactScreenSize(screenSize);
 
   const [hour24Clock] = useSetting(settingsAtom, 'hour24Clock');
   const [dateFormatString] = useSetting(settingsAtom, 'dateFormatString');
@@ -751,7 +751,7 @@ export function Invites() {
       <PageHeader balance>
         <Box grow="Yes" gap="200">
           <Box grow="Yes" basis="No">
-            {compact && (
+            {compactScreen && (
               <BackRouteHandler>
                 {(onBack) => (
                   <IconButton onClick={onBack}>
@@ -762,7 +762,7 @@ export function Invites() {
             )}
           </Box>
           <Box alignItems="Center" gap="200">
-            {!compact && <Icon size="400" src={Icons.Mail} />}
+            {!compactScreen && <Icon size="400" src={Icons.Mail} />}
             <Text size="H3" truncate>
               Invites
             </Text>
@@ -789,7 +789,7 @@ export function Invites() {
                 {filter === InviteFilter.Known && (
                   <KnownInvites
                     invites={knownInvites}
-                    compact={compact}
+                    compact={compactCards}
                     hour24Clock={hour24Clock}
                     dateFormatString={dateFormatString}
                     handleNavigate={handleNavigate}
@@ -799,7 +799,7 @@ export function Invites() {
                 {filter === InviteFilter.Unknown && (
                   <UnknownInvites
                     invites={unknownInvites}
-                    compact={compact}
+                    compact={compactCards}
                     hour24Clock={hour24Clock}
                     dateFormatString={dateFormatString}
                     handleNavigate={handleNavigate}
@@ -809,7 +809,7 @@ export function Invites() {
                 {filter === InviteFilter.Spam && (
                   <SpamInvites
                     invites={spamInvites}
-                    compact={compact}
+                    compact={compactCards}
                     hour24Clock={hour24Clock}
                     dateFormatString={dateFormatString}
                     handleNavigate={handleNavigate}
