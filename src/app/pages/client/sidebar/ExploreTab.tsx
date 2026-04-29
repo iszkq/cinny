@@ -22,6 +22,7 @@ export function ExploreTab() {
   const screenSize = useScreenSizeContext();
   const clientConfig = useClientConfig();
   const navigate = useNavigate();
+  const desktopPageNavCollapsed = useAtomValue(desktopPageNavCollapsedAtom);
   const setDesktopPageNavCollapsed = useSetAtom(desktopPageNavCollapsedAtom);
   const navToActivePath = useAtomValue(useNavToActivePathAtom());
 
@@ -33,10 +34,11 @@ export function ExploreTab() {
       return;
     }
 
-    setDesktopPageNavCollapsed(false);
     if (exploreSelected) {
+      setDesktopPageNavCollapsed(!desktopPageNavCollapsed);
       return;
     }
+    setDesktopPageNavCollapsed(false);
 
     const activePath = navToActivePath.get('explore');
     if (activePath) {

@@ -24,6 +24,7 @@ import { desktopPageNavCollapsedAtom } from '../../../state/desktopPageNav';
 export function InboxTab() {
   const screenSize = useScreenSizeContext();
   const navigate = useNavigate();
+  const desktopPageNavCollapsed = useAtomValue(desktopPageNavCollapsedAtom);
   const setDesktopPageNavCollapsed = useSetAtom(desktopPageNavCollapsedAtom);
   const navToActivePath = useAtomValue(useNavToActivePathAtom());
   const inboxSelected = useInboxSelected();
@@ -35,10 +36,11 @@ export function InboxTab() {
       navigate(getInboxPath());
       return;
     }
-    setDesktopPageNavCollapsed(false);
     if (inboxSelected) {
+      setDesktopPageNavCollapsed(!desktopPageNavCollapsed);
       return;
     }
+    setDesktopPageNavCollapsed(false);
     const activePath = navToActivePath.get('inbox');
     if (activePath) {
       navigate(joinPathComponent(activePath));

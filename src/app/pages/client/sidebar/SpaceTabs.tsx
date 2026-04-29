@@ -615,6 +615,7 @@ export function SpaceTabs({ scrollRef }: SpaceTabsProps) {
   const navigate = useNavigate();
   const mx = useMatrixClient();
   const screenSize = useScreenSizeContext();
+  const desktopPageNavCollapsed = useAtomValue(desktopPageNavCollapsedAtom);
   const setDesktopPageNavCollapsed = useSetAtom(desktopPageNavCollapsedAtom);
   const roomToParents = useAtomValue(roomToParentsAtom);
   const orphanSpaces = useOrphanSpaces(mx, allRoomsAtom, roomToParents);
@@ -769,10 +770,11 @@ export function SpaceTabs({ scrollRef }: SpaceTabsProps) {
       return;
     }
 
-    setDesktopPageNavCollapsed(false);
     if (selectedSpaceId === targetSpaceId) {
+      setDesktopPageNavCollapsed(!desktopPageNavCollapsed);
       return;
     }
+    setDesktopPageNavCollapsed(false);
 
     const activePath = navToActivePath.get(targetSpaceId);
     if (activePath && activePath.pathname.startsWith(spacePath)) {

@@ -61,6 +61,7 @@ const DirectMenu = forwardRef<HTMLDivElement, DirectMenuProps>(({ requestClose }
 export function DirectTab() {
   const navigate = useNavigate();
   const screenSize = useScreenSizeContext();
+  const desktopPageNavCollapsed = useAtomValue(desktopPageNavCollapsedAtom);
   const setDesktopPageNavCollapsed = useSetAtom(desktopPageNavCollapsedAtom);
   const navToActivePath = useAtomValue(useNavToActivePathAtom());
 
@@ -72,10 +73,11 @@ export function DirectTab() {
 
   const handleDirectClick = () => {
     if (!isCompactScreenSize(screenSize)) {
-      setDesktopPageNavCollapsed(false);
       if (directSelected) {
+        setDesktopPageNavCollapsed(!desktopPageNavCollapsed);
         return;
       }
+      setDesktopPageNavCollapsed(false);
     }
 
     const activePath = navToActivePath.get('direct');

@@ -61,6 +61,7 @@ const HomeMenu = forwardRef<HTMLDivElement, HomeMenuProps>(({ requestClose }, re
 export function HomeTab() {
   const navigate = useNavigate();
   const screenSize = useScreenSizeContext();
+  const desktopPageNavCollapsed = useAtomValue(desktopPageNavCollapsedAtom);
   const setDesktopPageNavCollapsed = useSetAtom(desktopPageNavCollapsedAtom);
   const navToActivePath = useAtomValue(useNavToActivePathAtom());
 
@@ -71,10 +72,11 @@ export function HomeTab() {
 
   const handleHomeClick = () => {
     if (!isCompactScreenSize(screenSize)) {
-      setDesktopPageNavCollapsed(false);
       if (homeSelected) {
+        setDesktopPageNavCollapsed(!desktopPageNavCollapsed);
         return;
       }
+      setDesktopPageNavCollapsed(false);
     }
 
     const activePath = navToActivePath.get('home');
