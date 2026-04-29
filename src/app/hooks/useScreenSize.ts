@@ -16,6 +16,9 @@ export const getScreenSize = (width: number): ScreenSize => {
   return ScreenSize.Mobile;
 };
 
+export const isCompactScreenSize = (screenSize: ScreenSize): boolean =>
+  screenSize !== ScreenSize.Desktop;
+
 export const useScreenSize = (): ScreenSize => {
   const [size, setSize] = useState<ScreenSize>(getScreenSize(document.body.clientWidth));
 
