@@ -74,7 +74,7 @@ import {
   useSidebarItems,
 } from '../../../hooks/useSidebarItems';
 import { AccountDataEvent } from '../../../../types/matrix/accountData';
-import { ScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
+import { isCompactScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
 import { useNavToActivePathAtom } from '../../../state/hooks/navToActivePath';
 import { useOpenedSidebarFolderAtom } from '../../../state/hooks/openedSidebarFolder';
 import { usePowerLevels } from '../../../hooks/usePowerLevels';
@@ -762,7 +762,7 @@ export function SpaceTabs({ scrollRef }: SpaceTabsProps) {
     if (!targetSpaceId) return;
 
     const spacePath = getSpacePath(getCanonicalAliasOrRoomId(mx, targetSpaceId));
-    if (screenSize === ScreenSize.Mobile) {
+    if (isCompactScreenSize(screenSize)) {
       navigate(spacePath);
       return;
     }

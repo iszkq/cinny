@@ -8,19 +8,20 @@ import {
   PageHero,
   PageHeroSection,
 } from '../../../components/page';
-import { ScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
+import { isCompactScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
 import { BackRouteHandler } from '../../../components/BackRouteHandler';
 import { CreateRoomForm } from '../../../features/create-room';
 import { useRoomNavigate } from '../../../hooks/useRoomNavigate';
 
 export function HomeCreateRoom() {
   const screenSize = useScreenSizeContext();
+  const compact = isCompactScreenSize(screenSize);
 
   const { navigateRoom } = useRoomNavigate();
 
   return (
     <Page>
-      {screenSize === ScreenSize.Mobile && (
+      {compact && (
         <PageHeader balance outlined={false}>
           <Box grow="Yes" alignItems="Center" gap="200">
             <BackRouteHandler>

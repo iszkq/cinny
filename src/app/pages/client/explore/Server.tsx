@@ -43,7 +43,7 @@ import { allRoomsAtom } from '../../../state/room-list/roomList';
 import { useRoomNavigate } from '../../../hooks/useRoomNavigate';
 import { getMxIdServer } from '../../../utils/matrix';
 import { stopPropagation } from '../../../utils/keyboard';
-import { ScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
+import { isCompactScreenSize, ScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
 import { BackRouteHandler } from '../../../components/BackRouteHandler';
 
 const useServerSearchParams = (searchParams: URLSearchParams): ExploreServerPathSearchParams =>
@@ -486,7 +486,7 @@ export function PublicRooms() {
             </Box>
 
             <Box grow="No" justifyContent="Center" alignItems="Center" gap="200">
-              {screenSize !== ScreenSize.Mobile && <Icon size="400" src={Icons.Search} />}
+              {!isCompactScreenSize(screenSize) && <Icon size="400" src={Icons.Search} />}
               <Text size="H3" truncate>
                 搜索结果
               </Text>
@@ -496,7 +496,7 @@ export function PublicRooms() {
         ) : (
           <>
             <Box grow="Yes" basis="No">
-              {screenSize === ScreenSize.Mobile && (
+              {isCompactScreenSize(screenSize) && (
                 <BackRouteHandler>
                   {(onBack) => (
                     <IconButton onClick={onBack}>
@@ -507,7 +507,7 @@ export function PublicRooms() {
               )}
             </Box>
             <Box grow="Yes" justifyContent="Center" alignItems="Center" gap="200">
-              {screenSize !== ScreenSize.Mobile && <Icon size="400" src={Icons.Server} />}
+              {!isCompactScreenSize(screenSize) && <Icon size="400" src={Icons.Server} />}
               <Text size="H3" truncate>
                 {server}
               </Text>

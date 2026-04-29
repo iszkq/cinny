@@ -17,7 +17,7 @@ import {
 } from '../../pathUtils';
 import { useInboxSelected } from '../../../hooks/router/useInbox';
 import { UnreadBadge } from '../../../components/unread-badge';
-import { ScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
+import { isCompactScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
 import { useNavToActivePathAtom } from '../../../state/hooks/navToActivePath';
 
 export function InboxTab() {
@@ -29,7 +29,7 @@ export function InboxTab() {
   const inviteCount = allInvites.length;
 
   const handleInboxClick = () => {
-    if (screenSize === ScreenSize.Mobile) {
+    if (isCompactScreenSize(screenSize)) {
       navigate(getInboxPath());
       return;
     }

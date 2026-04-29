@@ -6,7 +6,7 @@ import { getDirectCreateSearchParams } from '../../pathSearchParam';
 import { getDirectRoomPath } from '../../pathUtils';
 import { getDMRoomFor } from '../../../utils/matrix';
 import { useDirectRooms } from './useDirectRooms';
-import { ScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
+import { isCompactScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
 import {
   Page,
   PageContent,
@@ -21,6 +21,7 @@ import { CreateChat } from '../../../features/create-chat';
 export function DirectCreate() {
   const mx = useMatrixClient();
   const screenSize = useScreenSizeContext();
+  const compact = isCompactScreenSize(screenSize);
 
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -39,7 +40,7 @@ export function DirectCreate() {
 
   return (
     <Page>
-      {screenSize === ScreenSize.Mobile && (
+      {compact && (
         <PageHeader balance outlined={false}>
           <Box grow="Yes" alignItems="Center" gap="200">
             <BackRouteHandler>

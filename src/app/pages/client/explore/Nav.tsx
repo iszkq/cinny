@@ -26,7 +26,7 @@ import { Page, PageContent, PageContentCenter, PageHeader } from '../../../compo
 import { BackRouteHandler } from '../../../components/BackRouteHandler';
 import { useAccountData } from '../../../hooks/useAccountData';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
-import { ScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
+import { isCompactScreenSize, ScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
 import {
   AccountDataEvent,
   CinnyExploreNavCard,
@@ -631,9 +631,9 @@ export function ExploreNavView() {
         onSave={handleSaveCard}
       />
 
-      <PageHeader balance={screenSize === ScreenSize.Mobile}>
+      <PageHeader balance={isCompactScreenSize(screenSize)}>
         <Box grow="Yes" basis="No">
-          {screenSize === ScreenSize.Mobile && (
+          {isCompactScreenSize(screenSize) && (
             <BackRouteHandler>
               {(onBack) => (
                 <IconButton onClick={onBack}>

@@ -9,7 +9,7 @@ import { allRoomsAtom } from '../../../state/room-list/roomList';
 import { mDirectAtom } from '../../../state/mDirectList';
 import { roomToParentsAtom } from '../../../state/room/roomToParents';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
-import { ScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
+import { isCompactScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
 import { BackRouteHandler } from '../../../components/BackRouteHandler';
 
 export function SpaceSearch() {
@@ -17,6 +17,7 @@ export function SpaceSearch() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const space = useSpace();
   const screenSize = useScreenSizeContext();
+  const compact = isCompactScreenSize(screenSize);
 
   const mDirects = useAtomValue(mDirectAtom);
   const roomToParents = useAtomValue(roomToParentsAtom);
@@ -31,7 +32,7 @@ export function SpaceSearch() {
       <PageHeader balance>
         <Box grow="Yes" alignItems="Center" gap="200">
           <Box grow="Yes" basis="No">
-            {screenSize === ScreenSize.Mobile && (
+            {compact && (
               <BackRouteHandler>
                 {(onBack) => (
                   <IconButton onClick={onBack}>
@@ -42,7 +43,7 @@ export function SpaceSearch() {
             )}
           </Box>
           <Box justifyContent="Center" alignItems="Center" gap="200">
-            {screenSize !== ScreenSize.Mobile && <Icon size="400" src={Icons.Search} />}
+            {!compact && <Icon size="400" src={Icons.Search} />}
             <Text size="H3" truncate>
               消息搜索
             </Text>

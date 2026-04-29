@@ -80,7 +80,7 @@ import { UserAvatar } from '../../../components/user-avatar';
 import { EncryptedContent } from '../../../features/room/message';
 import { useMentionClickHandler } from '../../../hooks/useMentionClickHandler';
 import { useSpoilerClickHandler } from '../../../hooks/useSpoilerClickHandler';
-import { ScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
+import { isCompactScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
 import { BackRouteHandler } from '../../../components/BackRouteHandler';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { allRoomsAtom } from '../../../state/room-list/roomList';
@@ -574,6 +574,7 @@ export function Notifications() {
   const [hour24Clock] = useSetting(settingsAtom, 'hour24Clock');
   const [dateFormatString] = useSetting(settingsAtom, 'dateFormatString');
   const screenSize = useScreenSizeContext();
+  const compact = isCompactScreenSize(screenSize);
   const mDirects = useAtomValue(mDirectAtom);
 
   const { navigateRoom } = useRoomNavigate();
@@ -643,7 +644,7 @@ export function Notifications() {
       <PageHeader balance>
         <Box grow="Yes" gap="200">
           <Box grow="Yes" basis="No">
-            {screenSize === ScreenSize.Mobile && (
+            {compact && (
               <BackRouteHandler>
                 {(onBack) => (
                   <IconButton onClick={onBack}>
@@ -654,7 +655,7 @@ export function Notifications() {
             )}
           </Box>
           <Box alignItems="Center" gap="200">
-            {screenSize !== ScreenSize.Mobile && <Icon size="400" src={Icons.Message} />}
+            {!compact && <Icon size="400" src={Icons.Message} />}
             <Text size="H3" truncate>
               {'\u901a\u77e5\u6d88\u606f'}
             </Text>

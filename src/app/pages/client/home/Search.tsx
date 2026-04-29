@@ -3,20 +3,21 @@ import { Box, Icon, Icons, Text, Scroll, IconButton } from 'folds';
 import { Page, PageContent, PageContentCenter, PageHeader } from '../../../components/page';
 import { MessageSearch } from '../../../features/message-search';
 import { useHomeRooms } from './useHomeRooms';
-import { ScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
+import { isCompactScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
 import { BackRouteHandler } from '../../../components/BackRouteHandler';
 
 export function HomeSearch() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const rooms = useHomeRooms();
   const screenSize = useScreenSizeContext();
+  const compact = isCompactScreenSize(screenSize);
 
   return (
     <Page>
       <PageHeader balance>
         <Box grow="Yes" alignItems="Center" gap="200">
           <Box grow="Yes" basis="No">
-            {screenSize === ScreenSize.Mobile && (
+            {compact && (
               <BackRouteHandler>
                 {(onBack) => (
                   <IconButton onClick={onBack}>
@@ -27,7 +28,7 @@ export function HomeSearch() {
             )}
           </Box>
           <Box justifyContent="Center" alignItems="Center" gap="200">
-            {screenSize !== ScreenSize.Mobile && <Icon size="400" src={Icons.Search} />}
+            {!compact && <Icon size="400" src={Icons.Search} />}
             <Text size="H3" truncate>
               消息搜索
             </Text>
