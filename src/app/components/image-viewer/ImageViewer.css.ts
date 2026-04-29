@@ -24,6 +24,13 @@ export const ImageViewerHeader = style([
     background: 'rgba(255, 255, 255, 0.03)',
     flexShrink: 0,
     gap: config.space.S200,
+    '@media': {
+      'screen and (max-width: 1124px)': {
+        paddingTop: `max(${config.space.S100}, env(safe-area-inset-top))`,
+        paddingLeft: `max(${config.space.S200}, env(safe-area-inset-left))`,
+        paddingRight: `max(${config.space.S200}, env(safe-area-inset-right))`,
+      },
+    },
   },
 ]);
 
@@ -39,6 +46,12 @@ export const ImageViewerContent = style([
     padding: config.space.S300,
     background:
       'radial-gradient(circle at top, rgba(59, 130, 246, 0.08), transparent 32%), rgba(7, 10, 16, 0.98)',
+    '@media': {
+      'screen and (max-width: 750px)': {
+        padding: config.space.S200,
+        paddingBottom: `max(${config.space.S200}, env(safe-area-inset-bottom))`,
+      },
+    },
   },
 ]);
 
@@ -134,10 +147,20 @@ export const NavButton = style([
 
 export const NavButtonLeft = style({
   left: config.space.S300,
+  '@media': {
+    'screen and (max-width: 750px)': {
+      left: config.space.S100,
+    },
+  },
 });
 
 export const NavButtonRight = style({
   right: config.space.S300,
+  '@media': {
+    'screen and (max-width: 750px)': {
+      right: config.space.S100,
+    },
+  },
 });
 
 export const ThumbnailRail = style([
@@ -146,6 +169,11 @@ export const ThumbnailRail = style([
     flexShrink: 0,
     paddingTop: config.space.S200,
     borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+    '@media': {
+      'screen and (max-width: 750px)': {
+        paddingBottom: `max(${config.space.S100}, env(safe-area-inset-bottom))`,
+      },
+    },
   },
 ]);
 

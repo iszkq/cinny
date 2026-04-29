@@ -51,6 +51,7 @@ import {
   useRoomsNotificationPreferencesContext,
 } from '../../../hooks/useRoomsNotificationPreferences';
 import { useDirectCreateSelected } from '../../../hooks/router/useDirectSelected';
+import { CompactClientNavButton } from '../CompactClientNavButton';
 
 type DirectMenuProps = {
   requestClose: () => void;
@@ -101,6 +102,9 @@ function DirectHeader() {
     <>
       <PageNavHeader>
         <Box alignItems="Center" grow="Yes" gap="300">
+          <Box shrink="No">
+            <CompactClientNavButton />
+          </Box>
           <Box grow="Yes">
             <Text size="H4" truncate>
               {'\u79c1\u804a\u6d88\u606f'}

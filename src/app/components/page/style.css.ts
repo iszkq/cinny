@@ -24,6 +24,13 @@ export const PageNavHeader = recipe({
     padding: `0 ${config.space.S200} 0 ${config.space.S300}`,
     flexShrink: 0,
     minWidth: 0,
+    '@media': {
+      'screen and (max-width: 1124px)': {
+        paddingTop: `max(${config.space.S100}, env(safe-area-inset-top))`,
+        paddingLeft: `max(${config.space.S200}, env(safe-area-inset-left))`,
+        paddingRight: `max(${config.space.S200}, env(safe-area-inset-right))`,
+      },
+    },
     selectors: {
       'button&': {
         cursor: 'pointer',
@@ -64,6 +71,9 @@ export const PageNavContent = style({
       paddingRight: 0,
       paddingBottom: `calc(${config.space.S400} + env(safe-area-inset-bottom))`,
     },
+    'screen and (max-width: 750px)': {
+      paddingBottom: `max(${config.space.S200}, env(safe-area-inset-bottom))`,
+    },
   },
 });
 
@@ -76,6 +86,9 @@ export const PageHeader = recipe({
       'screen and (max-width: 1124px)': {
         paddingLeft: `max(${config.space.S200}, env(safe-area-inset-left))`,
         paddingRight: `max(${config.space.S200}, env(safe-area-inset-right))`,
+      },
+      'screen and (max-width: 1124px)': {
+        paddingTop: `max(${config.space.S100}, env(safe-area-inset-top))`,
       },
     },
   },
@@ -110,6 +123,10 @@ export const PageContent = style([
         paddingLeft: `max(${config.space.S200}, env(safe-area-inset-left))`,
         paddingRight: `max(${config.space.S200}, env(safe-area-inset-right))`,
         paddingBottom: `max(${config.space.S700}, env(safe-area-inset-bottom))`,
+      },
+      'screen and (max-width: 750px)': {
+        paddingTop: config.space.S200,
+        paddingBottom: `max(${config.space.S300}, env(safe-area-inset-bottom))`,
       },
     },
   },

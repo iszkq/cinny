@@ -47,6 +47,7 @@ import {
   useAudioTranscription,
 } from '../../../features/voice-transcription';
 import { AIHUBMIX_AUDIO_TRANSCRIPTION_MAX_FILE_SIZE } from '../../../utils/ai';
+import { ScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
 
 const PLAY_TIME_THROTTLE_OPS = {
   wait: 500,
@@ -77,6 +78,7 @@ export function AudioContent({
   renderMediaControl,
 }: AudioContentProps) {
   const mx = useMatrixClient();
+  const screenSize = useScreenSizeContext();
   const useAuthentication = useMediaAuthentication();
   const { state: transcriptionState, supported, mode, supportReason, transcribe } =
     useAudioTranscription(transcriptionId ?? url);
@@ -241,7 +243,7 @@ export function AudioContent({
         />
 
         <Box direction="Column" gap="100">
-          <Box alignItems="Center" gap="200">
+          <Box alignItems="Center" gap="200" wrap="Wrap">
             <Chip
               variant="SurfaceVariant"
               radii="300"
@@ -263,7 +265,7 @@ export function AudioContent({
               <Text size="B300">{transcriptionActionLabel}</Text>
             </Chip>
             {helperText && (
-              <Text size="T200" priority="300">
+              <Text size="T200" priority="300" style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
                 {helperText}
               </Text>
             )}
@@ -324,41 +326,43 @@ export function AudioContent({
         >
           <Icon src={mute ? Icons.VolumeMute : Icons.VolumeHigh} size="50" />
         </IconButton>
-        <Range
-          step={0.1}
-          min={0}
-          max={1}
-          values={[volume]}
-          onChange={(values) => setVolume(values[0])}
-          renderTrack={(params) => (
-            <div {...params.props}>
-              {params.children}
-              <ProgressBar
-                style={{ width: toRem(48) }}
-                variant="Secondary"
+        {screenSize !== ScreenSize.Mobile && (
+          <Range
+            step={0.1}
+            min={0}
+            max={1}
+            values={[volume]}
+            onChange={(values) => setVolume(values[0])}
+            renderTrack={(params) => (
+              <div {...params.props}>
+                {params.children}
+                <ProgressBar
+                  style={{ width: toRem(48) }}
+                  variant="Secondary"
+                  size="300"
+                  min={0}
+                  max={1}
+                  value={volume}
+                  radii="300"
+                />
+              </div>
+            )}
+            renderThumb={(params) => (
+              <Badge
                 size="300"
-                min={0}
-                max={1}
-                value={volume}
-                radii="300"
+                variant="Secondary"
+                fill="Solid"
+                radii="Pill"
+                outlined
+                {...params.props}
+                style={{
+                  ...params.props.style,
+                  zIndex: 0,
+                }}
               />
-            </div>
-          )}
-          renderThumb={(params) => (
-            <Badge
-              size="300"
-              variant="Secondary"
-              fill="Solid"
-              radii="Pill"
-              outlined
-              {...params.props}
-              style={{
-                ...params.props.style,
-                zIndex: 0,
-              }}
-            />
-          )}
-        />
+            )}
+          />
+        )}
       </>
     ),
     children: (

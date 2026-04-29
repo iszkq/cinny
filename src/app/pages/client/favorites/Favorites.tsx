@@ -93,6 +93,7 @@ import {
   setFavoriteNote,
 } from '../../../features/favorites';
 import * as css from './Favorites.css';
+import { CompactClientNavButton } from '../CompactClientNavButton';
 
 type FavoriteDateFilter = 'all' | 'today' | '7d' | '30d' | '90d';
 
@@ -1896,11 +1897,16 @@ export function Favorites() {
   return (
     <Page>
       <PageHeader balance>
-        <Box grow="Yes" alignItems="Center" justifyContent="Center" gap="200">
-          <Icon size="400" src={Icons.Heart} filled />
-          <Text size="H3" truncate>
-            {'\u6211\u7684\u6536\u85cf'}
-          </Text>
+        <Box grow="Yes" alignItems="Center" gap="200">
+          <Box shrink="No">
+            <CompactClientNavButton />
+          </Box>
+          <Box grow="Yes" alignItems="Center" justifyContent="Center" gap="200">
+            <Icon size="400" src={Icons.Heart} filled />
+            <Text size="H3" truncate>
+              {'\u6211\u7684\u6536\u85cf'}
+            </Text>
+          </Box>
         </Box>
       </PageHeader>
 

@@ -35,6 +35,14 @@ const copyFiles = {
       dest: '',
     },
     {
+      src: 'public/res/apple',
+      dest: 'public/res',
+    },
+    {
+      src: 'public/res/logo.png',
+      dest: 'public/res',
+    },
+    {
       src: 'public/res/android',
       dest: 'public/',
     },

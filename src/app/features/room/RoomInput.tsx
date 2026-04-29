@@ -670,6 +670,17 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       moveCursor(editor);
     };
 
+    const toggleEmojiBoardTab = useCallback(
+      (
+        currentTab: EmojiBoardTab | undefined,
+        nextTab: EmojiBoardTab,
+        setEmojiBoardTab: (tab: EmojiBoardTab | undefined) => void
+      ) => {
+        setEmojiBoardTab(currentTab === nextTab ? undefined : nextTab);
+      },
+      []
+    );
+
     const handleStickerSelect = async (mxc: string, label: string, info?: IImageInfo) => {
       setSendError(undefined);
       try {
@@ -1000,7 +1011,13 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                     {!hideStickerBtn && (
                       <IconButton
                         aria-pressed={emojiBoardTab === EmojiBoardTab.Sticker}
-                        onClick={() => setEmojiBoardTab(EmojiBoardTab.Sticker)}
+                        onClick={() =>
+                          toggleEmojiBoardTab(
+                            emojiBoardTab,
+                            EmojiBoardTab.Sticker,
+                            setEmojiBoardTab
+                          )
+                        }
                         variant="SurfaceVariant"
                         size="300"
                         radii="300"
@@ -1016,7 +1033,9 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                       aria-pressed={
                         hideStickerBtn ? !!emojiBoardTab : emojiBoardTab === EmojiBoardTab.Emoji
                       }
-                      onClick={() => setEmojiBoardTab(EmojiBoardTab.Emoji)}
+                      onClick={() =>
+                        toggleEmojiBoardTab(emojiBoardTab, EmojiBoardTab.Emoji, setEmojiBoardTab)
+                      }
                       variant="SurfaceVariant"
                       size="300"
                       radii="300"

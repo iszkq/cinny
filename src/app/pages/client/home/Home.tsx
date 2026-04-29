@@ -65,6 +65,7 @@ import {
 import { UseStateProvider } from '../../../components/UseStateProvider';
 import { JoinAddressPrompt } from '../../../components/join-address-prompt';
 import { _RoomSearchParams } from '../../paths';
+import { CompactClientNavButton } from '../CompactClientNavButton';
 
 type HomeMenuProps = {
   requestClose: () => void;
@@ -115,6 +116,9 @@ function HomeHeader() {
     <>
       <PageNavHeader>
         <Box alignItems="Center" grow="Yes" gap="300">
+          <Box shrink="No">
+            <CompactClientNavButton />
+          </Box>
           <Box grow="Yes">
             <Text size="H4" truncate>
               {'\u9996\u9875'}

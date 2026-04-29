@@ -61,21 +61,52 @@ export const selectFile = <M extends boolean | undefined = undefined>(
   new Promise((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';
-    if (accept) input.accept = accept;
+    if (accept && accept !== '*') input.accept = accept;
     if (multiple) input.multiple = true;
+    input.tabIndex = -1;
+    input.style.position = 'fixed';
+    input.style.opacity = '0';
+    input.style.pointerEvents = 'none';
+    input.style.width = '1px';
+    input.style.height = '1px';
+    input.style.left = '-9999px';
+    document.body.appendChild(input);
+
+    let settled = false;
+
+    const cleanup = () => {
+      input.removeEventListener('change', changeHandler);
+      window.removeEventListener('focus', focusHandler, true);
+      input.remove();
+    };
+
+    const resolveOnce = (value: FilesOrFile<M> | undefined) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(value);
+    };
 
     const changeHandler = () => {
       const fileList = input.files;
       if (!fileList) {
-        resolve(undefined);
+        resolveOnce(undefined);
       } else {
         const files: File[] = getFilesFromFileList(fileList);
-        resolve((multiple ? files : files[0]) as FilesOrFile<M>);
+        resolveOnce((multiple ? files : files[0]) as FilesOrFile<M>);
       }
-      input.removeEventListener('change', changeHandler);
+    };
+
+    const focusHandler = () => {
+      window.setTimeout(() => {
+        if (!settled && (!input.files || input.files.length === 0)) {
+          resolveOnce(undefined);
+        }
+      }, 0);
     };
 
     input.addEventListener('change', changeHandler);
+    window.addEventListener('focus', focusHandler, true);
     input.click();
   });
 

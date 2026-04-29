@@ -106,7 +106,9 @@ export function RoomView({ eventId }: { eventId?: string }) {
             paddingLeft: isCompactScreenSize(screenSize) ? config.space.S200 : config.space.S400,
             paddingRight: isCompactScreenSize(screenSize) ? config.space.S200 : config.space.S400,
             paddingBottom:
-              screenSize === ScreenSize.Mobile ? 'env(safe-area-inset-bottom, 0px)' : undefined,
+              screenSize === ScreenSize.Mobile
+                ? `max(${config.space.S100}, env(safe-area-inset-bottom, 0px))`
+                : undefined,
           }}
         >
           {tombstoneEvent ? (

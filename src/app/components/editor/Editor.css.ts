@@ -16,6 +16,11 @@ export const EditorOptions = style([
   DefaultReset,
   {
     padding: config.space.S200,
+    '@media': {
+      'screen and (max-width: 750px)': {
+        padding: config.space.S100,
+      },
+    },
   },
 ]);
 
@@ -27,6 +32,7 @@ export const EditorTextarea = style([
     flexGrow: 1,
     height: '100%',
     padding: `${toRem(13)} ${toRem(1)}`,
+    minWidth: 0,
     selectors: {
       [`${EditorTextareaScroll}:first-child &`]: {
         paddingLeft: toRem(13),
@@ -36,6 +42,20 @@ export const EditorTextarea = style([
       },
       '&:focus': {
         outline: 'none',
+      },
+    },
+    '@media': {
+      'screen and (max-width: 750px)': {
+        paddingTop: toRem(10),
+        paddingBottom: toRem(10),
+        selectors: {
+          [`${EditorTextareaScroll}:first-child &`]: {
+            paddingLeft: toRem(10),
+          },
+          [`${EditorTextareaScroll}:last-child &`]: {
+            paddingRight: toRem(10),
+          },
+        },
       },
     },
   },
@@ -56,6 +76,11 @@ export const EditorPlaceholderTextVisual = style([
     display: 'block',
     paddingTop: toRem(13),
     paddingLeft: toRem(1),
+    '@media': {
+      'screen and (max-width: 750px)': {
+        paddingTop: toRem(10),
+      },
+    },
   },
 ]);
 

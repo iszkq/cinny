@@ -132,6 +132,7 @@ import { useRoomCreatorsTag } from '../../hooks/useRoomCreatorsTag';
 import { usePowerLevelTags } from '../../hooks/usePowerLevelTags';
 import { ForwardableMessage, isForwardableMessage } from './forwardMessages';
 import { ForwardMessagesModal } from './ForwardMessagesModal';
+import { ScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
 
 const TimelineFloat = as<'div', css.TimelineFloatVariants>(
   ({ position, className, ...props }, ref) => (
@@ -576,6 +577,7 @@ const getReceiptTimestamp = (room: Room, userId: string): number | undefined => 
 export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimelineProps) {
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
+  const screenSize = useScreenSizeContext();
   const [sendReadReceipts] = useSetting(settingsAtom, 'sendReadReceipts');
   const [messageLayout] = useSetting(settingsAtom, 'messageLayout');
   const [messageSpacing] = useSetting(settingsAtom, 'messageSpacing');
@@ -589,6 +591,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
   const showUrlPreview = room.hasEncryptionStateEvent() ? encUrlPreview : urlPreview;
   const [showHiddenEvents] = useSetting(settingsAtom, 'showHiddenEvents');
   const [showDeveloperTools] = useSetting(settingsAtom, 'developerTools');
+  const timelinePaddingY = screenSize === ScreenSize.Mobile ? config.space.S300 : config.space.S600;
 
   const [hour24Clock] = useSetting(settingsAtom, 'hour24Clock');
   const [dateFormatString] = useSetting(settingsAtom, 'dateFormatString');
@@ -2077,7 +2080,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
         <Box
           direction="Column"
           justifyContent="End"
-          style={{ minHeight: '100%', padding: `${config.space.S600} 0` }}
+          style={{ minHeight: '100%', padding: `${timelinePaddingY} 0` }}
         >
           {!canPaginateBack && rangeAtStart && getItems().length > 0 && (
             <div

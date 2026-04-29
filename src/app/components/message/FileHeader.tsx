@@ -69,7 +69,7 @@ export const FileHeader = as<'div', FileHeaderProps>(
     const extLabel = nameExt && nameExt !== body ? nameExt : mimeTypeToExt(mimeType);
 
     return (
-      <Box alignItems="Center" gap="200" grow="Yes" {...props} ref={ref}>
+      <Box alignItems="Center" gap="200" grow="Yes" wrap="Wrap" style={{ minWidth: 0 }} {...props} ref={ref}>
         <Box shrink="No">
           <Badge style={badgeStyles} variant="Secondary" radii="Pill">
             <Text size="O400" truncate>
@@ -77,12 +77,12 @@ export const FileHeader = as<'div', FileHeaderProps>(
             </Text>
           </Badge>
         </Box>
-        <Box grow="Yes">
+        <Box grow="Yes" style={{ minWidth: 0 }}>
           <Text size="T300" truncate>
             {body}
           </Text>
         </Box>
-        {after}
+        {after && <Box shrink="No">{after}</Box>}
       </Box>
     );
   }

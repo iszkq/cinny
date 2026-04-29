@@ -62,6 +62,7 @@ import {
   setExploreWebSourcePolicy,
   upsertExploreCustomSource,
 } from './customSources';
+import { CompactClientNavButton } from '../CompactClientNavButton';
 
 const PROBE_TIMEOUT_MS = 2500;
 
@@ -712,7 +713,10 @@ export function Explore() {
   return (
     <PageNav>
       <PageNavHeader>
-        <Box grow="Yes" gap="300">
+        <Box grow="Yes" alignItems="Center" gap="300">
+          <Box shrink="No">
+            <CompactClientNavButton />
+          </Box>
           <Box grow="Yes">
             <Text size="H4" truncate>
               社区探索

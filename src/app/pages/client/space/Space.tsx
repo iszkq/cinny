@@ -85,6 +85,7 @@ import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { BreakWord } from '../../../styles/Text.css';
 import { InviteUserPrompt } from '../../../components/invite-user-prompt';
 import { useCallEmbed } from '../../../hooks/useCallEmbed';
+import { CompactClientNavButton } from '../CompactClientNavButton';
 
 type SpaceMenuProps = {
   room: Room;
@@ -266,6 +267,9 @@ function SpaceHeader() {
     <>
       <PageNavHeader>
         <Box alignItems="Center" grow="Yes" gap="300">
+          <Box shrink="No">
+            <CompactClientNavButton />
+          </Box>
           <Box grow="Yes" alignItems="Center" gap="100">
             <Text size="H4" truncate>
               {spaceName}
