@@ -227,6 +227,11 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       useState<AutocompleteQuery<AutocompletePrefix>>();
     const [emojiBoardTab, setEmojiBoardTab] = useState(EmojiBoardTab.Emoji);
     const [emojiBoardOpen, setEmojiBoardOpen] = useState(false);
+    const emojiBoardOpenRef = useRef(emojiBoardOpen);
+    const emojiBoardTabRef = useRef(emojiBoardTab);
+    const emojiBoardTouchTriggerRef = useRef(0);
+    emojiBoardOpenRef.current = emojiBoardOpen;
+    emojiBoardTabRef.current = emojiBoardTab;
 
     const sendTypingStatus = useTypingStatusUpdater(mx, roomId);
 
@@ -674,12 +679,19 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       moveCursor(editor);
     };
 
+    const closeEmojiBoard = useCallback(() => {
+      setEmojiBoardOpen(false);
+      if (!mobileOrTablet()) ReactEditor.focus(editor);
+    }, [editor]);
+
     const toggleEmojiBoardTab = useCallback(
       (nextTab: EmojiBoardTab) => {
+        const currentOpen = emojiBoardOpenRef.current;
+        const currentTab = emojiBoardTabRef.current;
+
         if (hideStickerBtn) {
-          if (emojiBoardOpen) {
-            setEmojiBoardOpen(false);
-            if (!mobileOrTablet()) ReactEditor.focus(editor);
+          if (currentOpen) {
+            closeEmojiBoard();
             return;
           }
 
@@ -688,22 +700,36 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           return;
         }
 
-        if (emojiBoardOpen && emojiBoardTab === nextTab) {
-          setEmojiBoardOpen(false);
-          if (!mobileOrTablet()) ReactEditor.focus(editor);
+        if (currentOpen && currentTab === nextTab) {
+          closeEmojiBoard();
           return;
         }
 
         setEmojiBoardTab(nextTab);
         setEmojiBoardOpen(true);
       },
-      [editor, emojiBoardOpen, emojiBoardTab, hideStickerBtn]
+      [closeEmojiBoard, hideStickerBtn]
     );
 
-    const closeEmojiBoard = useCallback(() => {
-      setEmojiBoardOpen(false);
-      if (!mobileOrTablet()) ReactEditor.focus(editor);
-    }, [editor]);
+    const handleEmojiBoardTriggerPointerDown = (
+      nextTab: EmojiBoardTab,
+      evt: React.PointerEvent<HTMLButtonElement>
+    ) => {
+      if (evt.pointerType === 'mouse') return;
+
+      emojiBoardTouchTriggerRef.current = Date.now();
+      evt.preventDefault();
+      toggleEmojiBoardTab(nextTab);
+    };
+
+    const handleEmojiBoardTriggerClick = (nextTab: EmojiBoardTab) => {
+      if (Date.now() - emojiBoardTouchTriggerRef.current < 1000) {
+        emojiBoardTouchTriggerRef.current = 0;
+        return;
+      }
+
+      toggleEmojiBoardTab(nextTab);
+    };
 
     const handleStickerSelect = async (mxc: string, label: string, info?: IImageInfo) => {
       setSendError(undefined);
@@ -1023,7 +1049,10 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                 {!hideStickerBtn && (
                   <IconButton
                     aria-pressed={emojiBoardOpen && emojiBoardTab === EmojiBoardTab.Sticker}
-                    onClick={() => toggleEmojiBoardTab(EmojiBoardTab.Sticker)}
+                    onPointerDown={(evt) =>
+                      handleEmojiBoardTriggerPointerDown(EmojiBoardTab.Sticker, evt)
+                    }
+                    onClick={() => handleEmojiBoardTriggerClick(EmojiBoardTab.Sticker)}
                     variant="SurfaceVariant"
                     size="300"
                     radii="300"
@@ -1041,7 +1070,10 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                       ? emojiBoardOpen
                       : emojiBoardOpen && emojiBoardTab === EmojiBoardTab.Emoji
                   }
-                  onClick={() => toggleEmojiBoardTab(EmojiBoardTab.Emoji)}
+                  onPointerDown={(evt) =>
+                    handleEmojiBoardTriggerPointerDown(EmojiBoardTab.Emoji, evt)
+                  }
+                  onClick={() => handleEmojiBoardTriggerClick(EmojiBoardTab.Emoji)}
                   variant="SurfaceVariant"
                   size="300"
                   radii="300"

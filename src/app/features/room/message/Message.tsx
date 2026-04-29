@@ -1597,7 +1597,8 @@ export const Message = as<'div', MessageProps>(
 
     const handleOpenEmojiBoard: MouseEventHandler<HTMLButtonElement> = (evt) => {
       const target = evt.currentTarget.parentElement?.parentElement ?? evt.currentTarget;
-      setEmojiBoardAnchor(target.getBoundingClientRect());
+      const rect = target.getBoundingClientRect();
+      setEmojiBoardAnchor((current) => (current ? undefined : rect));
     };
     const handleAddReactions: MouseEventHandler<HTMLButtonElement> = () => {
       const rect = menuAnchor;

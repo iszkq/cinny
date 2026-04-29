@@ -3,6 +3,7 @@ import React, {
   MouseEventHandler,
   useCallback,
   useEffect,
+  useRef,
   useState,
 } from 'react';
 import {
@@ -71,6 +72,7 @@ export const MessageEditor = as<'div', MessageEditorProps>(
     const [isMarkdown] = useSetting(settingsAtom, 'isMarkdown');
     const [toolbar, setToolbar] = useState(globalToolbar);
     const isComposing = useComposingCheck();
+    const emojiBoardTouchTriggerRef = useRef(0);
 
     const [autocompleteQuery, setAutocompleteQuery] =
       useState<AutocompleteQuery<AutocompletePrefix>>();
@@ -206,6 +208,23 @@ export const MessageEditor = as<'div', MessageEditorProps>(
       moveCursor(editor);
     };
 
+    const toggleEmojiBoardAnchor = useCallback(
+      (
+        setAnchor: React.Dispatch<React.SetStateAction<RectCords | undefined>>,
+        nextAnchor: RectCords
+      ) => {
+        setAnchor((current) => {
+          if (current) {
+            if (!mobileOrTablet()) ReactEditor.focus(editor);
+            return undefined;
+          }
+
+          return nextAnchor;
+        });
+      },
+      [editor]
+    );
+
     useEffect(() => {
       const [body, customHtml] = getPrevBodyAndFormattedBody();
 
@@ -325,11 +344,28 @@ export const MessageEditor = as<'div', MessageEditorProps>(
                       >
                         <IconButton
                           aria-pressed={anchor !== undefined}
+                          onPointerDown={(evt) => {
+                            if (evt.pointerType === 'mouse') return;
+
+                            emojiBoardTouchTriggerRef.current = Date.now();
+                            evt.preventDefault();
+                            toggleEmojiBoardAnchor(
+                              setAnchor,
+                              evt.currentTarget.getBoundingClientRect()
+                            );
+                          }}
                           onClick={
-                            ((evt) =>
-                              setAnchor(
+                            ((evt) => {
+                              if (Date.now() - emojiBoardTouchTriggerRef.current < 1000) {
+                                emojiBoardTouchTriggerRef.current = 0;
+                                return;
+                              }
+
+                              toggleEmojiBoardAnchor(
+                                setAnchor,
                                 evt.currentTarget.getBoundingClientRect()
-                              )) as MouseEventHandler<HTMLButtonElement>
+                              );
+                            }) as MouseEventHandler<HTMLButtonElement>
                           }
                           variant="SurfaceVariant"
                           size="300"
