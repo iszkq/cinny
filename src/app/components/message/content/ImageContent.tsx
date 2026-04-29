@@ -550,12 +550,16 @@ export const ImageContent = as<'div', ImageContentProps>(
                     style={{
                       display: 'flex',
                       flexDirection: 'column',
-                      width: mobile ? '100vw' : 'min(96vw, 1320px)',
-                      minWidth: mobile ? '100vw' : 'min(96vw, 1320px)',
-                      maxWidth: mobile ? '100vw' : 'min(96vw, 1320px)',
-                      height: mobile ? '100dvh' : 'min(92dvh, 920px)',
-                      minHeight: mobile ? '100dvh' : 'min(92dvh, 920px)',
-                      maxHeight: mobile ? '100dvh' : 'min(92dvh, 920px)',
+                      width: mobile ? 'var(--app-width, 100vw)' : 'min(96vw, 1320px)',
+                      minWidth: mobile ? 'var(--app-width, 100vw)' : 'min(96vw, 1320px)',
+                      maxWidth: mobile ? 'var(--app-width, 100vw)' : 'min(96vw, 1320px)',
+                      height: mobile ? 'var(--app-height, 100dvh)' : 'min(92dvh, 920px)',
+                      minHeight: mobile
+                        ? 'var(--app-height, 100dvh)'
+                        : 'min(92dvh, 920px)',
+                      maxHeight: mobile
+                        ? 'var(--app-height, 100dvh)'
+                        : 'min(92dvh, 920px)',
                       padding: 0,
                       background: 'transparent',
                       boxShadow: 'none',
