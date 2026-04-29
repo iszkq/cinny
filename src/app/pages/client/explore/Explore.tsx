@@ -717,13 +717,13 @@ export function Explore() {
   };
 
   return (
-    <PageNav>
+    <PageNav resizable>
       <PageNavHeader>
         <Box grow="Yes" alignItems="Center" gap="300">
           <Box shrink="No">
             {desktop ? (
               <IconButton
-                aria-label="Back to main sidebar"
+                aria-label="Collapse section list"
                 variant="Background"
                 onClick={() => setDesktopPageNavCollapsed(true)}
               >

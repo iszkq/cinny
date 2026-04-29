@@ -114,7 +114,7 @@ function DirectHeader() {
           <Box shrink="No">
             {desktop ? (
               <IconButton
-                aria-label="Back to main sidebar"
+                aria-label="Collapse section list"
                 variant="Background"
                 onClick={handleToggleCollapsed}
               >
@@ -226,7 +226,7 @@ export function Direct() {
   );
 
   return (
-    <PageNav>
+    <PageNav resizable>
       <DirectHeader />
       {noRoomToDisplay ? (
         <DirectEmpty />

@@ -280,7 +280,7 @@ function SpaceHeader() {
           <Box shrink="No">
             {desktop ? (
               <IconButton
-                aria-label="Back to main sidebar"
+                aria-label="Collapse section list"
                 variant="Background"
                 onClick={handleToggleCollapsed}
               >
@@ -468,7 +468,7 @@ export function Space() {
     getSpaceRoomPath(spaceIdOrAlias, getCanonicalAliasOrRoomId(mx, roomId));
 
   return (
-    <PageNav>
+    <PageNav resizable>
       <SpaceHeader />
       <PageNavContent scrollRef={scrollRef}>
         <Box direction="Column" gap="300">

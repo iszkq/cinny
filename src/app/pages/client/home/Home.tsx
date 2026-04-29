@@ -127,7 +127,7 @@ function HomeHeader() {
         <Box alignItems="Center" grow="Yes" gap="300">
           <Box shrink="No">
             {desktop ? (
-              <IconButton aria-label="Back to main sidebar" variant="Background" onClick={handleToggleCollapsed}>
+              <IconButton aria-label="Collapse section list" variant="Background" onClick={handleToggleCollapsed}>
                 <Icon src={Icons.ArrowLeft} size="200" />
               </IconButton>
             ) : (
@@ -252,7 +252,7 @@ export function Home() {
   );
 
   return (
-    <PageNav>
+    <PageNav resizable>
       <HomeHeader />
       {noRoomToDisplay ? (
         <HomeEmpty />
