@@ -38,7 +38,7 @@ export const ImageViewerHeader = style([
         paddingRight: `max(${config.space.S200}, env(safe-area-inset-right, 0px))`,
       },
       'screen and (max-width: 750px)': {
-        paddingTop: `calc(env(safe-area-inset-top, 0px) + ${config.space.S200})`,
+        paddingTop: 'calc(env(safe-area-inset-top, 0px) + 24px)',
         paddingLeft: `max(${config.space.S200}, env(safe-area-inset-left, 0px))`,
         paddingRight: `max(${config.space.S200}, env(safe-area-inset-right, 0px))`,
         paddingBottom: config.space.S200,
