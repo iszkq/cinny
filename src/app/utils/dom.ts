@@ -76,6 +76,7 @@ export const selectFile = <M extends boolean | undefined = undefined>(
 
     const cleanup = () => {
       input.removeEventListener('change', changeHandler);
+      input.removeEventListener('cancel', cancelHandler);
       window.removeEventListener('focus', focusHandler, true);
       input.remove();
     };
@@ -97,15 +98,24 @@ export const selectFile = <M extends boolean | undefined = undefined>(
       }
     };
 
+    const cancelHandler = () => {
+      resolveOnce(undefined);
+    };
+
     const focusHandler = () => {
       window.setTimeout(() => {
-        if (!settled && (!input.files || input.files.length === 0)) {
+        if (
+          !settled &&
+          document.visibilityState === 'visible' &&
+          (!input.files || input.files.length === 0)
+        ) {
           resolveOnce(undefined);
         }
-      }, 0);
+      }, 400);
     };
 
     input.addEventListener('change', changeHandler);
+    input.addEventListener('cancel', cancelHandler);
     window.addEventListener('focus', focusHandler, true);
     input.click();
   });
