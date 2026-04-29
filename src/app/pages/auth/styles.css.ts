@@ -5,10 +5,18 @@ export const AuthLayout = style({
   minHeight: '100%',
   backgroundColor: color.Background.Container,
   color: color.Background.OnContainer,
-  padding: config.space.S400,
-  paddingRight: config.space.S200,
-  paddingBottom: 0,
+  paddingTop: `max(${config.space.S400}, env(safe-area-inset-top))`,
+  paddingRight: `max(${config.space.S200}, env(safe-area-inset-right))`,
+  paddingBottom: `env(safe-area-inset-bottom)`,
+  paddingLeft: `max(${config.space.S400}, env(safe-area-inset-left))`,
   position: 'relative',
+  '@media': {
+    'screen and (max-width: 750px)': {
+      paddingTop: `max(${config.space.S200}, env(safe-area-inset-top))`,
+      paddingRight: `max(${config.space.S200}, env(safe-area-inset-right))`,
+      paddingLeft: `max(${config.space.S200}, env(safe-area-inset-left))`,
+    },
+  },
 });
 
 export const AuthCard = style({
@@ -46,6 +54,14 @@ export const AuthCardContent = style({
   paddingTop: config.space.S700,
   paddingBottom: toRem(44),
   gap: toRem(44),
+  '@media': {
+    'screen and (max-width: 750px)': {
+      padding: config.space.S300,
+      paddingTop: config.space.S400,
+      paddingBottom: config.space.S400,
+      gap: config.space.S400,
+    },
+  },
 });
 
 export const AuthFooter = style({
