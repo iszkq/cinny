@@ -41,6 +41,7 @@ import {
   retainObjectUrl,
   revokeObjectUrlWhenPossible,
 } from '../../../utils/objectUrlRetainer';
+import { ScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
 import * as css from './style.css';
 
 type RenderViewerProps = {
@@ -141,6 +142,8 @@ export const ImageContent = as<'div', ImageContentProps>(
   ) => {
     const mx = useMatrixClient();
     const useAuthentication = useMediaAuthentication();
+    const screenSize = useScreenSizeContext();
+    const mobile = screenSize === ScreenSize.Mobile;
     const blurHash = validBlurHash(info?.[MATRIX_BLUR_HASH_PROPERTY_NAME]);
 
     const [load, setLoad] = useState(false);
@@ -547,15 +550,17 @@ export const ImageContent = as<'div', ImageContentProps>(
                     style={{
                       display: 'flex',
                       flexDirection: 'column',
-                      width: 'min(96vw, 1320px)',
-                      minWidth: 'min(96vw, 1320px)',
-                      height: 'min(92dvh, 920px)',
-                      minHeight: 'min(92dvh, 920px)',
-                      maxHeight: 'min(92dvh, 920px)',
+                      width: mobile ? '100vw' : 'min(96vw, 1320px)',
+                      minWidth: mobile ? '100vw' : 'min(96vw, 1320px)',
+                      maxWidth: mobile ? '100vw' : 'min(96vw, 1320px)',
+                      height: mobile ? '100dvh' : 'min(92dvh, 920px)',
+                      minHeight: mobile ? '100dvh' : 'min(92dvh, 920px)',
+                      maxHeight: mobile ? '100dvh' : 'min(92dvh, 920px)',
                       padding: 0,
                       background: 'transparent',
                       boxShadow: 'none',
                       border: 'none',
+                      borderRadius: mobile ? 0 : undefined,
                       overflow: 'hidden',
                     }}
                     onContextMenu={(evt: React.MouseEvent) => evt.stopPropagation()}
