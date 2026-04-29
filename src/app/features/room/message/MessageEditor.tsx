@@ -77,6 +77,7 @@ export const MessageEditor = as<'div', MessageEditorProps>(
     const isComposing = useComposingCheck();
     const emojiBoardTouchTriggerRef = useRef(0);
     const emojiBoardSuppressOpenUntilRef = useRef(0);
+    const emojiBoardSkipClickUntilRef = useRef(0);
 
     const [autocompleteQuery, setAutocompleteQuery] =
       useState<AutocompleteQuery<AutocompletePrefix>>();
@@ -215,11 +216,17 @@ export const MessageEditor = as<'div', MessageEditorProps>(
     const closeEmojiBoard = useCallback(
       (
         setAnchor: React.Dispatch<React.SetStateAction<RectCords | undefined>>,
-        returnFocus = true
+        returnFocus = true,
+        fromPointerTrigger = false
       ) => {
         const now = Date.now();
-        if (now - emojiBoardTouchTriggerRef.current < EMOJI_BOARD_REOPEN_SUPPRESS_MS) {
-          emojiBoardSuppressOpenUntilRef.current = now + EMOJI_BOARD_REOPEN_SUPPRESS_MS;
+        if (
+          fromPointerTrigger ||
+          now - emojiBoardTouchTriggerRef.current < EMOJI_BOARD_REOPEN_SUPPRESS_MS
+        ) {
+          const suppressUntil = now + EMOJI_BOARD_REOPEN_SUPPRESS_MS;
+          emojiBoardSuppressOpenUntilRef.current = suppressUntil;
+          emojiBoardSkipClickUntilRef.current = suppressUntil;
         }
 
         setAnchor((current) => {
@@ -368,9 +375,18 @@ export const MessageEditor = as<'div', MessageEditorProps>(
                           aria-pressed={anchor !== undefined}
                           onPointerDown={(evt) => {
                             emojiBoardTouchTriggerRef.current = Date.now();
+                            if (!anchor) {
+                              return;
+                            }
+                            evt.preventDefault();
+                            evt.stopPropagation();
+                            closeEmojiBoard(setAnchor, false, true);
                           }}
                           onClick={
                             ((evt) => {
+                              if (Date.now() < emojiBoardSkipClickUntilRef.current) {
+                                return;
+                              }
                               toggleEmojiBoardAnchor(
                                 setAnchor,
                                 evt.currentTarget.getBoundingClientRect()

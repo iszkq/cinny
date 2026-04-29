@@ -1712,8 +1712,24 @@ export const Message = as<'div', MessageProps>(
                     }
                   >
                     <IconButton
-                      onPointerDown={handleOpenEmojiBoardPointerDown}
-                      onClick={handleOpenEmojiBoard}
+                      onPointerDown={(evt) => {
+                        handleOpenEmojiBoardPointerDown(evt);
+                        if (!emojiBoardAnchor) {
+                          return;
+                        }
+                        evt.preventDefault();
+                        evt.stopPropagation();
+                        const now = Date.now();
+                        emojiBoardSuppressOpenUntilRef.current =
+                          now + MESSAGE_EMOJI_REOPEN_SUPPRESS_MS;
+                        setEmojiBoardAnchor(undefined);
+                      }}
+                      onClick={(evt) => {
+                        if (Date.now() < emojiBoardSuppressOpenUntilRef.current) {
+                          return;
+                        }
+                        handleOpenEmojiBoard(evt);
+                      }}
                       variant="SurfaceVariant"
                       size="300"
                       radii="300"

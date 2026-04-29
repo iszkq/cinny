@@ -233,6 +233,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const emojiBoardTabRef = useRef(emojiBoardTab);
     const emojiBoardTouchTriggerRef = useRef(0);
     const emojiBoardSuppressOpenUntilRef = useRef(0);
+    const emojiBoardSkipClickUntilRef = useRef(0);
     emojiBoardOpenRef.current = emojiBoardOpen;
     emojiBoardTabRef.current = emojiBoardTab;
 
@@ -682,10 +683,15 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       moveCursor(editor);
     };
 
-    const closeEmojiBoard = useCallback(() => {
+    const closeEmojiBoard = useCallback((fromPointerTrigger = false) => {
       const now = Date.now();
-      if (now - emojiBoardTouchTriggerRef.current < EMOJI_BOARD_REOPEN_SUPPRESS_MS) {
-        emojiBoardSuppressOpenUntilRef.current = now + EMOJI_BOARD_REOPEN_SUPPRESS_MS;
+      if (
+        fromPointerTrigger ||
+        now - emojiBoardTouchTriggerRef.current < EMOJI_BOARD_REOPEN_SUPPRESS_MS
+      ) {
+        const suppressUntil = now + EMOJI_BOARD_REOPEN_SUPPRESS_MS;
+        emojiBoardSuppressOpenUntilRef.current = suppressUntil;
+        emojiBoardSkipClickUntilRef.current = suppressUntil;
       }
       setEmojiBoardOpen(false);
       if (!mobileOrTablet()) ReactEditor.focus(editor);
@@ -726,10 +732,6 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       },
       [closeEmojiBoard, hideStickerBtn]
     );
-
-    const handleEmojiBoardTriggerPointerDown = () => {
-      emojiBoardTouchTriggerRef.current = Date.now();
-    };
 
     const handleStickerSelect = async (mxc: string, label: string, info?: IImageInfo) => {
       setSendError(undefined);
@@ -1049,8 +1051,23 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                 {!hideStickerBtn && (
                   <IconButton
                     aria-pressed={emojiBoardOpen && emojiBoardTab === EmojiBoardTab.Sticker}
-                    onPointerDown={handleEmojiBoardTriggerPointerDown}
-                    onClick={() => toggleEmojiBoardTab(EmojiBoardTab.Sticker)}
+                    onPointerDown={(evt) => {
+                      emojiBoardTouchTriggerRef.current = Date.now();
+                      if (
+                        emojiBoardOpen &&
+                        emojiBoardTab === EmojiBoardTab.Sticker
+                      ) {
+                        evt.preventDefault();
+                        evt.stopPropagation();
+                        closeEmojiBoard(true);
+                      }
+                    }}
+                    onClick={() => {
+                      if (Date.now() < emojiBoardSkipClickUntilRef.current) {
+                        return;
+                      }
+                      toggleEmojiBoardTab(EmojiBoardTab.Sticker);
+                    }}
                     variant="SurfaceVariant"
                     size="300"
                     radii="300"
@@ -1068,8 +1085,24 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                       ? emojiBoardOpen
                       : emojiBoardOpen && emojiBoardTab === EmojiBoardTab.Emoji
                   }
-                  onPointerDown={handleEmojiBoardTriggerPointerDown}
-                  onClick={() => toggleEmojiBoardTab(EmojiBoardTab.Emoji)}
+                  onPointerDown={(evt) => {
+                    emojiBoardTouchTriggerRef.current = Date.now();
+                    if (
+                      hideStickerBtn
+                        ? emojiBoardOpen
+                        : emojiBoardOpen && emojiBoardTab === EmojiBoardTab.Emoji
+                    ) {
+                      evt.preventDefault();
+                      evt.stopPropagation();
+                      closeEmojiBoard(true);
+                    }
+                  }}
+                  onClick={() => {
+                    if (Date.now() < emojiBoardSkipClickUntilRef.current) {
+                      return;
+                    }
+                    toggleEmojiBoardTab(EmojiBoardTab.Emoji);
+                  }}
                   variant="SurfaceVariant"
                   size="300"
                   radii="300"
