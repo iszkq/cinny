@@ -1,4 +1,4 @@
-import { style } from '@vanilla-extract/css';
+import { globalStyle, style } from '@vanilla-extract/css';
 import { DefaultReset, config } from 'folds';
 
 export const RelativeBase = style([
@@ -27,14 +27,13 @@ export const MediaContainer = style([
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    selectors: {
-      '& > img': {
-        objectFit: 'contain',
-        objectPosition: 'center',
-      },
-    },
   },
 ]);
+
+globalStyle(`${MediaContainer} > img`, {
+  objectFit: 'contain',
+  objectPosition: 'center',
+});
 
 export const AbsoluteFooter = style([
   DefaultReset,
