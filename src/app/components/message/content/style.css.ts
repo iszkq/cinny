@@ -21,6 +21,21 @@ export const AbsoluteContainer = style([
   },
 ]);
 
+export const MediaContainer = style([
+  AbsoluteContainer,
+  {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    selectors: {
+      '& > img': {
+        objectFit: 'contain',
+        objectPosition: 'center',
+      },
+    },
+  },
+]);
+
 export const AbsoluteFooter = style([
   DefaultReset,
   {

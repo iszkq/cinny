@@ -195,15 +195,24 @@ export function MImage({ content, renderImageContent, outlined }: MImageProps) {
   if (typeof mxcUrl !== 'string') {
     return <BrokenContent />;
   }
-  const height = scaleYDimension(imgInfo?.w || 400, 400, imgInfo?.h || 400);
+  const imageWidth = typeof imgInfo?.w === 'number' && imgInfo.w > 0 ? imgInfo.w : undefined;
+  const imageHeight = typeof imgInfo?.h === 'number' && imgInfo.h > 0 ? imgInfo.h : undefined;
+  const hasAspectRatio =
+    typeof imageWidth === 'number' && typeof imageHeight === 'number';
+  const height = scaleYDimension(imageWidth || 400, 400, imageHeight || 400);
+  const imageBoxStyle: CSSProperties = hasAspectRatio
+    ? {
+        aspectRatio: `${imageWidth} / ${imageHeight}`,
+        height: 'auto',
+        minHeight: toRem(48),
+      }
+    : {
+        height: toRem(height < 48 ? 48 : height),
+      };
 
   return (
     <Attachment outlined={outlined}>
-      <AttachmentBox
-        style={{
-          height: toRem(height < 48 ? 48 : height),
-        }}
-      >
+      <AttachmentBox style={imageBoxStyle}>
         {renderImageContent({
           body: content.body || 'Image',
           info: imgInfo,

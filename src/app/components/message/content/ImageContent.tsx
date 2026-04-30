@@ -642,7 +642,7 @@ export const ImageContent = as<'div', ImageContentProps>(
         )}
 
         {srcState.status === AsyncStatus.Success && (
-          <Box className={classNames(css.AbsoluteContainer, blurred && css.Blur)}>
+          <Box className={classNames(css.MediaContainer, blurred && css.Blur)}>
             {renderImage({
               alt: body,
               title: body,
