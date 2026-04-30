@@ -234,6 +234,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const emojiBoardTouchTriggerRef = useRef(0);
     const emojiBoardSuppressOpenUntilRef = useRef(0);
     const emojiBoardSkipClickUntilRef = useRef(0);
+    const emojiBoardFocusTimerRef = useRef<number>();
     emojiBoardOpenRef.current = emojiBoardOpen;
     emojiBoardTabRef.current = emojiBoardTab;
 
@@ -333,6 +334,9 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
 
     useEffect(
       () => () => {
+        if (emojiBoardFocusTimerRef.current) {
+          window.clearTimeout(emojiBoardFocusTimerRef.current);
+        }
         stopRecordingTracks();
         if (!isEmptyEditor(editor)) {
           const parsedDraft = JSON.parse(JSON.stringify(editor.children));
@@ -680,7 +684,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
 
     const handleEmoticonSelect = (key: string, shortcode: string) => {
       editor.insertNode(createEmoticonElement(key, shortcode));
-      moveCursor(editor);
+      moveCursor(editor, true);
     };
 
     const closeEmojiBoard = useCallback((fromPointerTrigger = false) => {
@@ -694,7 +698,14 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         emojiBoardSkipClickUntilRef.current = suppressUntil;
       }
       setEmojiBoardOpen(false);
-      if (!mobileOrTablet()) ReactEditor.focus(editor);
+      if (!mobileOrTablet()) {
+        if (emojiBoardFocusTimerRef.current) {
+          window.clearTimeout(emojiBoardFocusTimerRef.current);
+        }
+        emojiBoardFocusTimerRef.current = window.setTimeout(() => {
+          ReactEditor.focus(editor);
+        }, 0);
+      }
     }, [editor]);
 
     const toggleEmojiBoardTab = useCallback(
