@@ -42,6 +42,10 @@ export const canFitInScrollView = (
 ): boolean => childElement.offsetHeight < scrollElement.offsetHeight;
 
 export type FilesOrFile<T extends boolean | undefined = undefined> = T extends true ? File[] : File;
+export type SelectFileOptions = {
+  accept: string;
+  capture?: 'user' | 'environment';
+};
 
 export const getFilesFromFileList = (fileList: FileList): File[] => {
   const files: File[] = [];
@@ -55,13 +59,16 @@ export const getFilesFromFileList = (fileList: FileList): File[] => {
 };
 
 export const selectFile = <M extends boolean | undefined = undefined>(
-  accept: string,
+  selectOptions: string | SelectFileOptions,
   multiple?: M
 ): Promise<FilesOrFile<M> | undefined> =>
   new Promise((resolve) => {
+    const { accept, capture } =
+      typeof selectOptions === 'string' ? { accept: selectOptions } : selectOptions;
     const input = document.createElement('input');
     input.type = 'file';
     if (accept && accept !== '*') input.accept = accept;
+    if (capture) input.setAttribute('capture', capture);
     if (multiple) input.multiple = true;
     input.tabIndex = -1;
     input.style.position = 'fixed';
