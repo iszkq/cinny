@@ -20,6 +20,8 @@ import {
   IconButton,
   Icons,
   Line,
+  Menu,
+  MenuItem,
   Overlay,
   OverlayBackdrop,
   OverlayCenter,
@@ -30,6 +32,7 @@ import {
   config,
   toRem,
 } from 'folds';
+import FocusTrap from 'focus-trap-react';
 
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import {
@@ -57,6 +60,7 @@ import {
   getMentions,
 } from '../../components/editor';
 import { EmojiBoard, EmojiBoardTab } from '../../components/emoji-board';
+import { SelectFileOptions } from '../../utils/dom';
 import {
   TUploadContent,
   encryptFile,
@@ -229,6 +233,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       useState<AutocompleteQuery<AutocompletePrefix>>();
     const [emojiBoardTab, setEmojiBoardTab] = useState(EmojiBoardTab.Emoji);
     const [emojiBoardOpen, setEmojiBoardOpen] = useState(false);
+    const [mobileAttachmentMenuOpen, setMobileAttachmentMenuOpen] = useState(false);
+    const attachmentBtnRef = useRef<HTMLButtonElement>(null);
     const emojiBoardOpenRef = useRef(emojiBoardOpen);
     const emojiBoardTabRef = useRef(emojiBoardTab);
     const emojiBoardTouchTriggerRef = useRef(0);
@@ -239,12 +245,19 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     emojiBoardTabRef.current = emojiBoardTab;
 
     const sendTypingStatus = useTypingStatusUpdater(mx, roomId);
+    const mobileAttachmentMenuEnabled = compactScreen && mobileOrTablet();
 
     useEffect(() => {
       if (!sendTypingNotifications) {
         sendTypingStatus(false);
       }
     }, [sendTypingStatus, sendTypingNotifications]);
+
+    useEffect(() => {
+      if (!mobileAttachmentMenuEnabled) {
+        setMobileAttachmentMenuOpen(false);
+      }
+    }, [mobileAttachmentMenuEnabled]);
 
     useInterval(
       useCallback(() => {
@@ -317,6 +330,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       [getAudioMetadata, setSelectedFiles, room]
     );
     const pickFile = useFilePicker(handleFiles, true);
+    const pickSingleFile = useFilePicker((file) => handleFiles([file]), false);
     const handlePaste = useFilePasteHandler(handleFiles);
     const dropZoneVisible = useFileDropZone(fileDropContainerRef, handleFiles);
     const [hideStickerBtn, setHideStickerBtn] = useState(document.body.clientWidth < 500);
@@ -757,6 +771,19 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       }
     };
 
+    const closeMobileAttachmentMenu = useCallback(() => {
+      setMobileAttachmentMenuOpen(false);
+    }, []);
+
+    const handleMobileAttachmentPick = useCallback(
+      (selectOptions: string | SelectFileOptions, single?: boolean) => {
+        closeMobileAttachmentMenu();
+        const pick = single ? pickSingleFile : pickFile;
+        pick(selectOptions).catch(() => undefined);
+      },
+      [closeMobileAttachmentMenu, pickFile, pickSingleFile]
+    );
+
     const closePollDialog = useCallback(() => {
       setPollDialog(false);
       setTimeout(() => ReactEditor.focus(editor), 100);
@@ -989,14 +1016,90 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
             )
           }
           before={
-            <IconButton
-              onClick={() => pickFile('*')}
-              variant="SurfaceVariant"
-              size="300"
-              radii="300"
+            <PopOut
+              offset={8}
+              position="Top"
+              align="Start"
+              anchor={
+                mobileAttachmentMenuEnabled && mobileAttachmentMenuOpen
+                  ? attachmentBtnRef.current?.getBoundingClientRect()
+                  : undefined
+              }
+              content={
+                mobileAttachmentMenuEnabled ? (
+                  <FocusTrap
+                    focusTrapOptions={{
+                      initialFocus: false,
+                      returnFocusOnDeactivate: false,
+                      onDeactivate: closeMobileAttachmentMenu,
+                      clickOutsideDeactivates: true,
+                    }}
+                  >
+                    <Menu style={{ maxWidth: toRem(200), width: 'calc(100vw - 32px)' }}>
+                      <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
+                        <MenuItem
+                          size="300"
+                          radii="300"
+                          after={<Icon size="100" src={Icons.Photo} />}
+                          onClick={() =>
+                            handleMobileAttachmentPick(
+                              { accept: 'image/*', capture: 'environment' },
+                              true
+                            )
+                          }
+                        >
+                          <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
+                            拍照发送
+                          </Text>
+                        </MenuItem>
+                        <MenuItem
+                          size="300"
+                          radii="300"
+                          after={<Icon size="100" src={Icons.VideoCamera} />}
+                          onClick={() =>
+                            handleMobileAttachmentPick(
+                              { accept: 'video/*', capture: 'environment' },
+                              true
+                            )
+                          }
+                        >
+                          <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
+                            录像发送
+                          </Text>
+                        </MenuItem>
+                        <MenuItem
+                          size="300"
+                          radii="300"
+                          after={<Icon size="100" src={Icons.File} />}
+                          onClick={() => handleMobileAttachmentPick('*')}
+                        >
+                          <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
+                            选择附件
+                          </Text>
+                        </MenuItem>
+                      </Box>
+                    </Menu>
+                  </FocusTrap>
+                ) : undefined
+              }
             >
-              <Icon src={Icons.PlusCircle} />
-            </IconButton>
+              <IconButton
+                ref={attachmentBtnRef}
+                onClick={() => {
+                  if (mobileAttachmentMenuEnabled) {
+                    setMobileAttachmentMenuOpen((open) => !open);
+                    return;
+                  }
+                  pickFile('*').catch(() => undefined);
+                }}
+                variant="SurfaceVariant"
+                size="300"
+                radii="300"
+                aria-pressed={mobileAttachmentMenuEnabled ? mobileAttachmentMenuOpen : undefined}
+              >
+                <Icon src={Icons.PlusCircle} />
+              </IconButton>
+            </PopOut>
           }
           after={
             <>
