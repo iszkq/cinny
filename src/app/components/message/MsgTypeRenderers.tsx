@@ -334,7 +334,12 @@ export function MAudio({ content, renderAsFile, renderAudioContent, outlined }: 
           }
         />
       </AttachmentHeader>
-      <AttachmentBox>
+      <AttachmentBox
+        style={{
+          maxHeight: 'none',
+          overflow: 'visible',
+        }}
+      >
         <AttachmentContent>
           {renderAudioContent({
             info: audioInfo,
