@@ -13,9 +13,8 @@ import { CommandElement, EmoticonElement, LinkElement, MentionElement } from './
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { getBeginCommand } from './utils';
 import { BlockType } from './types';
-import { mxcUrlToHttp } from '../../utils/matrix';
+import { isHttpUrl, isMxcUrl, mxcUrlToHttp } from '../../utils/matrix';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
-import { useCachedMediaUrl } from '../../hooks/useCachedMediaUrl';
 
 // Put this at the start and end of an inline component to work around this Chromium bug:
 // https://bugs.chromium.org/p/chromium/issues/detail?id=1249405
@@ -82,13 +81,15 @@ function RenderEmoticonElement({
   const useAuthentication = useMediaAuthentication();
   const selected = useSelected();
   const focused = useFocused();
+  const customEmoji = isMxcUrl(element.key) || isHttpUrl(element.key);
   const mediaUrl =
-    element.key.startsWith('mxc://')
+    isMxcUrl(element.key)
       ? (mxcUrlToHttp(mx, element.key, useAuthentication, 48, 48, 'scale') ??
           mxcUrlToHttp(mx, element.key, useAuthentication) ??
           undefined)
-      : undefined;
-  const cachedMediaUrl = useCachedMediaUrl(mediaUrl);
+      : isHttpUrl(element.key)
+        ? element.key
+        : undefined;
 
   return (
     <span className={css.EmoticonBase} {...attributes}>
@@ -98,10 +99,10 @@ function RenderEmoticonElement({
         })}
         contentEditable={false}
       >
-        {element.key.startsWith('mxc://') ? (
+        {customEmoji ? (
           <img
             className={css.EmoticonImg}
-            src={cachedMediaUrl ?? mediaUrl ?? element.key}
+            src={mediaUrl ?? element.key}
             alt={element.shortcode}
             decoding="async"
           />

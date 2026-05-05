@@ -11,7 +11,7 @@ import {
 } from '../../plugins/markdown';
 import { findAndReplace } from '../../utils/findAndReplace';
 import { sanitizeForRegex } from '../../utils/regex';
-import { getCanonicalAliasOrRoomId, isUserId } from '../../utils/matrix';
+import { getCanonicalAliasOrRoomId, isHttpUrl, isMxcUrl, isUserId } from '../../utils/matrix';
 
 export type OutputOptions = {
   allowTextFormatting?: boolean;
@@ -73,8 +73,8 @@ const elementToCustomHtml = (node: CustomElement, children: string): string => {
       return `<a href="${encodeURI(matrixTo)}">${sanitizeText(node.name)}</a>`;
     }
     case BlockType.Emoticon:
-      return node.key.startsWith('mxc://')
-        ? `<img data-mx-emoticon src="${node.key}" alt="${sanitizeText(
+      return isMxcUrl(node.key) || isHttpUrl(node.key)
+        ? `<img data-mx-emoticon src="${sanitizeText(node.key)}" alt="${sanitizeText(
             node.shortcode
           )}" title="${sanitizeText(node.shortcode)}" height="32" />`
         : sanitizeText(node.key);
@@ -155,7 +155,7 @@ const elementToPlainText = (node: CustomElement, children: string): string => {
     case BlockType.Mention:
       return node.id;
     case BlockType.Emoticon:
-      return node.key.startsWith('mxc://') ? `:${node.shortcode}:` : node.key;
+      return isMxcUrl(node.key) || isHttpUrl(node.key) ? `:${node.shortcode}:` : node.key;
     case BlockType.Link:
       return `[${node.children}](${node.href})`;
     case BlockType.Command:
