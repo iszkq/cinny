@@ -12,6 +12,7 @@ import {
   isMxcUrl,
   mxcUrlToHttp,
 } from '../../utils/matrix';
+import { useStableMediaUrl } from '../emoji-board/components/useStableMediaUrl';
 
 export const Reaction = as<
   'button',
@@ -23,14 +24,21 @@ export const Reaction = as<
   }
 >(({ className, mx, count, reaction, useAuthentication, ...props }, ref) => {
   const customEmoji = isMxcUrl(reaction) || isHttpUrl(reaction);
-  const mediaUrl =
-    isMxcUrl(reaction)
-      ? (mxcUrlToHttp(mx, reaction, useAuthentication, 48, 48, 'scale') ??
-          mxcUrlToHttp(mx, reaction, useAuthentication) ??
-          undefined)
-      : isHttpUrl(reaction)
-        ? reaction
-        : undefined;
+  const originalMediaUrl = isMxcUrl(reaction)
+    ? (mxcUrlToHttp(mx, reaction, useAuthentication) ?? undefined)
+    : isHttpUrl(reaction)
+      ? reaction
+      : undefined;
+  const thumbnailMediaUrl = isMxcUrl(reaction)
+    ? (mxcUrlToHttp(mx, reaction, useAuthentication, 48, 48, 'scale') ?? undefined)
+    : undefined;
+  const { displayUrl, handleLoad, handleError, requestKey } = useStableMediaUrl(
+    originalMediaUrl,
+    thumbnailMediaUrl,
+    {
+      disableObjectUrlCache: true,
+    }
+  );
 
   return (
     <Box
@@ -45,10 +53,13 @@ export const Reaction = as<
       <Text className={css.ReactionText} as="span" size="T400">
         {customEmoji ? (
           <img
+            key={requestKey}
             className={css.ReactionImg}
-            src={mediaUrl ?? reaction}
+            src={displayUrl ?? originalMediaUrl ?? thumbnailMediaUrl ?? reaction}
             alt={reaction}
             decoding="async"
+            onLoad={handleLoad}
+            onError={handleError}
           />
         ) : (
           <Text as="span" size="Inherit" truncate>
