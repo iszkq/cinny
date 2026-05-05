@@ -25,6 +25,8 @@ import * as css from '../styles/CustomHtml.css';
 import {
   getMxIdLocalPart,
   getCanonicalAliasRoomId,
+  isHttpUrl,
+  isMxcUrl,
   isRoomAlias,
   mxcUrlToHttp,
 } from '../utils/matrix';
@@ -41,7 +43,6 @@ import {
 import { onEnterOrSpace } from '../utils/keyboard';
 import { copyToClipboard, tryDecodeURIComponent } from '../utils/dom';
 import { useTimeoutToggle } from '../hooks/useTimeoutToggle';
-import { useCachedMediaUrl } from '../hooks/useCachedMediaUrl';
 
 const ReactPrism = lazy(() => import('./react-prism/ReactPrism'));
 
@@ -226,9 +227,7 @@ const extractTextFromChildren = (nodes: ChildNode[]): string => {
 };
 
 function CachedHtmlEmoticonImage(props: ComponentPropsWithoutRef<'img'>) {
-  const cachedMediaUrl = useCachedMediaUrl(props.src);
-
-  return <img {...props} src={cachedMediaUrl ?? props.src} decoding="async" />;
+  return <img {...props} decoding="async" />;
 }
 
 export function CodeBlock({
@@ -481,17 +480,20 @@ export const getReactCustomHtmlParser = (
         }
 
         if (name === 'img') {
-          const htmlSrc = mxcUrlToHttp(mx, props.src, params.useAuthentication);
-          const emoticonSrc =
-            mxcUrlToHttp(mx, props.src, params.useAuthentication, 64, 64, 'scale') ?? htmlSrc;
-          if (htmlSrc && props.src.startsWith('mxc://') === false) {
-            return (
-              <a href={htmlSrc} target="_blank" rel="noreferrer noopener">
-                {props.alt || props.title || htmlSrc}
-              </a>
-            );
-          }
-          if (htmlSrc && 'data-mx-emoticon' in props) {
+          const isEmoticon = 'data-mx-emoticon' in props;
+          const emoticonSrc = isMxcUrl(props.src)
+            ? (mxcUrlToHttp(mx, props.src, params.useAuthentication, 64, 64, 'scale') ??
+                mxcUrlToHttp(mx, props.src, params.useAuthentication) ??
+                props.src)
+            : isHttpUrl(props.src)
+              ? props.src
+              : undefined;
+          const htmlSrc = isMxcUrl(props.src)
+            ? mxcUrlToHttp(mx, props.src, params.useAuthentication)
+            : isHttpUrl(props.src)
+              ? props.src
+              : undefined;
+          if (isEmoticon && emoticonSrc) {
             return (
               <span className={css.EmoticonBase}>
                 <span className={css.Emoticon()}>
@@ -502,6 +504,13 @@ export const getReactCustomHtmlParser = (
                   />
                 </span>
               </span>
+            );
+          }
+          if (htmlSrc && isMxcUrl(props.src) === false) {
+            return (
+              <a href={htmlSrc} target="_blank" rel="noreferrer noopener">
+                {props.alt || props.title || htmlSrc}
+              </a>
             );
           }
           if (htmlSrc) return <img {...props} className={css.Img} src={htmlSrc} />;
