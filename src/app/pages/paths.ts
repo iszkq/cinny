@@ -58,6 +58,7 @@ export type DirectCreateSearchParams = {
   userId?: string;
 };
 export const DIRECT_CREATE_PATH = `/direct/${_CREATE_PATH}`;
+export const DIRECT_SEARCH_PATH = `/direct/${_SEARCH_PATH}`;
 export const DIRECT_ROOM_PATH = `/direct/${_ROOM_PATH}`;
 
 export const FAVORITES_PATH = '/favorites/';
