@@ -135,6 +135,12 @@ export const getCanonicalAliasOrRoomId = (mx: MatrixClient, roomId: string): str
   return roomId;
 };
 
+export const isMxcUrl = (url: string | undefined | null): url is string =>
+  typeof url === 'string' && url.startsWith('mxc://');
+
+export const isHttpUrl = (url: string | undefined | null): url is string =>
+  typeof url === 'string' && /^(https?):\/\//i.test(url);
+
 export const getImageInfo = (img: HTMLImageElement, fileOrBlob: File | Blob): IImageInfo => {
   const info: IImageInfo = {};
   info.w = img.width;

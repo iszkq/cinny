@@ -107,6 +107,15 @@ const transformATag: Transformer = (tagName, attribs) => ({
 
 const transformImgTag: Transformer = (tagName, attribs) => {
   const { src } = attribs;
+  if ('data-mx-emoticon' in attribs) {
+    return {
+      tagName,
+      attribs: {
+        ...attribs,
+      },
+    };
+  }
+
   if (typeof src === 'string' && src.startsWith('mxc://') === false) {
     return {
       tagName: 'a',
