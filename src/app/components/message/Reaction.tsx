@@ -5,8 +5,13 @@ import { MatrixClient, MatrixEvent, Room } from 'matrix-js-sdk';
 import * as css from './Reaction.css';
 import { getHexcodeForEmoji, getShortcodeFor } from '../../plugins/emoji';
 import { getMemberDisplayName } from '../../utils/room';
-import { eventWithShortcode, getMxIdLocalPart, mxcUrlToHttp } from '../../utils/matrix';
-import { useCachedMediaUrl } from '../../hooks/useCachedMediaUrl';
+import {
+  eventWithShortcode,
+  getMxIdLocalPart,
+  isHttpUrl,
+  isMxcUrl,
+  mxcUrlToHttp,
+} from '../../utils/matrix';
 
 export const Reaction = as<
   'button',
@@ -17,13 +22,15 @@ export const Reaction = as<
     useAuthentication?: boolean;
   }
 >(({ className, mx, count, reaction, useAuthentication, ...props }, ref) => {
+  const customEmoji = isMxcUrl(reaction) || isHttpUrl(reaction);
   const mediaUrl =
-    reaction.startsWith('mxc://')
+    isMxcUrl(reaction)
       ? (mxcUrlToHttp(mx, reaction, useAuthentication, 48, 48, 'scale') ??
           mxcUrlToHttp(mx, reaction, useAuthentication) ??
           undefined)
-      : undefined;
-  const cachedMediaUrl = useCachedMediaUrl(mediaUrl);
+      : isHttpUrl(reaction)
+        ? reaction
+        : undefined;
 
   return (
     <Box
@@ -36,10 +43,10 @@ export const Reaction = as<
       ref={ref}
     >
       <Text className={css.ReactionText} as="span" size="T400">
-        {reaction.startsWith('mxc://') ? (
+        {customEmoji ? (
           <img
             className={css.ReactionImg}
-            src={cachedMediaUrl ?? mediaUrl ?? reaction}
+            src={mediaUrl ?? reaction}
             alt={reaction}
             decoding="async"
           />
