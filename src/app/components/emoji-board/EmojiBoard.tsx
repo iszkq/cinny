@@ -543,12 +543,10 @@ export function EmojiBoard({
     if (emojiInfo.type === EmojiType.Sticker) {
       onStickerSelect?.(emojiInfo.data, emojiInfo.label, emojiInfo.info);
     }
-    if (!evt.altKey && !evt.shiftKey) requestClose();
   };
 
   const handleTextCustomEmojiSelect = (textEmoji: string) => {
     onCustomEmojiSelect?.(textEmoji, textEmoji);
-    requestClose();
   };
 
   const handleScrollToGroup = (groupId: string) => {
