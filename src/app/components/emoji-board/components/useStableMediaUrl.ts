@@ -11,9 +11,16 @@ type MediaCandidate = {
   displayUrl: string;
 };
 
+type UseStableMediaUrlOptions = {
+  disableObjectUrlCache?: boolean;
+};
+
 const MAX_MEDIA_RETRY_COUNT = 12;
 
-const buildMediaCandidates = (...sources: Array<string | undefined>): MediaCandidate[] => {
+const buildMediaCandidates = (
+  options: UseStableMediaUrlOptions,
+  ...sources: Array<string | undefined>
+): MediaCandidate[] => {
   const candidates: MediaCandidate[] = [];
   const seenSources = new Set<string>();
   const seenDisplayUrls = new Set<string>();
@@ -25,10 +32,12 @@ const buildMediaCandidates = (...sources: Array<string | undefined>): MediaCandi
 
     seenSources.add(source);
 
-    const cachedUrl = getCachedMediaObjectUrl(source);
-    if (cachedUrl && !seenDisplayUrls.has(cachedUrl)) {
-      candidates.push({ source, displayUrl: cachedUrl });
-      seenDisplayUrls.add(cachedUrl);
+    if (!options.disableObjectUrlCache) {
+      const cachedUrl = getCachedMediaObjectUrl(source);
+      if (cachedUrl && !seenDisplayUrls.has(cachedUrl)) {
+        candidates.push({ source, displayUrl: cachedUrl });
+        seenDisplayUrls.add(cachedUrl);
+      }
     }
 
     if (!seenDisplayUrls.has(source)) {
@@ -40,15 +49,20 @@ const buildMediaCandidates = (...sources: Array<string | undefined>): MediaCandi
   return candidates;
 };
 
-export const useStableMediaUrl = (src?: string, fallbackSrc?: string) => {
+export const useStableMediaUrl = (
+  src?: string,
+  fallbackSrc?: string,
+  options: UseStableMediaUrlOptions = {}
+) => {
+  const disableObjectUrlCache = options.disableObjectUrlCache ?? false;
   const [candidateIndex, setCandidateIndex] = useState(0);
   const [cacheVersion, setCacheVersion] = useState(0);
   const [loadedDisplayUrl, setLoadedDisplayUrl] = useState<string | undefined>();
   const [retryCount, setRetryCount] = useState(0);
 
   const candidates = useMemo(
-    () => buildMediaCandidates(src, fallbackSrc),
-    [src, fallbackSrc, cacheVersion]
+    () => buildMediaCandidates({ disableObjectUrlCache }, src, fallbackSrc),
+    [cacheVersion, disableObjectUrlCache, fallbackSrc, src]
   );
 
   useEffect(() => {
@@ -58,6 +72,10 @@ export const useStableMediaUrl = (src?: string, fallbackSrc?: string) => {
   }, [src, fallbackSrc]);
 
   useEffect(() => {
+    if (disableObjectUrlCache) {
+      return undefined;
+    }
+
     if (!src && !fallbackSrc) {
       return undefined;
     }
@@ -84,7 +102,7 @@ export const useStableMediaUrl = (src?: string, fallbackSrc?: string) => {
     return () => {
       unsubscribeList.forEach((unsubscribe) => unsubscribe());
     };
-  }, [src, fallbackSrc]);
+  }, [disableObjectUrlCache, src, fallbackSrc]);
 
   const activeCandidate = candidates[candidateIndex];
   const displayUrl = loadedDisplayUrl ?? activeCandidate?.displayUrl;
@@ -109,10 +127,10 @@ export const useStableMediaUrl = (src?: string, fallbackSrc?: string) => {
       setCacheVersion((prev) => prev + 1);
       setCandidateIndex(0);
 
-      if (src) {
+      if (!disableObjectUrlCache && src) {
         void primeCachedMediaObjectUrl(src);
       }
-      if (fallbackSrc && fallbackSrc !== src) {
+      if (!disableObjectUrlCache && fallbackSrc && fallbackSrc !== src) {
         void primeCachedMediaObjectUrl(fallbackSrc);
       }
     }, Math.min(1200 * (retryCount + 1), 4000));
@@ -120,14 +138,14 @@ export const useStableMediaUrl = (src?: string, fallbackSrc?: string) => {
     return () => {
       window.clearTimeout(retryTimer);
     };
-  }, [fallbackSrc, hasFailed, loadedDisplayUrl, retryCount, src]);
+  }, [disableObjectUrlCache, fallbackSrc, hasFailed, loadedDisplayUrl, retryCount, src]);
 
   const handleLoad = useCallback(() => {
-    if (activeCandidate?.source) {
+    if (!disableObjectUrlCache && activeCandidate?.source) {
       void primeCachedMediaObjectUrl(activeCandidate.source);
     }
     setLoadedDisplayUrl((prev) => prev ?? activeCandidate?.displayUrl);
-  }, [activeCandidate]);
+  }, [activeCandidate, disableObjectUrlCache]);
 
   const handleError = useCallback(() => {
     if (loadedDisplayUrl) {

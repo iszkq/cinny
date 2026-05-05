@@ -7,7 +7,7 @@ import * as css from './styles.css';
 import { PackImageReader } from '../../../plugins/custom-emoji';
 import { IEmoji } from '../../../plugins/emoji';
 import { useStableMediaUrl } from './useStableMediaUrl';
-import { getEmojiBoardMediaUrls } from './media';
+import { getEmojiBoardMediaUrls, isAnimatedEmojiBoardMedia } from './media';
 
 export const getEmojiItemInfo = (element: Element): EmojiItemInfo | undefined => {
   const label = element.getAttribute('title');
@@ -75,8 +75,11 @@ export function CustomEmojiItem({ mx, useAuthentication, image }: CustomEmojiIte
     width: 64,
     height: 64,
   });
+  const animated = isAnimatedEmojiBoardMedia(image.info);
   const { displayUrl, hasFailed, requestKey, handleLoad, handleError } =
-    useStableMediaUrl(primaryUrl, fallbackUrl);
+    useStableMediaUrl(primaryUrl, fallbackUrl, {
+      disableObjectUrlCache: animated,
+    });
 
   return (
     <Box
@@ -127,8 +130,11 @@ export function StickerItem({ mx, useAuthentication, image }: StickerItemProps) 
     width: 256,
     height: 256,
   });
+  const animated = isAnimatedEmojiBoardMedia(image.info);
   const { displayUrl, hasFailed, requestKey, handleLoad, handleError } =
-    useStableMediaUrl(primaryUrl, fallbackUrl);
+    useStableMediaUrl(primaryUrl, fallbackUrl, {
+      disableObjectUrlCache: animated,
+    });
 
   return (
     <Box

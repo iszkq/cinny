@@ -1,7 +1,7 @@
 import { MatrixClient } from 'matrix-js-sdk';
 import { IImageInfo } from '../../../../types/matrix/common';
 import { getNormalizedMimeType } from '../../../utils/mimeTypes';
-import { mxcUrlToHttp } from '../../../utils/matrix';
+import { isHttpUrl, isMxcUrl, mxcUrlToHttp } from '../../../utils/matrix';
 
 const ANIMATED_EMOJI_MEDIA_MIME_TYPES = new Set([
   'image/gif',
@@ -36,6 +36,16 @@ export const getEmojiBoardMediaUrls = ({
   fallbackUrl?: string;
 } => {
   if (!mxc) {
+    return {};
+  }
+
+  if (isHttpUrl(mxc)) {
+    return {
+      primaryUrl: mxc,
+    };
+  }
+
+  if (!isMxcUrl(mxc)) {
     return {};
   }
 

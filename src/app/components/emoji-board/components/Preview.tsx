@@ -6,7 +6,8 @@ import { IImageInfo } from '../../../../types/matrix/common';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { useStableMediaUrl } from './useStableMediaUrl';
-import { getEmojiBoardMediaUrls } from './media';
+import { getEmojiBoardMediaUrls, isAnimatedEmojiBoardMedia } from './media';
+import { isHttpUrl, isMxcUrl } from '../../../utils/matrix';
 
 export type PreviewData = {
   key: string;
@@ -25,16 +26,20 @@ export function Preview({ previewAtom }: PreviewProps) {
   const useAuthentication = useMediaAuthentication();
 
   const { key, shortcode, info } = useAtomValue(previewAtom) ?? {};
+  const customEmoji = isMxcUrl(key) || isHttpUrl(key);
   const { primaryUrl, fallbackUrl } = getEmojiBoardMediaUrls({
     mx,
-    mxc: key && key.startsWith('mxc://') ? key : undefined,
+    mxc: customEmoji ? key : undefined,
     useAuthentication,
     info,
     width: 256,
     height: 256,
   });
+  const animated = isAnimatedEmojiBoardMedia(info);
   const { displayUrl, hasFailed, requestKey, handleLoad, handleError } =
-    useStableMediaUrl(primaryUrl, fallbackUrl);
+    useStableMediaUrl(primaryUrl, fallbackUrl, {
+      disableObjectUrlCache: animated,
+    });
 
   if (!shortcode) return null;
 
@@ -47,7 +52,7 @@ export function Preview({ previewAtom }: PreviewProps) {
           alignItems="Center"
           justifyContent="Center"
         >
-          {key.startsWith('mxc://') ? (
+          {customEmoji ? (
             displayUrl && !hasFailed ? (
               <img
                 key={requestKey}
