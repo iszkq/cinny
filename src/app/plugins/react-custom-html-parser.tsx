@@ -43,6 +43,7 @@ import {
 import { onEnterOrSpace } from '../utils/keyboard';
 import { copyToClipboard, tryDecodeURIComponent } from '../utils/dom';
 import { useTimeoutToggle } from '../hooks/useTimeoutToggle';
+import { useStableMediaUrl } from '../components/emoji-board/components/useStableMediaUrl';
 
 const ReactPrism = lazy(() => import('./react-prism/ReactPrism'));
 
@@ -226,8 +227,29 @@ const extractTextFromChildren = (nodes: ChildNode[]): string => {
   return text;
 };
 
-function CachedHtmlEmoticonImage(props: ComponentPropsWithoutRef<'img'>) {
-  return <img {...props} decoding="async" />;
+function CachedHtmlEmoticonImage(
+  props: ComponentPropsWithoutRef<'img'> & { fallbackSrc?: string }
+) {
+  const { fallbackSrc, src, ...imgProps } = props;
+  const originalSrc = src;
+  const { displayUrl, handleLoad, handleError, requestKey } = useStableMediaUrl(
+    originalSrc,
+    fallbackSrc,
+    {
+      disableObjectUrlCache: true,
+    }
+  );
+
+  return (
+    <img
+      {...imgProps}
+      key={requestKey}
+      src={displayUrl ?? originalSrc ?? fallbackSrc}
+      decoding="async"
+      onLoad={handleLoad}
+      onError={handleError}
+    />
+  );
 }
 
 export function CodeBlock({
@@ -481,26 +503,24 @@ export const getReactCustomHtmlParser = (
 
         if (name === 'img') {
           const isEmoticon = 'data-mx-emoticon' in props;
-          const emoticonSrc = isMxcUrl(props.src)
-            ? (mxcUrlToHttp(mx, props.src, params.useAuthentication, 64, 64, 'scale') ??
-                mxcUrlToHttp(mx, props.src, params.useAuthentication) ??
-                props.src)
+          const emoticonOriginalSrc = isMxcUrl(props.src)
+            ? (mxcUrlToHttp(mx, props.src, params.useAuthentication) ?? props.src)
             : isHttpUrl(props.src)
               ? props.src
               : undefined;
-          const htmlSrc = isMxcUrl(props.src)
-            ? mxcUrlToHttp(mx, props.src, params.useAuthentication)
-            : isHttpUrl(props.src)
-              ? props.src
-              : undefined;
-          if (isEmoticon && emoticonSrc) {
+          const emoticonFallbackSrc = isMxcUrl(props.src)
+            ? (mxcUrlToHttp(mx, props.src, params.useAuthentication, 64, 64, 'scale') ?? undefined)
+            : undefined;
+          const htmlSrc = emoticonOriginalSrc;
+          if (isEmoticon && emoticonOriginalSrc) {
             return (
               <span className={css.EmoticonBase}>
                 <span className={css.Emoticon()}>
                   <CachedHtmlEmoticonImage
                     {...props}
                     className={css.EmoticonImg}
-                    src={emoticonSrc}
+                    src={emoticonOriginalSrc}
+                    fallbackSrc={emoticonFallbackSrc}
                   />
                 </span>
               </span>
