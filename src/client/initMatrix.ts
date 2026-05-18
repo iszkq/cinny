@@ -242,10 +242,62 @@ export const startClient = async (mx: MatrixClient) => {
   });
 };
 
+const clearAllServiceWorkerCaches = async () => {
+  if (typeof window === 'undefined' || typeof window.caches === 'undefined') {
+    return;
+  }
+
+  const cacheKeys = await window.caches.keys();
+  await Promise.all(cacheKeys.map((key) => window.caches.delete(key)));
+};
+
+const clearAllIndexedDbDatabases = async () => {
+  if (typeof window === 'undefined' || typeof window.indexedDB?.databases !== 'function') {
+    return;
+  }
+
+  const dbs = await window.indexedDB.databases();
+
+  await Promise.all(
+    dbs.map(async (idbInfo) => {
+      const { name } = idbInfo;
+      if (!name) return;
+
+      await new Promise<void>((resolve) => {
+        const request = window.indexedDB.deleteDatabase(name);
+        request.onsuccess = () => resolve();
+        request.onerror = () => resolve();
+        request.onblocked = () => resolve();
+      });
+    })
+  );
+};
+
+export const clearResourceCaches = async () => {
+  await clearAllServiceWorkerCaches();
+};
+
+export const clearAllLocalData = async (mx?: MatrixClient) => {
+  pushSessionToSW();
+  mx?.stopClient();
+
+  try {
+    await mx?.clearStores();
+  } catch {
+    // Ignore cleanup failures so the rest of local data can still be cleared.
+  }
+
+  await clearAllServiceWorkerCaches();
+  await clearAllIndexedDbDatabases();
+  window.localStorage.clear();
+  window.sessionStorage.clear();
+};
+
 export const clearCacheAndReload = async (mx: MatrixClient) => {
   mx.stopClient();
   clearNavToActivePathStore(mx.getSafeUserId());
   await mx.store.deleteAllData();
+  await clearResourceCaches();
   window.location.reload();
 };
 
@@ -263,15 +315,6 @@ export const logoutClient = async (mx: MatrixClient) => {
 };
 
 export const clearLoginData = async () => {
-  const dbs = await window.indexedDB.databases();
-
-  dbs.forEach((idbInfo) => {
-    const { name } = idbInfo;
-    if (name) {
-      window.indexedDB.deleteDatabase(name);
-    }
-  });
-
-  window.localStorage.clear();
+  await clearAllLocalData();
   window.location.reload();
 };
