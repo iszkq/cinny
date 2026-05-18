@@ -6,7 +6,7 @@ import { IImageInfo } from '../../../../types/matrix/common';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { useStableMediaUrl } from './useStableMediaUrl';
-import { getEmojiBoardMediaUrls, isAnimatedEmojiBoardMedia } from './media';
+import { getEmojiBoardMediaUrls } from './media';
 import { isHttpUrl, isMxcUrl } from '../../../utils/matrix';
 
 export type PreviewData = {
@@ -35,11 +35,10 @@ export function Preview({ previewAtom }: PreviewProps) {
     width: 256,
     height: 256,
   });
-  const animated = isAnimatedEmojiBoardMedia(info);
-  const { displayUrl, hasFailed, requestKey, handleLoad, handleError } =
-    useStableMediaUrl(primaryUrl, fallbackUrl, {
-      disableObjectUrlCache: animated,
-    });
+  const { displayUrl, hasFailed, requestKey, handleLoad, handleError } = useStableMediaUrl(
+    primaryUrl,
+    fallbackUrl
+  );
 
   if (!shortcode) return null;
 
