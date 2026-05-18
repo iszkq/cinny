@@ -10,6 +10,7 @@ import { cryptoCallbacks } from './secretStorageKeys';
 import { getSettings } from '../app/state/settings';
 import { clearNavToActivePathStore } from '../app/state/navToActivePath';
 import { attachMediaAccessToken } from '../app/utils/matrix';
+import { restorePinLockStorage, snapshotPinLockStorage } from '../app/utils/pinLock';
 import { pushSessionToSW } from '../sw-session';
 
 type Session = {
@@ -301,6 +302,20 @@ export const clearCacheAndReload = async (mx: MatrixClient) => {
   window.location.reload();
 };
 
+export const clearLocalSessionAfterLogout = async (mx?: MatrixClient) => {
+  pushSessionToSW();
+  mx?.stopClient();
+  try {
+    await mx?.clearStores();
+  } catch {
+    // ignore cleanup failures so logout can still continue.
+  }
+
+  const preservedPinLockEntries = snapshotPinLockStorage();
+  window.localStorage.clear();
+  restorePinLockStorage(preservedPinLockEntries);
+};
+
 export const logoutClient = async (mx: MatrixClient) => {
   pushSessionToSW();
   mx.stopClient();
@@ -309,8 +324,7 @@ export const logoutClient = async (mx: MatrixClient) => {
   } catch {
     // ignore if failed to logout
   }
-  await mx.clearStores();
-  window.localStorage.clear();
+  await clearLocalSessionAfterLogout(mx);
   window.location.reload();
 };
 
