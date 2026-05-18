@@ -38,12 +38,19 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Write updater signing key
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          printf "%s" "$TAURI_SIGNING_PRIVATE_KEY" > "$RUNNER_TEMP/tauri-updater.key"
+
       - name: Build NSIS installer
         uses: tauri-apps/tauri-action@action-v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NODE_OPTIONS: '--max_old_space_size=4096'
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PATH: ${{ runner.temp }}/tauri-updater.key
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           args: --bundles nsis
