@@ -1,0 +1,13 @@
+[package]
+name = "cinny-desktop"
+version = "4.11.1"
+description = "Cinny desktop client"
+authors = ["Cinny contributors"]
+license = "AGPL-3.0-only"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
