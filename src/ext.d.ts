@@ -1,5 +1,7 @@
 /// <reference types="vite/client" />
 
+declare const __APP_VERSION__: string;
+
 interface ImportMetaEnv {
   readonly VITE_HASH_ROUTER_ENABLED?: string;
   readonly VITE_HASH_ROUTER_BASENAME?: string;
