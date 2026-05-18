@@ -86,6 +86,9 @@ export default defineConfig({
   appType: 'spa',
   publicDir: false,
   base: buildConfig.base,
+  define: {
+    __APP_VERSION__: JSON.stringify(process.env.npm_package_version ?? '4.11.1'),
+  },
   server: {
     port: 8080,
     host: true,
