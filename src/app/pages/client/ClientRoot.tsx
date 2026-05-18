@@ -18,6 +18,8 @@ import FocusTrap from 'focus-trap-react';
 import React, { MouseEventHandler, ReactNode, useCallback, useEffect, useState } from 'react';
 import {
   clearCacheAndReload,
+  clearResourceCaches,
+  clearAllLocalData,
   clearLoginData,
   initClient,
   logoutClient,
@@ -91,12 +93,40 @@ function ClientRootOptions({ mx }: { mx?: MatrixClient }) {
             <Menu>
               <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
                 {mx && (
+                  <MenuItem
+                    onClick={async () => {
+                      await clearResourceCaches();
+                      window.location.reload();
+                    }}
+                    size="300"
+                    radii="300"
+                  >
+                    <Text as="span" size="T300" truncate>
+                      Clear Resource Cache
+                    </Text>
+                  </MenuItem>
+                )}
+                {mx && (
                   <MenuItem onClick={() => clearCacheAndReload(mx)} size="300" radii="300">
                     <Text as="span" size="T300" truncate>
                       Clear Cache and Reload
                     </Text>
                   </MenuItem>
                 )}
+                <MenuItem
+                  onClick={async () => {
+                    await clearAllLocalData(mx);
+                    window.location.reload();
+                  }}
+                  size="300"
+                  radii="300"
+                  variant="Warning"
+                  fill="None"
+                >
+                  <Text as="span" size="T300" truncate>
+                    Wipe Local Data
+                  </Text>
+                </MenuItem>
                 <MenuItem
                   onClick={() => {
                     if (mx) {
