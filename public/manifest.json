@@ -1,7 +1,7 @@
 {
   "name": "星火",
   "short_name": "星火",
-  "description": "A mobile-friendly Matrix web app.",
+  "description": "星火是一款面向中文用户优化的 Matrix Web 与桌面客户端。",
   "dir": "auto",
   "lang": "zh-CN",
   "display": "standalone",
