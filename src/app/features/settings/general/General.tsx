@@ -56,6 +56,7 @@ import { useMessageLayoutItems } from '../../../hooks/useMessageLayout';
 import { useMessageSpacingItems } from '../../../hooks/useMessageSpacing';
 import { useDateFormatItems } from '../../../hooks/useDateFormat';
 import { SequenceCardStyle } from '../styles.css';
+import { Security } from './Security';
 
 const MIN_READ_RECEIPT_AVATAR_COUNT = 1;
 const MAX_READ_RECEIPT_AVATAR_COUNT = 50;
@@ -1206,6 +1207,7 @@ export function General({ requestClose }: GeneralProps) {
               <Editor />
               <PrivacyMode />
               <Messages />
+              <Security requestClose={requestClose} />
             </Box>
           </PageContent>
         </Scroll>
