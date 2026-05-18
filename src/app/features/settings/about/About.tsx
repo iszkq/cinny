@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text, IconButton, Icon, Icons, Scroll, Button, config, toRem } from 'folds';
+import { Box, Button, Icon, IconButton, Icons, Scroll, Text, config, toRem } from 'folds';
 import { Page, PageContent, PageHeader } from '../../../components/page';
 import { AuthorContactButton } from '../../../components/AuthorContactButton';
 import { APP_DISPLAY_NAME, APP_LOGO_URL, APP_TAGLINE } from '../../../constants/branding';
@@ -7,12 +7,17 @@ import { SequenceCard } from '../../../components/sequence-card';
 import { SequenceCardStyle } from '../styles.css';
 import { SettingTile } from '../../../components/setting-tile';
 import { FEATURE_UPDATE_NOTES, PROJECT_SOURCE_URL } from '../../../constants/projectInfo';
-import { clearCacheAndReload } from '../../../../client/initMatrix';
+import {
+  clearAllLocalData,
+  clearCacheAndReload,
+  clearResourceCaches,
+} from '../../../../client/initMatrix';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 
 type AboutProps = {
   requestClose: () => void;
 };
+
 export function About({ requestClose }: AboutProps) {
   const mx = useMatrixClient();
 
@@ -22,7 +27,7 @@ export function About({ requestClose }: AboutProps) {
         <Box grow="Yes" gap="200">
           <Box grow="Yes" alignItems="Center" gap="200">
             <Text size="H3" truncate>
-              关于
+              About
             </Text>
           </Box>
           <Box shrink="No">
@@ -65,7 +70,7 @@ export function About({ requestClose }: AboutProps) {
                       radii="300"
                       before={<Icon src={Icons.Code} size="100" filled />}
                     >
-                      <Text size="B300">源码地址</Text>
+                      <Text size="B300">Source Code</Text>
                     </Button>
                     <AuthorContactButton
                       variant="Secondary"
@@ -74,13 +79,14 @@ export function About({ requestClose }: AboutProps) {
                       radii="300"
                       before={<Icon src={Icons.User} size="100" filled />}
                     >
-                      <Text size="B300">联系作者</Text>
+                      <Text size="B300">Contact Author</Text>
                     </AuthorContactButton>
                   </Box>
                 </Box>
               </Box>
+
               <Box direction="Column" gap="100">
-                <Text size="L400">选项</Text>
+                <Text size="L400">Local Data</Text>
                 <SequenceCard
                   className={SequenceCardStyle}
                   variant="SurfaceVariant"
@@ -88,8 +94,27 @@ export function About({ requestClose }: AboutProps) {
                   gap="400"
                 >
                   <SettingTile
-                    title="清除缓存并重新加载"
-                    description="清除本地存储的所有数据，然后重新从服务器加载。"
+                    title="Clear resource cache"
+                    description="Remove local media/resource caches such as emoji, sticker and service-worker caches, then reload."
+                    after={
+                      <Button
+                        onClick={async () => {
+                          await clearResourceCaches();
+                          window.location.reload();
+                        }}
+                        variant="Secondary"
+                        fill="Soft"
+                        size="300"
+                        radii="300"
+                        outlined
+                      >
+                        <Text size="B300">Clear Resources</Text>
+                      </Button>
+                    }
+                  />
+                  <SettingTile
+                    title="Clear cache and reload"
+                    description="Clear the current session cache and sync store, then fetch data from the server again."
                     after={
                       <Button
                         onClick={() => clearCacheAndReload(mx)}
@@ -99,14 +124,34 @@ export function About({ requestClose }: AboutProps) {
                         radii="300"
                         outlined
                       >
-                        <Text size="B300">清除缓存</Text>
+                        <Text size="B300">Clear Cache</Text>
+                      </Button>
+                    }
+                  />
+                  <SettingTile
+                    title="Wipe all local data"
+                    description="Clear IndexedDB, localStorage, sessionStorage and all caches. You will need to log in again after this."
+                    after={
+                      <Button
+                        onClick={async () => {
+                          await clearAllLocalData(mx);
+                          window.location.reload();
+                        }}
+                        variant="Warning"
+                        fill="Soft"
+                        size="300"
+                        radii="300"
+                        outlined
+                      >
+                        <Text size="B300">Wipe All</Text>
                       </Button>
                     }
                   />
                 </SequenceCard>
               </Box>
+
               <Box direction="Column" gap="100">
-                <Text size="L400">功能更新说明</Text>
+                <Text size="L400">What&apos;s New</Text>
                 <SequenceCard
                   className={SequenceCardStyle}
                   variant="SurfaceVariant"
