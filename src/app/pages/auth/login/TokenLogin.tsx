@@ -10,12 +10,15 @@ import {
   color,
   config,
 } from 'folds';
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { MatrixError } from 'matrix-js-sdk';
+import { useNavigate } from 'react-router-dom';
 import { APP_WEB_DEVICE_NAME } from '../../../constants/branding';
 import { useAutoDiscoveryInfo } from '../../../hooks/useAutoDiscoveryInfo';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
-import { CustomLoginResponse, LoginError, login, useLoginComplete } from './loginUtil';
+import { AccountPinDialog } from '../../../components/pin-lock';
+import { hasAccountPin } from '../../../utils/pinLock';
+import { completeLogin, CustomLoginResponse, LoginError, login } from './loginUtil';
 
 function LoginTokenError({ message }: { message: string }) {
   return (
@@ -47,12 +50,17 @@ type TokenLoginProps = {
 export function TokenLogin({ token }: TokenLoginProps) {
   const discovery = useAutoDiscoveryInfo();
   const baseUrl = discovery['m.homeserver'].base_url;
+  const navigate = useNavigate();
+  const [pinProtectedLogin, setPinProtectedLogin] = useState<CustomLoginResponse>();
+  const [handledSuccess, setHandledSuccess] = useState(false);
 
   const [loginState, startLogin] = useAsyncCallback<
     CustomLoginResponse,
     MatrixError,
     Parameters<typeof login>
   >(useCallback(login, []));
+  const loginSuccessData =
+    loginState.status === AsyncStatus.Success ? loginState.data : undefined;
 
   useEffect(() => {
     startLogin(baseUrl, {
@@ -62,7 +70,26 @@ export function TokenLogin({ token }: TokenLoginProps) {
     });
   }, [baseUrl, token, startLogin]);
 
-  useLoginComplete(loginState.status === AsyncStatus.Success ? loginState.data : undefined);
+  useEffect(() => {
+    if (!loginSuccessData) {
+      setHandledSuccess(false);
+      setPinProtectedLogin(undefined);
+      return;
+    }
+
+    if (handledSuccess) {
+      return;
+    }
+
+    if (hasAccountPin(loginSuccessData.baseUrl, loginSuccessData.response.user_id)) {
+      setPinProtectedLogin(loginSuccessData);
+      setHandledSuccess(true);
+      return;
+    }
+
+    setHandledSuccess(true);
+    completeLogin(loginSuccessData, navigate);
+  }, [handledSuccess, loginSuccessData, navigate]);
 
   return (
     <>
@@ -85,11 +112,23 @@ export function TokenLogin({ token }: TokenLoginProps) {
           )}
         </>
       )}
-      <Overlay open={loginState.status !== AsyncStatus.Error} backdrop={<OverlayBackdrop />}>
+      <Overlay open={loginState.status === AsyncStatus.Loading} backdrop={<OverlayBackdrop />}>
         <OverlayCenter>
           <Spinner size="600" variant="Secondary" />
         </OverlayCenter>
       </Overlay>
+
+      {pinProtectedLogin && (
+        <AccountPinDialog
+          baseUrl={pinProtectedLogin.baseUrl}
+          userId={pinProtectedLogin.response.user_id}
+          title="登录受保护账号"
+          description="这个账号已启用 PIN 保护，请先输入 PIN 码再进入。"
+          submitLabel="继续登录"
+          onCancel={() => setPinProtectedLogin(undefined)}
+          onSuccess={() => completeLogin(pinProtectedLogin, navigate)}
+        />
+      )}
     </>
   );
 }

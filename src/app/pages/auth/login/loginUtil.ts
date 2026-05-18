@@ -1,7 +1,7 @@
 import to from 'await-to-js';
 import { LoginRequest, LoginResponse, MatrixError, createClient } from 'matrix-js-sdk';
 import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { NavigateFunction, useNavigate } from 'react-router-dom';
 import { ClientConfig, clientAllowedServer } from '../../../hooks/useClientConfig';
 import { autoDiscovery, specVersions } from '../../../cs-api';
 import { ErrorCode } from '../../../cs-errorcode';
@@ -108,16 +108,20 @@ export const login = async (
   };
 };
 
+export const completeLogin = (data: CustomLoginResponse, navigate: NavigateFunction) => {
+  const { response: loginRes, baseUrl: loginBaseUrl } = data;
+  setFallbackSession(loginRes.access_token, loginRes.device_id, loginRes.user_id, loginBaseUrl);
+  const afterLoginRedirectUrl = getAfterLoginRedirectPath();
+  deleteAfterLoginRedirectPath();
+  navigate(afterLoginRedirectUrl ?? getHomePath(), { replace: true });
+};
+
 export const useLoginComplete = (data?: CustomLoginResponse) => {
   const navigate = useNavigate();
 
   useEffect(() => {
     if (data) {
-      const { response: loginRes, baseUrl: loginBaseUrl } = data;
-      setFallbackSession(loginRes.access_token, loginRes.device_id, loginRes.user_id, loginBaseUrl);
-      const afterLoginRedirectUrl = getAfterLoginRedirectPath();
-      deleteAfterLoginRedirectPath();
-      navigate(afterLoginRedirectUrl ?? getHomePath(), { replace: true });
+      completeLogin(data, navigate);
     }
   }, [data, navigate]);
 };

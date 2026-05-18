@@ -1,4 +1,4 @@
-import React, { FormEventHandler, MouseEventHandler, useCallback, useState } from 'react';
+import React, { FormEventHandler, MouseEventHandler, useCallback, useEffect, useState } from 'react';
 import {
   Box,
   Button,
@@ -18,7 +18,7 @@ import {
   config,
 } from 'folds';
 import FocusTrap from 'focus-trap-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { MatrixError } from 'matrix-js-sdk';
 import { getMxIdLocalPart, getMxIdServer, isUserId } from '../../../utils/matrix';
 import { EMAIL_REGEX } from '../../../utils/regex';
@@ -28,16 +28,18 @@ import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { useAuthServer } from '../../../hooks/useAuthServer';
 import { useClientConfig } from '../../../hooks/useClientConfig';
 import {
+  completeLogin,
   CustomLoginResponse,
   LoginError,
   factoryGetBaseUrl,
   login,
-  useLoginComplete,
 } from './loginUtil';
 import { PasswordInput } from '../../../components/password-input';
 import { FieldError } from '../FiledError';
 import { getResetPasswordPath } from '../../pathUtils';
 import { stopPropagation } from '../../../utils/keyboard';
+import { hasAccountPin } from '../../../utils/pinLock';
+import { AccountPinDialog } from '../../../components/pin-lock';
 
 function UsernameHint({ server }: { server: string }) {
   const [anchor, setAnchor] = useState<RectCords>();
@@ -114,17 +116,41 @@ type PasswordLoginFormProps = {
 export function PasswordLoginForm({ defaultUsername, defaultEmail }: PasswordLoginFormProps) {
   const server = useAuthServer();
   const clientConfig = useClientConfig();
+  const navigate = useNavigate();
 
   const serverDiscovery = useAutoDiscoveryInfo();
   const baseUrl = serverDiscovery['m.homeserver'].base_url;
+  const [pinProtectedLogin, setPinProtectedLogin] = useState<CustomLoginResponse>();
+  const [handledSuccess, setHandledSuccess] = useState(false);
 
   const [loginState, startLogin] = useAsyncCallback<
     CustomLoginResponse,
     MatrixError,
     Parameters<typeof login>
   >(useCallback(login, []));
+  const loginSuccessData =
+    loginState.status === AsyncStatus.Success ? loginState.data : undefined;
 
-  useLoginComplete(loginState.status === AsyncStatus.Success ? loginState.data : undefined);
+  useEffect(() => {
+    if (!loginSuccessData) {
+      setHandledSuccess(false);
+      setPinProtectedLogin(undefined);
+      return;
+    }
+
+    if (handledSuccess) {
+      return;
+    }
+
+    if (hasAccountPin(loginSuccessData.baseUrl, loginSuccessData.response.user_id)) {
+      setPinProtectedLogin(loginSuccessData);
+      setHandledSuccess(true);
+      return;
+    }
+
+    setHandledSuccess(true);
+    completeLogin(loginSuccessData, navigate);
+  }, [handledSuccess, loginSuccessData, navigate]);
 
   const handleUsernameLogin = (username: string, password: string) => {
     startLogin(baseUrl, {
@@ -263,15 +289,25 @@ export function PasswordLoginForm({ defaultUsername, defaultEmail }: PasswordLog
       </Button>
 
       <Overlay
-        open={
-          loginState.status === AsyncStatus.Loading || loginState.status === AsyncStatus.Success
-        }
+        open={loginState.status === AsyncStatus.Loading}
         backdrop={<OverlayBackdrop />}
       >
         <OverlayCenter>
           <Spinner variant="Secondary" size="600" />
         </OverlayCenter>
       </Overlay>
+
+      {pinProtectedLogin && (
+        <AccountPinDialog
+          baseUrl={pinProtectedLogin.baseUrl}
+          userId={pinProtectedLogin.response.user_id}
+          title="登录受保护账号"
+          description="这个账号已启用 PIN 保护，请先输入 PIN 码再进入。"
+          submitLabel="继续登录"
+          onCancel={() => setPinProtectedLogin(undefined)}
+          onSuccess={() => completeLogin(pinProtectedLogin, navigate)}
+        />
+      )}
     </Box>
   );
 }
