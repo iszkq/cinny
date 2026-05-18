@@ -1,4 +1,4 @@
-const bibleCsvUrl = new URL('../../../../Bible1.csv', import.meta.url).href;
+import bibleCsvText from '../../../../Bible1.csv?raw';
 
 const BOOK_SHORT_NAMES: Record<string, string> = {
   创世记: '创',
@@ -189,38 +189,6 @@ const buildVerseReference = (book: string, chapter: number, verse: number): stri
 const buildCopyReference = (shortBook: string, chapter: number, verse: number): string =>
   `【${shortBook}${chapter}：${verse}】`;
 
-const BIBLE_TEXT_MARKERS = ['旧约', '新约', '创世记', '马太福音', '启示录'];
-
-const scoreDecodedBibleText = (text: string): number => {
-  const markerScore = BIBLE_TEXT_MARKERS.reduce(
-    (score, marker) => score + (text.includes(marker) ? 3 : 0),
-    0
-  );
-  const replacementPenalty = (text.match(/�/g) ?? []).length;
-  return markerScore - replacementPenalty;
-};
-
-const decodeBibleCsv = (buffer: ArrayBuffer): string => {
-  const labels = ['utf-8', 'gb18030'];
-  let bestText = '';
-  let bestScore = Number.NEGATIVE_INFINITY;
-
-  labels.forEach((label) => {
-    try {
-      const text = new TextDecoder(label).decode(buffer);
-      const score = scoreDecodedBibleText(text);
-      if (score > bestScore) {
-        bestText = text;
-        bestScore = score;
-      }
-    } catch {
-      // Ignore unsupported encodings and keep the best decoded result so far.
-    }
-  });
-
-  return bestText || new TextDecoder().decode(buffer);
-};
-
 const parseBibleCsv = (csvText: string): BibleData => {
   const lines = csvText
     .split(/\r?\n/)
@@ -323,14 +291,7 @@ let bibleDataPromise: Promise<BibleData> | undefined;
 
 export const loadBibleData = async (): Promise<BibleData> => {
   if (!bibleDataPromise) {
-    bibleDataPromise = fetch(bibleCsvUrl)
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error(`Failed to load bible data: ${response.status}`);
-        }
-        return response.arrayBuffer();
-      })
-      .then(decodeBibleCsv)
+    bibleDataPromise = Promise.resolve(bibleCsvText)
       .then(parseBibleCsv)
       .catch((error) => {
         bibleDataPromise = undefined;
