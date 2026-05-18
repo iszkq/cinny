@@ -20,6 +20,7 @@ import {
   clearCacheAndReload,
   clearResourceCaches,
   clearAllLocalData,
+  clearLocalSessionAfterLogout,
   clearLoginData,
   initClient,
   logoutClient,
@@ -44,7 +45,7 @@ function ClientRootLoading() {
     <SplashScreen>
       <Box direction="Column" grow="Yes" alignItems="Center" justifyContent="Center" gap="400">
         <Spinner variant="Secondary" size="600" />
-        <Text>Heating up</Text>
+        <Text>正在启动</Text>
       </Box>
     </SplashScreen>
   );
@@ -102,14 +103,14 @@ function ClientRootOptions({ mx }: { mx?: MatrixClient }) {
                     radii="300"
                   >
                     <Text as="span" size="T300" truncate>
-                      Clear Resource Cache
+                      清理资源缓存
                     </Text>
                   </MenuItem>
                 )}
                 {mx && (
                   <MenuItem onClick={() => clearCacheAndReload(mx)} size="300" radii="300">
                     <Text as="span" size="T300" truncate>
-                      Clear Cache and Reload
+                      清理缓存并重载
                     </Text>
                   </MenuItem>
                 )}
@@ -124,7 +125,7 @@ function ClientRootOptions({ mx }: { mx?: MatrixClient }) {
                   fill="None"
                 >
                   <Text as="span" size="T300" truncate>
-                    Wipe Local Data
+                    清空本地数据
                   </Text>
                 </MenuItem>
                 <MenuItem
@@ -141,7 +142,7 @@ function ClientRootOptions({ mx }: { mx?: MatrixClient }) {
                   fill="None"
                 >
                   <Text as="span" size="T300" truncate>
-                    Logout
+                    退出登录
                   </Text>
                 </MenuItem>
               </Box>
@@ -156,9 +157,7 @@ function ClientRootOptions({ mx }: { mx?: MatrixClient }) {
 const useLogoutListener = (mx?: MatrixClient) => {
   useEffect(() => {
     const handleLogout: HttpApiEventHandlerMap[HttpApiEvent.SessionLoggedOut] = async () => {
-      mx?.stopClient();
-      await mx?.clearStores();
-      window.localStorage.clear();
+      await clearLocalSessionAfterLogout(mx);
       window.location.reload();
     };
 
