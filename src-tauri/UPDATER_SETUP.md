@@ -31,6 +31,8 @@
    - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
      如果你的私钥有密码就填，没有可以留空字符串。
 
+如果你本地没有 Node / npm，也可以不在本地构建，直接把源码推到 GitHub，使用仓库里的 Actions 自动打包。
+
 ## 本地手动发版
 
 Windows PowerShell：
