@@ -1,7 +1,7 @@
 [package]
 name = "cinny-desktop"
 version = "4.11.1"
-description = "Cinny desktop client"
+description = "星火桌面客户端"
 authors = ["Cinny contributors"]
 license = "AGPL-3.0-only"
 edition = "2021"
@@ -11,3 +11,5 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
+tauri-plugin-process = "2"
+tauri-plugin-updater = "2"

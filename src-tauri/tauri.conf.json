@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Cinny Desktop",
+  "productName": "星火",
   "identifier": "org.cinny.desktop",
   "build": {
     "beforeBuildCommand": "npm run build",
@@ -11,7 +11,8 @@
   "app": {
     "windows": [
       {
-        "title": "Cinny Desktop",
+        "label": "main",
+        "title": "星火",
         "width": 1440,
         "height": 900,
         "minWidth": 960,
@@ -25,6 +26,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": [
       "nsis"
     ],
@@ -38,6 +40,14 @@
         "installerIcon": "../public/favicon.ico",
         "uninstallerIcon": "../public/favicon.ico"
       }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "REPLACE_WITH_TAURI_UPDATER_PUBLIC_KEY",
+      "endpoints": [
+        "https://github.com/iszkq/cinny/releases/latest/download/latest.json"
+      ]
     }
   }
 }

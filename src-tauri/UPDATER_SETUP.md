@@ -1,0 +1,77 @@
+# 星火桌面端自动更新接入说明
+
+当前源码已经接入了 Tauri 2 的更新插件、前端检查更新按钮、下载并安装流程，以及 Windows 打包时需要的 updater 产物开关。
+
+## 一次性配置
+
+1. 安装依赖：
+
+   ```powershell
+   npm install
+   ```
+
+2. 生成 updater 签名密钥：
+
+   ```powershell
+   npm run desktop:signer:generate -- -w "$env:USERPROFILE\\.tauri\\starfire.key"
+   ```
+
+3. 把生成出来的公钥内容填入 [tauri.conf.json](./tauri.conf.json) 的 `plugins.updater.pubkey`。
+
+当前配置中的：
+
+`REPLACE_WITH_TAURI_UPDATER_PUBLIC_KEY`
+
+只是占位值，必须替换为你自己的 updater 公钥。
+
+4. 在 GitHub 仓库 Secrets 里新增：
+
+   - `TAURI_SIGNING_PRIVATE_KEY`
+     填私钥文件内容，或者私钥文件路径。
+   - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
+     如果你的私钥有密码就填，没有可以留空字符串。
+
+## 本地手动发版
+
+Windows PowerShell：
+
+```powershell
+$env:TAURI_SIGNING_PRIVATE_KEY="$env:USERPROFILE\\.tauri\\starfire.key"
+$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD=""
+npm run desktop:build:nsis
+```
+
+构建完成后，重点看这些目录：
+
+- `src-tauri/target/release/bundle/nsis/`
+- `src-tauri/target/release/bundle/`
+
+## 需要上传到 GitHub Releases 的更新文件
+
+至少上传下面这些 Windows 更新文件：
+
+- `src-tauri/target/release/bundle/nsis/*-setup.exe`
+- `src-tauri/target/release/bundle/nsis/*-setup.exe.sig`
+- `src-tauri/target/release/bundle/**/latest.json`
+
+如果构建结果里额外生成了其他 updater JSON，也一并上传同目录下的 `*.json`。
+
+自动更新请求的地址目前配置为：
+
+`https://github.com/iszkq/cinny/releases/latest/download/latest.json`
+
+所以 GitHub Releases 里必须能通过这个地址直接访问到最新的 `latest.json`。
+
+## GitHub Actions
+
+仓库里的 [windows-installer.yml](../.github/workflows/windows-installer.yml) 已经补充为：
+
+- 构建 NSIS 安装包
+- 使用 `TAURI_SIGNING_PRIVATE_KEY` / `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` 进行签名
+- 上传 `.exe`
+- 上传 `.sig`
+- 上传 updater `latest.json`
+
+如果你是打 tag 发版，建议 tag 形如：
+
+`v4.11.2`
