@@ -3,6 +3,11 @@ import { recipe, RecipeVariants } from '@vanilla-extract/recipes';
 import { DefaultReset, color, config, toRem } from 'folds';
 
 export const PageNav = recipe({
+  base: {
+    minHeight: 0,
+    background: 'rgba(244, 247, 244, 0.92)',
+    borderRight: '1px solid rgba(114, 131, 120, 0.10)',
+  },
   variants: {
     size: {
       '400': {
@@ -52,6 +57,7 @@ export const PageNavHeader = recipe({
     padding: `0 ${config.space.S200} 0 ${config.space.S300}`,
     flexShrink: 0,
     minWidth: 0,
+    background: 'rgba(244, 247, 244, 0.92)',
     '@media': {
       'screen and (max-width: 1124px)': {
         paddingLeft: `max(${config.space.S200}, env(safe-area-inset-left))`,
@@ -90,7 +96,7 @@ export type PageNavHeaderVariants = RecipeVariants<typeof PageNavHeader>;
 export const PageNavContent = style({
   minHeight: '100%',
   padding: config.space.S200,
-  paddingRight: 0,
+  paddingRight: config.space.S100,
   paddingBottom: config.space.S700,
   '@media': {
     'screen and (max-width: 1124px)': {
@@ -109,6 +115,7 @@ export const PageHeader = recipe({
     paddingLeft: `max(${config.space.S400}, env(safe-area-inset-left))`,
     paddingRight: `max(${config.space.S200}, env(safe-area-inset-right))`,
     minWidth: 0,
+    background: 'rgba(250, 252, 250, 0.94)',
     '@media': {
       'screen and (max-width: 1124px)': {
         paddingLeft: `max(${config.space.S200}, env(safe-area-inset-left))`,

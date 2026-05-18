@@ -6,13 +6,17 @@ import { ContainerColor } from '../../styles/ContainerColor.css';
 export const Sidebar = style([
   DefaultReset,
   {
-    width: toRem(66),
-    backgroundColor: color.Background.Container,
-    borderRight: `${config.borderWidth.B300} solid ${color.Background.ContainerLine}`,
+    width: toRem(76),
+    paddingTop: config.space.S200,
+    paddingBottom: config.space.S200,
+    background:
+      'linear-gradient(180deg, rgba(223, 233, 225, 0.94) 0%, rgba(211, 224, 214, 0.94) 100%)',
+    borderRight: `${config.borderWidth.B300} solid rgba(115, 133, 121, 0.12)`,
 
     display: 'flex',
     flexDirection: 'column',
     color: color.Background.OnContainer,
+    backdropFilter: 'blur(12px)',
   },
 ]);
 
@@ -25,7 +29,7 @@ export const SidebarStack = style([
     justifyContent: 'center',
     alignItems: 'center',
     gap: config.space.S300,
-    padding: `${config.space.S300} 0`,
+    padding: `${config.space.S200} 0`,
   },
 ]);
 
@@ -165,17 +169,18 @@ export const SidebarAvatar = recipe({
         letterSpacing: config.letterSpacing.T200,
       },
       '300': {
-        width: toRem(34),
-        height: toRem(34),
+        width: toRem(38),
+        height: toRem(38),
       },
       '400': {
-        width: toRem(42),
-        height: toRem(42),
+        width: toRem(46),
+        height: toRem(46),
       },
     },
     outlined: {
       true: {
-        border: `${config.borderWidth.B300} solid ${color.Background.ContainerLine}`,
+        border: `${config.borderWidth.B300} solid rgba(108, 125, 114, 0.18)`,
+        boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.75)',
       },
     },
   },
