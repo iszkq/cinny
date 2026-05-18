@@ -44,7 +44,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "REPLACE_WITH_TAURI_UPDATER_PUBLIC_KEY",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDc5RTk1Q0IxRUQ4RDk2MTQKUldRVWxvM3RzVnpwZWJQaVc4dDVzNkcyaTlrMTFJQXpPMEFJWVJJcm0rMnNZdmNic2liM0dXdnIK",
       "endpoints": [
         "https://github.com/iszkq/cinny/releases/latest/download/latest.json"
       ]
