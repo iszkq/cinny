@@ -20,6 +20,7 @@ import { useMediaAuthentication } from './useMediaAuthentication';
 import { useMatrixClient } from './useMatrixClient';
 import { useAccountDataCallback } from './useAccountDataCallback';
 import { useStateEventCallback } from './useStateEventCallback';
+import { primeDesktopMediaAssetUrl } from '../utils/desktopMediaAssetCache';
 import { primeCachedMediaObjectUrl, primePersistentMediaUrl } from '../utils/mediaUrlCache';
 import { getEmojiBoardMediaCandidates } from '../components/emoji-board/components/media';
 
@@ -39,6 +40,7 @@ const warmImagePackMedia = (
 
   mediaUrls.forEach((mediaUrl) => {
     void primePersistentMediaUrl(mediaUrl);
+    void primeDesktopMediaAssetUrl(mediaUrl, 'background');
   });
 };
 
