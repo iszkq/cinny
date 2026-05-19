@@ -54,6 +54,45 @@ export const SidebarDivider = style({
   width: toRem(18),
 });
 
+export const SortablePackItem = style({
+  position: 'relative',
+  width: '100%',
+  display: 'flex',
+  justifyContent: 'center',
+  selectors: {
+    '&[draggable="true"]': {
+      cursor: 'grab',
+    },
+    '&[data-dragging="true"]': {
+      opacity: 0.45,
+    },
+    '&[data-drop-above="true"]::before': {
+      content: '""',
+      position: 'absolute',
+      top: toRem(-3),
+      left: config.space.S200,
+      right: config.space.S200,
+      height: toRem(3),
+      borderRadius: config.radii.Pill,
+      backgroundColor: color.Success.Main,
+      boxShadow: `0 0 0 1px ${color.Surface.Container}`,
+      pointerEvents: 'none',
+    },
+    '&[data-drop-below="true"]::after': {
+      content: '""',
+      position: 'absolute',
+      bottom: toRem(-3),
+      left: config.space.S200,
+      right: config.space.S200,
+      height: toRem(3),
+      borderRadius: config.radii.Pill,
+      backgroundColor: color.Success.Main,
+      boxShadow: `0 0 0 1px ${color.Surface.Container}`,
+      pointerEvents: 'none',
+    },
+  },
+});
+
 export const SidebarBtnImg = style({
   width: toRem(24),
   height: toRem(24),

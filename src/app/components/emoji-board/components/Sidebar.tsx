@@ -134,6 +134,7 @@ export function ImageGroupIcon<T extends string>({
           className={css.SidebarBtnImg}
           src={displayUrl}
           alt=""
+          draggable={false}
           loading="eager"
           decoding="async"
           onLoad={handleLoad}
