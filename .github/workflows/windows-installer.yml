@@ -40,6 +40,9 @@ jobs:
           HUSKY: '0'
         run: npm install
 
+      - name: Type check
+        run: npm run typecheck
+
       - name: Write updater signing key
         shell: bash
         env:
