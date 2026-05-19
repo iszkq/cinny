@@ -52,6 +52,7 @@
           "assets": [
             "package.json",
             "package-lock.json",
+            "src-tauri/Cargo.toml",
             "src/app/features/settings/about/About.tsx",
             "src/app/pages/auth/AuthFooter.tsx",
             "src/app/pages/client/WelcomePage.tsx"
@@ -73,6 +74,7 @@
     "@tanstack/react-query": "5.24.1",
     "@tanstack/react-query-devtools": "5.24.1",
     "@tanstack/react-virtual": "3.2.0",
+    "@tauri-apps/api": "2",
     "@tauri-apps/plugin-process": "2",
     "@tauri-apps/plugin-updater": "2",
     "@vanilla-extract/css": "1.9.3",
