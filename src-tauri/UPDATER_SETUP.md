@@ -81,8 +81,9 @@ npm run desktop:build:nsis
 ## Release checklist
 
 - The desktop bundle version comes from `src-tauri/Cargo.toml`, so it must match the web/app version before tagging a release.
+- The desktop bundle `productName` is intentionally kept ASCII (`Starfire`) so the signed installer filename and the uploaded GitHub Release asset name stay identical. The in-app UI branding can still remain `星火`.
 - A valid Windows auto-update release must include the installer `.exe`, its `.sig`, and `latest.json`.
 - With Tauri 2, the Windows build output itself only guarantees the installer and signature artifacts. `latest.json` is not expected to exist as a plain file under `src-tauri/target/release/bundle/`.
 - This repository now generates `latest.json` in the tagged GitHub Actions release workflow after the NSIS bundle is built and signed, then uploads it to the GitHub Release with `gh release upload`.
 - If a release was already published without `latest.json` or with the wrong desktop version, replace the release assets or publish a new tag such as `v4.12.1`.
-- The GitHub Actions workflow now uses `tauri-action` to upload the Windows release assets and a follow-up step to upload the generated updater `latest.json` on `v*` tags.
+- The GitHub Actions workflow now uses `tauri-action` only to build the Windows bundle. On `v*` tags, a follow-up step creates the GitHub Release if needed and uploads the exact built `.exe`, `.sig`, and generated `latest.json`.
