@@ -55,6 +55,26 @@ jobs:
         with:
           args: --bundles nsis
 
+      - name: Verify updater artifacts
+        shell: pwsh
+        run: |
+          $bundleRoot = "src-tauri/target/release/bundle"
+          $latestJson = Get-ChildItem -Path $bundleRoot -Recurse -Filter latest.json | Select-Object -First 1
+          $sigFiles = Get-ChildItem -Path "$bundleRoot/nsis" -Filter *.sig -ErrorAction SilentlyContinue
+
+          if (-not $latestJson) {
+            Write-Error "Missing latest.json under $bundleRoot. Desktop auto-update release would be broken."
+            exit 1
+          }
+
+          if (-not $sigFiles) {
+            Write-Error "Missing NSIS signature file under $bundleRoot/nsis."
+            exit 1
+          }
+
+          Write-Host "Found latest.json: $($latestJson.FullName)"
+          $sigFiles | ForEach-Object { Write-Host "Found signature: $($_.FullName)" }
+
       - name: Upload Windows installer artifact
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
