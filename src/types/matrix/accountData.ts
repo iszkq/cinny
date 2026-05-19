@@ -4,6 +4,7 @@ export enum AccountDataEvent {
   IgnoredUserList = 'm.ignored_user_list',
 
   CinnySpaces = 'in.cinny.spaces',
+  CinnyAccountPinPolicy = 'in.cinny.account_pin_policy',
   CinnyFavorites = 'in.cinny.favorites',
   CinnyFavoriteNotes = 'in.cinny.favorite_notes',
   CinnyExploreSources = 'in.cinny.explore_sources',
@@ -29,6 +30,12 @@ export type CinnyFavoritesContent = {
   roomId?: string;
   createdAt?: number;
   version?: number;
+};
+
+export type CinnyAccountPinPolicyContent = {
+  version?: number;
+  enabled?: boolean;
+  updatedAt?: number;
 };
 
 export type CinnyFavoriteNotesContent = {
