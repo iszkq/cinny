@@ -77,13 +77,19 @@ jobs:
           RELEASE_REPOSITORY: ${{ github.repository }}
         run: |
           $version = $env:RELEASE_TAG -replace '^v', ''
+          $setupFile = Get-ChildItem -Path 'src-tauri/target/release/bundle/nsis' -Filter '*-setup.exe' | Select-Object -First 1
           $signatureFile = Get-ChildItem -Path 'src-tauri/target/release/bundle/nsis' -Filter '*-setup.exe.sig' | Select-Object -First 1
+          if (-not $setupFile) {
+            throw 'Missing NSIS installer file under src-tauri/target/release/bundle/nsis.'
+          }
           if (-not $signatureFile) {
             throw 'Missing NSIS signature file under src-tauri/target/release/bundle/nsis.'
           }
 
+          gh release upload $env:RELEASE_TAG $setupFile.FullName $signatureFile.FullName --clobber --repo $env:RELEASE_REPOSITORY
+
           $signature = (Get-Content -LiteralPath $signatureFile.FullName -Raw).Trim()
-          $assetName = "starfire_${version}_x64-setup.exe"
+          $assetName = [System.Uri]::EscapeDataString($setupFile.Name)
           $manifest = @{
             version = "v$version"
             notes = "星火 v$version"
