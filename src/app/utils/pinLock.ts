@@ -1,3 +1,5 @@
+import { AccountDataEvent, CinnyAccountPinPolicyContent } from '../../types/matrix/accountData';
+
 type AccountPinConfig = {
   version: 1;
   salt: string;
@@ -13,11 +15,19 @@ type ScreenLockState = {
   accountKey?: string;
 };
 
+type AccountPinPolicyState = {
+  enabled: boolean;
+  updatedAt: number;
+};
+
+export type AccountPinLoginRequirement = 'none' | 'prompt' | 'setup';
+
 const ACCOUNT_PIN_CONFIGS_KEY = 'starfire-account-pin-configs';
 const SCREEN_LOCK_STATE_KEY = 'starfire-screen-lock-state';
 const PIN_LOCK_CHANGE_EVENT = 'starfire-pin-lock-change';
 const PIN_LOCK_ITERATIONS = 150000;
 const PIN_CODE_REGEX = /^\d{4,12}$/;
+const ACCOUNT_PIN_POLICY_VERSION = 1;
 
 const safeLocalStorage = (): Storage | undefined => {
   if (typeof window === 'undefined') return undefined;
@@ -71,6 +81,12 @@ const normalizeBaseUrl = (baseUrl: string): string => {
     return baseUrl.trim().toLowerCase();
   }
 };
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
+const isFiniteNumber = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value);
 
 const ensurePinCode = (pin: string) => {
   const normalizedPin = pin.trim();
@@ -153,8 +169,95 @@ export const supportsPinLock = (): boolean =>
 
 export const isPinCodeFormatValid = (pin: string): boolean => PIN_CODE_REGEX.test(pin.trim());
 
+const buildAccountPinPolicyUrl = (baseUrl: string, userId: string): string => {
+  const origin = normalizeBaseUrl(baseUrl);
+  const encodedUserId = encodeURIComponent(userId.trim());
+  const encodedType = encodeURIComponent(AccountDataEvent.CinnyAccountPinPolicy);
+
+  return `${origin}/_matrix/client/v3/user/${encodedUserId}/account_data/${encodedType}`;
+};
+
+const getAccountPinPolicyState = (
+  content?: CinnyAccountPinPolicyContent | unknown
+): AccountPinPolicyState => {
+  if (!isRecord(content)) {
+    return { enabled: false, updatedAt: 0 };
+  }
+
+  return {
+    enabled: content.enabled === true,
+    updatedAt: isFiniteNumber(content.updatedAt) ? content.updatedAt : 0,
+  };
+};
+
+const createAccountPinPolicyContent = (
+  policy: AccountPinPolicyState
+): CinnyAccountPinPolicyContent => ({
+  version: ACCOUNT_PIN_POLICY_VERSION,
+  enabled: policy.enabled,
+  updatedAt: policy.updatedAt,
+});
+
+const fetchAccountPinPolicyContent = async (
+  baseUrl: string,
+  userId: string,
+  accessToken: string
+): Promise<CinnyAccountPinPolicyContent | undefined> => {
+  const response = await fetch(buildAccountPinPolicyUrl(baseUrl, userId), {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  if (response.status === 404) {
+    return undefined;
+  }
+  if (!response.ok) {
+    throw new Error('Unable to fetch PIN policy.');
+  }
+
+  return (await response.json()) as CinnyAccountPinPolicyContent;
+};
+
+const saveAccountPinPolicyContent = async (
+  baseUrl: string,
+  userId: string,
+  accessToken: string,
+  policy: AccountPinPolicyState
+) => {
+  const response = await fetch(buildAccountPinPolicyUrl(baseUrl, userId), {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(createAccountPinPolicyContent(policy)),
+  });
+
+  if (!response.ok) {
+    throw new Error('Unable to save PIN policy.');
+  }
+};
+
 export const hasAccountPin = (baseUrl: string, userId: string): boolean =>
   !!getConfigByAccountKey(getAccountPinKey(baseUrl, userId));
+
+export const clearLocalAccountPin = (baseUrl: string, userId: string) => {
+  const accountKey = getAccountPinKey(baseUrl, userId);
+  const configMap = getAccountPinConfigMap();
+  if (!configMap[accountKey]) {
+    return;
+  }
+
+  delete configMap[accountKey];
+  setAccountPinConfigMap(configMap);
+
+  const screenLockState = getScreenLockState();
+  if (screenLockState.accountKey === accountKey) {
+    clearScreenLock();
+  }
+};
 
 export const enableAccountPin = async (
   baseUrl: string,
@@ -211,14 +314,105 @@ export const disableAccountPin = async (
     throw new Error('Current PIN is incorrect.');
   }
 
-  const accountKey = getAccountPinKey(baseUrl, userId);
-  const configMap = getAccountPinConfigMap();
-  delete configMap[accountKey];
-  setAccountPinConfigMap(configMap);
+  clearLocalAccountPin(baseUrl, userId);
+};
 
-  const screenLockState = getScreenLockState();
-  if (screenLockState.accountKey === accountKey) {
-    clearScreenLock();
+export const isAccountPinPolicyEnabled = (
+  content?: CinnyAccountPinPolicyContent | unknown
+): boolean => getAccountPinPolicyState(content).enabled;
+
+export const enableAccountPinPolicy = async (
+  baseUrl: string,
+  userId: string,
+  accessToken: string,
+  updatedAt: number
+) => {
+  await saveAccountPinPolicyContent(baseUrl, userId, accessToken, {
+    enabled: true,
+    updatedAt,
+  });
+};
+
+export const disableAccountPinPolicy = async (
+  baseUrl: string,
+  userId: string,
+  accessToken: string
+) => {
+  await saveAccountPinPolicyContent(baseUrl, userId, accessToken, {
+    enabled: false,
+    updatedAt: Date.now(),
+  });
+};
+
+export const applyAccountPinPolicyContent = (
+  baseUrl: string,
+  userId: string,
+  content?: CinnyAccountPinPolicyContent | unknown
+): boolean => {
+  const localConfig = getConfigByAccountKey(getAccountPinKey(baseUrl, userId));
+  const remotePolicy = getAccountPinPolicyState(content);
+
+  if (!remotePolicy.enabled && localConfig && remotePolicy.updatedAt > localConfig.updatedAt) {
+    clearLocalAccountPin(baseUrl, userId);
+  }
+
+  return remotePolicy.enabled;
+};
+
+export const syncAccountPinPolicy = async (
+  baseUrl: string,
+  userId: string,
+  accessToken: string
+): Promise<boolean> => {
+  const localConfig = getConfigByAccountKey(getAccountPinKey(baseUrl, userId));
+  const remoteContent = await fetchAccountPinPolicyContent(baseUrl, userId, accessToken);
+  const remotePolicy = getAccountPinPolicyState(remoteContent);
+
+  if (!localConfig) {
+    return remotePolicy.enabled;
+  }
+
+  if (!remotePolicy.enabled) {
+    if (remotePolicy.updatedAt > localConfig.updatedAt) {
+      clearLocalAccountPin(baseUrl, userId);
+      return false;
+    }
+
+    await enableAccountPinPolicy(baseUrl, userId, accessToken, localConfig.updatedAt);
+    return true;
+  }
+
+  return true;
+};
+
+export const resolveAccountPinLoginRequirement = async (
+  baseUrl: string,
+  userId: string,
+  accessToken: string
+): Promise<AccountPinLoginRequirement> => {
+  const localConfig = getConfigByAccountKey(getAccountPinKey(baseUrl, userId));
+
+  try {
+    const remoteContent = await fetchAccountPinPolicyContent(baseUrl, userId, accessToken);
+    const remotePolicy = getAccountPinPolicyState(remoteContent);
+
+    if (remotePolicy.enabled) {
+      return localConfig ? 'prompt' : 'setup';
+    }
+
+    if (localConfig) {
+      if (remotePolicy.updatedAt > localConfig.updatedAt) {
+        clearLocalAccountPin(baseUrl, userId);
+        return 'none';
+      }
+
+      await enableAccountPinPolicy(baseUrl, userId, accessToken, localConfig.updatedAt);
+      return 'prompt';
+    }
+
+    return 'none';
+  } catch {
+    return localConfig ? 'prompt' : 'none';
   }
 };
 
