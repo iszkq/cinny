@@ -38,8 +38,8 @@ import { PasswordInput } from '../../../components/password-input';
 import { FieldError } from '../FiledError';
 import { getResetPasswordPath } from '../../pathUtils';
 import { stopPropagation } from '../../../utils/keyboard';
-import { hasAccountPin } from '../../../utils/pinLock';
-import { AccountPinDialog } from '../../../components/pin-lock';
+import { resolveAccountPinLoginRequirement } from '../../../utils/pinLock';
+import { AccountPinDialog, LocalPinSetupDialog } from '../../../components/pin-lock';
 
 function UsernameHint({ server }: { server: string }) {
   const [anchor, setAnchor] = useState<RectCords>();
@@ -121,7 +121,9 @@ export function PasswordLoginForm({ defaultUsername, defaultEmail }: PasswordLog
   const serverDiscovery = useAutoDiscoveryInfo();
   const baseUrl = serverDiscovery['m.homeserver'].base_url;
   const [pinProtectedLogin, setPinProtectedLogin] = useState<CustomLoginResponse>();
+  const [pinSetupRequiredLogin, setPinSetupRequiredLogin] = useState<CustomLoginResponse>();
   const [handledSuccess, setHandledSuccess] = useState(false);
+  const [resolvingPinRequirement, setResolvingPinRequirement] = useState(false);
 
   const [loginState, startLogin] = useAsyncCallback<
     CustomLoginResponse,
@@ -135,6 +137,8 @@ export function PasswordLoginForm({ defaultUsername, defaultEmail }: PasswordLog
     if (!loginSuccessData) {
       setHandledSuccess(false);
       setPinProtectedLogin(undefined);
+      setPinSetupRequiredLogin(undefined);
+      setResolvingPinRequirement(false);
       return;
     }
 
@@ -142,14 +146,51 @@ export function PasswordLoginForm({ defaultUsername, defaultEmail }: PasswordLog
       return;
     }
 
-    if (hasAccountPin(loginSuccessData.baseUrl, loginSuccessData.response.user_id)) {
-      setPinProtectedLogin(loginSuccessData);
-      setHandledSuccess(true);
-      return;
-    }
+    let disposed = false;
+    setResolvingPinRequirement(true);
 
-    setHandledSuccess(true);
-    completeLogin(loginSuccessData, navigate);
+    resolveAccountPinLoginRequirement(
+      loginSuccessData.baseUrl,
+      loginSuccessData.response.user_id,
+      loginSuccessData.response.access_token
+    )
+      .then((requirement) => {
+        if (disposed) {
+          return;
+        }
+
+        if (requirement === 'setup') {
+          setPinSetupRequiredLogin(loginSuccessData);
+          setHandledSuccess(true);
+          return;
+        }
+
+        if (requirement === 'prompt') {
+          setPinProtectedLogin(loginSuccessData);
+          setHandledSuccess(true);
+          return;
+        }
+
+        setHandledSuccess(true);
+        completeLogin(loginSuccessData, navigate);
+      })
+      .catch(() => {
+        if (disposed) {
+          return;
+        }
+
+        setHandledSuccess(true);
+        completeLogin(loginSuccessData, navigate);
+      })
+      .finally(() => {
+        if (!disposed) {
+          setResolvingPinRequirement(false);
+        }
+      });
+
+    return () => {
+      disposed = true;
+    };
   }, [handledSuccess, loginSuccessData, navigate]);
 
   const handleUsernameLogin = (username: string, password: string) => {
@@ -289,7 +330,7 @@ export function PasswordLoginForm({ defaultUsername, defaultEmail }: PasswordLog
       </Button>
 
       <Overlay
-        open={loginState.status === AsyncStatus.Loading}
+        open={loginState.status === AsyncStatus.Loading || resolvingPinRequirement}
         backdrop={<OverlayBackdrop />}
       >
         <OverlayCenter>
@@ -306,6 +347,17 @@ export function PasswordLoginForm({ defaultUsername, defaultEmail }: PasswordLog
           submitLabel="继续登录"
           onCancel={() => setPinProtectedLogin(undefined)}
           onSuccess={() => completeLogin(pinProtectedLogin, navigate)}
+        />
+      )}
+      {pinSetupRequiredLogin && (
+        <LocalPinSetupDialog
+          baseUrl={pinSetupRequiredLogin.baseUrl}
+          userId={pinSetupRequiredLogin.response.user_id}
+          title="为这台设备设置 PIN"
+          description="这个账号已开启账号级 PIN 保护。进入前，需要先在当前设备上创建本地 PIN。PIN 码只保存在这台设备里。"
+          submitLabel="设置并进入"
+          onCancel={() => setPinSetupRequiredLogin(undefined)}
+          onSuccess={() => completeLogin(pinSetupRequiredLogin, navigate)}
         />
       )}
     </Box>

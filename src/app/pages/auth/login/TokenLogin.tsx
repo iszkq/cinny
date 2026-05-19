@@ -16,8 +16,8 @@ import { useNavigate } from 'react-router-dom';
 import { APP_WEB_DEVICE_NAME } from '../../../constants/branding';
 import { useAutoDiscoveryInfo } from '../../../hooks/useAutoDiscoveryInfo';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
-import { AccountPinDialog } from '../../../components/pin-lock';
-import { hasAccountPin } from '../../../utils/pinLock';
+import { AccountPinDialog, LocalPinSetupDialog } from '../../../components/pin-lock';
+import { resolveAccountPinLoginRequirement } from '../../../utils/pinLock';
 import { completeLogin, CustomLoginResponse, LoginError, login } from './loginUtil';
 
 function LoginTokenError({ message }: { message: string }) {
@@ -52,7 +52,9 @@ export function TokenLogin({ token }: TokenLoginProps) {
   const baseUrl = discovery['m.homeserver'].base_url;
   const navigate = useNavigate();
   const [pinProtectedLogin, setPinProtectedLogin] = useState<CustomLoginResponse>();
+  const [pinSetupRequiredLogin, setPinSetupRequiredLogin] = useState<CustomLoginResponse>();
   const [handledSuccess, setHandledSuccess] = useState(false);
+  const [resolvingPinRequirement, setResolvingPinRequirement] = useState(false);
 
   const [loginState, startLogin] = useAsyncCallback<
     CustomLoginResponse,
@@ -74,6 +76,8 @@ export function TokenLogin({ token }: TokenLoginProps) {
     if (!loginSuccessData) {
       setHandledSuccess(false);
       setPinProtectedLogin(undefined);
+      setPinSetupRequiredLogin(undefined);
+      setResolvingPinRequirement(false);
       return;
     }
 
@@ -81,14 +85,51 @@ export function TokenLogin({ token }: TokenLoginProps) {
       return;
     }
 
-    if (hasAccountPin(loginSuccessData.baseUrl, loginSuccessData.response.user_id)) {
-      setPinProtectedLogin(loginSuccessData);
-      setHandledSuccess(true);
-      return;
-    }
+    let disposed = false;
+    setResolvingPinRequirement(true);
 
-    setHandledSuccess(true);
-    completeLogin(loginSuccessData, navigate);
+    resolveAccountPinLoginRequirement(
+      loginSuccessData.baseUrl,
+      loginSuccessData.response.user_id,
+      loginSuccessData.response.access_token
+    )
+      .then((requirement) => {
+        if (disposed) {
+          return;
+        }
+
+        if (requirement === 'setup') {
+          setPinSetupRequiredLogin(loginSuccessData);
+          setHandledSuccess(true);
+          return;
+        }
+
+        if (requirement === 'prompt') {
+          setPinProtectedLogin(loginSuccessData);
+          setHandledSuccess(true);
+          return;
+        }
+
+        setHandledSuccess(true);
+        completeLogin(loginSuccessData, navigate);
+      })
+      .catch(() => {
+        if (disposed) {
+          return;
+        }
+
+        setHandledSuccess(true);
+        completeLogin(loginSuccessData, navigate);
+      })
+      .finally(() => {
+        if (!disposed) {
+          setResolvingPinRequirement(false);
+        }
+      });
+
+    return () => {
+      disposed = true;
+    };
   }, [handledSuccess, loginSuccessData, navigate]);
 
   return (
@@ -112,7 +153,10 @@ export function TokenLogin({ token }: TokenLoginProps) {
           )}
         </>
       )}
-      <Overlay open={loginState.status === AsyncStatus.Loading} backdrop={<OverlayBackdrop />}>
+      <Overlay
+        open={loginState.status === AsyncStatus.Loading || resolvingPinRequirement}
+        backdrop={<OverlayBackdrop />}
+      >
         <OverlayCenter>
           <Spinner size="600" variant="Secondary" />
         </OverlayCenter>
@@ -127,6 +171,17 @@ export function TokenLogin({ token }: TokenLoginProps) {
           submitLabel="继续登录"
           onCancel={() => setPinProtectedLogin(undefined)}
           onSuccess={() => completeLogin(pinProtectedLogin, navigate)}
+        />
+      )}
+      {pinSetupRequiredLogin && (
+        <LocalPinSetupDialog
+          baseUrl={pinSetupRequiredLogin.baseUrl}
+          userId={pinSetupRequiredLogin.response.user_id}
+          title="为这台设备设置 PIN"
+          description="这个账号已开启账号级 PIN 保护。进入前，需要先在当前设备上创建本地 PIN。PIN 码只保存在这台设备里。"
+          submitLabel="设置并进入"
+          onCancel={() => setPinSetupRequiredLogin(undefined)}
+          onSuccess={() => completeLogin(pinSetupRequiredLogin, navigate)}
         />
       )}
     </>
