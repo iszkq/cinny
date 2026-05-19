@@ -1,4 +1,3 @@
-import { getFallbackSession } from '../state/sessions';
 import { isDesktopUpdaterSupported } from './desktopUpdater';
 
 type DesktopMediaPriority = 'visible' | 'background';
@@ -13,6 +12,11 @@ type DesktopMediaTask = {
 };
 
 const DESKTOP_MEDIA_PRELOAD_CONCURRENCY = 4;
+
+type FallbackSession = {
+  baseUrl: string;
+  userId: string;
+};
 
 const cachedDesktopMediaAssetUrls = new Map<string, string>();
 const pendingDesktopMediaAssetUrls = new Map<string, Promise<string | undefined>>();
@@ -29,8 +33,26 @@ const normalizeBaseUrl = (baseUrl: string): string => {
   }
 };
 
+const getDesktopFallbackSession = (): FallbackSession | undefined => {
+  if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+    return undefined;
+  }
+
+  const baseUrl = window.localStorage.getItem('cinny_hs_base_url');
+  const userId = window.localStorage.getItem('cinny_user_id');
+
+  if (!baseUrl || !userId) {
+    return undefined;
+  }
+
+  return {
+    baseUrl,
+    userId,
+  };
+};
+
 const getDesktopMediaAccountKey = (): string | undefined => {
-  const session = getFallbackSession();
+  const session = getDesktopFallbackSession();
   if (!session) {
     return undefined;
   }
