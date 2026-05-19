@@ -87,7 +87,7 @@ export default defineConfig({
   publicDir: false,
   base: buildConfig.base,
   define: {
-    __APP_VERSION__: JSON.stringify(process.env.npm_package_version ?? '4.11.1'),
+    __APP_VERSION__: JSON.stringify(process.env.npm_package_version ?? '4.12.0'),
   },
   server: {
     port: 8080,
