@@ -48,6 +48,7 @@ jobs:
           printf "%s" "$TAURI_SIGNING_PRIVATE_KEY" > "$RUNNER_TEMP/tauri-updater.key"
 
       - name: Build NSIS installer
+        id: tauri_build
         uses: tauri-apps/tauri-action@action-v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -55,11 +56,45 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ runner.temp }}/tauri-updater.key
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
+          projectPath: .
+          tauriScript: npm run tauri --
           args: --bundles nsis
           tagName: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
           releaseName: ${{ startsWith(github.ref, 'refs/tags/v') && format('Starfire {0}', github.ref_name) || '' }}
           generateReleaseNotes: ${{ startsWith(github.ref, 'refs/tags/v') }}
+          releaseAssetNamePattern: starfire_[version]_[arch][setup][ext]
           uploadWorkflowArtifacts: true
           workflowArtifactNamePattern: windows-[platform]-[arch]-[bundle]
-          uploadUpdaterJson: ${{ startsWith(github.ref, 'refs/tags/v') }}
+          uploadUpdaterJson: false
           updaterJsonPreferNsis: ${{ startsWith(github.ref, 'refs/tags/v') }}
+
+      - name: Generate updater latest.json
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+        run: |
+          $version = $env:RELEASE_TAG -replace '^v', ''
+          $signatureFile = Get-ChildItem -Path 'src-tauri/target/release/bundle/nsis' -Filter '*-setup.exe.sig' | Select-Object -First 1
+          if (-not $signatureFile) {
+            throw 'Missing NSIS signature file under src-tauri/target/release/bundle/nsis.'
+          }
+
+          $signature = (Get-Content -LiteralPath $signatureFile.FullName -Raw).Trim()
+          $assetName = "starfire_${version}_x64-setup.exe"
+          $manifest = @{
+            version = "v$version"
+            notes = "星火 v$version"
+            pub_date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+            platforms = @{
+              'windows-x86_64' = @{
+                signature = $signature
+                url = "https://github.com/$($env:RELEASE_REPOSITORY)/releases/download/$($env:RELEASE_TAG)/$assetName"
+              }
+            }
+          } | ConvertTo-Json -Depth 6
+
+          Set-Content -LiteralPath 'latest.json' -Value $manifest -Encoding utf8NoBOM
+          gh release upload $env:RELEASE_TAG latest.json --clobber --repo $env:RELEASE_REPOSITORY
