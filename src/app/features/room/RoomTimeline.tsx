@@ -207,6 +207,10 @@ const getTimelineImageViewerItems = (linkedTimelines: EventTimeline[]): ViewerIm
           : undefined;
       const mimeType =
         typeof content.info?.mimetype === 'string' ? content.info.mimetype : undefined;
+      const info =
+        content.info && typeof content.info === 'object'
+          ? (content.info as ViewerImageItem['info'])
+          : undefined;
       const body = typeof content.body === 'string' ? content.body : '图片';
 
       if (!url) return;
@@ -217,6 +221,7 @@ const getTimelineImageViewerItems = (linkedTimelines: EventTimeline[]): ViewerIm
           body,
           mimeType,
           url,
+          info,
           encInfo: content.file,
         });
         return;
@@ -231,6 +236,7 @@ const getTimelineImageViewerItems = (linkedTimelines: EventTimeline[]): ViewerIm
         body,
         mimeType,
         url,
+        info,
         encInfo: content.file,
       });
     });
@@ -271,6 +277,10 @@ const getTimelineImageViewerItemsInRange = (
           : undefined;
     const mimeType =
       typeof content.info?.mimetype === 'string' ? content.info.mimetype : undefined;
+    const info =
+      content.info && typeof content.info === 'object'
+        ? (content.info as ViewerImageItem['info'])
+        : undefined;
     const body = typeof content.body === 'string' ? content.body : 'Image';
 
     if (!url) {
@@ -283,6 +293,7 @@ const getTimelineImageViewerItemsInRange = (
         body,
         mimeType,
         url,
+        info,
         encInfo: content.file,
       });
       continue;
@@ -297,6 +308,7 @@ const getTimelineImageViewerItemsInRange = (
       body,
       mimeType,
       url,
+      info,
       encInfo: content.file,
     });
   }
