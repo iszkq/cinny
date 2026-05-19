@@ -24,6 +24,7 @@ import { IImageInfo, MATRIX_BLUR_HASH_PROPERTY_NAME } from '../../../../types/ma
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { ModalWide } from '../../../styles/Modal.css';
 import { validBlurHash } from '../../../utils/blurHash';
 import { bytesToSize } from '../../../utils/common';
 import { stopPropagation } from '../../../utils/keyboard';
@@ -113,70 +114,6 @@ export type ImageContentProps = {
 
 const VIEWER_THUMBNAIL_PRELOAD_LIMIT = 18;
 const VIEWER_THUMBNAIL_PRELOAD_DELAY_MS = 80;
-const VIEWER_DESKTOP_MIN_WIDTH = 360;
-const VIEWER_DESKTOP_MAX_WIDTH = 1100;
-const VIEWER_DESKTOP_MIN_HEIGHT = 320;
-const VIEWER_DESKTOP_MAX_HEIGHT = 820;
-const VIEWER_DESKTOP_FALLBACK_WIDTH = 920;
-const VIEWER_DESKTOP_FALLBACK_HEIGHT = 720;
-const VIEWER_DESKTOP_HORIZONTAL_CHROME = 72;
-const VIEWER_DESKTOP_VERTICAL_CHROME = 156;
-const VIEWER_DESKTOP_THUMBNAIL_RAIL_HEIGHT = 112;
-
-const clampViewerDimension = (value: number, min: number, max: number): number =>
-  Math.min(max, Math.max(min, Math.round(value)));
-
-const getDesktopViewerSize = (
-  info?: IImageInfo,
-  hasThumbnailRail?: boolean
-): { width: number; height: number } => {
-  const extraHeight =
-    VIEWER_DESKTOP_VERTICAL_CHROME +
-    (hasThumbnailRail ? VIEWER_DESKTOP_THUMBNAIL_RAIL_HEIGHT : 0);
-  const fallbackWidth = hasThumbnailRail
-    ? VIEWER_DESKTOP_FALLBACK_WIDTH
-    : VIEWER_DESKTOP_FALLBACK_WIDTH - 80;
-
-  if (
-    typeof info?.w !== 'number' ||
-    typeof info?.h !== 'number' ||
-    info.w <= 0 ||
-    info.h <= 0
-  ) {
-    return {
-      width: clampViewerDimension(
-        fallbackWidth,
-        VIEWER_DESKTOP_MIN_WIDTH,
-        VIEWER_DESKTOP_MAX_WIDTH
-      ),
-      height: clampViewerDimension(
-        VIEWER_DESKTOP_FALLBACK_HEIGHT,
-        VIEWER_DESKTOP_MIN_HEIGHT,
-        VIEWER_DESKTOP_MAX_HEIGHT
-      ),
-    };
-  }
-
-  const availableMediaWidth = Math.max(
-    1,
-    VIEWER_DESKTOP_MAX_WIDTH - VIEWER_DESKTOP_HORIZONTAL_CHROME
-  );
-  const availableMediaHeight = Math.max(1, VIEWER_DESKTOP_MAX_HEIGHT - extraHeight);
-  const scale = Math.min(1, availableMediaWidth / info.w, availableMediaHeight / info.h);
-
-  return {
-    width: clampViewerDimension(
-      info.w * scale + VIEWER_DESKTOP_HORIZONTAL_CHROME,
-      VIEWER_DESKTOP_MIN_WIDTH,
-      VIEWER_DESKTOP_MAX_WIDTH
-    ),
-    height: clampViewerDimension(
-      info.h * scale + extraHeight,
-      VIEWER_DESKTOP_MIN_HEIGHT,
-      VIEWER_DESKTOP_MAX_HEIGHT
-    ),
-  };
-};
 
 const revokeBlobUrl = (src?: string) => {
   if (!src?.startsWith('blob:')) return;
@@ -584,10 +521,6 @@ export const ImageContent = as<'div', ImageContentProps>(
 
     const canPrev = viewerIndex > 0;
     const canNext = viewerIndex < galleryItems.length - 1;
-    const desktopViewerSize = useMemo(
-      () => getDesktopViewerSize(currentViewerItem.info, galleryItems.length > 1),
-      [currentViewerItem.info, galleryItems.length]
-    );
 
     const renderedViewerSrc = activeViewerSrc ?? viewerDisplayedState?.src;
     const safeRenderedViewerSrc = renderedViewerSrc ?? '';
@@ -614,14 +547,21 @@ export const ImageContent = as<'div', ImageContentProps>(
               >
                 <div ref={viewerTrapRef} tabIndex={-1} style={{ outline: 'none' }}>
                   <Modal
+                    className={ModalWide}
                     size="500"
                     style={{
                       display: 'flex',
                       flexDirection: 'column',
-                      width: mobile ? 'var(--app-width, 100vw)' : desktopViewerSize.width,
-                      maxWidth: mobile ? 'var(--app-width, 100vw)' : '88vw',
-                      height: mobile ? 'var(--app-height, 100dvh)' : desktopViewerSize.height,
-                      maxHeight: mobile ? 'var(--app-height, 100dvh)' : '88dvh',
+                      width: mobile ? 'var(--app-width, 100vw)' : 'min(96vw, 1320px)',
+                      minWidth: mobile ? 'var(--app-width, 100vw)' : 'min(96vw, 1320px)',
+                      maxWidth: mobile ? 'var(--app-width, 100vw)' : 'min(96vw, 1320px)',
+                      height: mobile ? 'var(--app-height, 100dvh)' : 'min(92dvh, 920px)',
+                      minHeight: mobile
+                        ? 'var(--app-height, 100dvh)'
+                        : 'min(92dvh, 920px)',
+                      maxHeight: mobile
+                        ? 'var(--app-height, 100dvh)'
+                        : 'min(92dvh, 920px)',
                       padding: 0,
                       background: 'transparent',
                       boxShadow: 'none',
