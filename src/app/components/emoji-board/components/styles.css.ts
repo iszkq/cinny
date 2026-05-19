@@ -94,14 +94,17 @@ export const SortablePackItem = style({
 });
 
 export const SidebarBtnImg = style({
+  gridArea: '1 / 1',
   width: toRem(24),
   height: toRem(24),
   objectFit: 'contain',
+  transition: 'opacity 120ms ease',
 });
 
 export const SidebarBtnFallback = style([
   DefaultReset,
   {
+    gridArea: '1 / 1',
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -128,6 +131,19 @@ export const Preview = style({
   color: color.SurfaceVariant.OnContainer,
 });
 
+export const MediaFrame = style({
+  display: 'grid',
+  placeItems: 'center',
+});
+
+export const MediaImgPending = style({
+  opacity: 0,
+});
+
+export const MediaFallbackHidden = style({
+  opacity: 0,
+});
+
 export const PreviewEmoji = style([
   DefaultReset,
   {
@@ -140,15 +156,18 @@ export const PreviewEmoji = style([
 export const PreviewImg = style([
   DefaultReset,
   {
+    gridArea: '1 / 1',
     width: toRem(32),
     height: toRem(32),
     objectFit: 'contain',
+    transition: 'opacity 120ms ease',
   },
 ]);
 
 export const PreviewFallback = style([
   DefaultReset,
   {
+    gridArea: '1 / 1',
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -220,15 +239,18 @@ export const StickerItem = style([
 export const CustomEmojiImg = style([
   DefaultReset,
   {
+    gridArea: '1 / 1',
     width: toRem(32),
     height: toRem(32),
     objectFit: 'contain',
+    transition: 'opacity 120ms ease',
   },
 ]);
 
 export const CustomEmojiFallback = style([
   DefaultReset,
   {
+    gridArea: '1 / 1',
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -243,15 +265,18 @@ export const CustomEmojiFallback = style([
 export const StickerImg = style([
   DefaultReset,
   {
+    gridArea: '1 / 1',
     width: toRem(96),
     height: toRem(96),
     objectFit: 'contain',
+    transition: 'opacity 120ms ease',
   },
 ]);
 
 export const StickerFallback = style([
   DefaultReset,
   {
+    gridArea: '1 / 1',
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',

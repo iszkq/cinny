@@ -15,6 +15,7 @@ import {
 import classNames from 'classnames';
 import * as css from './styles.css';
 import { useStableMediaUrl } from './useStableMediaUrl';
+import { isDesktopUpdaterSupported } from '../../../utils/desktopUpdater';
 
 export function Sidebar({ children }: { children: ReactNode }) {
   return (
@@ -121,25 +122,45 @@ export function ImageGroupIcon<T extends string>({
   fallbackUrl,
   onClick,
 }: ImageGroupIconProps<T>) {
-  const { displayUrl, hasFailed, requestKey, handleLoad, handleError } = useStableMediaUrl(
-    url,
-    fallbackUrl
-  );
+  const desktopSupported = isDesktopUpdaterSupported();
+  const { displayUrl, hasFailed, isLoaded, requestKey, handleLoad, handleError } =
+    useStableMediaUrl(url, fallbackUrl);
 
   return (
     <SidebarBtn active={active} id={id} label={label} onClick={onClick}>
       {displayUrl && !hasFailed ? (
-        <img
-          key={requestKey}
-          className={css.SidebarBtnImg}
-          src={displayUrl}
-          alt=""
-          draggable={false}
-          loading="eager"
-          decoding="async"
-          onLoad={handleLoad}
-          onError={handleError}
-        />
+        desktopSupported ? (
+          <Box className={css.MediaFrame}>
+            <img
+              key={requestKey}
+              className={classNames(css.SidebarBtnImg, !isLoaded && css.MediaImgPending)}
+              src={displayUrl}
+              alt=""
+              draggable={false}
+              loading="eager"
+              decoding="async"
+              onLoad={handleLoad}
+              onError={handleError}
+            />
+            <Box
+              className={classNames(css.SidebarBtnFallback, isLoaded && css.MediaFallbackHidden)}
+            >
+              <Icon src={Icons.Photo} filled={active} />
+            </Box>
+          </Box>
+        ) : (
+          <img
+            key={requestKey}
+            className={css.SidebarBtnImg}
+            src={displayUrl}
+            alt=""
+            draggable={false}
+            loading="eager"
+            decoding="async"
+            onLoad={handleLoad}
+            onError={handleError}
+          />
+        )
       ) : (
         <Box className={css.SidebarBtnFallback}>
           <Icon src={Icons.Photo} filled={active} />
