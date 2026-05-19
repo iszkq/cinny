@@ -76,4 +76,11 @@ npm run desktop:build:nsis
 
 如果你是打 tag 发版，建议 tag 形如：
 
-`v4.11.2`
+`v4.12.0`
+
+## Release checklist
+
+- The desktop bundle version comes from `src-tauri/Cargo.toml`, so it must match the web/app version before tagging a release.
+- A valid Windows auto-update release must include the installer `.exe`, its `.sig`, and `latest.json`.
+- If a release was already published without `latest.json` or with the wrong desktop version, replace the release assets or publish a new tag such as `v4.12.1`.
+- The GitHub Actions workflow now fails fast when `latest.json` or the NSIS signature is missing, so broken auto-update assets are caught before release.
