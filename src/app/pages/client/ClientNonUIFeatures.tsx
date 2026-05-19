@@ -34,6 +34,7 @@ import { useInboxNotificationsSelected } from '../../hooks/router/useInbox';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 import { ensurePersonalPackSync } from '../../plugins/custom-emoji';
 import { useWarmAllImagePackMedia, useWarmPersonalImagePackMedia } from '../../hooks/useImagePacks';
+import { getFallbackSession } from '../../state/sessions';
 import {
   aiSettingsAtom,
   applyAISettingsAccountData,
