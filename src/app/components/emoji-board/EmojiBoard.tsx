@@ -8,6 +8,7 @@ import React, {
   useEffect,
   useMemo,
   useRef,
+  useState,
 } from 'react';
 import { Box, config, Icons, Scroll } from 'folds';
 import FocusTrap from 'focus-trap-react';
@@ -20,7 +21,11 @@ import { IEmoji, emojiGroups, emojis } from '../../plugins/emoji';
 import { useEmojiGroupLabels } from './useEmojiGroupLabels';
 import { useEmojiGroupIcons } from './useEmojiGroupIcons';
 import { preventScrollWithArrowKey, stopPropagation } from '../../utils/keyboard';
-import { usePersonalImagePacks, useRelevantImagePacks } from '../../hooks/useImagePacks';
+import {
+  useAllPersonalImagePacks,
+  usePersonalImagePacks,
+  useRelevantImagePacks,
+} from '../../hooks/useImagePacks';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useRecentEmoji } from '../../hooks/useRecentEmoji';
 import { editableActiveElement, targetFromEvent } from '../../utils/dom';
@@ -29,7 +34,12 @@ import { useDebounce } from '../../hooks/useDebounce';
 import { useThrottle } from '../../hooks/useThrottle';
 import { addRecentEmoji } from '../../plugins/recent-emoji';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
-import { ImagePack, ImageUsage, PackImageReader } from '../../plugins/custom-emoji';
+import {
+  ImagePack,
+  ImageUsage,
+  PackImageReader,
+  setPersonalPackOrder,
+} from '../../plugins/custom-emoji';
 import { getEmoticonSearchStr } from '../../plugins/utils';
 import { primeCachedMediaObjectUrl, primePersistentMediaUrl } from '../../utils/mediaUrlCache';
 import {
@@ -71,6 +81,13 @@ type StickerGroupItem = {
   id: string;
   name: string;
   items: Array<PackImageReader>;
+};
+
+type PackDropPosition = 'before' | 'after';
+
+type PersonalPackDropTarget = {
+  packId: string;
+  position: PackDropPosition;
 };
 
 const useGroups = (
@@ -170,8 +187,87 @@ type EmojiSidebarProps = {
   activeGroupAtom: PrimitiveAtom<string | undefined>;
   packs: ImagePack[];
   onScrollToGroup: (groupId: string) => void;
+  draggingPackId?: string;
+  dropTarget?: PersonalPackDropTarget;
+  reorderEnabled?: boolean;
+  onPackDragStart?: (packId: string, evt: React.DragEvent<HTMLDivElement>) => void;
+  onPackDragOver?: (packId: string, evt: React.DragEvent<HTMLDivElement>) => void;
+  onPackDrop?: (packId: string, evt: React.DragEvent<HTMLDivElement>) => void;
+  onPackDragEnd?: () => void;
 };
-function EmojiSidebar({ activeGroupAtom, packs, onScrollToGroup }: EmojiSidebarProps) {
+type PersonalPackSidebarItemProps = {
+  active: boolean;
+  pack: ImagePack;
+  label: string;
+  url?: string;
+  fallbackUrl?: string;
+  reorderEnabled: boolean;
+  draggingPackId?: string;
+  dropTarget?: PersonalPackDropTarget;
+  onClick: (id: string) => void;
+  onDragStart?: (packId: string, evt: React.DragEvent<HTMLDivElement>) => void;
+  onDragOver?: (packId: string, evt: React.DragEvent<HTMLDivElement>) => void;
+  onDrop?: (packId: string, evt: React.DragEvent<HTMLDivElement>) => void;
+  onDragEnd?: () => void;
+};
+
+function PersonalPackSidebarItem({
+  active,
+  pack,
+  label,
+  url,
+  fallbackUrl,
+  reorderEnabled,
+  draggingPackId,
+  dropTarget,
+  onClick,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd,
+}: PersonalPackSidebarItemProps) {
+  const dragging = draggingPackId === pack.id;
+  const dropAbove = dropTarget?.packId === pack.id && dropTarget.position === 'before';
+  const dropBelow = dropTarget?.packId === pack.id && dropTarget.position === 'after';
+
+  return (
+    <div
+      className={css.SortablePackItem}
+      draggable={reorderEnabled}
+      data-dragging={dragging || undefined}
+      data-drop-above={dropAbove || undefined}
+      data-drop-below={dropBelow || undefined}
+      onDragStart={
+        reorderEnabled && onDragStart ? (evt) => onDragStart(pack.id, evt) : undefined
+      }
+      onDragOver={reorderEnabled && onDragOver ? (evt) => onDragOver(pack.id, evt) : undefined}
+      onDrop={reorderEnabled && onDrop ? (evt) => onDrop(pack.id, evt) : undefined}
+      onDragEnd={reorderEnabled ? onDragEnd : undefined}
+    >
+      <ImageGroupIcon
+        active={active}
+        id={pack.id}
+        label={label}
+        url={url}
+        fallbackUrl={fallbackUrl}
+        onClick={onClick}
+      />
+    </div>
+  );
+}
+
+function EmojiSidebar({
+  activeGroupAtom,
+  packs,
+  onScrollToGroup,
+  draggingPackId,
+  dropTarget,
+  reorderEnabled = false,
+  onPackDragStart,
+  onPackDragOver,
+  onPackDrop,
+  onPackDragEnd,
+}: EmojiSidebarProps) {
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
 
@@ -225,14 +321,21 @@ function EmojiSidebar({ activeGroupAtom, packs, onScrollToGroup }: EmojiSidebarP
               });
 
             return (
-              <ImageGroupIcon
+              <PersonalPackSidebarItem
                 key={pack.id}
                 active={activeGroupId === pack.id}
-                id={pack.id}
+                pack={pack}
                 label={label ?? 'Unknown Pack'}
                 url={avatarUrl ?? fallbackUrl}
                 fallbackUrl={avatarUrl ? fallbackUrl ?? fallbackOriginalUrl : fallbackOriginalUrl}
+                reorderEnabled={reorderEnabled}
+                draggingPackId={draggingPackId}
+                dropTarget={dropTarget}
                 onClick={handleScrollToGroup}
+                onDragStart={onPackDragStart}
+                onDragOver={onPackDragOver}
+                onDrop={onPackDrop}
+                onDragEnd={onPackDragEnd}
               />
             );
           })}
@@ -265,8 +368,26 @@ type StickerSidebarProps = {
   activeGroupAtom: PrimitiveAtom<string | undefined>;
   packs: ImagePack[];
   onScrollToGroup: (groupId: string) => void;
+  draggingPackId?: string;
+  dropTarget?: PersonalPackDropTarget;
+  reorderEnabled?: boolean;
+  onPackDragStart?: (packId: string, evt: React.DragEvent<HTMLDivElement>) => void;
+  onPackDragOver?: (packId: string, evt: React.DragEvent<HTMLDivElement>) => void;
+  onPackDrop?: (packId: string, evt: React.DragEvent<HTMLDivElement>) => void;
+  onPackDragEnd?: () => void;
 };
-function StickerSidebar({ activeGroupAtom, packs, onScrollToGroup }: StickerSidebarProps) {
+function StickerSidebar({
+  activeGroupAtom,
+  packs,
+  onScrollToGroup,
+  draggingPackId,
+  dropTarget,
+  reorderEnabled = false,
+  onPackDragStart,
+  onPackDragOver,
+  onPackDrop,
+  onPackDragEnd,
+}: StickerSidebarProps) {
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
 
@@ -307,14 +428,21 @@ function StickerSidebar({ activeGroupAtom, packs, onScrollToGroup }: StickerSide
             });
 
           return (
-            <ImageGroupIcon
+            <PersonalPackSidebarItem
               key={pack.id}
               active={activeGroupId === pack.id}
-              id={pack.id}
+              pack={pack}
               label={label ?? 'Unknown Pack'}
               url={avatarUrl ?? fallbackUrl}
               fallbackUrl={avatarUrl ? fallbackUrl ?? fallbackOriginalUrl : fallbackOriginalUrl}
+              reorderEnabled={reorderEnabled}
+              draggingPackId={draggingPackId}
+              dropTarget={dropTarget}
               onClick={handleScrollToGroup}
+              onDragStart={onPackDragStart}
+              onDragOver={onPackDragOver}
+              onDrop={onPackDrop}
+              onDragEnd={onPackDragEnd}
             />
           );
         })}
@@ -432,8 +560,11 @@ export function EmojiBoard({
   const activeGroupIdAtom = useMemo(() => atom<string | undefined>(undefined), []);
   const [activeGroupId, setActiveGroupId] = useAtom(activeGroupIdAtom);
   const contextualImagePacks = useRelevantImagePacks(usage, imagePackRooms);
+  const allPersonalImagePacks = useAllPersonalImagePacks();
   const personalImagePacks = usePersonalImagePacks(usage);
   const imagePacks = imagePackMode === 'personal' ? personalImagePacks : contextualImagePacks;
+  const [draggingPackId, setDraggingPackId] = useState<string>();
+  const [packDropTarget, setPackDropTarget] = useState<PersonalPackDropTarget>();
   const [emojiGroupItems, stickerGroupItems] = useGroups(tab, imagePacks);
   const groups = emojiTab ? emojiGroupItems : stickerGroupItems;
   const renderItem = useItemRenderer(tab);
@@ -549,6 +680,87 @@ export function EmojiBoard({
     onCustomEmojiSelect?.(textEmoji, textEmoji);
   };
 
+  const resetPackDragState = useCallback(() => {
+    setDraggingPackId(undefined);
+    setPackDropTarget(undefined);
+  }, []);
+
+  const handlePersonalPackReorder = useCallback(
+    (sourceId: string, targetId: string, position: PackDropPosition) => {
+      const currentOrder = allPersonalImagePacks.map((pack) => pack.id);
+      const sourceIndex = currentOrder.indexOf(sourceId);
+      const targetIndex = currentOrder.indexOf(targetId);
+
+      if (sourceIndex < 0 || targetIndex < 0 || sourceId === targetId) {
+        return;
+      }
+
+      const nextOrder = [...currentOrder];
+      nextOrder.splice(sourceIndex, 1);
+
+      const nextTargetIndex = nextOrder.indexOf(targetId);
+      nextOrder.splice(position === 'after' ? nextTargetIndex + 1 : nextTargetIndex, 0, sourceId);
+
+      if (nextOrder.every((packId, index) => packId === currentOrder[index])) {
+        return;
+      }
+
+      void setPersonalPackOrder(mx, nextOrder).catch(() => undefined);
+    },
+    [allPersonalImagePacks, mx]
+  );
+
+  const handlePackDragStart = useCallback(
+    (packId: string, evt: React.DragEvent<HTMLDivElement>) => {
+      setDraggingPackId(packId);
+      setPackDropTarget(undefined);
+      evt.dataTransfer.effectAllowed = 'move';
+      evt.dataTransfer.setData('text/plain', packId);
+    },
+    []
+  );
+
+  const handlePackDragOver = useCallback(
+    (packId: string, evt: React.DragEvent<HTMLDivElement>) => {
+      const sourceId = draggingPackId ?? evt.dataTransfer.getData('text/plain');
+      if (!sourceId || sourceId === packId) {
+        return;
+      }
+
+      evt.preventDefault();
+      evt.dataTransfer.dropEffect = 'move';
+
+      const { top, height } = evt.currentTarget.getBoundingClientRect();
+      const position: PackDropPosition = evt.clientY < top + height / 2 ? 'before' : 'after';
+
+      setPackDropTarget((current) =>
+        current?.packId === packId && current.position === position
+          ? current
+          : { packId, position }
+      );
+    },
+    [draggingPackId]
+  );
+
+  const handlePackDrop = useCallback(
+    (packId: string, evt: React.DragEvent<HTMLDivElement>) => {
+      evt.preventDefault();
+
+      const sourceId = draggingPackId ?? evt.dataTransfer.getData('text/plain');
+      const { top, height } = evt.currentTarget.getBoundingClientRect();
+      const position: PackDropPosition = evt.clientY < top + height / 2 ? 'before' : 'after';
+
+      resetPackDragState();
+
+      if (!sourceId || sourceId === packId) {
+        return;
+      }
+
+      handlePersonalPackReorder(sourceId, packId, position);
+    },
+    [draggingPackId, handlePersonalPackReorder, resetPackDragState]
+  );
+
   const handleScrollToGroup = (groupId: string) => {
     const groupIndex = groups.findIndex((group) => group.id === groupId);
     virtualizer.scrollToIndex(groupIndex, { align: 'start' });
@@ -646,12 +858,26 @@ export function EmojiBoard({
               activeGroupAtom={activeGroupIdAtom}
               packs={imagePacks}
               onScrollToGroup={handleScrollToGroup}
+              reorderEnabled={imagePackMode === 'personal'}
+              draggingPackId={draggingPackId}
+              dropTarget={packDropTarget}
+              onPackDragStart={handlePackDragStart}
+              onPackDragOver={handlePackDragOver}
+              onPackDrop={handlePackDrop}
+              onPackDragEnd={resetPackDragState}
             />
           ) : (
             <StickerSidebar
               activeGroupAtom={activeGroupIdAtom}
               packs={imagePacks}
               onScrollToGroup={handleScrollToGroup}
+              reorderEnabled={imagePackMode === 'personal'}
+              draggingPackId={draggingPackId}
+              dropTarget={packDropTarget}
+              onPackDragStart={handlePackDragStart}
+              onPackDragOver={handlePackDragOver}
+              onPackDrop={handlePackDrop}
+              onPackDragEnd={resetPackDragState}
             />
           )
         }
