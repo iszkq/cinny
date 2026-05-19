@@ -1,10 +1,10 @@
 import React, { FormEventHandler, useState } from 'react';
 import { Box, Button, Input, Text, color } from 'folds';
-import { getAccountPinLabel, isPinCodeFormatValid, verifyAccountPin } from '../../utils/pinLock';
+import { enableAccountPin, isPinCodeFormatValid, supportsPinLock } from '../../utils/pinLock';
 import { PinLockDialogShell } from './PinLockShell';
 import * as css from './style.css';
 
-type AccountPinFormProps = {
+type LocalPinSetupFormProps = {
   baseUrl: string;
   userId: string;
   submitLabel: string;
@@ -14,7 +14,7 @@ type AccountPinFormProps = {
   autoFocus?: boolean;
 };
 
-export function AccountPinForm({
+export function LocalPinSetupForm({
   baseUrl,
   userId,
   submitLabel,
@@ -22,16 +22,25 @@ export function AccountPinForm({
   onCancel,
   onSuccess,
   autoFocus,
-}: AccountPinFormProps) {
+}: LocalPinSetupFormProps) {
   const [pin, setPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string>();
 
   const handleSubmit: FormEventHandler<HTMLFormElement> = async (evt) => {
     evt.preventDefault();
 
+    if (!supportsPinLock()) {
+      setError('当前环境不支持本地 PIN 加密能力。');
+      return;
+    }
     if (!isPinCodeFormatValid(pin)) {
       setError('PIN 码需要为 4 到 12 位数字。');
+      return;
+    }
+    if (pin !== confirmPin) {
+      setError('两次输入的 PIN 码不一致。');
       return;
     }
 
@@ -39,15 +48,10 @@ export function AccountPinForm({
     setError(undefined);
 
     try {
-      const verified = await verifyAccountPin(baseUrl, userId, pin);
-      if (!verified) {
-        setError('PIN 码错误，请重试。');
-        return;
-      }
-
+      await enableAccountPin(baseUrl, userId, pin);
       await onSuccess();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'PIN 校验失败，请稍后重试。');
+      setError(err instanceof Error ? err.message : '启用 PIN 失败，请稍后重试。');
     } finally {
       setSubmitting(false);
     }
@@ -56,7 +60,7 @@ export function AccountPinForm({
   return (
     <Box as="form" onSubmit={handleSubmit} direction="Column" gap="300">
       <Box direction="Column" gap="100">
-        <Text size="L400">PIN 码</Text>
+        <Text size="L400">新 PIN 码</Text>
         <Input
           autoFocus={autoFocus}
           required
@@ -65,13 +69,29 @@ export function AccountPinForm({
           type="password"
           inputMode="numeric"
           maxLength={12}
-          autoComplete="current-password"
+          autoComplete="new-password"
           placeholder="请输入 4 到 12 位数字"
           value={pin}
           onChange={(evt) => setPin(evt.currentTarget.value)}
         />
+      </Box>
+
+      <Box direction="Column" gap="100">
+        <Text size="L400">确认 PIN 码</Text>
+        <Input
+          required
+          outlined
+          size="500"
+          type="password"
+          inputMode="numeric"
+          maxLength={12}
+          autoComplete="new-password"
+          placeholder="请再次输入 PIN 码"
+          value={confirmPin}
+          onChange={(evt) => setConfirmPin(evt.currentTarget.value)}
+        />
         <Text size="T200" priority="400">
-          仅接受数字输入，用于解锁当前设备上的这个账号。
+          这个 PIN 只保存在当前设备，本身不会上传到服务器。
         </Text>
         {error && (
           <Text size="T200" style={{ color: color.Critical.Main }}>
@@ -94,14 +114,14 @@ export function AccountPinForm({
           </Button>
         )}
         <Button type="submit" variant="Primary" size="400" disabled={submitting}>
-          <Text size="B300">{submitting ? '正在验证...' : submitLabel}</Text>
+          <Text size="B300">{submitting ? '正在保存...' : submitLabel}</Text>
         </Button>
       </Box>
     </Box>
   );
 }
 
-type AccountPinDialogProps = {
+type LocalPinSetupDialogProps = {
   baseUrl: string;
   userId: string;
   title: string;
@@ -112,7 +132,7 @@ type AccountPinDialogProps = {
   onSuccess: () => void | Promise<void>;
 };
 
-export function AccountPinDialog({
+export function LocalPinSetupDialog({
   baseUrl,
   userId,
   title,
@@ -121,15 +141,10 @@ export function AccountPinDialog({
   cancelLabel,
   onCancel,
   onSuccess,
-}: AccountPinDialogProps) {
+}: LocalPinSetupDialogProps) {
   return (
-    <PinLockDialogShell
-      title={title}
-      description={description}
-      accountLabel={getAccountPinLabel(baseUrl, userId)}
-      requestClose={onCancel}
-    >
-      <AccountPinForm
+    <PinLockDialogShell title={title} description={description} requestClose={onCancel}>
+      <LocalPinSetupForm
         baseUrl={baseUrl}
         userId={userId}
         submitLabel={submitLabel}
