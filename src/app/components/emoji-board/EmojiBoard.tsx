@@ -63,6 +63,7 @@ import {
   EmojiGroup,
   EmojiBoardLayout,
 } from './components';
+import * as css from './components/styles.css';
 import { EmojiBoardTab, EmojiType } from './types';
 import { VirtualTile } from '../virtualizer';
 import { getEmojiBoardMediaCandidates, getEmojiBoardMediaUrls } from './components/media';
