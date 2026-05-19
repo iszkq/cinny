@@ -1,7 +1,9 @@
 import { revokeObjectUrlWhenPossible } from './objectUrlRetainer';
 import { fetchMediaWithAuth } from './matrix';
+import { getFallbackSession } from '../state/sessions';
 
-const PERSISTENT_MEDIA_CACHE = 'cinny-auth-media-v2';
+const LEGACY_PERSISTENT_MEDIA_CACHE = 'cinny-auth-media-v2';
+const PERSISTENT_MEDIA_CACHE_PREFIX = 'cinny-auth-media-v3';
 const PERSISTENT_MEDIA_PRELOAD_CONCURRENCY = 4;
 const OBJECT_URL_MEDIA_PRELOAD_CONCURRENCY = 4;
 
@@ -102,6 +104,8 @@ const backgroundObjectUrlMediaQueue: ObjectUrlMediaTask[] = [];
 let objectUrlMediaCleanupBound = false;
 let objectUrlMediaBytes = 0;
 let activeObjectUrlMediaTasks = 0;
+let currentCacheNamespace: string | undefined;
+let legacyCacheCleanupPromise: Promise<void> | undefined;
 
 const emitObjectUrlMediaChange = (src: string, objectUrl: string | undefined) => {
   objectUrlMediaListeners.get(src)?.forEach((listener) => {
@@ -250,12 +254,83 @@ const bindObjectUrlMediaCleanup = () => {
   );
 };
 
+const hashNamespace = (value: string): string => {
+  let hash = 2166136261;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  return (hash >>> 0).toString(36);
+};
+
+const getCacheNamespace = (): string => {
+  const session = getFallbackSession();
+  return `${session?.baseUrl?.toLowerCase() ?? 'guest'}::${session?.userId?.toLowerCase() ?? 'guest'}`;
+};
+
+const getPersistentMediaCacheName = (): string =>
+  `${PERSISTENT_MEDIA_CACHE_PREFIX}-${hashNamespace(getCacheNamespace())}`;
+
+const resetInMemoryMediaCaches = () => {
+  persistedMediaUrls.clear();
+  pendingPersistentMedia.clear();
+  persistentMediaQueue.length = 0;
+
+  pendingObjectUrlMedia.clear();
+  queuedObjectUrlMediaTasks.clear();
+  visibleObjectUrlMediaQueue.length = 0;
+  backgroundObjectUrlMediaQueue.length = 0;
+  clearObjectUrlMediaCache();
+};
+
+const syncPersistentMediaNamespace = () => {
+  const nextNamespace = getPersistentMediaCacheName();
+  if (nextNamespace === currentCacheNamespace) {
+    return nextNamespace;
+  }
+
+  currentCacheNamespace = nextNamespace;
+  resetInMemoryMediaCaches();
+  return nextNamespace;
+};
+
+const cleanupLegacyMediaCaches = async () => {
+  if (typeof caches === 'undefined') {
+    return;
+  }
+
+  if (legacyCacheCleanupPromise) {
+    return legacyCacheCleanupPromise;
+  }
+
+  legacyCacheCleanupPromise = caches
+    .keys()
+    .then((cacheKeys) =>
+      Promise.all(
+        cacheKeys
+          .filter(
+            (key) => key === LEGACY_PERSISTENT_MEDIA_CACHE || key === PERSISTENT_MEDIA_CACHE_PREFIX
+          )
+          .map((key) => caches.delete(key))
+      )
+    )
+    .finally(() => {
+      legacyCacheCleanupPromise = undefined;
+    });
+
+  return legacyCacheCleanupPromise;
+};
+
 const getMediaCache = async (): Promise<Cache | undefined> => {
   if (typeof caches === 'undefined') {
     return undefined;
   }
 
-  return caches.open(PERSISTENT_MEDIA_CACHE);
+  syncPersistentMediaNamespace();
+  await cleanupLegacyMediaCaches();
+  return caches.open(getPersistentMediaCacheName());
 };
 
 const trimPersistentMediaCache = async (mediaCache: Cache) => {
@@ -338,6 +413,8 @@ const flushPersistentMediaQueue = () => {
 };
 
 export const primePersistentMediaUrl = (src?: string): Promise<void> | undefined => {
+  syncPersistentMediaNamespace();
+
   if (!src || persistedMediaUrls.has(src)) {
     return undefined;
   }
@@ -357,14 +434,18 @@ export const primePersistentMediaUrl = (src?: string): Promise<void> | undefined
   return preloadPromise;
 };
 
-export const getCachedMediaObjectUrl = (src?: string): string | undefined =>
-  (src && touchObjectUrlMediaEntry(src)?.objectUrl) || undefined;
+export const getCachedMediaObjectUrl = (src?: string): string | undefined => {
+  syncPersistentMediaNamespace();
+  return (src && touchObjectUrlMediaEntry(src)?.objectUrl) || undefined;
+};
 
 export const getPreparedMediaUrl = async (
   src?: string,
   priority: 'visible' | 'background' = 'visible',
   timeoutMs = 120
 ): Promise<string | undefined> => {
+  syncPersistentMediaNamespace();
+
   if (!src) {
     return undefined;
   }
@@ -395,13 +476,17 @@ export const getPreparedMediaUrl = async (
   }
 };
 
-export const isCachedMediaObjectUrl = (url?: string): boolean =>
-  typeof url === 'string' && objectUrlMediaUrls.has(url);
+export const isCachedMediaObjectUrl = (url?: string): boolean => {
+  syncPersistentMediaNamespace();
+  return typeof url === 'string' && objectUrlMediaUrls.has(url);
+};
 
 export const subscribeCachedMediaObjectUrl = (
   src: string | undefined,
   listener: (objectUrl: string | undefined) => void
 ): (() => void) => {
+  syncPersistentMediaNamespace();
+
   if (!src) {
     return () => undefined;
   }
@@ -427,6 +512,8 @@ export const primeCachedMediaObjectUrl = (
   src?: string,
   priority: 'visible' | 'background' = 'visible'
 ): Promise<string | undefined> | undefined => {
+  syncPersistentMediaNamespace();
+
   if (!src) {
     return undefined;
   }
