@@ -5,6 +5,8 @@ import { Membership, StateEvent } from '../../types/matrix/room';
 import { mxcUrlToHttp } from '../utils/matrix';
 import {
   ensurePersonalPackSync,
+  getCustomUserImagePacksContent,
+  getPersonalPackOrder,
   getCustomUserImagePack,
   getCustomUserImagePacks,
   getGlobalImagePacks,
@@ -168,6 +170,16 @@ const getPersonalPacks = (
     list.push(pack);
     return list;
   }, []);
+};
+
+const sortImagePacksByOrder = (packs: ImagePack[], orderedIds: string[]) => {
+  const orderIndex = new Map(orderedIds.map((packId, index) => [packId, index]));
+
+  return [...packs].sort(
+    (a, b) =>
+      (orderIndex.get(a.id) ?? Number.MAX_SAFE_INTEGER) -
+      (orderIndex.get(b.id) ?? Number.MAX_SAFE_INTEGER)
+  );
 };
 
 export const useUserImagePack = (): ImagePack | undefined => {
@@ -386,13 +398,37 @@ export const useUniversalImagePacks = (usage: ImageUsage): ImagePack[] => {
 };
 
 export const usePersonalImagePacks = (usage: ImageUsage): ImagePack[] => {
+  const mx = useMatrixClient();
   const userPack = useUserImagePack();
   const customUserPacks = useCustomUserImagePacks();
 
   return useMemo(() => {
     const packs = getPersonalPacks(userPack, customUserPacks);
-    return packs.filter((pack) => pack.getImages(usage).length > 0);
-  }, [userPack, customUserPacks, usage]);
+    const orderedIds = getPersonalPackOrder(
+      getCustomUserImagePacksContent(mx),
+      packs.map((pack) => pack.id)
+    );
+
+    return sortImagePacksByOrder(packs, orderedIds).filter(
+      (pack) => pack.getImages(usage).length > 0
+    );
+  }, [mx, userPack, customUserPacks, usage]);
+};
+
+export const useAllPersonalImagePacks = (): ImagePack[] => {
+  const userPack = useUserImagePack();
+  const customUserPacks = useCustomUserImagePacks();
+  const mx = useMatrixClient();
+
+  return useMemo(() => {
+    const packs = getPersonalPacks(userPack, customUserPacks);
+    const orderedIds = getPersonalPackOrder(
+      getCustomUserImagePacksContent(mx),
+      packs.map((pack) => pack.id)
+    );
+
+    return sortImagePacksByOrder(packs, orderedIds);
+  }, [mx, userPack, customUserPacks]);
 };
 
 export const useWarmImagePackMedia = (rooms: Room[]) => {
