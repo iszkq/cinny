@@ -1,21 +1,31 @@
 import React, { FormEventHandler, useMemo, useState } from 'react';
 import { Box, Button, Input, Switch, Text, color } from 'folds';
+import { useAccountData } from '../../../hooks/useAccountData';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { getFallbackSession } from '../../../state/sessions';
 import { SequenceCard } from '../../../components/sequence-card';
 import { SettingTile } from '../../../components/setting-tile';
 import { SequenceCardStyle } from '../styles.css';
-import { Modal500 } from '../../../components/Modal500';
+import { usePinLockSnapshot } from '../../../hooks/usePinLockSnapshot';
+import {
+  AccountPinDialog,
+  LocalPinSetupDialog,
+  PinLockDialogShell,
+} from '../../../components/pin-lock';
 import {
   changeAccountPin,
-  disableAccountPin,
-  enableAccountPin,
+  clearLocalAccountPin,
+  disableAccountPinPolicy,
+  enableAccountPinPolicy,
   getAccountPinKey,
+  getAccountPinLabel,
+  isAccountPinPolicyEnabled,
   isPinCodeFormatValid,
   lockScreenForAccount,
   supportsPinLock,
 } from '../../../utils/pinLock';
-import { usePinLockSnapshot } from '../../../hooks/usePinLockSnapshot';
+import { AccountDataEvent, CinnyAccountPinPolicyContent } from '../../../../types/matrix/accountData';
+import * as pinCss from '../../../components/pin-lock/style.css';
 
 type SecurityProps = {
   requestClose: () => void;
@@ -23,161 +33,21 @@ type SecurityProps = {
 
 type PinDialogMode = 'setup' | 'change' | 'disable' | undefined;
 
-type PinDialogShellProps = {
-  title: string;
-  description: string;
-  children: React.ReactNode;
-  requestClose: () => void;
-};
-
-function PinDialogShell({ title, description, children, requestClose }: PinDialogShellProps) {
-  return (
-    <Modal500 requestClose={requestClose}>
-      <Box direction="Column" gap="400">
-        <Box direction="Column" gap="100">
-          <Text size="H4">{title}</Text>
-          <Text size="T300" priority="300">
-            {description}
-          </Text>
-        </Box>
-        {children}
-      </Box>
-    </Modal500>
-  );
-}
-
-type DialogActionsProps = {
-  submitting: boolean;
-  submitLabel: string;
-  requestClose: () => void;
-};
-
-function DialogActions({ submitting, submitLabel, requestClose }: DialogActionsProps) {
-  return (
-    <Box justifyContent="End" gap="200">
-      <Button
-        type="button"
-        variant="Secondary"
-        fill="Soft"
-        onClick={requestClose}
-        disabled={submitting}
-      >
-        <Text size="B300">取消</Text>
-      </Button>
-      <Button type="submit" variant="Primary" disabled={submitting}>
-        <Text size="B300">{submitting ? '处理中...' : submitLabel}</Text>
-      </Button>
-    </Box>
-  );
-}
-
-function PinError({ message }: { message?: string }) {
-  if (!message) return null;
-
-  return (
-    <Text size="T200" style={{ color: color.Critical.Main }}>
-      {message}
-    </Text>
-  );
-}
-
-type SetupPinDialogProps = {
-  baseUrl: string;
-  userId: string;
-  requestClose: () => void;
-};
-
-function SetupPinDialog({ baseUrl, userId, requestClose }: SetupPinDialogProps) {
-  const [pin, setPin] = useState('');
-  const [confirmPin, setConfirmPin] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string>();
-
-  const handleSubmit: FormEventHandler<HTMLFormElement> = async (evt) => {
-    evt.preventDefault();
-
-    if (!supportsPinLock()) {
-      setError('当前运行环境不支持 Web Crypto，无法启用 PIN 锁。');
-      return;
-    }
-    if (!isPinCodeFormatValid(pin)) {
-      setError('PIN 码需要为 4 到 12 位数字。');
-      return;
-    }
-    if (pin !== confirmPin) {
-      setError('两次输入的 PIN 码不一致。');
-      return;
-    }
-
-    setSubmitting(true);
-    setError(undefined);
-
-    try {
-      await enableAccountPin(baseUrl, userId, pin);
-      requestClose();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '启用 PIN 锁失败，请重试。');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <PinDialogShell
-      title="启用账号 PIN 锁"
-      description="只对当前账号生效。退出后再次登录这个账号时，会先要求输入 PIN 码。"
-      requestClose={requestClose}
-    >
-      <Box as="form" onSubmit={handleSubmit} direction="Column" gap="300">
-        <Box direction="Column" gap="100">
-          <Text size="T300">新 PIN 码</Text>
-          <Input
-            autoFocus
-            required
-            outlined
-            size="500"
-            type="password"
-            inputMode="numeric"
-            maxLength={12}
-            autoComplete="new-password"
-            placeholder="请输入 4 到 12 位数字"
-            value={pin}
-            onChange={(evt) => setPin(evt.currentTarget.value)}
-          />
-        </Box>
-        <Box direction="Column" gap="100">
-          <Text size="T300">确认 PIN 码</Text>
-          <Input
-            required
-            outlined
-            size="500"
-            type="password"
-            inputMode="numeric"
-            maxLength={12}
-            autoComplete="new-password"
-            placeholder="请再次输入 PIN 码"
-            value={confirmPin}
-            onChange={(evt) => setConfirmPin(evt.currentTarget.value)}
-          />
-        </Box>
-        <PinError message={error} />
-        <DialogActions
-          submitting={submitting}
-          submitLabel="启用 PIN 锁"
-          requestClose={requestClose}
-        />
-      </Box>
-    </PinDialogShell>
-  );
-}
-
 type ChangePinDialogProps = {
   baseUrl: string;
   userId: string;
+  accessToken: string;
+  syncPolicy: boolean;
   requestClose: () => void;
 };
 
-function ChangePinDialog({ baseUrl, userId, requestClose }: ChangePinDialogProps) {
+function ChangePinDialog({
+  baseUrl,
+  userId,
+  accessToken,
+  syncPolicy,
+  requestClose,
+}: ChangePinDialogProps) {
   const [currentPin, setCurrentPin] = useState('');
   const [nextPin, setNextPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
@@ -188,9 +58,10 @@ function ChangePinDialog({ baseUrl, userId, requestClose }: ChangePinDialogProps
     evt.preventDefault();
 
     if (!isPinCodeFormatValid(nextPin)) {
-      setError('新 PIN 码需要为 4 到 12 位数字。');
+      setError('PIN 码需要为 4 到 12 位数字。');
       return;
     }
+
     if (nextPin !== confirmPin) {
       setError('两次输入的新 PIN 码不一致。');
       return;
@@ -201,23 +72,29 @@ function ChangePinDialog({ baseUrl, userId, requestClose }: ChangePinDialogProps
 
     try {
       await changeAccountPin(baseUrl, userId, currentPin, nextPin);
+
+      if (syncPolicy) {
+        await enableAccountPinPolicy(baseUrl, userId, accessToken, Date.now());
+      }
+
       requestClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : '修改 PIN 码失败，请重试。');
+      setError(err instanceof Error ? err.message : '修改 PIN 码失败，请稍后重试。');
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <PinDialogShell
-      title="修改账号 PIN 码"
-      description="修改后，当前账号后续登录和锁屏解锁都会使用新的 PIN 码。"
+    <PinLockDialogShell
+      title="修改本机 PIN"
+      description="修改后，这台设备上的锁屏和下次登录验证都会使用新的 PIN。账号级策略本身仍然保持开启。"
+      accountLabel={getAccountPinLabel(baseUrl, userId)}
       requestClose={requestClose}
     >
       <Box as="form" onSubmit={handleSubmit} direction="Column" gap="300">
         <Box direction="Column" gap="100">
-          <Text size="T300">当前 PIN 码</Text>
+          <Text size="L400">当前 PIN</Text>
           <Input
             autoFocus
             required
@@ -232,7 +109,7 @@ function ChangePinDialog({ baseUrl, userId, requestClose }: ChangePinDialogProps
           />
         </Box>
         <Box direction="Column" gap="100">
-          <Text size="T300">新 PIN 码</Text>
+          <Text size="L400">新 PIN</Text>
           <Input
             required
             outlined
@@ -246,7 +123,7 @@ function ChangePinDialog({ baseUrl, userId, requestClose }: ChangePinDialogProps
           />
         </Box>
         <Box direction="Column" gap="100">
-          <Text size="T300">确认新 PIN 码</Text>
+          <Text size="L400">确认新 PIN</Text>
           <Input
             required
             outlined
@@ -258,100 +135,64 @@ function ChangePinDialog({ baseUrl, userId, requestClose }: ChangePinDialogProps
             value={confirmPin}
             onChange={(evt) => setConfirmPin(evt.currentTarget.value)}
           />
+          <Text size="T200" priority="400">
+            PIN 码只会保存在当前设备，不会上报到服务器。
+          </Text>
+          {error && (
+            <Text size="T200" style={{ color: color.Critical.Main }}>
+              {error}
+            </Text>
+          )}
         </Box>
-        <PinError message={error} />
-        <DialogActions
-          submitting={submitting}
-          submitLabel="保存新 PIN 码"
-          requestClose={requestClose}
-        />
-      </Box>
-    </PinDialogShell>
-  );
-}
 
-type DisablePinDialogProps = {
-  baseUrl: string;
-  userId: string;
-  requestClose: () => void;
-};
-
-function DisablePinDialog({ baseUrl, userId, requestClose }: DisablePinDialogProps) {
-  const [pin, setPin] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string>();
-
-  const handleSubmit: FormEventHandler<HTMLFormElement> = async (evt) => {
-    evt.preventDefault();
-
-    setSubmitting(true);
-    setError(undefined);
-
-    try {
-      await disableAccountPin(baseUrl, userId, pin);
-      requestClose();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '关闭 PIN 锁失败，请重试。');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <PinDialogShell
-      title="关闭账号 PIN 锁"
-      description="关闭后，当前账号再次登录时将不再需要输入 PIN 码。"
-      requestClose={requestClose}
-    >
-      <Box as="form" onSubmit={handleSubmit} direction="Column" gap="300">
-        <Box direction="Column" gap="100">
-          <Text size="T300">当前 PIN 码</Text>
-          <Input
-            autoFocus
-            required
-            outlined
-            size="500"
-            type="password"
-            inputMode="numeric"
-            maxLength={12}
-            autoComplete="current-password"
-            value={pin}
-            onChange={(evt) => setPin(evt.currentTarget.value)}
-          />
+        <Box className={pinCss.ActionRow}>
+          <Button
+            type="button"
+            variant="Secondary"
+            fill="Soft"
+            size="400"
+            onClick={requestClose}
+            disabled={submitting}
+          >
+            <Text size="B300">取消</Text>
+          </Button>
+          <Button type="submit" variant="Primary" size="400" disabled={submitting}>
+            <Text size="B300">{submitting ? '正在保存...' : '保存新 PIN'}</Text>
+          </Button>
         </Box>
-        <PinError message={error} />
-        <DialogActions
-          submitting={submitting}
-          submitLabel="关闭 PIN 锁"
-          requestClose={requestClose}
-        />
       </Box>
-    </PinDialogShell>
+    </PinLockDialogShell>
   );
 }
 
 export function Security({ requestClose }: SecurityProps) {
   const mx = useMatrixClient();
   const session = getFallbackSession();
+  const policyEvent = useAccountData(AccountDataEvent.CinnyAccountPinPolicy);
   const { protectedAccountKeys } = usePinLockSnapshot();
   const [dialogMode, setDialogMode] = useState<PinDialogMode>();
 
   const userId = mx.getUserId();
   const baseUrl = session?.baseUrl;
-  const accountKey =
-    baseUrl && userId ? getAccountPinKey(baseUrl, userId) : undefined;
-  const enabled = useMemo(
+  const accessToken = session?.accessToken;
+  const pinSupported = supportsPinLock();
+  const policyEnabled = isAccountPinPolicyEnabled(
+    policyEvent?.getContent<CinnyAccountPinPolicyContent>()
+  );
+  const accountKey = baseUrl && userId ? getAccountPinKey(baseUrl, userId) : undefined;
+  const localPinEnabled = useMemo(
     () => !!accountKey && protectedAccountKeys.includes(accountKey),
     [accountKey, protectedAccountKeys]
   );
+  const accountPinEnabled = policyEnabled || localPinEnabled;
 
-  if (!userId || !baseUrl) {
+  if (!userId || !baseUrl || !accessToken) {
     return null;
   }
 
   return (
     <Box direction="Column" gap="100">
-      <Text size="L400">账号安全</Text>
+      <Text size="L400">账户安全</Text>
       <SequenceCard
         className={SequenceCardStyle}
         variant="SurfaceVariant"
@@ -359,36 +200,67 @@ export function Security({ requestClose }: SecurityProps) {
         gap="400"
       >
         <SettingTile
-          title="账号 PIN 锁"
-          description="为当前账号单独启用本地 PIN 保护。退出后再次登录这个账号时，会先要求输入 PIN。"
+          title="PIN 保护"
+          description={
+            pinSupported ? (
+              accountPinEnabled
+                ? '当前账号已开启账号级 PIN 策略。其他新设备登录同一账号时，也必须先设置本机 PIN 才能进入。'
+                : '开启后，这个账号在每台设备上都需要先设置各自的本机 PIN。PIN 码本身只保存在本地，不会同步到服务器。'
+            ) : (
+              <Text as="span" size="T200" style={{ color: color.Critical.Main }}>
+                当前环境不支持本机 PIN 加密能力，暂时无法启用 PIN 保护。
+              </Text>
+            )
+          }
           after={
             <Switch
               variant="Primary"
-              value={enabled}
-              onChange={() => setDialogMode(enabled ? 'disable' : 'setup')}
+              value={accountPinEnabled}
+              disabled={!pinSupported}
+              onChange={() => setDialogMode(accountPinEnabled ? 'disable' : 'setup')}
             />
           }
         />
-        {enabled && (
+        <SettingTile
+          title="当前设备状态"
+          description={
+            localPinEnabled
+              ? '这台设备已经保存了本机 PIN，可以用于解锁锁屏和下次登录验证。'
+              : '这台设备还没有保存本机 PIN。开启账号级 PIN 策略后，会先要求为当前设备创建本机 PIN。'
+          }
+          after={
+            <Text size="T200" priority="300">
+              {localPinEnabled ? '已设置' : '未设置'}
+            </Text>
+          }
+        />
+        {localPinEnabled && (
           <SettingTile
-            title="修改 PIN 码"
-            description="建议使用只有你自己知道的 4 到 12 位数字。"
+            title="修改本机 PIN"
+            description="建议使用只有你自己知道的 4 到 12 位数字。修改后不会影响其他设备上的本机 PIN。"
             after={
-              <Button variant="Secondary" fill="Soft" size="300" onClick={() => setDialogMode('change')}>
+              <Button
+                variant="Secondary"
+                fill="Soft"
+                size="300"
+                radii="300"
+                onClick={() => setDialogMode('change')}
+              >
                 <Text size="B300">修改 PIN</Text>
               </Button>
             }
           />
         )}
-        {enabled && (
+        {localPinEnabled && (
           <SettingTile
             title="立即锁屏"
-            description="锁定当前账号界面，重新查看内容前必须输入该账号的 PIN 码。"
+            description="锁屏后会完全切换到 PIN 锁定页面，后面的聊天内容不会继续显示。"
             after={
               <Button
                 variant="Primary"
                 fill="Soft"
                 size="300"
+                radii="300"
                 onClick={() => {
                   lockScreenForAccount(baseUrl, userId);
                   requestClose();
@@ -399,19 +271,57 @@ export function Security({ requestClose }: SecurityProps) {
             }
           />
         )}
-        <SettingTile
-          description="忘记 PIN 时，可通过“清空全部本地数据”恢复，但这会同时删除本地会话和缓存。"
-        />
+        <Box className={pinCss.NoticeCard} direction="Column" gap="100">
+          <Text size="L400">说明</Text>
+          <Text size="T300" priority="300">
+            账号级策略会跟随账号同步，用来告诉其他设备“这个账号需要本机 PIN”。
+          </Text>
+          <Text size="T300" priority="300">
+            真正的 PIN 码和加密摘要只保存在当前设备，不会上传，也不会在设备之间同步。
+          </Text>
+          <Text size="T300" priority="300">
+            如果忘记 PIN，只能通过清空这台设备的本地数据来重置，本地会话和缓存也会一起被移除。
+          </Text>
+        </Box>
       </SequenceCard>
 
       {dialogMode === 'setup' && (
-        <SetupPinDialog baseUrl={baseUrl} userId={userId} requestClose={() => setDialogMode(undefined)} />
+        <LocalPinSetupDialog
+          baseUrl={baseUrl}
+          userId={userId}
+          title="开启账号级 PIN 保护"
+          description="先为当前设备创建本机 PIN。保存完成后，这个账号在其他新设备登录时也会先要求设置各自的本机 PIN。"
+          submitLabel="开启 PIN 保护"
+          onCancel={() => setDialogMode(undefined)}
+          onSuccess={async () => {
+            await enableAccountPinPolicy(baseUrl, userId, accessToken, Date.now());
+            setDialogMode(undefined);
+          }}
+        />
       )}
       {dialogMode === 'change' && (
-        <ChangePinDialog baseUrl={baseUrl} userId={userId} requestClose={() => setDialogMode(undefined)} />
+        <ChangePinDialog
+          baseUrl={baseUrl}
+          userId={userId}
+          accessToken={accessToken}
+          syncPolicy={accountPinEnabled}
+          requestClose={() => setDialogMode(undefined)}
+        />
       )}
       {dialogMode === 'disable' && (
-        <DisablePinDialog baseUrl={baseUrl} userId={userId} requestClose={() => setDialogMode(undefined)} />
+        <AccountPinDialog
+          baseUrl={baseUrl}
+          userId={userId}
+          title="关闭 PIN 保护"
+          description="输入当前设备的 PIN 后，会关闭这个账号的账号级 PIN 策略，并清除当前设备保存的本机 PIN。"
+          submitLabel="关闭 PIN 保护"
+          onCancel={() => setDialogMode(undefined)}
+          onSuccess={async () => {
+            await disableAccountPinPolicy(baseUrl, userId, accessToken);
+            clearLocalAccountPin(baseUrl, userId);
+            setDialogMode(undefined);
+          }}
+        />
       )}
     </Box>
   );
