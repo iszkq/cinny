@@ -59,14 +59,8 @@ jobs:
           projectPath: .
           tauriScript: npm run tauri
           args: --bundles nsis
-          tagName: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
-          releaseName: ${{ startsWith(github.ref, 'refs/tags/v') && format('Starfire {0}', github.ref_name) || '' }}
-          generateReleaseNotes: ${{ startsWith(github.ref, 'refs/tags/v') }}
-          releaseAssetNamePattern: starfire_[version]_[arch][setup][ext]
           uploadWorkflowArtifacts: true
           workflowArtifactNamePattern: windows-[platform]-[arch]-[bundle]
-          uploadUpdaterJson: false
-          updaterJsonPreferNsis: ${{ startsWith(github.ref, 'refs/tags/v') }}
 
       - name: Generate updater latest.json
         if: startsWith(github.ref, 'refs/tags/v')
@@ -84,6 +78,14 @@ jobs:
           }
           if (-not $signatureFile) {
             throw 'Missing NSIS signature file under src-tauri/target/release/bundle/nsis.'
+          }
+
+          gh release view $env:RELEASE_TAG --repo $env:RELEASE_REPOSITORY *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $env:RELEASE_TAG --repo $env:RELEASE_REPOSITORY --title "Starfire $($env:RELEASE_TAG)" --generate-notes
+            if ($LASTEXITCODE -ne 0) {
+              throw "Failed to create GitHub release for $($env:RELEASE_TAG)."
+            }
           }
 
           gh release upload $env:RELEASE_TAG $setupFile.FullName $signatureFile.FullName --clobber --repo $env:RELEASE_REPOSITORY
