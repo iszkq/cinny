@@ -51,5 +51,6 @@ export type UserImagePacks = Record<string, PackContent>;
 
 export type UserImagePacksContent = {
   version?: number;
+  order?: string[];
   packs?: UserImagePacks;
 };

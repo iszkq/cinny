@@ -9,6 +9,7 @@ import { PackAddress } from './PackAddress';
 import {
   getCustomUserImagePacksContent,
   getEditableDefaultUserImagePackContent,
+  getPersonalPackOrder,
 } from './personalPacks';
 
 export function packAddressEqual(a1?: PackAddress, a2?: PackAddress): boolean {
@@ -84,12 +85,24 @@ export function getCustomUserImagePacks(mx: MatrixClient): ImagePack[] {
   const content = getCustomUserImagePacksContent(mx);
   if (!content.packs || typeof content.packs !== 'object') return [];
 
-  return Object.entries(content.packs).reduce<ImagePack[]>((packs, [packId, packContent]) => {
+  const unorderedPacks = Object.entries(content.packs).reduce<ImagePack[]>((packs, [packId, packContent]) => {
     if (!packContent || typeof packContent !== 'object') return packs;
 
     packs.push(new ImagePack(packId, packContent as PackContent, undefined));
     return packs;
   }, []);
+
+  const orderedIds = getPersonalPackOrder(
+    content,
+    unorderedPacks.map((pack) => pack.id)
+  );
+  const orderIndex = new Map(orderedIds.map((packId, index) => [packId, index]));
+
+  return unorderedPacks.sort(
+    (a, b) =>
+      (orderIndex.get(a.id) ?? Number.MAX_SAFE_INTEGER) -
+      (orderIndex.get(b.id) ?? Number.MAX_SAFE_INTEGER)
+  );
 }
 
 export function getCustomUserImagePack(mx: MatrixClient, packId: string): ImagePack | undefined {

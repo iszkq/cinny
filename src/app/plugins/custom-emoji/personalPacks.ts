@@ -25,6 +25,37 @@ export const cloneUserImagePacksContent = (
 ): UserImagePacksContent =>
   JSON.parse(JSON.stringify(content ?? {})) as UserImagePacksContent;
 
+export const getPersonalPackOrder = (
+  content: UserImagePacksContent | undefined,
+  packIds: string[]
+): string[] => {
+  const knownPackIds = new Set(packIds);
+  const seen = new Set<string>();
+  const nextOrder: string[] = [];
+
+  if (Array.isArray(content?.order)) {
+    content.order.forEach((packId) => {
+      if (typeof packId !== 'string' || !knownPackIds.has(packId) || seen.has(packId)) {
+        return;
+      }
+
+      seen.add(packId);
+      nextOrder.push(packId);
+    });
+  }
+
+  packIds.forEach((packId) => {
+    if (seen.has(packId)) {
+      return;
+    }
+
+    seen.add(packId);
+    nextOrder.push(packId);
+  });
+
+  return nextOrder;
+};
+
 export const getCustomUserImagePacksContent = (mx: MatrixClient): UserImagePacksContent => {
   const content = mx.getAccountData(AccountDataEvent.CinnyUserEmojiPacks)?.getContent<
     UserImagePacksContent
@@ -224,6 +255,32 @@ export const setCustomUserImagePacksContent = async (
     getEditableDefaultUserImagePackContent(mx),
     customContent
   );
+};
+
+export const setPersonalPackOrder = async (
+  mx: MatrixClient,
+  order: string[]
+) => {
+  const userId = mx.getUserId();
+  if (!userId) {
+    throw new Error('Missing user id');
+  }
+
+  const content = cloneUserImagePacksContent(getCustomUserImagePacksContent(mx));
+  const customPackIds = Object.keys(content.packs ?? {});
+  const knownPackIds = [userId, ...customPackIds];
+  const currentOrder = getPersonalPackOrder(content, knownPackIds);
+
+  content.version = content.version ?? 1;
+  content.order = getPersonalPackOrder(
+    {
+      ...content,
+      order: order.filter((packId) => currentOrder.includes(packId)),
+    },
+    knownPackIds
+  );
+
+  await setCustomUserImagePacksContent(mx, content);
 };
 
 export const isDefaultPersonalPackImageSaved = (
