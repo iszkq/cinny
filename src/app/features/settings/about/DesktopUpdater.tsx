@@ -82,6 +82,7 @@ export function DesktopUpdater() {
       setMessage(`发现新版本 v${update.version}，可以直接下载并安装。`);
     } catch (error) {
       setStatus('error');
+      setPendingUpdate(undefined);
       setMessage(getUpdateErrorMessage(error));
     }
   };
@@ -111,6 +112,7 @@ export function DesktopUpdater() {
       await relaunchDesktopApp().catch(() => undefined);
     } catch (error) {
       setStatus('error');
+      setPendingUpdate(undefined);
       setMessage(getUpdateErrorMessage(error));
     }
   };
