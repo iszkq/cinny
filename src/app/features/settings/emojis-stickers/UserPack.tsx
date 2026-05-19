@@ -12,7 +12,7 @@ import {
   Spinner,
   Text,
 } from 'folds';
-import { useCustomUserImagePacks, useUserImagePack } from '../../../hooks/useImagePacks';
+import { useAllPersonalImagePacks } from '../../../hooks/useImagePacks';
 import { SequenceCard } from '../../../components/sequence-card';
 import { SequenceCardStyle } from '../styles.css';
 import { SettingTile } from '../../../components/setting-tile';
@@ -175,8 +175,8 @@ export function UserPack({ onViewPack }: UserPackProps) {
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
 
-  const userPack = useUserImagePack();
-  const customUserPacks = useCustomUserImagePacks();
+  const personalPacks = useAllPersonalImagePacks();
+  const defaultPackId = mx.getUserId() ?? '';
   const [removingPackId, setRemovingPackId] = useState<string>();
   const [removeError, setRemoveError] = useState<string>();
 
@@ -225,6 +225,9 @@ export function UserPack({ onViewPack }: UserPackProps) {
           updatedContent.packs = nextPacks;
         } else {
           delete updatedContent.packs;
+        }
+        if (Array.isArray(content.order)) {
+          updatedContent.order = content.order.filter((packId) => packId !== imagePack.id);
         }
 
         await setCustomUserImagePacksContent(mx, updatedContent);
@@ -305,24 +308,11 @@ export function UserPack({ onViewPack }: UserPackProps) {
   };
 
   return (
-    <Box direction="Column" gap="100">
-      <Text size="L400">{'\u4e2a\u4eba\u5206\u7c7b'}</Text>
-      {renderPack(
-        userPack ??
-          new ImagePack(
-            mx.getUserId() ?? '',
-            {
-              pack: {
-                display_name: '\u9ed8\u8ba4\u5206\u7c7b',
-              },
-            },
-            undefined
-          ),
-        true
-      )}
+      <Box direction="Column" gap="100">
+        <Text size="L400">{'\u4e2a\u4eba\u5206\u7c7b'}</Text>
+      {personalPacks.map((imagePack) => renderPack(imagePack, imagePack.id === defaultPackId))}
       <CreatePersonalPackTile onViewPack={onViewPack} />
-      {customUserPacks.map((imagePack) => renderPack(imagePack))}
-      {customUserPacks.length === 0 && (
+      {personalPacks.filter((imagePack) => imagePack.id !== defaultPackId).length === 0 && (
         <SequenceCard
           className={SequenceCardStyle}
           variant="SurfaceVariant"
