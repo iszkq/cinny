@@ -24,7 +24,6 @@ import { IImageInfo, MATRIX_BLUR_HASH_PROPERTY_NAME } from '../../../../types/ma
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
-import { ModalWide } from '../../../styles/Modal.css';
 import { validBlurHash } from '../../../utils/blurHash';
 import { bytesToSize } from '../../../utils/common';
 import { stopPropagation } from '../../../utils/keyboard';
@@ -547,21 +546,20 @@ export const ImageContent = as<'div', ImageContentProps>(
               >
                 <div ref={viewerTrapRef} tabIndex={-1} style={{ outline: 'none' }}>
                   <Modal
-                    className={ModalWide}
                     size="500"
                     style={{
                       display: 'flex',
                       flexDirection: 'column',
-                      width: mobile ? 'var(--app-width, 100vw)' : 'min(96vw, 1320px)',
-                      minWidth: mobile ? 'var(--app-width, 100vw)' : 'min(96vw, 1320px)',
-                      maxWidth: mobile ? 'var(--app-width, 100vw)' : 'min(96vw, 1320px)',
-                      height: mobile ? 'var(--app-height, 100dvh)' : 'min(92dvh, 920px)',
+                      width: mobile ? 'var(--app-width, 100vw)' : 'min(88vw, 1080px)',
+                      minWidth: mobile ? 'var(--app-width, 100vw)' : 'min(88vw, 1080px)',
+                      maxWidth: mobile ? 'var(--app-width, 100vw)' : 'min(88vw, 1080px)',
+                      height: mobile ? 'var(--app-height, 100dvh)' : 'min(84dvh, 780px)',
                       minHeight: mobile
                         ? 'var(--app-height, 100dvh)'
-                        : 'min(92dvh, 920px)',
+                        : 'min(84dvh, 780px)',
                       maxHeight: mobile
                         ? 'var(--app-height, 100dvh)'
-                        : 'min(92dvh, 920px)',
+                        : 'min(84dvh, 780px)',
                       padding: 0,
                       background: 'transparent',
                       boxShadow: 'none',
