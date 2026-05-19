@@ -41,7 +41,9 @@ import {
   setPersonalPackOrder,
 } from '../../plugins/custom-emoji';
 import { getEmoticonSearchStr } from '../../plugins/utils';
+import { primeDesktopMediaAssetUrl } from '../../utils/desktopMediaAssetCache';
 import { primeCachedMediaObjectUrl, primePersistentMediaUrl } from '../../utils/mediaUrlCache';
+import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
 import {
   SearchInput,
   EmojiBoardTabs,
@@ -549,9 +551,12 @@ export function EmojiBoard({
 }: EmojiBoardProps) {
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
+  const desktopSupported = isDesktopUpdaterSupported();
 
   const emojiTab = tab === EmojiBoardTab.Emoji;
   const usage = emojiTab ? ImageUsage.Emoticon : ImageUsage.Sticker;
+  const priorityPackPreloadCount = desktopSupported ? 3 : PRIORITY_PACK_PRELOAD_COUNT;
+  const priorityPackVisibleUrlLimit = desktopSupported ? 160 : PRIORITY_PACK_VISIBLE_URL_LIMIT;
 
   const previewAtom = useMemo(
     () => createPreviewDataAtom(emojiTab ? DefaultEmojiPreview : undefined),
@@ -630,10 +635,10 @@ export function EmojiBoard({
     };
 
     pushPack(imagePacks.find((pack) => pack.id === activeGroupId));
-    imagePacks.slice(0, PRIORITY_PACK_PRELOAD_COUNT).forEach(pushPack);
+    imagePacks.slice(0, priorityPackPreloadCount).forEach(pushPack);
 
     return packs;
-  }, [activeGroupId, imagePacks]);
+  }, [activeGroupId, imagePacks, priorityPackPreloadCount]);
 
   const handleOnChange: ChangeEventHandler<HTMLInputElement> = useDebounce(
     useCallback(
@@ -779,13 +784,11 @@ export function EmojiBoard({
 
       priorityPacks.forEach((pack, packIndex) => {
         getPackMediaUrls(pack).forEach((mediaUrl, mediaIndex) => {
+          const priority =
+            packIndex === 0 && mediaIndex < priorityPackVisibleUrlLimit ? 'visible' : 'background';
           void primePersistentMediaUrl(mediaUrl);
-          void primeCachedMediaObjectUrl(
-            mediaUrl,
-            packIndex === 0 && mediaIndex < PRIORITY_PACK_VISIBLE_URL_LIMIT
-              ? 'visible'
-              : 'background'
-          );
+          void primeCachedMediaObjectUrl(mediaUrl, priority);
+          void primeDesktopMediaAssetUrl(mediaUrl, priority);
         });
       });
     }, 0);
@@ -794,7 +797,7 @@ export function EmojiBoard({
       disposed = true;
       window.clearTimeout(preloadTimer);
     };
-  }, [getPackMediaUrls, priorityPacks]);
+  }, [getPackMediaUrls, priorityPackVisibleUrlLimit, priorityPacks]);
 
   // sync active sidebar tab with scroll
   useEffect(() => {
