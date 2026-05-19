@@ -10,10 +10,11 @@ type DeviceMemoryNavigator = Navigator & {
 type SessionInfo = {
   accessToken: string;
   baseUrl: string;
+  userId?: string;
 };
 
-const AUTH_MEDIA_CACHE = 'cinny-auth-media-v2';
-const AUTH_MEDIA_CACHE_PREFIX = 'cinny-auth-media-v';
+const LEGACY_AUTH_MEDIA_CACHE = 'cinny-auth-media-v2';
+const AUTH_MEDIA_CACHE_PREFIX = 'cinny-auth-media-v3';
 
 const getAuthMediaCacheEntryLimit = () => {
   const deviceMemory = (self.navigator as DeviceMemoryNavigator | undefined)?.deviceMemory;
@@ -54,37 +55,39 @@ async function cleanupDeadClients() {
   });
 }
 
-async function clearAuthMediaCache() {
-  await caches.delete(AUTH_MEDIA_CACHE);
+function hashNamespace(value: string): string {
+  let hash = 2166136261;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  return (hash >>> 0).toString(36);
+}
+
+function getAuthMediaCacheName(session: SessionInfo): string {
+  const namespace = `${session.baseUrl.toLowerCase()}::${session.userId?.toLowerCase() ?? 'guest'}`;
+  return `${AUTH_MEDIA_CACHE_PREFIX}-${hashNamespace(namespace)}`;
 }
 
 async function cleanupStaleCaches() {
   const cacheKeys = await caches.keys();
   const staleKeys = cacheKeys.filter(
-    (key) => key.startsWith(AUTH_MEDIA_CACHE_PREFIX) && key !== AUTH_MEDIA_CACHE
+    (key) => key === LEGACY_AUTH_MEDIA_CACHE || key === AUTH_MEDIA_CACHE_PREFIX
   );
 
   await Promise.all(staleKeys.map((key) => caches.delete(key)));
 }
 
-function setSession(clientId: string, accessToken: any, baseUrl: any) {
-  const previousSession = sessions.get(clientId);
-
+function setSession(clientId: string, accessToken: any, baseUrl: any, userId: any) {
   if (typeof accessToken === 'string' && typeof baseUrl === 'string') {
-    const nextSession = { accessToken, baseUrl };
-    sessions.set(clientId, nextSession);
-
-    if (
-      previousSession &&
-      (previousSession.accessToken !== nextSession.accessToken ||
-        previousSession.baseUrl !== nextSession.baseUrl)
-    ) {
-      void clearAuthMediaCache();
-    }
+    sessions.set(clientId, {
+      accessToken,
+      baseUrl,
+      userId: typeof userId === 'string' ? userId : undefined,
+    });
   } else {
-    if (previousSession) {
-      void clearAuthMediaCache();
-    }
     sessions.delete(clientId);
   }
 
@@ -148,10 +151,10 @@ self.addEventListener('message', (event: ExtendableMessageEvent) => {
   const client = event.source as Client | null;
   if (!client) return;
 
-  const { type, accessToken, baseUrl } = event.data || {};
+  const { type, accessToken, baseUrl, userId } = event.data || {};
 
   if (type === 'setSession') {
-    setSession(client.id, accessToken, baseUrl);
+    setSession(client.id, accessToken, baseUrl, userId);
     void cleanupDeadClients();
   }
 });
@@ -210,8 +213,8 @@ async function touchCachedMedia(cache: Cache, url: string, response: Response) {
   await cache.put(url, response);
 }
 
-async function getCachedMedia(url: string): Promise<Response | undefined> {
-  const cache = await caches.open(AUTH_MEDIA_CACHE);
+async function getCachedMedia(url: string, cacheName: string): Promise<Response | undefined> {
+  const cache = await caches.open(cacheName);
   const cachedResponse = await cache.match(url);
 
   if (!cachedResponse) {
@@ -222,11 +225,15 @@ async function getCachedMedia(url: string): Promise<Response | undefined> {
   return cachedResponse;
 }
 
-async function fetchAndCacheMedia(url: string, token: string): Promise<Response> {
+async function fetchAndCacheMedia(
+  url: string,
+  token: string,
+  cacheName: string
+): Promise<Response> {
   const response = await fetch(url, fetchConfig(token));
 
   if (response.ok) {
-    const cache = await caches.open(AUTH_MEDIA_CACHE);
+    const cache = await caches.open(cacheName);
     await cache.put(url, response.clone());
     await trimAuthMediaCache(cache);
   }
@@ -250,12 +257,13 @@ self.addEventListener('fetch', (event: FetchEvent) => {
         return fetch(event.request);
       }
 
-      const cachedResponse = await getCachedMedia(url);
+      const cacheName = getAuthMediaCacheName(session);
+      const cachedResponse = await getCachedMedia(url, cacheName);
       if (cachedResponse) {
         return cachedResponse;
       }
 
-      return fetchAndCacheMedia(url, session.accessToken);
+      return fetchAndCacheMedia(url, session.accessToken, cacheName);
     })()
   );
 });
