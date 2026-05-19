@@ -33,15 +33,23 @@ import { useSelectedRoom } from '../../hooks/router/useSelectedRoom';
 import { useInboxNotificationsSelected } from '../../hooks/router/useInbox';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 import { ensurePersonalPackSync } from '../../plugins/custom-emoji';
-import { useWarmPersonalImagePackMedia } from '../../hooks/useImagePacks';
+import { useWarmAllImagePackMedia, useWarmPersonalImagePackMedia } from '../../hooks/useImagePacks';
 import {
   aiSettingsAtom,
   applyAISettingsAccountData,
   getAISettingsAccountDataContent,
   getAISettingsAccountDataSignature,
 } from '../../state/ai';
-import { CinnyAISettingsContent } from '../../../types/matrix/accountData';
+import {
+  CinnyAISettingsContent,
+  CinnyAccountPinPolicyContent,
+} from '../../../types/matrix/accountData';
 import { startClient } from '../../../client/initMatrix';
+import {
+  applyAccountPinPolicyContent,
+  syncAccountPinPolicy,
+} from '../../utils/pinLock';
+import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
 
 const HEALTHY_SYNC_STATES = new Set<SyncState>([
   SyncState.Prepared,
@@ -357,10 +365,65 @@ function AISettingsAccountDataFeature() {
   return null;
 }
 
-function ImagePackMediaWarmFeature() {
+function AccountPinPolicyFeature() {
+  const mx = useMatrixClient();
+  const session = getFallbackSession();
+
+  useEffect(() => {
+    const baseUrl = session?.baseUrl;
+    const accessToken = session?.accessToken;
+    const userId = mx.getUserId();
+
+    if (!baseUrl || !accessToken || !userId) {
+      return undefined;
+    }
+
+    const applyPolicy = (content?: CinnyAccountPinPolicyContent) => {
+      applyAccountPinPolicyContent(baseUrl, userId, content);
+    };
+
+    applyPolicy(
+      mx.getAccountData(AccountDataEvent.CinnyAccountPinPolicy)?.getContent<
+        CinnyAccountPinPolicyContent
+      >()
+    );
+    void syncAccountPinPolicy(baseUrl, userId, accessToken).catch(() => undefined);
+
+    const handleAccountData = (event: MatrixEvent) => {
+      if (event.getType() !== AccountDataEvent.CinnyAccountPinPolicy) {
+        return;
+      }
+
+      applyPolicy(event.getContent<CinnyAccountPinPolicyContent>());
+    };
+
+    mx.on(ClientEvent.AccountData, handleAccountData);
+    return () => {
+      mx.removeListener(ClientEvent.AccountData, handleAccountData);
+    };
+  }, [mx, session?.accessToken, session?.baseUrl]);
+
+  return null;
+}
+
+function DesktopImagePackMediaWarmFeature() {
+  useWarmAllImagePackMedia();
+
+  return null;
+}
+
+function DefaultImagePackMediaWarmFeature() {
   useWarmPersonalImagePackMedia();
 
   return null;
+}
+
+function ImagePackMediaWarmFeature() {
+  return isDesktopUpdaterSupported() ? (
+    <DesktopImagePackMediaWarmFeature />
+  ) : (
+    <DefaultImagePackMediaWarmFeature />
+  );
 }
 
 function FaviconUpdater() {
@@ -605,6 +668,7 @@ export function ClientNonUIFeatures({ children }: ClientNonUIFeaturesProps) {
       <PageZoomFeature />
       <PresenceSyncFeature />
       <SyncRecoveryFeature />
+      <AccountPinPolicyFeature />
       <PersonalPackSyncFeature />
       <AISettingsAccountDataFeature />
       <ImagePackMediaWarmFeature />
