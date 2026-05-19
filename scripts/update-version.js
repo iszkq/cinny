@@ -16,33 +16,48 @@ if (!version) {
 const root = path.resolve(__dirname, "..");
 const newVersionTag = `v${version}`;
 
+const updateFile = (relativePath, transform, successMessage) => {
+  const absPath = path.join(root, relativePath);
+
+  if (!fs.existsSync(absPath)) {
+    console.warn(`File not found: ${relativePath}`);
+    return;
+  }
+
+  const content = fs.readFileSync(absPath, "utf8");
+  const updated = transform(content);
+
+  if (updated === content) {
+    console.warn(`No changes made in ${relativePath}`);
+    return;
+  }
+
+  fs.writeFileSync(absPath, updated);
+  console.log(successMessage);
+};
+
 // Update package.json + package-lock.json safely
 execSync(`npm version ${version} --no-git-tag-version`, {
   cwd: root,
   stdio: "inherit",
 });
 
-console.log(`Updated package.json and package-lock.json → ${version}`);
+console.log(`Updated package.json and package-lock.json -> ${version}`);
 
-// Update UI version references
-const files = [
+updateFile(
+  "src-tauri/Cargo.toml",
+  (content) => content.replace(/^version = "\d+\.\d+\.\d+"$/m, `version = "${version}"`),
+  `Updated src-tauri/Cargo.toml -> ${version}`
+);
+
+[
   "src/app/features/settings/about/About.tsx",
   "src/app/pages/auth/AuthFooter.tsx",
   "src/app/pages/client/WelcomePage.tsx",
-];
-
-files.forEach((filePath) => {
-  const absPath = path.join(root, filePath);
-
-  if (!fs.existsSync(absPath)) {
-    console.warn(`File not found: ${filePath}`);
-    return;
-  }
-
-  const content = fs.readFileSync(absPath, "utf8");
-  const updated = content.replace(/v\d+\.\d+\.\d+/g, newVersionTag);
-
-  fs.writeFileSync(absPath, updated);
-
-  console.log(`Updated ${filePath} → ${newVersionTag}`);
+].forEach((filePath) => {
+  updateFile(
+    filePath,
+    (content) => content.replace(/v\d+\.\d+\.\d+/g, newVersionTag),
+    `Updated ${filePath} -> ${newVersionTag}`
+  );
 });
