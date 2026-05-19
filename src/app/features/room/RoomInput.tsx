@@ -123,7 +123,6 @@ import { getAudioFileUrl, loadAudioElement } from '../../utils/dom';
 import { getAudioInfo } from '../../utils/matrix';
 import { CreatePollModal } from './CreatePollModal';
 import { createPollMessageContent, CreatePollInput } from '../../utils/polls';
-import { BibleModal } from '../bible';
 import { ScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
 
 interface RoomInputProps {
@@ -209,7 +208,6 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
 
     const [uploadBoard, setUploadBoard] = useState(true);
     const [pollDialog, setPollDialog] = useState(false);
-    const [bibleDialog, setBibleDialog] = useState(false);
     const mediaRecorderRef = useRef<MediaRecorder>();
     const mediaStreamRef = useRef<MediaStream>();
     const recordingChunksRef = useRef<Blob[]>([]);
@@ -828,14 +826,6 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           requestClose={closePollDialog}
           onCreate={handleCreatePoll}
         />
-        <BibleModal
-          open={bibleDialog}
-          requestClose={() => setBibleDialog(false)}
-          onInsertSelected={(text) => {
-            Transforms.insertText(editor, text);
-            ReactEditor.focus(editor);
-          }}
-        />
         {selectedFiles.length > 0 && (
           <UploadBoard
             header={
@@ -1113,18 +1103,6 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
               >
                 <Icon src={Icons.OrderList} />
               </IconButton>
-              {!compactScreen && (
-                <IconButton
-                  onClick={() => setBibleDialog(true)}
-                  variant="SurfaceVariant"
-                  size="300"
-                  radii="300"
-                  disabled={recording}
-                  aria-disabled={recording}
-                >
-                  <Text size="B300">{'\u7ecf'}</Text>
-                </IconButton>
-              )}
               <IconButton
                 onClick={recording ? stopVoiceRecording : startVoiceRecording}
                 variant={recording ? 'Primary' : 'SurfaceVariant'}
