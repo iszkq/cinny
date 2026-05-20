@@ -71,6 +71,12 @@ const HEALTHY_SYNC_STATES = new Set<SyncState>([
 ]);
 const FAILED_PENDING_MESSAGE_STATUS = 'not_sent';
 const EXTERNAL_LINK_SELECTOR = 'a[href]';
+const SYNC_RECOVERY_RETRY_INTERVAL_MS = 4000;
+const SYNC_RECOVERY_WATCHDOG_INTERVAL_MS = 10000;
+const SYNC_RECOVERY_STALL_MS = 30000;
+const SYNC_RECOVERY_FORCE_RESTART_MS = 18000;
+const SYNC_RECOVERY_BURST_WINDOW_MS = 60000;
+const SYNC_RECOVERY_BURST_THRESHOLD = 4;
 
 const createFaviconUrl = async (logoUrl: string, badgeColor?: string): Promise<string> => {
   const img = await loadImageElement(logoUrl);
@@ -237,6 +243,85 @@ function SyncRecoveryFeature() {
   const lastRecoveryAttemptRef = useRef(0);
   const lastPendingRetryAtRef = useRef(0);
   const retryingPendingEventIdsRef = useRef<Set<string>>(new Set());
+  const reconnectStartedAtRef = useRef<number>();
+  const reconnectBurstCountRef = useRef(0);
+  const lastReconnectTransitionAtRef = useRef(0);
+
+  const resetReconnectTracking = useCallback(() => {
+    reconnectStartedAtRef.current = undefined;
+    reconnectBurstCountRef.current = 0;
+    lastReconnectTransitionAtRef.current = 0;
+  }, []);
+
+  const getReconnectDuration = useCallback(() => {
+    if (typeof reconnectStartedAtRef.current !== 'number') {
+      return 0;
+    }
+
+    return Date.now() - reconnectStartedAtRef.current;
+  }, []);
+
+  const trackReconnectState = useCallback(
+    (state: SyncState | null, previous?: SyncState | null) => {
+      if (!state || HEALTHY_SYNC_STATES.has(state)) {
+        resetReconnectTracking();
+        return;
+      }
+
+      if (state !== SyncState.Reconnecting && state !== SyncState.Error && state !== SyncState.Stopped) {
+        return;
+      }
+
+      const now = Date.now();
+      if (typeof reconnectStartedAtRef.current !== 'number') {
+        reconnectStartedAtRef.current = now;
+      }
+
+      if (previous !== state) {
+        if (
+          lastReconnectTransitionAtRef.current > 0 &&
+          now - lastReconnectTransitionAtRef.current <= SYNC_RECOVERY_BURST_WINDOW_MS
+        ) {
+          reconnectBurstCountRef.current += 1;
+        } else {
+          reconnectBurstCountRef.current = 1;
+        }
+
+        lastReconnectTransitionAtRef.current = now;
+      }
+    },
+    [resetReconnectTracking]
+  );
+
+  const shouldForceRestartSync = useCallback(
+    (syncState: SyncState | null) => {
+      if (syncState === SyncState.Stopped) {
+        return true;
+      }
+
+      const reconnectDuration = getReconnectDuration();
+      if (reconnectDuration >= SYNC_RECOVERY_FORCE_RESTART_MS) {
+        return true;
+      }
+
+      if (
+        reconnectBurstCountRef.current >= SYNC_RECOVERY_BURST_THRESHOLD &&
+        Date.now() - lastHealthySyncRef.current >= 10000
+      ) {
+        return true;
+      }
+
+      if (
+        syncState === SyncState.Error &&
+        reconnectDuration >= SYNC_RECOVERY_RETRY_INTERVAL_MS * 2
+      ) {
+        return true;
+      }
+
+      return false;
+    },
+    [getReconnectDuration]
+  );
 
   const recoverSync = useCallback(
     (forceRestart = false) => {
@@ -245,7 +330,7 @@ function SyncRecoveryFeature() {
       }
 
       const now = Date.now();
-      if (now - lastRecoveryAttemptRef.current < 5000) {
+      if (now - lastRecoveryAttemptRef.current < SYNC_RECOVERY_RETRY_INTERVAL_MS) {
         return;
       }
 
@@ -283,17 +368,13 @@ function SyncRecoveryFeature() {
   );
 
   const retryPendingMessages = useCallback(() => {
-    if (!isDesktopUpdaterSupported()) {
-      return;
-    }
-
     const syncState = mx.getSyncState();
     if (!syncState || !HEALTHY_SYNC_STATES.has(syncState)) {
       return;
     }
 
     const now = Date.now();
-    if (now - lastPendingRetryAtRef.current < 5000) {
+    if (now - lastPendingRetryAtRef.current < SYNC_RECOVERY_RETRY_INTERVAL_MS) {
       return;
     }
 
@@ -305,15 +386,18 @@ function SyncRecoveryFeature() {
   }, [mx]);
 
   useEffect(() => {
-    const handleSync: ClientEventHandlerMap[ClientEvent.Sync] = (state) => {
+    const handleSync: ClientEventHandlerMap[ClientEvent.Sync] = (state, previous) => {
       if (state && HEALTHY_SYNC_STATES.has(state)) {
         lastHealthySyncRef.current = Date.now();
+        resetReconnectTracking();
         retryPendingMessages();
         return;
       }
 
+      trackReconnectState(state, previous);
+
       if (state === SyncState.Reconnecting || state === SyncState.Error) {
-        recoverSync();
+        recoverSync(shouldForceRestartSync(state));
       }
     };
 
@@ -321,7 +405,7 @@ function SyncRecoveryFeature() {
     return () => {
       mx.removeListener(ClientEvent.Sync, handleSync);
     };
-  }, [mx, recoverSync, retryPendingMessages]);
+  }, [mx, recoverSync, resetReconnectTracking, retryPendingMessages, shouldForceRestartSync, trackReconnectState]);
 
   useEffect(() => {
     const handleOnline = () => {
@@ -353,12 +437,12 @@ function SyncRecoveryFeature() {
         return;
       }
 
-      if (Date.now() - lastHealthySyncRef.current < 45000) {
+      if (Date.now() - lastHealthySyncRef.current < SYNC_RECOVERY_STALL_MS) {
         return;
       }
 
-      recoverSync(syncState === SyncState.Error || syncState === SyncState.Stopped);
-    }, 15000);
+      recoverSync(shouldForceRestartSync(syncState));
+    }, SYNC_RECOVERY_WATCHDOG_INTERVAL_MS);
 
     return () => {
       window.removeEventListener('online', handleOnline);
@@ -366,7 +450,7 @@ function SyncRecoveryFeature() {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.clearInterval(recoveryTimer);
     };
-  }, [mx, recoverSync, retryPendingMessages]);
+  }, [mx, recoverSync, retryPendingMessages, shouldForceRestartSync]);
 
   return null;
 }
