@@ -75,10 +75,10 @@ function ChangePinDialog({
     setError(undefined);
 
     try {
-      await changeAccountPin(baseUrl, userId, currentPin, nextPin);
+      const config = await changeAccountPin(baseUrl, userId, currentPin, nextPin);
 
       if (syncPolicy) {
-        await enableAccountPinPolicy(baseUrl, userId, accessToken, Date.now());
+        await enableAccountPinPolicy(baseUrl, userId, accessToken, config.updatedAt, config);
       }
 
       requestClose();
@@ -95,6 +95,7 @@ function ChangePinDialog({
       description="修改后，这台设备上的锁屏和下次登录验证都会使用新的 PIN。账号级策略本身仍然保持开启。"
       accountLabel={getAccountPinLabel(baseUrl, userId)}
       requestClose={requestClose}
+      embedded
     >
       <Box as="form" onSubmit={handleSubmit} direction="Column" gap="300">
         <Box direction="Column" gap="100">
@@ -298,8 +299,9 @@ export function Security({ requestClose }: SecurityProps) {
           description="先为当前设备创建本机 PIN。保存完成后，这个账号在其他新设备登录时也会先要求设置各自的本机 PIN。"
           submitLabel="开启 PIN 保护"
           onCancel={() => setDialogMode(undefined)}
-          onSuccess={async () => {
-            await enableAccountPinPolicy(baseUrl, userId, accessToken, Date.now());
+          embedded
+          onSuccess={async (config) => {
+            await enableAccountPinPolicy(baseUrl, userId, accessToken, config.updatedAt, config);
             setDialogMode(undefined);
           }}
         />
@@ -320,6 +322,7 @@ export function Security({ requestClose }: SecurityProps) {
           title="关闭 PIN 保护"
           description="输入当前设备的 PIN 后，会关闭这个账号的账号级 PIN 策略，并清除当前设备保存的本机 PIN。"
           submitLabel="关闭 PIN 保护"
+          embedded
           onCancel={() => setDialogMode(undefined)}
           onSuccess={async () => {
             await disableAccountPinPolicy(baseUrl, userId, accessToken);
