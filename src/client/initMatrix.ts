@@ -32,6 +32,7 @@ type SyncTransportDiagnostics = {
   lastSyncResponseAt: number;
   lastSyncErrorAt: number;
   lastSyncNetworkErrorAt: number;
+  lastSyncRealtimeActivityAt: number;
   lastSyncNetworkErrorMessage?: string;
 };
 
@@ -63,6 +64,7 @@ const getOrCreateSyncTransportDiagnostics = (mx: MatrixClient): SyncTransportDia
     lastSyncResponseAt: 0,
     lastSyncErrorAt: 0,
     lastSyncNetworkErrorAt: 0,
+    lastSyncRealtimeActivityAt: 0,
     lastSyncNetworkErrorMessage: undefined,
   };
   syncTransportDiagnostics.set(mx, nextDiagnostics);
@@ -71,6 +73,11 @@ const getOrCreateSyncTransportDiagnostics = (mx: MatrixClient): SyncTransportDia
 
 export const getSyncTransportDiagnostics = (mx: MatrixClient): SyncTransportDiagnostics =>
   getOrCreateSyncTransportDiagnostics(mx);
+
+export const markSyncRealtimeActivity = (mx: MatrixClient) => {
+  const diagnostics = getOrCreateSyncTransportDiagnostics(mx);
+  diagnostics.lastSyncRealtimeActivityAt = Date.now();
+};
 
 const getErrorMessage = (error: unknown): string | undefined => {
   if (error instanceof Error) {
