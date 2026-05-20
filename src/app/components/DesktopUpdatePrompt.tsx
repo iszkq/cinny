@@ -13,6 +13,7 @@ import {
 } from 'folds';
 import { APP_VERSION } from '../constants/branding';
 import { useDesktopUpdater } from '../hooks/useDesktopUpdater';
+import { openDesktopUpdateDownloadUrl } from '../utils/desktopUpdater';
 import { stopPropagation } from '../utils/keyboard';
 import { ReleaseNotes } from './ReleaseNotes';
 
@@ -36,6 +37,7 @@ export function DesktopUpdatePrompt({ open, requestClose }: DesktopUpdatePromptP
   }
 
   const downloading = status === 'downloading';
+  const manualDownloadUrl = pendingUpdate.downloadUrl;
 
   return (
     <Overlay open backdrop={<OverlayBackdrop />}>
@@ -107,6 +109,19 @@ export function DesktopUpdatePrompt({ open, requestClose }: DesktopUpdatePromptP
                     {downloading ? '\u5b89\u88c5\u4e2d...' : '\u4e0b\u8f7d\u5e76\u5b89\u88c5'}
                   </Text>
                 </Button>
+                {manualDownloadUrl && (
+                  <Button
+                    variant="Secondary"
+                    fill="Soft"
+                    size="300"
+                    radii="300"
+                    onClick={() => {
+                      void openDesktopUpdateDownloadUrl(manualDownloadUrl);
+                    }}
+                  >
+                    <Text size="B300">{'\u624b\u52a8\u4e0b\u8f7d'}</Text>
+                  </Button>
+                )}
               </Box>
             </Box>
           </Dialog>
