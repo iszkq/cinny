@@ -41,7 +41,7 @@ import { useSelectedRoom } from '../../hooks/router/useSelectedRoom';
 import { useInboxNotificationsSelected } from '../../hooks/router/useInbox';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 import { ensurePersonalPackSync } from '../../plugins/custom-emoji';
-import { useWarmAllImagePackMedia, useWarmPersonalImagePackMedia } from '../../hooks/useImagePacks';
+import { useWarmAllImagePackMedia, useWarmWebImagePackMedia } from '../../hooks/useImagePacks';
 import { getFallbackSession } from '../../state/sessions';
 import {
   aiSettingsAtom,
@@ -619,7 +619,7 @@ function DesktopImagePackMediaWarmFeature() {
 }
 
 function DefaultImagePackMediaWarmFeature() {
-  useWarmPersonalImagePackMedia();
+  useWarmWebImagePackMedia();
 
   return null;
 }
