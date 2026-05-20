@@ -1,6 +1,8 @@
+import { MatrixClient } from 'matrix-js-sdk';
 import { isDesktopUpdaterSupported } from './desktopUpdater';
 
 export type AppNotificationPermission = PermissionState;
+export const ROOM_MARKED_AS_READ = 'cinny.room_marked_as_read';
 
 type DesktopNotificationPayload = {
   title: string;
@@ -27,6 +29,31 @@ const normalizePermission = (permission: string): AppNotificationPermission => {
 
 const canUseWebNotifications = (): boolean =>
   typeof window !== 'undefined' && 'Notification' in window;
+
+const dispatchRoomMarkedAsRead = (roomId: string) => {
+  if (typeof window === 'undefined') return;
+
+  window.dispatchEvent(
+    new CustomEvent<{ roomId: string }>(ROOM_MARKED_AS_READ, {
+      detail: { roomId },
+    })
+  );
+};
+
+const getLatestRoomEventId = (mx: MatrixClient, roomId: string): string | undefined => {
+  const room = mx.getRoom(roomId);
+  if (!room) return undefined;
+
+  const events = room.getLiveTimeline().getEvents();
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const eventId = events[index]?.getId();
+    if (eventId) {
+      return eventId;
+    }
+  }
+
+  return undefined;
+};
 
 const invokeDesktopNotificationCommand = async <T>(
   command: string,
@@ -81,6 +108,28 @@ export const requestNotificationPermission = async (): Promise<AppNotificationPe
 
   const permission = await window.Notification.requestPermission();
   return normalizePermission(permission);
+};
+
+export const markAsRead = async (
+  mx: MatrixClient,
+  roomId: string,
+  privateReceipt = false
+): Promise<void> => {
+  const eventId = getLatestRoomEventId(mx, roomId);
+  if (!eventId) return;
+
+  dispatchRoomMarkedAsRead(roomId);
+
+  try {
+    await mx.setRoomReadMarkers(
+      roomId,
+      eventId,
+      privateReceipt ? undefined : eventId,
+      privateReceipt ? eventId : undefined
+    );
+  } catch {
+    // Ignore read marker failures so optimistic unread clearing still works locally.
+  }
 };
 
 export const sendAppNotification = async ({
