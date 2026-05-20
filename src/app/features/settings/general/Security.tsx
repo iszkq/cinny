@@ -20,6 +20,7 @@ import {
   getAccountPinKey,
   getAccountPinLabel,
   isAccountPinPolicyEnabled,
+  isDesktopPinLockSupported,
   isPinCodeFormatValid,
   lockScreenForAccount,
   supportsPinLock,
@@ -179,6 +180,7 @@ export function Security({ requestClose }: SecurityProps) {
   const baseUrl = session?.baseUrl;
   const accessToken = session?.accessToken;
   const pinSupported = supportsPinLock();
+  const desktopPinSupported = isDesktopPinLockSupported();
   const policyEnabled = isAccountPinPolicyEnabled(
     policyEvent?.getContent<CinnyAccountPinPolicyContent>()
   );
@@ -189,7 +191,7 @@ export function Security({ requestClose }: SecurityProps) {
   );
   const accountPinEnabled = policyEnabled || localPinEnabled;
 
-  if (!userId || !baseUrl || !accessToken) {
+  if (!desktopPinSupported || !userId || !baseUrl || !accessToken) {
     return null;
   }
 
@@ -257,7 +259,7 @@ export function Security({ requestClose }: SecurityProps) {
         {localPinEnabled && (
           <SettingTile
             title="立即锁屏"
-            description="快捷键：CTRL+L，锁屏后会完全切换到 PIN 锁定页面，后面的聊天内容不会继续显示。"
+            description="锁屏后会完全切换到 PIN 锁定页面，后面的聊天内容不会继续显示。"
             after={
               <Button
                 variant="Primary"
