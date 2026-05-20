@@ -1,12 +1,17 @@
 import { useSetAtom } from 'jotai';
 import { useCallback, useEffect, useRef } from 'react';
-import { backupRestoreProgressAtom } from '../state/backupRestore';
+import {
+  BackupProgressStatus,
+  backupRestoreProgressAtom,
+  setBackupRestoreProgressAtom,
+} from '../state/backupRestore';
 import { useMatrixClient } from './useMatrixClient';
 import { useKeyBackupDecryptionKeyCached } from './useKeyBackup';
 import { restoreKeyBackupAndDecrypt } from '../utils/keyBackup';
 
 export const useRestoreBackupOnVerification = () => {
   const setRestoreProgress = useSetAtom(backupRestoreProgressAtom);
+  const setRestoreProgressState = useSetAtom(setBackupRestoreProgressAtom);
 
   const mx = useMatrixClient();
   const restorePromiseRef = useRef<Promise<void>>();
@@ -21,13 +26,22 @@ export const useRestoreBackupOnVerification = () => {
         setRestoreProgress(progress);
       },
     })
-      .catch(() => undefined)
+      .then(() => {
+        setRestoreProgressState({
+          status: BackupProgressStatus.Done,
+        });
+      })
+      .catch(() => {
+        setRestoreProgressState({
+          status: BackupProgressStatus.Idle,
+        });
+      })
       .finally(() => {
         restorePromiseRef.current = undefined;
       });
 
     return restorePromiseRef.current;
-  }, [mx, setRestoreProgress]);
+  }, [mx, setRestoreProgress, setRestoreProgressState]);
 
   useEffect(() => {
     void attemptRestore();
