@@ -243,7 +243,7 @@ const getAccountPinPolicyState = (
   };
 };
 
-const createAccountPinPolicyContent = (
+export const createAccountPinPolicyContent = (
   policy: AccountPinPolicyState
 ): CinnyAccountPinPolicyContent => {
   const content: CinnyAccountPinPolicyContent = {
@@ -260,6 +260,23 @@ const createAccountPinPolicyContent = (
 
   return content;
 };
+
+export const createEnabledAccountPinPolicyContent = (
+  config: AccountPinConfig
+): CinnyAccountPinPolicyContent =>
+  createAccountPinPolicyContent({
+    enabled: true,
+    updatedAt: config.updatedAt,
+    config,
+  });
+
+export const createDisabledAccountPinPolicyContent = (
+  updatedAt = Date.now()
+): CinnyAccountPinPolicyContent =>
+  createAccountPinPolicyContent({
+    enabled: false,
+    updatedAt,
+  });
 
 const fetchAccountPinPolicyContent = async (
   baseUrl: string,
@@ -442,7 +459,9 @@ export const applyAccountPinPolicyContent = (
   const remotePolicy = getAccountPinPolicyState(content);
 
   if (remotePolicy.enabled && remotePolicy.config) {
-    cacheAccountPinConfig(baseUrl, userId, remotePolicy.config);
+    if (!localConfig || remotePolicy.updatedAt >= localConfig.updatedAt) {
+      cacheAccountPinConfig(baseUrl, userId, remotePolicy.config);
+    }
     return true;
   }
 
