@@ -23,6 +23,7 @@ import {
   Room,
   RoomEvent,
   RoomEventHandlerMap,
+  SyncState,
 } from 'matrix-js-sdk';
 import { HTMLReactParserOptions } from 'html-react-parser';
 import classNames from 'classnames';
@@ -108,6 +109,7 @@ import { usePowerLevelsContext } from '../../hooks/usePowerLevels';
 import { GetContentCallback, MessageEvent, StateEvent } from '../../../types/matrix/room';
 import { useKeyDown } from '../../hooks/useKeyDown';
 import { useDocumentFocusChange } from '../../hooks/useDocumentFocusChange';
+import { useSyncState } from '../../hooks/useSyncState';
 import { RenderMessageContent } from '../../components/RenderMessageContent';
 import { Image } from '../../components/media';
 import { ImageViewer } from '../../components/image-viewer';
@@ -578,6 +580,11 @@ const RECEIPT_MESSAGE_TYPES = new Set<string>([
   MessageEvent.RoomMessageEncrypted,
   MessageEvent.Sticker,
 ]);
+const UNREAD_SYNC_STATES = new Set<SyncState>([
+  SyncState.Prepared,
+  SyncState.Catchup,
+  SyncState.Syncing,
+]);
 
 const getReceiptTimestamp = (room: Room, userId: string): number | undefined => {
   const receipt = room.getReadReceiptForUserId(userId) as ReceiptWithTs | null;
@@ -973,7 +980,8 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
       if (liveTimelineLinked) {
         setTimeline(getInitialTimeline(room));
       }
-    }, [room, liveTimelineLinked])
+      syncUnreadInfo();
+    }, [room, liveTimelineLinked, syncUnreadInfo])
   );
 
   // Stay at bottom when room editor resize
@@ -1062,6 +1070,18 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
         }
       },
       [tryAutoMarkAsRead, unreadInfo, handleOpenEvent]
+    )
+  );
+
+  useSyncState(
+    mx,
+    useCallback(
+      (state, prevState) => {
+        if (state && UNREAD_SYNC_STATES.has(state) && state !== prevState) {
+          syncUnreadInfo();
+        }
+      },
+      [mx, syncUnreadInfo]
     )
   );
 
@@ -1155,7 +1175,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
       const evtTimeline = getEventTimeline(room, readUptoEventId);
       const absoluteIndex =
         evtTimeline && getEventIdAbsoluteIndex(linkedTimelines, evtTimeline, readUptoEventId);
-      if (absoluteIndex) {
+      if (typeof absoluteIndex === 'number') {
         scrollToItem(absoluteIndex, {
           behavior: 'instant',
           align: 'start',
