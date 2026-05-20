@@ -20,7 +20,7 @@ type Session = {
   deviceId: string;
 };
 
-const SYNC_POLL_TIMEOUT_MS = 30000;
+export const SYNC_POLL_TIMEOUT_MS = 30000;
 const PRIVATE_RECEIPT_TYPE = 'm.read.private' as ReceiptType;
 
 const patchedReadReceiptClients = new WeakSet<MatrixClient>();
@@ -28,9 +28,11 @@ const syncTransportDiagnostics = new WeakMap<MatrixClient, SyncTransportDiagnost
 let globalReadReceiptFetchPatched = false;
 
 type SyncTransportDiagnostics = {
-  lastRequestAt: number;
-  lastResponseAt: number;
-  lastErrorAt: number;
+  lastSyncRequestAt: number;
+  lastSyncResponseAt: number;
+  lastSyncErrorAt: number;
+  lastSyncNetworkErrorAt: number;
+  lastSyncNetworkErrorMessage?: string;
 };
 
 const shouldBlockReadReceipts = () => !getSettings().sendReadReceipts;
@@ -57,9 +59,11 @@ const getOrCreateSyncTransportDiagnostics = (mx: MatrixClient): SyncTransportDia
   }
 
   const nextDiagnostics: SyncTransportDiagnostics = {
-    lastRequestAt: 0,
-    lastResponseAt: 0,
-    lastErrorAt: 0,
+    lastSyncRequestAt: 0,
+    lastSyncResponseAt: 0,
+    lastSyncErrorAt: 0,
+    lastSyncNetworkErrorAt: 0,
+    lastSyncNetworkErrorMessage: undefined,
   };
   syncTransportDiagnostics.set(mx, nextDiagnostics);
   return nextDiagnostics;
@@ -68,19 +72,74 @@ const getOrCreateSyncTransportDiagnostics = (mx: MatrixClient): SyncTransportDia
 export const getSyncTransportDiagnostics = (mx: MatrixClient): SyncTransportDiagnostics =>
   getOrCreateSyncTransportDiagnostics(mx);
 
+const getErrorMessage = (error: unknown): string | undefined => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (typeof error === 'string') {
+    return error;
+  }
+
+  if (
+    error &&
+    typeof error === 'object' &&
+    'message' in error &&
+    typeof (error as { message?: unknown }).message === 'string'
+  ) {
+    return (error as { message: string }).message;
+  }
+
+  return undefined;
+};
+
+const isLikelyAbortError = (error: unknown): boolean => {
+  if (error instanceof DOMException && error.name === 'AbortError') {
+    return true;
+  }
+
+  const message = getErrorMessage(error);
+  return typeof message === 'string' && /abort(ed)?/i.test(message);
+};
+
+const isLikelyNetworkTransportError = (error: unknown): boolean => {
+  if (isLikelyAbortError(error)) {
+    return false;
+  }
+
+  const message = getErrorMessage(error);
+  if (!message) {
+    return false;
+  }
+
+  return /networkerror|network error|failed to fetch|fetch failed|load failed|network request failed/i.test(
+    message
+  );
+};
+
+const trackSyncTransportError = (mx: MatrixClient, error: unknown) => {
+  const diagnostics = getOrCreateSyncTransportDiagnostics(mx);
+  diagnostics.lastSyncErrorAt = Date.now();
+
+  if (isLikelyNetworkTransportError(error)) {
+    diagnostics.lastSyncNetworkErrorAt = diagnostics.lastSyncErrorAt;
+    diagnostics.lastSyncNetworkErrorMessage = getErrorMessage(error);
+  }
+};
+
 const trackSyncTransportRequest = async <T>(
   mx: MatrixClient,
   request: () => Promise<T>
 ): Promise<T> => {
   const diagnostics = getOrCreateSyncTransportDiagnostics(mx);
-  diagnostics.lastRequestAt = Date.now();
+  diagnostics.lastSyncRequestAt = Date.now();
 
   try {
     const result = await request();
-    diagnostics.lastResponseAt = Date.now();
+    diagnostics.lastSyncResponseAt = Date.now();
     return result;
   } catch (error) {
-    diagnostics.lastErrorAt = Date.now();
+    trackSyncTransportError(mx, error);
     throw error;
   }
 };
