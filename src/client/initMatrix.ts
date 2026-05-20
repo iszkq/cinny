@@ -20,7 +20,7 @@ type Session = {
   deviceId: string;
 };
 
-const SYNC_POLL_TIMEOUT_MS = 15000;
+const SYNC_POLL_TIMEOUT_MS = 30000;
 const PRIVATE_RECEIPT_TYPE = 'm.read.private' as ReceiptType;
 
 const patchedReadReceiptClients = new WeakSet<MatrixClient>();
