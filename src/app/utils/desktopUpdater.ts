@@ -20,6 +20,7 @@ export type PendingDesktopUpdate = {
   version: string;
   date?: string;
   body?: string;
+  downloadUrl?: string;
 };
 
 export type PendingDesktopUpdateHandle = PendingDesktopUpdate & {
@@ -32,6 +33,7 @@ export type DesktopUpdateReleaseInfo = {
   version: string;
   date?: string;
   body?: string;
+  downloadUrl?: string;
 };
 
 export const DESKTOP_UPDATER_MANIFEST_URL =
@@ -81,6 +83,7 @@ export const toPendingDesktopUpdate = (
     version: update.version,
     date: update.date,
     body: update.body,
+    downloadUrl: update.downloadUrl,
   };
 };
 
@@ -115,15 +118,25 @@ const parseLatestDesktopManifest = (payload: {
   version?: unknown;
   notes?: unknown;
   pub_date?: unknown;
+  platforms?: unknown;
 }): DesktopUpdateReleaseInfo | undefined => {
   if (typeof payload.version !== 'string' || payload.version.trim() === '') {
     return undefined;
   }
 
+  const platforms =
+    typeof payload.platforms === 'object' && payload.platforms
+      ? (payload.platforms as Record<string, { url?: unknown }>)
+      : undefined;
+  const windowsPlatform = platforms?.['windows-x86_64'];
+  const downloadUrl =
+    windowsPlatform && typeof windowsPlatform.url === 'string' ? windowsPlatform.url : undefined;
+
   return {
     version: payload.version,
     body: typeof payload.notes === 'string' ? payload.notes : undefined,
     date: typeof payload.pub_date === 'string' ? payload.pub_date : undefined,
+    downloadUrl,
   };
 };
 
@@ -131,15 +144,30 @@ const parseLatestDesktopRelease = (payload: {
   tag_name?: unknown;
   body?: unknown;
   published_at?: unknown;
+  assets?: unknown;
 }): DesktopUpdateReleaseInfo | undefined => {
   if (typeof payload.tag_name !== 'string' || payload.tag_name.trim() === '') {
     return undefined;
   }
 
+  const assets = Array.isArray(payload.assets)
+    ? payload.assets
+    : [];
+  const installerAsset = assets.find((asset) => {
+    if (!asset || typeof asset !== 'object') return false;
+    const name = 'name' in asset ? asset.name : undefined;
+    return typeof name === 'string' && /-setup\.exe$/i.test(name);
+  }) as { browser_download_url?: unknown } | undefined;
+  const downloadUrl =
+    installerAsset && typeof installerAsset.browser_download_url === 'string'
+      ? installerAsset.browser_download_url
+      : undefined;
+
   return {
     version: payload.tag_name.replace(/^v/i, ''),
     body: typeof payload.body === 'string' ? payload.body : undefined,
     date: typeof payload.published_at === 'string' ? payload.published_at : undefined,
+    downloadUrl,
   };
 };
 
@@ -158,6 +186,7 @@ export const fetchLatestDesktopRelease = async (): Promise<DesktopUpdateReleaseI
         version?: unknown;
         notes?: unknown;
         pub_date?: unknown;
+        platforms?: unknown;
       };
       const manifestRelease = parseLatestDesktopManifest(manifestPayload);
       if (manifestRelease) {
@@ -183,9 +212,27 @@ export const fetchLatestDesktopRelease = async (): Promise<DesktopUpdateReleaseI
     tag_name?: unknown;
     body?: unknown;
     published_at?: unknown;
+    assets?: unknown;
   };
 
   return parseLatestDesktopRelease(releasePayload);
+};
+
+export const openDesktopUpdateDownloadUrl = async (url: string): Promise<void> => {
+  if (!url.trim()) return;
+
+  if (isDesktopUpdaterSupported()) {
+    const { invoke } = await import('@tauri-apps/api/core');
+    await invoke('open_external_url', { url });
+    return;
+  }
+
+  if (typeof window === 'undefined') return;
+
+  const popup = window.open(url, '_blank', 'noopener,noreferrer');
+  if (!popup) {
+    window.location.assign(url);
+  }
 };
 
 export const relaunchDesktopApp = async (): Promise<void> => {
