@@ -257,7 +257,7 @@ export function Security({ requestClose }: SecurityProps) {
         {localPinEnabled && (
           <SettingTile
             title="立即锁屏"
-            description="锁屏后会完全切换到 PIN 锁定页面，后面的聊天内容不会继续显示。"
+            description="快捷键：CTRL+L，锁屏后会完全切换到 PIN 锁定页面，后面的聊天内容不会继续显示。"
             after={
               <Button
                 variant="Primary"
