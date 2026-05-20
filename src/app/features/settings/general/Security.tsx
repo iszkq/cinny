@@ -24,7 +24,10 @@ import {
   lockScreenForAccount,
   supportsPinLock,
 } from '../../../utils/pinLock';
-import { AccountDataEvent, CinnyAccountPinPolicyContent } from '../../../../types/matrix/accountData';
+import {
+  AccountDataEvent,
+  CinnyAccountPinPolicyContent,
+} from '../../../../types/matrix/accountData';
 import * as pinCss from '../../../components/pin-lock/style.css';
 
 type SecurityProps = {
@@ -254,7 +257,7 @@ export function Security({ requestClose }: SecurityProps) {
         {localPinEnabled && (
           <SettingTile
             title="立即锁屏"
-            description="锁屏后会完全切换到 PIN 锁定页面，后面的聊天内容不会继续显示，锁屏快捷键"ctrl+L"。"
+            description="锁屏后会完全切换到 PIN 锁定页面，后面的聊天内容不会继续显示。"
             after={
               <Button
                 variant="Primary"
