@@ -90,9 +90,13 @@ jobs:
 
           $signature = (Get-Content -LiteralPath $signatureFile.FullName -Raw).Trim()
           $assetName = [System.Uri]::EscapeDataString($setupFile.Name)
+          $releaseBody = gh release view $env:RELEASE_TAG --repo $env:RELEASE_REPOSITORY --json body --jq '.body'
+          if ([string]::IsNullOrWhiteSpace($releaseBody)) {
+            $releaseBody = "Starfire v$version"
+          }
           $manifest = @{
-            version = "v$version"
-            notes = "星火 v$version"
+            version = $version
+            notes = $releaseBody
             pub_date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
             platforms = @{
               'windows-x86_64' = @{
