@@ -1,5 +1,5 @@
 import React, { MouseEventHandler, useCallback, useState } from 'react';
-import { useAtom } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { CryptoApi, KeyBackupInfo } from 'matrix-js-sdk/lib/crypto-api';
 import {
   Badge,
@@ -19,7 +19,11 @@ import {
   Text,
 } from 'folds';
 import FocusTrap from 'focus-trap-react';
-import { BackupProgressStatus, backupRestoreProgressAtom } from '../state/backupRestore';
+import {
+  BackupProgressStatus,
+  backupRestoreProgressAtom,
+  setBackupRestoreProgressAtom,
+} from '../state/backupRestore';
 import { InfoCard } from './info-card';
 import { AsyncStatus, useAsyncCallback } from '../hooks/useAsyncCallback';
 import {
@@ -138,7 +142,9 @@ type BackupRestoreTileProps = {
 };
 export function BackupRestoreTile({ crypto }: BackupRestoreTileProps) {
   const mx = useMatrixClient();
-  const [restoreProgress, setRestoreProgress] = useAtom(backupRestoreProgressAtom);
+  const restoreProgress = useAtomValue(backupRestoreProgressAtom);
+  const setRestoreProgress = useSetAtom(backupRestoreProgressAtom);
+  const setRestoreProgressState = useSetAtom(setBackupRestoreProgressAtom);
   const restoring =
     restoreProgress.status === BackupProgressStatus.Fetching ||
     restoreProgress.status === BackupProgressStatus.Loading;
@@ -155,12 +161,21 @@ export function BackupRestoreTile({ crypto }: BackupRestoreTileProps) {
 
   const [restoreState, restoreBackup] = useAsyncCallback<void, Error, []>(
     useCallback(async () => {
-      await restoreKeyBackupAndDecrypt(mx, {
-        progressCallback(progress) {
-          setRestoreProgress(progress);
-        },
-      });
-    }, [mx, setRestoreProgress])
+      let succeeded = false;
+
+      try {
+        await restoreKeyBackupAndDecrypt(mx, {
+          progressCallback(progress) {
+            setRestoreProgress(progress);
+          },
+        });
+        succeeded = true;
+      } finally {
+        setRestoreProgressState({
+          status: succeeded ? BackupProgressStatus.Done : BackupProgressStatus.Idle,
+        });
+      }
+    }, [mx, setRestoreProgress, setRestoreProgressState])
   );
 
   const handleRestore = () => {
