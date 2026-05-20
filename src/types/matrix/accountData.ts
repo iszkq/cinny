@@ -36,6 +36,9 @@ export type CinnyAccountPinPolicyContent = {
   version?: number;
   enabled?: boolean;
   updatedAt?: number;
+  salt?: string;
+  hash?: string;
+  iterations?: number;
 };
 
 export type CinnyFavoriteNotesContent = {
