@@ -440,21 +440,21 @@ function SyncRecoveryFeature() {
 
       lastRecoveryAttemptRef.current = now;
       recoveryPromiseRef.current = (async () => {
-        if (!mx.clientRunning || syncState === SyncState.Stopped || forceRestart) {
-          if (mx.clientRunning) {
-            mx.stopClient();
-          }
+        if (!mx.clientRunning || syncState === SyncState.Stopped) {
           await startClient(mx);
           return;
         }
 
-        if (syncState !== SyncState.Error) {
+        if (
+          syncState !== SyncState.Error &&
+          syncState !== SyncState.Reconnecting &&
+          !forceRestart
+        ) {
           return;
         }
 
         const retried = mx.retryImmediately();
-        if (!retried) {
-          mx.stopClient();
+        if (!retried && !mx.clientRunning) {
           await startClient(mx);
         }
       })()
