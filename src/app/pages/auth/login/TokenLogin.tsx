@@ -16,9 +16,22 @@ import { useNavigate } from 'react-router-dom';
 import { APP_WEB_DEVICE_NAME } from '../../../constants/branding';
 import { useAutoDiscoveryInfo } from '../../../hooks/useAutoDiscoveryInfo';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
-import { AccountPinDialog, LocalPinSetupDialog } from '../../../components/pin-lock';
+import { AccountPinDialog } from '../../../components/pin-lock';
 import { resolveAccountPinLoginRequirement } from '../../../utils/pinLock';
 import { completeLogin, CustomLoginResponse, LoginError, login } from './loginUtil';
+
+const copy = {
+  title: '\u4ee4\u724c\u767b\u5f55',
+  forbidden: '\u767b\u5f55\u4ee4\u724c\u65e0\u6548\u3002',
+  userDeactivated: '\u8be5\u8d26\u6237\u5df2\u88ab\u505c\u7528\u3002',
+  invalidRequest: '\u767b\u5f55\u5931\u8d25\uff0c\u8bf7\u6c42\u4e2d\u7684\u90e8\u5206\u6570\u636e\u65e0\u6548\u3002',
+  rateLimited: '\u767b\u5f55\u5931\u8d25\uff0c\u8bf7\u6c42\u8fc7\u4e8e\u9891\u7e41\uff0c\u8bf7\u7a0d\u540e\u518d\u8bd5\u3002',
+  unknown: '\u767b\u5f55\u5931\u8d25\uff0c\u539f\u56e0\u672a\u77e5\u3002',
+  pinTitle: '\u9a8c\u8bc1 PIN \u5e76\u767b\u5f55',
+  pinDescription:
+    '\u8fd9\u4e2a\u8d26\u6237\u5df2\u542f\u7528 PIN \u4fdd\u62a4\uff0c\u8bf7\u5148\u8f93\u5165\u5df2\u7ecf\u8bbe\u7f6e\u7684 PIN \u7801\u540e\u518d\u8fdb\u5165\u3002',
+  continueLogin: '\u7ee7\u7eed\u767b\u5f55',
+} as const;
 
 function LoginTokenError({ message }: { message: string }) {
   return (
@@ -35,7 +48,7 @@ function LoginTokenError({ message }: { message: string }) {
     >
       <Icon size="300" filled src={Icons.Warning} />
       <Box direction="Column" gap="100">
-        <Text size="L400">令牌登录</Text>
+        <Text size="L400">{copy.title}</Text>
         <Text size="T300">
           <b>{message}</b>
         </Text>
@@ -47,12 +60,12 @@ function LoginTokenError({ message }: { message: string }) {
 type TokenLoginProps = {
   token: string;
 };
+
 export function TokenLogin({ token }: TokenLoginProps) {
   const discovery = useAutoDiscoveryInfo();
   const baseUrl = discovery['m.homeserver'].base_url;
   const navigate = useNavigate();
   const [pinProtectedLogin, setPinProtectedLogin] = useState<CustomLoginResponse>();
-  const [pinSetupRequiredLogin, setPinSetupRequiredLogin] = useState<CustomLoginResponse>();
   const [handledSuccess, setHandledSuccess] = useState(false);
   const [resolvingPinRequirement, setResolvingPinRequirement] = useState(false);
 
@@ -76,7 +89,6 @@ export function TokenLogin({ token }: TokenLoginProps) {
     if (!loginSuccessData) {
       setHandledSuccess(false);
       setPinProtectedLogin(undefined);
-      setPinSetupRequiredLogin(undefined);
       setResolvingPinRequirement(false);
       return;
     }
@@ -95,12 +107,6 @@ export function TokenLogin({ token }: TokenLoginProps) {
     )
       .then((requirement) => {
         if (disposed) {
-          return;
-        }
-
-        if (requirement === 'setup') {
-          setPinSetupRequiredLogin(loginSuccessData);
-          setHandledSuccess(true);
           return;
         }
 
@@ -137,22 +143,23 @@ export function TokenLogin({ token }: TokenLoginProps) {
       {loginState.status === AsyncStatus.Error && (
         <>
           {loginState.error.errcode === LoginError.Forbidden && (
-            <LoginTokenError message="登录令牌无效。" />
+            <LoginTokenError message={copy.forbidden} />
           )}
           {loginState.error.errcode === LoginError.UserDeactivated && (
-            <LoginTokenError message="该账号已被停用。" />
+            <LoginTokenError message={copy.userDeactivated} />
           )}
           {loginState.error.errcode === LoginError.InvalidRequest && (
-            <LoginTokenError message="登录失败，请求中的部分数据无效。" />
+            <LoginTokenError message={copy.invalidRequest} />
           )}
           {loginState.error.errcode === LoginError.RateLimited && (
-            <LoginTokenError message="登录失败，请求过于频繁，请稍后再试。" />
+            <LoginTokenError message={copy.rateLimited} />
           )}
           {loginState.error.errcode === LoginError.Unknown && (
-            <LoginTokenError message="登录失败，原因未知。" />
+            <LoginTokenError message={copy.unknown} />
           )}
         </>
       )}
+
       <Overlay
         open={loginState.status === AsyncStatus.Loading || resolvingPinRequirement}
         backdrop={<OverlayBackdrop />}
@@ -166,22 +173,11 @@ export function TokenLogin({ token }: TokenLoginProps) {
         <AccountPinDialog
           baseUrl={pinProtectedLogin.baseUrl}
           userId={pinProtectedLogin.response.user_id}
-          title="登录受保护账号"
-          description="这个账号已启用 PIN 保护，请先输入 PIN 码再进入。"
-          submitLabel="继续登录"
+          title={copy.pinTitle}
+          description={copy.pinDescription}
+          submitLabel={copy.continueLogin}
           onCancel={() => setPinProtectedLogin(undefined)}
           onSuccess={() => completeLogin(pinProtectedLogin, navigate)}
-        />
-      )}
-      {pinSetupRequiredLogin && (
-        <LocalPinSetupDialog
-          baseUrl={pinSetupRequiredLogin.baseUrl}
-          userId={pinSetupRequiredLogin.response.user_id}
-          title="为这台设备设置 PIN"
-          description="这个账号已开启账号级 PIN 保护。进入前，需要先在当前设备上创建本地 PIN。PIN 码只保存在这台设备里。"
-          submitLabel="设置并进入"
-          onCancel={() => setPinSetupRequiredLogin(undefined)}
-          onSuccess={() => completeLogin(pinSetupRequiredLogin, navigate)}
         />
       )}
     </>

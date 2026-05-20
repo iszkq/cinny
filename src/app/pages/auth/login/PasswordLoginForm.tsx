@@ -39,7 +39,30 @@ import { FieldError } from '../FiledError';
 import { getResetPasswordPath } from '../../pathUtils';
 import { stopPropagation } from '../../../utils/keyboard';
 import { resolveAccountPinLoginRequirement } from '../../../utils/pinLock';
-import { AccountPinDialog, LocalPinSetupDialog } from '../../../components/pin-lock';
+import { AccountPinDialog } from '../../../components/pin-lock';
+
+const copy = {
+  hintTitle: '\u63d0\u793a',
+  usernameLabel: '\u7528\u6237\u540d\uff1a',
+  matrixIdLabel: 'Matrix ID\uff1a',
+  emailLabel: '\u90ae\u7bb1\uff1a',
+  usernameField: '\u7528\u6237\u540d',
+  passwordField: '\u5bc6\u7801',
+  serverNotAllowed:
+    '\u5f53\u524d\u5ba2\u6237\u7aef\u5b9e\u4f8b\u4e0d\u5141\u8bb8\u4f7f\u7528\u81ea\u5b9a\u4e49\u670d\u52a1\u5668\u767b\u5f55\u3002',
+  invalidServer: '\u672a\u80fd\u627e\u5230\u5bf9\u5e94\u7684 Matrix ID \u670d\u52a1\u5668\u3002',
+  forbidden: '\u7528\u6237\u540d\u6216\u5bc6\u7801\u9519\u8bef\u3002',
+  userDeactivated: '\u8be5\u8d26\u6237\u5df2\u88ab\u505c\u7528\u3002',
+  invalidRequest: '\u767b\u5f55\u5931\u8d25\uff0c\u8bf7\u6c42\u4e2d\u7684\u90e8\u5206\u6570\u636e\u65e0\u6548\u3002',
+  rateLimited: '\u767b\u5f55\u5931\u8d25\uff0c\u5f53\u524d\u8bf7\u6c42\u8fc7\u4e8e\u9891\u7e41\uff0c\u8bf7\u7a0d\u540e\u518d\u8bd5\u3002',
+  unknown: '\u767b\u5f55\u5931\u8d25\uff0c\u539f\u56e0\u672a\u77e5\u3002',
+  forgotPassword: '\u5fd8\u8bb0\u5bc6\u7801\uff1f',
+  login: '\u767b\u5f55',
+  pinTitle: '\u9a8c\u8bc1 PIN \u5e76\u767b\u5f55',
+  pinDescription:
+    '\u8fd9\u4e2a\u8d26\u6237\u5df2\u542f\u7528 PIN \u4fdd\u62a4\uff0c\u8bf7\u5148\u8f93\u5165\u5df2\u7ecf\u8bbe\u7f6e\u7684 PIN \u7801\u540e\u518d\u8fdb\u5165\u3002',
+  continueLogin: '\u7ee7\u7eed\u767b\u5f55',
+} as const;
 
 function UsernameHint({ server }: { server: string }) {
   const [anchor, setAnchor] = useState<RectCords>();
@@ -47,6 +70,7 @@ function UsernameHint({ server }: { server: string }) {
   const handleOpenMenu: MouseEventHandler<HTMLElement> = (evt) => {
     setAnchor(evt.currentTarget.getBoundingClientRect());
   };
+
   return (
     <PopOut
       anchor={anchor}
@@ -63,7 +87,7 @@ function UsernameHint({ server }: { server: string }) {
         >
           <Menu>
             <Header size="300" style={{ padding: `0 ${config.space.S200}` }}>
-              <Text size="L400">提示</Text>
+              <Text size="L400">{copy.hintTitle}</Text>
             </Header>
             <Box
               style={{ padding: config.space.S200, paddingTop: 0 }}
@@ -73,21 +97,21 @@ function UsernameHint({ server }: { server: string }) {
             >
               <Text size="T300">
                 <Text as="span" size="Inherit" priority="300">
-                  用户名：
+                  {copy.usernameLabel}
                 </Text>{' '}
                 user123
               </Text>
               <Text size="T300">
                 <Text as="span" size="Inherit" priority="300">
-                  Matrix ID：
-                </Text>
-                {` @user123:${server}`}
+                  {copy.matrixIdLabel}
+                </Text>{' '}
+                {`@user123:${server}`}
               </Text>
               <Text size="T300">
                 <Text as="span" size="Inherit" priority="300">
-                  邮箱：
-                </Text>
-                {` user123@${server}`}
+                  {copy.emailLabel}
+                </Text>{' '}
+                {`user123@${server}`}
               </Text>
             </Box>
           </Menu>
@@ -113,6 +137,7 @@ type PasswordLoginFormProps = {
   defaultUsername?: string;
   defaultEmail?: string;
 };
+
 export function PasswordLoginForm({ defaultUsername, defaultEmail }: PasswordLoginFormProps) {
   const server = useAuthServer();
   const clientConfig = useClientConfig();
@@ -121,7 +146,6 @@ export function PasswordLoginForm({ defaultUsername, defaultEmail }: PasswordLog
   const serverDiscovery = useAutoDiscoveryInfo();
   const baseUrl = serverDiscovery['m.homeserver'].base_url;
   const [pinProtectedLogin, setPinProtectedLogin] = useState<CustomLoginResponse>();
-  const [pinSetupRequiredLogin, setPinSetupRequiredLogin] = useState<CustomLoginResponse>();
   const [handledSuccess, setHandledSuccess] = useState(false);
   const [resolvingPinRequirement, setResolvingPinRequirement] = useState(false);
 
@@ -137,7 +161,6 @@ export function PasswordLoginForm({ defaultUsername, defaultEmail }: PasswordLog
     if (!loginSuccessData) {
       setHandledSuccess(false);
       setPinProtectedLogin(undefined);
-      setPinSetupRequiredLogin(undefined);
       setResolvingPinRequirement(false);
       return;
     }
@@ -156,12 +179,6 @@ export function PasswordLoginForm({ defaultUsername, defaultEmail }: PasswordLog
     )
       .then((requirement) => {
         if (disposed) {
-          return;
-        }
-
-        if (requirement === 'setup') {
-          setPinSetupRequiredLogin(loginSuccessData);
-          setHandledSuccess(true);
           return;
         }
 
@@ -222,6 +239,7 @@ export function PasswordLoginForm({ defaultUsername, defaultEmail }: PasswordLog
       initial_device_display_name: APP_WEB_DEVICE_NAME,
     });
   };
+
   const handleEmailLogin = (email: string, password: string) => {
     startLogin(baseUrl, {
       type: 'm.login.password',
@@ -244,6 +262,7 @@ export function PasswordLoginForm({ defaultUsername, defaultEmail }: PasswordLog
 
     const username = usernameInput.value.trim();
     const password = passwordInput.value;
+
     if (!username) {
       usernameInput.focus();
       return;
@@ -261,6 +280,7 @@ export function PasswordLoginForm({ defaultUsername, defaultEmail }: PasswordLog
       handleEmailLogin(username, password);
       return;
     }
+
     handleUsernameLogin(username, password);
   };
 
@@ -268,7 +288,7 @@ export function PasswordLoginForm({ defaultUsername, defaultEmail }: PasswordLog
     <Box as="form" onSubmit={handleSubmit} direction="Inherit" gap="400">
       <Box direction="Column" gap="100">
         <Text as="label" size="L400" priority="300">
-          用户名
+          {copy.usernameField}
         </Text>
         <Input
           defaultValue={defaultUsername ?? defaultEmail}
@@ -283,49 +303,51 @@ export function PasswordLoginForm({ defaultUsername, defaultEmail }: PasswordLog
         {loginState.status === AsyncStatus.Error && (
           <>
             {loginState.error.errcode === LoginError.ServerNotAllowed && (
-              <FieldError message="当前客户端实例不允许使用自定义服务器登录。" />
+              <FieldError message={copy.serverNotAllowed} />
             )}
             {loginState.error.errcode === LoginError.InvalidServer && (
-              <FieldError message="未能找到对应的 Matrix ID 服务器。" />
+              <FieldError message={copy.invalidServer} />
             )}
           </>
         )}
       </Box>
+
       <Box direction="Column" gap="100">
         <Text as="label" size="L400" priority="300">
-          密码
+          {copy.passwordField}
         </Text>
         <PasswordInput name="passwordInput" variant="Background" size="500" outlined required />
         <Box alignItems="Start" justifyContent="SpaceBetween" gap="200">
           {loginState.status === AsyncStatus.Error && (
             <>
               {loginState.error.errcode === LoginError.Forbidden && (
-                <FieldError message="用户名或密码错误。" />
+                <FieldError message={copy.forbidden} />
               )}
               {loginState.error.errcode === LoginError.UserDeactivated && (
-                <FieldError message="该账号已被停用。" />
+                <FieldError message={copy.userDeactivated} />
               )}
               {loginState.error.errcode === LoginError.InvalidRequest && (
-                <FieldError message="登录失败，请求中的部分数据无效。" />
+                <FieldError message={copy.invalidRequest} />
               )}
               {loginState.error.errcode === LoginError.RateLimited && (
-                <FieldError message="登录失败，当前请求过于频繁，请稍后再试。" />
+                <FieldError message={copy.rateLimited} />
               )}
               {loginState.error.errcode === LoginError.Unknown && (
-                <FieldError message="登录失败，原因未知。" />
+                <FieldError message={copy.unknown} />
               )}
             </>
           )}
           <Box grow="Yes" shrink="No" justifyContent="End">
             <Text as="span" size="T200" priority="400" align="Right">
-              <Link to={getResetPasswordPath(server)}>忘记密码？</Link>
+              <Link to={getResetPasswordPath(server)}>{copy.forgotPassword}</Link>
             </Text>
           </Box>
         </Box>
       </Box>
+
       <Button type="submit" variant="Primary" size="500">
         <Text as="span" size="B500">
-          登录
+          {copy.login}
         </Text>
       </Button>
 
@@ -342,22 +364,11 @@ export function PasswordLoginForm({ defaultUsername, defaultEmail }: PasswordLog
         <AccountPinDialog
           baseUrl={pinProtectedLogin.baseUrl}
           userId={pinProtectedLogin.response.user_id}
-          title="登录受保护账号"
-          description="这个账号已启用 PIN 保护，请先输入 PIN 码再进入。"
-          submitLabel="继续登录"
+          title={copy.pinTitle}
+          description={copy.pinDescription}
+          submitLabel={copy.continueLogin}
           onCancel={() => setPinProtectedLogin(undefined)}
           onSuccess={() => completeLogin(pinProtectedLogin, navigate)}
-        />
-      )}
-      {pinSetupRequiredLogin && (
-        <LocalPinSetupDialog
-          baseUrl={pinSetupRequiredLogin.baseUrl}
-          userId={pinSetupRequiredLogin.response.user_id}
-          title="为这台设备设置 PIN"
-          description="这个账号已开启账号级 PIN 保护。进入前，需要先在当前设备上创建本地 PIN。PIN 码只保存在这台设备里。"
-          submitLabel="设置并进入"
-          onCancel={() => setPinSetupRequiredLogin(undefined)}
-          onSuccess={() => completeLogin(pinSetupRequiredLogin, navigate)}
         />
       )}
     </Box>
