@@ -1,5 +1,6 @@
 import { MatrixClient } from 'matrix-js-sdk';
 import { isDesktopUpdaterSupported } from './desktopUpdater';
+import { setOptimisticRoomReadMarker } from './room';
 
 export type AppNotificationPermission = PermissionState;
 export const ROOM_MARKED_AS_READ = 'cinny.room_marked_as_read';
@@ -118,6 +119,7 @@ export const markAsRead = async (
   const eventId = getLatestRoomEventId(mx, roomId);
   if (!eventId) return;
 
+  setOptimisticRoomReadMarker(roomId, eventId, mx.getUserId());
   dispatchRoomMarkedAsRead(roomId);
 
   try {
