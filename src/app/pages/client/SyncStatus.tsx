@@ -11,6 +11,7 @@ type StateData = {
 type SyncStatusProps = {
   mx: MatrixClient;
 };
+
 export function SyncStatus({ mx }: SyncStatusProps) {
   const [stateData, setStateData] = useState<StateData>({
     current: null,
