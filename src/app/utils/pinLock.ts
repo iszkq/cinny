@@ -1,4 +1,5 @@
 import { AccountDataEvent, CinnyAccountPinPolicyContent } from '../../types/matrix/accountData';
+import { isDesktopUpdaterSupported } from './desktopUpdater';
 
 type AccountPinConfig = {
   version: 1;
@@ -172,6 +173,9 @@ export const getAccountPinLabel = (baseUrl: string, userId: string): string =>
 
 export const supportsPinLock = (): boolean =>
   typeof crypto !== 'undefined' && typeof crypto.subtle !== 'undefined';
+
+export const isDesktopPinLockSupported = (): boolean =>
+  isDesktopUpdaterSupported() && supportsPinLock();
 
 export const isPinCodeFormatValid = (pin: string): boolean => PIN_CODE_REGEX.test(pin.trim());
 
@@ -396,6 +400,10 @@ export const resolveAccountPinLoginRequirement = async (
   userId: string,
   accessToken: string
 ): Promise<AccountPinLoginRequirement> => {
+  if (!isDesktopPinLockSupported()) {
+    return 'none';
+  }
+
   const localConfig = getConfigByAccountKey(getAccountPinKey(baseUrl, userId));
 
   try {
@@ -433,6 +441,7 @@ export const lockScreenForAccount = (baseUrl: string, userId: string) => {
 };
 
 export const applyDesktopStartupPinLock = (baseUrl?: string, userId?: string) => {
+  if (!isDesktopPinLockSupported()) return;
   if (!baseUrl || !userId) return;
 
   const sessionStorage = safeSessionStorage();
