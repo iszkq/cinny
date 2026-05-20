@@ -73,6 +73,7 @@ const FAILED_PENDING_MESSAGE_STATUS = 'not_sent';
 const EXTERNAL_LINK_SELECTOR = 'a[href]';
 const SYNC_RECOVERY_RETRY_INTERVAL_MS = 4000;
 const SYNC_RECOVERY_WATCHDOG_INTERVAL_MS = 10000;
+const SYNC_RECOVERY_PENDING_RETRY_WATCHDOG_INTERVAL_MS = 12000;
 const SYNC_RECOVERY_STALL_MS = 30000;
 const SYNC_RECOVERY_FORCE_RESTART_MS = 18000;
 const SYNC_RECOVERY_BURST_WINDOW_MS = 60000;
@@ -132,6 +133,45 @@ const getPendingEventKey = (mEvent: MatrixEvent): string | undefined => {
   return mEvent.getId() ?? txnId;
 };
 
+const isRetryablePendingEvent = (
+  mx: MatrixClient,
+  mEvent: MatrixEvent,
+  retryingEventIds?: Set<string>
+): boolean => {
+  const eventKey = getPendingEventKey(mEvent);
+  const status = (mEvent as MatrixEvent & { status?: unknown }).status;
+
+  return Boolean(
+    eventKey &&
+      !retryingEventIds?.has(eventKey) &&
+      mEvent.getSender() === mx.getUserId() &&
+      status === FAILED_PENDING_MESSAGE_STATUS
+  );
+};
+
+const hasRetryablePendingEvents = (
+  mx: MatrixClient,
+  retryingEventIds: Set<string>
+): boolean =>
+  mx.getRooms().some((room) => {
+    const pendingEvents =
+      (
+        room as Room & {
+          getPendingEvents?: () => MatrixEvent[];
+        }
+      ).getPendingEvents?.() ?? [];
+
+    return pendingEvents.some((mEvent) => isRetryablePendingEvent(mx, mEvent, retryingEventIds));
+  });
+
+const hasRetryableTimelineDecryptions = (mx: MatrixClient): boolean =>
+  mx.getRooms().some((room) =>
+    room
+      .getLiveTimeline()
+      .getEvents()
+      .some((event) => event.isDecryptionFailure())
+  );
+
 const retryPendingEvents = async (
   mx: MatrixClient,
   retryingEventIds: Set<string>
@@ -156,14 +196,8 @@ const retryPendingEvents = async (
 
     return pendingEvents.flatMap((mEvent) => {
       const eventKey = getPendingEventKey(mEvent);
-      const status = (mEvent as MatrixEvent & { status?: unknown }).status;
 
-      if (
-        !eventKey ||
-        retryingEventIds.has(eventKey) ||
-        mEvent.getSender() !== mx.getUserId() ||
-        status !== FAILED_PENDING_MESSAGE_STATUS
-      ) {
+      if (!eventKey || !isRetryablePendingEvent(mx, mEvent, retryingEventIds)) {
         return [];
       }
 
@@ -183,9 +217,7 @@ const retryPendingEvents = async (
 const retryLiveTimelineDecryptions = async (mx: MatrixClient): Promise<void> => {
   const retryTasks = mx.getRooms().flatMap((room) => {
     const liveTimeline = room.getLiveTimeline();
-    const hasRetryableEvents = liveTimeline
-      .getEvents()
-      .some((event) => event.isEncrypted() || event.isDecryptionFailure());
+    const hasRetryableEvents = liveTimeline.getEvents().some((event) => event.isDecryptionFailure());
 
     if (!hasRetryableEvents) {
       return [];
@@ -373,6 +405,13 @@ function SyncRecoveryFeature() {
       return;
     }
 
+    if (
+      !hasRetryablePendingEvents(mx, retryingPendingEventIdsRef.current) &&
+      !hasRetryableTimelineDecryptions(mx)
+    ) {
+      return;
+    }
+
     const now = Date.now();
     if (now - lastPendingRetryAtRef.current < SYNC_RECOVERY_RETRY_INTERVAL_MS) {
       return;
@@ -444,11 +483,24 @@ function SyncRecoveryFeature() {
       recoverSync(shouldForceRestartSync(syncState));
     }, SYNC_RECOVERY_WATCHDOG_INTERVAL_MS);
 
+    const pendingRetryTimer = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') {
+        return;
+      }
+
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        return;
+      }
+
+      retryPendingMessages();
+    }, SYNC_RECOVERY_PENDING_RETRY_WATCHDOG_INTERVAL_MS);
+
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('focus', handleFocus);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.clearInterval(recoveryTimer);
+      window.clearInterval(pendingRetryTimer);
     };
   }, [mx, recoverSync, retryPendingMessages, shouldForceRestartSync]);
 
