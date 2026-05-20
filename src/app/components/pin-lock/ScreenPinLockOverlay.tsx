@@ -1,4 +1,4 @@
-import React, { ReactNode } from 'react';
+import React, { ReactNode, useCallback, useState } from 'react';
 import { Box, Text } from 'folds';
 import { APP_DISPLAY_NAME, APP_LOGO_URL } from '../../constants/branding';
 import { useAccountData } from '../../hooks/useAccountData';
@@ -8,18 +8,37 @@ import { getFallbackSession } from '../../state/sessions';
 import {
   cacheAccountPinConfig,
   clearScreenLock,
+  consumeRecentAccountPinVerification,
+  getAccountPinConfig,
+  getAccountPinKey,
   getAccountPinLabel,
   getAccountPinPolicyConfig,
-  hasAccountPin,
   isAccountPinPolicyEnabled,
   isAccountScreenLocked,
   isDesktopPinLockSupported,
 } from '../../utils/pinLock';
-import { AccountDataEvent, CinnyAccountPinPolicyContent } from '../../../types/matrix/accountData';
+import {
+  AccountDataEvent,
+  CinnyAccountPinPolicyContent,
+} from '../../../types/matrix/accountData';
 import { SplashScreen } from '../splash-screen';
 import { AccountPinForm } from './AccountPinDialog';
-import { LocalPinSetupForm } from './LocalPinSetupDialog';
 import * as css from './style.css';
+
+const copy = {
+  entryTitle: '\u9a8c\u8bc1 PIN \u5e76\u8fdb\u5165',
+  entryDescription:
+    '\u5f53\u524d\u8d26\u6237\u5df2\u542f\u7528 PIN \u4fdd\u62a4\u3002\u8f93\u5165\u4f60\u5df2\u7ecf\u8bbe\u7f6e\u7684 PIN \u7801\u540e\uff0c\u624d\u80fd\u7ee7\u7eed\u8fdb\u5165\u5f53\u524d\u8d26\u6237\u3002',
+  entryEyebrow:
+    '\u8d26\u6237\u7ea7 PIN \u9a8c\u8bc1',
+  fallbackEntryEyebrow: 'PIN \u9a8c\u8bc1',
+  entryButton: '\u9a8c\u8bc1\u5e76\u8fdb\u5165',
+  lockTitle: '\u5df2\u9501\u5b9a',
+  lockDescription:
+    '\u5f53\u524d\u8d26\u6237\u5df2\u7ecf\u9501\u5b9a\u3002\u8f93\u5165 PIN \u7801\u540e\uff0c\u624d\u80fd\u7ee7\u7eed\u67e5\u770b\u804a\u5929\u5185\u5bb9\u3002',
+  lockEyebrow: '\u9501\u5c4f\u4fdd\u62a4',
+  unlockButton: '\u89e3\u9501',
+} as const;
 
 type ScreenPinLockGateProps = {
   children: ReactNode;
@@ -79,72 +98,78 @@ export function ScreenPinLockGate({ children }: ScreenPinLockGateProps) {
 
   const userId = mx.getUserId();
   const baseUrl = session?.baseUrl;
+  const [verifiedAccountKey, setVerifiedAccountKey] = useState<string | undefined>(() => {
+    if (!baseUrl || !userId) {
+      return undefined;
+    }
+
+    return consumeRecentAccountPinVerification(baseUrl, userId)
+      ? getAccountPinKey(baseUrl, userId)
+      : undefined;
+  });
 
   if (!isDesktopPinLockSupported() || !userId || !baseUrl) {
     return <>{children}</>;
   }
 
+  const accountKey = getAccountPinKey(baseUrl, userId);
   const accountLabel = getAccountPinLabel(baseUrl, userId);
-  const localPinEnabled = hasAccountPin(baseUrl, userId);
   const policyContent = policyEvent?.getContent<CinnyAccountPinPolicyContent>();
   const policyEnabled = isAccountPinPolicyEnabled(policyContent);
   const remotePinConfig = getAccountPinPolicyConfig(policyContent);
+  const localPinConfig = getAccountPinConfig(baseUrl, userId);
+  let activePinConfig = localPinConfig;
+  if (policyEvent) {
+    activePinConfig = policyEnabled ? remotePinConfig ?? localPinConfig : undefined;
+  }
+  const manuallyLocked =
+    Boolean(activePinConfig) && screenLockState.locked && isAccountScreenLocked(baseUrl, userId);
+  const entryVerificationRequired =
+    Boolean(activePinConfig) && verifiedAccountKey !== accountKey && !manuallyLocked;
 
-  if (policyEnabled && !localPinEnabled) {
+  const handleVerifySuccess = useCallback(() => {
     if (remotePinConfig) {
-      return (
-        <ScreenPinLockPage
-          title="验证 PIN 并进入"
-          description="这个账号已启用 PIN 保护。输入你已经设置的 PIN 码后，才能继续进入当前账号。"
-          accountLabel={accountLabel}
-          eyebrow="账号级 PIN 验证"
-        >
-          <AccountPinForm
-            baseUrl={baseUrl}
-            userId={userId}
-            submitLabel="验证并进入"
-            pinConfig={remotePinConfig}
-            onSuccess={() => {
-              cacheAccountPinConfig(baseUrl, userId, remotePinConfig);
-              clearScreenLock();
-            }}
-            autoFocus
-          />
-        </ScreenPinLockPage>
-      );
+      cacheAccountPinConfig(baseUrl, userId, remotePinConfig);
     }
 
+    setVerifiedAccountKey(accountKey);
+    clearScreenLock();
+  }, [accountKey, baseUrl, remotePinConfig, userId]);
+
+  if (entryVerificationRequired && activePinConfig) {
     return (
       <ScreenPinLockPage
-        title="为这台设备设置 PIN"
-        description="这个账号已经开启 PIN 保护。继续查看消息前，需要先为当前设备创建一个本地 PIN。"
+        title={copy.entryTitle}
+        description={copy.entryDescription}
         accountLabel={accountLabel}
-        eyebrow="账号级 PIN 策略"
+        eyebrow={policyEnabled ? copy.entryEyebrow : copy.fallbackEntryEyebrow}
       >
-        <LocalPinSetupForm
+        <AccountPinForm
           baseUrl={baseUrl}
           userId={userId}
-          submitLabel="启用并进入"
-          onSuccess={() => undefined}
+          submitLabel={copy.entryButton}
+          pinConfig={activePinConfig}
+          onSuccess={handleVerifySuccess}
           autoFocus
         />
       </ScreenPinLockPage>
     );
   }
 
-  if (screenLockState.locked && isAccountScreenLocked(baseUrl, userId)) {
+  if (manuallyLocked && activePinConfig) {
     return (
       <ScreenPinLockPage
-        title="已锁定"
-        description="当前账号已经锁定。输入 PIN 码后，才能继续查看聊天内容。"
+        title={copy.lockTitle}
+        description={copy.lockDescription}
         accountLabel={accountLabel}
-        eyebrow="锁屏保护"
+        eyebrow={copy.lockEyebrow}
       >
         <AccountPinForm
           baseUrl={baseUrl}
           userId={userId}
-          submitLabel="解锁"
-          onSuccess={() => clearScreenLock()}
+          submitLabel={copy.unlockButton}
+          pinConfig={activePinConfig}
+          onSuccess={handleVerifySuccess}
           autoFocus
         />
       </ScreenPinLockPage>
