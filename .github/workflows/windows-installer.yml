@@ -59,8 +59,6 @@ jobs:
           projectPath: .
           tauriScript: npm run tauri
           args: --bundles nsis
-          uploadWorkflowArtifacts: true
-          workflowArtifactNamePattern: windows-[platform]-[arch]-[bundle]
 
       - name: Generate updater latest.json
         if: startsWith(github.ref, 'refs/tags/v')
