@@ -47,11 +47,11 @@ export function Devices({ requestClose }: DevicesProps) {
 
   const [currentDevice, otherDevices] = useSplitCurrentDevice(devices);
   const verificationStatus =
-    crossSigningReady === undefined
-      ? VerificationStatus.Unknown
-      : crossSigningReady
+    crossSigningReady === true
       ? VerificationStatus.Verified
-      : VerificationStatus.Unverified;
+      : crossSigningActive
+      ? VerificationStatus.Unverified
+      : VerificationStatus.Unknown;
 
   const otherDevicesId = useDeviceIds(otherDevices);
   const unverifiedDeviceCount = useUnverifiedDeviceCount(
