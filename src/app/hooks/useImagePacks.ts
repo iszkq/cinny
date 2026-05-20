@@ -22,7 +22,10 @@ import { useAccountDataCallback } from './useAccountDataCallback';
 import { useStateEventCallback } from './useStateEventCallback';
 import { primeDesktopMediaAssetUrl } from '../utils/desktopMediaAssetCache';
 import { primeCachedMediaObjectUrl, primePersistentMediaUrl } from '../utils/mediaUrlCache';
-import { getEmojiBoardMediaCandidates } from '../components/emoji-board/components/media';
+import {
+  getEmojiBoardMediaCandidates,
+  getEmojiBoardMediaUrls,
+} from '../components/emoji-board/components/media';
 
 const GLOBAL_IMAGE_PACK_WARM_DELAY_MS = 0;
 const GLOBAL_IMAGE_PACK_OBJECT_WARM_DELAY_MS = 120;
@@ -51,6 +54,19 @@ const warmImagePackObjectUrls = (
   usages: ImageUsage[]
 ) => {
   const mediaUrls = getImagePackMediaUrls(mx, useAuthentication, packs, usages);
+
+  mediaUrls.forEach((mediaUrl) => {
+    void primeCachedMediaObjectUrl(mediaUrl, 'background');
+  });
+};
+
+const warmImagePackPrimaryObjectUrls = (
+  mx: ReturnType<typeof useMatrixClient>,
+  useAuthentication: boolean,
+  packs: ImagePack[],
+  usages: ImageUsage[]
+) => {
+  const mediaUrls = getImagePackPrimaryMediaUrls(mx, useAuthentication, packs, usages);
 
   mediaUrls.forEach((mediaUrl) => {
     void primeCachedMediaObjectUrl(mediaUrl, 'background');
@@ -125,6 +141,55 @@ const getImagePackMediaUrls = (
         }).forEach((mediaUrl) => {
           mediaUrls.add(mediaUrl);
         });
+      });
+    });
+  });
+
+  return mediaUrls;
+};
+
+const getImagePackPrimaryMediaUrls = (
+  mx: ReturnType<typeof useMatrixClient>,
+  useAuthentication: boolean,
+  packs: ImagePack[],
+  usages: ImageUsage[]
+) => {
+  const mediaUrls = new Set<string>();
+
+  packs.forEach((pack) => {
+    usages.forEach((usage) => {
+      const avatarMxc = pack.getAvatarUrl(usage);
+      const avatarUrl = avatarMxc
+        ? mxcUrlToHttp(
+            mx,
+            avatarMxc,
+            useAuthentication,
+            IMAGE_PACK_AVATAR_SIZE,
+            IMAGE_PACK_AVATAR_SIZE,
+            'scale'
+          ) ??
+          mxcUrlToHttp(mx, avatarMxc, useAuthentication)
+        : null;
+
+      if (avatarUrl) {
+        mediaUrls.add(avatarUrl);
+      }
+
+      pack.getImages(usage).forEach((image) => {
+        const size =
+          usage === ImageUsage.Sticker ? IMAGE_PACK_STICKER_SIZE : IMAGE_PACK_EMOTICON_SIZE;
+        const { primaryUrl } = getEmojiBoardMediaUrls({
+          mx,
+          mxc: image.url,
+          useAuthentication,
+          info: image.info,
+          width: size,
+          height: size,
+        });
+
+        if (primaryUrl) {
+          mediaUrls.add(primaryUrl);
+        }
       });
     });
   });
@@ -490,6 +555,54 @@ export const useWarmAllImagePackMedia = () => {
         warmImagePackObjectUrls(mx, useAuthentication, relevantPacks, [
           ImageUsage.Emoticon,
           ImageUsage.Sticker,
+        ]);
+      }
+    }, GLOBAL_IMAGE_PACK_OBJECT_WARM_DELAY_MS);
+
+    return () => {
+      disposed = true;
+      if (typeof persistentDelayTimer === 'number') {
+        window.clearTimeout(persistentDelayTimer);
+      }
+      if (typeof objectDelayTimer === 'number') {
+        window.clearTimeout(objectDelayTimer);
+      }
+    };
+  }, [mx, relevantPacks, useAuthentication]);
+};
+
+export const useWarmWebImagePackMedia = () => {
+  const mx = useMatrixClient();
+  const useAuthentication = useMediaAuthentication();
+  const userPack = useUserImagePack();
+  const customUserPacks = useCustomUserImagePacks();
+
+  const relevantPacks = useMemo(
+    () => getPersonalPacks(userPack, customUserPacks),
+    [userPack, customUserPacks]
+  );
+
+  useEffect(() => {
+    if (relevantPacks.length === 0) {
+      return undefined;
+    }
+
+    let disposed = false;
+    let persistentDelayTimer: number | undefined;
+    let objectDelayTimer: number | undefined;
+    persistentDelayTimer = window.setTimeout(() => {
+      if (!disposed) {
+        warmImagePackMedia(mx, useAuthentication, relevantPacks, [
+          ImageUsage.Emoticon,
+          ImageUsage.Sticker,
+        ]);
+      }
+    }, GLOBAL_IMAGE_PACK_WARM_DELAY_MS);
+
+    objectDelayTimer = window.setTimeout(() => {
+      if (!disposed) {
+        warmImagePackPrimaryObjectUrls(mx, useAuthentication, relevantPacks, [
+          ImageUsage.Emoticon,
         ]);
       }
     }, GLOBAL_IMAGE_PACK_OBJECT_WARM_DELAY_MS);
