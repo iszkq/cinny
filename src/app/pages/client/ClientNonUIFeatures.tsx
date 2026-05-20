@@ -18,7 +18,6 @@ import { APP_LOGO_URL } from '../../constants/branding';
 import {
   editableActiveElement,
   loadImageElement,
-  notificationPermission,
   setFavicon,
   targetFromEvent,
 } from '../../utils/dom';
@@ -63,6 +62,7 @@ import {
 } from '../../utils/pinLock';
 import { openExternalUrl, shouldOpenHrefExternally } from '../../utils/desktop';
 import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
+import { sendAppNotification } from '../../utils/notifications';
 
 const HEALTHY_SYNC_STATES = new Set<SyncState>([
   SyncState.Prepared,
@@ -697,17 +697,16 @@ function InviteNotifications() {
 
   const notify = useCallback(
     (count: number) => {
-      const noti = new window.Notification('Invitation', {
+      return sendAppNotification({
+        title: 'Invitation',
         icon: APP_LOGO_URL,
         badge: APP_LOGO_URL,
         body: `You have ${count} new invitation request.`,
         silent: true,
+        onClick: () => {
+          if (!window.closed) navigate(getInboxInvitesPath());
+        },
       });
-
-      noti.onclick = () => {
-        if (!window.closed) navigate(getInboxInvitesPath());
-        noti.close();
-      };
     },
     [navigate]
   );
@@ -718,8 +717,8 @@ function InviteNotifications() {
 
   useEffect(() => {
     if (invites.length > perviousInviteLen && mx.getSyncState() === 'SYNCING') {
-      if (showNotifications && notificationPermission('granted')) {
-        notify(invites.length - perviousInviteLen);
+      if (showNotifications) {
+        void notify(invites.length - perviousInviteLen);
       }
 
       if (notificationSound) {
@@ -750,7 +749,7 @@ function MessageNotifications() {
   const selectedRoomId = useSelectedRoom();
 
   const notify = useCallback(
-    ({
+    async ({
       roomName,
       roomAvatar,
       username,
@@ -761,21 +760,22 @@ function MessageNotifications() {
       roomId: string;
       eventId: string;
     }) => {
-      const noti = new window.Notification(roomName, {
+      const noti = await sendAppNotification({
+        title: roomName,
         icon: roomAvatar,
         badge: roomAvatar,
         body: `New inbox notification from ${username}`,
         silent: true,
+        onClick: () => {
+          if (!window.closed) navigate(getInboxNotificationsPath());
+          notifRef.current = undefined;
+        },
       });
 
-      noti.onclick = () => {
-        if (!window.closed) navigate(getInboxNotificationsPath());
-        noti.close();
-        notifRef.current = undefined;
-      };
-
-      notifRef.current?.close();
-      notifRef.current = noti;
+      if (noti) {
+        notifRef.current?.close();
+        notifRef.current = noti;
+      }
     },
     [navigate]
   );
@@ -822,10 +822,10 @@ function MessageNotifications() {
         }
       }
 
-      if (!suppressDesktopNotification && showNotifications && notificationPermission('granted')) {
+      if (!suppressDesktopNotification && showNotifications) {
         const avatarMxc =
           room.getAvatarFallbackMember()?.getMxcAvatarUrl() ?? room.getMxcAvatarUrl();
-        notify({
+        void notify({
           roomName: room.name ?? 'Unknown',
           roomAvatar: avatarMxc
             ? mxcUrlToHttp(mx, avatarMxc, useAuthentication, 96, 96, 'crop') ?? undefined
