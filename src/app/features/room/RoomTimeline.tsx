@@ -97,7 +97,7 @@ import {
   getIntersectionObserverEntry,
   useIntersectionObserver,
 } from '../../hooks/useIntersectionObserver';
-import { markAsRead } from '../../utils/notifications';
+import { markAsRead, ROOM_MARKED_AS_READ } from '../../utils/notifications';
 import { useDebounce } from '../../hooks/useDebounce';
 import { getResizeObserverEntry, useResizeObserver } from '../../hooks/useResizeObserver';
 import * as css from './RoomTimeline.css';
@@ -649,9 +649,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
 
   const [unreadInfo, setUnreadInfo] = useState(() => getRoomUnreadInfo(room, true));
   const readUptoEventIdRef = useRef<string>();
-  if (unreadInfo) {
-    readUptoEventIdRef.current = unreadInfo.readUptoEventId;
-  }
+  readUptoEventIdRef.current = unreadInfo?.readUptoEventId;
 
   const atBottomAnchorRef = useRef<HTMLElement>(null);
   const [atBottom, setAtBottom] = useState<boolean>(true);
@@ -739,6 +737,28 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     });
   const visibleItems = getItems();
   const privateReceipt = !sendReadReceipts;
+  const syncUnreadInfo = useCallback(() => {
+    setUnreadInfo((current) => {
+      if (!unread) return undefined;
+
+      const nextUnreadInfo = getRoomUnreadInfo(room, current?.scrollTo ?? false);
+      if (!nextUnreadInfo) return undefined;
+
+      const nextScrollTo = current?.scrollTo ?? nextUnreadInfo.scrollTo;
+      if (
+        current?.readUptoEventId === nextUnreadInfo.readUptoEventId &&
+        current?.inLiveTimeline === nextUnreadInfo.inLiveTimeline &&
+        current?.scrollTo === nextScrollTo
+      ) {
+        return current;
+      }
+
+      return {
+        ...nextUnreadInfo,
+        scrollTo: nextScrollTo,
+      };
+    });
+  }, [room, unread]);
 
   const messageReadReceipts = useMemo(() => {
     const myUserId = mx.getUserId();
@@ -892,13 +912,30 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     const handleReceipt: RoomEventHandlerMap[RoomEvent.Receipt] = (_, eventRoom) => {
       if (eventRoom?.roomId !== room.roomId) return;
       setReceiptTick((state) => state + 1);
+      syncUnreadInfo();
     };
 
     room.on(RoomEvent.Receipt, handleReceipt);
     return () => {
       room.removeListener(RoomEvent.Receipt, handleReceipt);
     };
-  }, [room]);
+  }, [room, syncUnreadInfo]);
+
+  useEffect(() => {
+    const handleRoomAccountData: RoomEventHandlerMap[RoomEvent.AccountData] = (
+      mEvent,
+      eventRoom
+    ) => {
+      if (eventRoom?.roomId !== room.roomId) return;
+      if (mEvent.getType() !== 'm.fully_read') return;
+      syncUnreadInfo();
+    };
+
+    room.on(RoomEvent.AccountData, handleRoomAccountData);
+    return () => {
+      room.removeListener(RoomEvent.AccountData, handleRoomAccountData);
+    };
+  }, [room, syncUnreadInfo]);
 
   const handleOpenEvent = useCallback(
     async (
@@ -1157,12 +1194,24 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     }
   }, [scrollToBottomCount]);
 
-  // Remove unreadInfo on mark as read
   useEffect(() => {
-    if (!unread) {
-      setUnreadInfo(undefined);
-    }
-  }, [unread]);
+    syncUnreadInfo();
+  }, [syncUnreadInfo]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+
+    const handleOptimisticRead = (evt: Event) => {
+      const customEvent = evt as CustomEvent<{ roomId?: string }>;
+      if (customEvent.detail?.roomId !== room.roomId) return;
+      syncUnreadInfo();
+    };
+
+    window.addEventListener(ROOM_MARKED_AS_READ, handleOptimisticRead);
+    return () => {
+      window.removeEventListener(ROOM_MARKED_AS_READ, handleOptimisticRead);
+    };
+  }, [room.roomId, syncUnreadInfo]);
 
   // scroll out of view msg editor in view.
   useEffect(() => {
