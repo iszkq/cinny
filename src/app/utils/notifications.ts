@@ -1,83 +1,131 @@
-import { MatrixClient, MatrixEvent, ReceiptType } from 'matrix-js-sdk';
-import { getRoomFullyReadEventId, setOptimisticRoomReadMarker } from './room';
+import { isDesktopUpdaterSupported } from './desktopUpdater';
 
-export const ROOM_MARKED_AS_READ = 'cinny:room-marked-as-read';
-const FULLY_READ_EVENT_TYPE = 'm.fully_read';
-const PRIVATE_RECEIPT_TYPE = 'm.read.private' as ReceiptType;
+export type AppNotificationPermission = PermissionState;
 
-type RoomMarkedAsReadDetail = {
-  roomId: string;
+type DesktopNotificationPayload = {
+  title: string;
+  body?: string;
+  silent?: boolean;
 };
 
-const dispatchRoomMarkedAsRead = (roomId: string) => {
-  if (typeof window === 'undefined') return;
-  window.dispatchEvent(
-    new CustomEvent<RoomMarkedAsReadDetail>(ROOM_MARKED_AS_READ, {
-      detail: { roomId },
-    })
-  );
+type AppNotificationOptions = {
+  title: string;
+  body?: string;
+  icon?: string;
+  badge?: string;
+  silent?: boolean;
+  onClick?: () => void;
 };
 
-const getLatestValidEvent = (timeline: MatrixEvent[]) => {
-  for (let i = timeline.length - 1; i >= 0; i -= 1) {
-    const latestEvent = timeline[i];
-    if (!latestEvent.isSending()) return latestEvent;
+const normalizePermission = (permission: string): AppNotificationPermission => {
+  if (permission === 'granted' || permission === 'denied') {
+    return permission;
   }
-  return null;
+
+  return 'prompt';
 };
 
-export async function markAsRead(mx: MatrixClient, roomId: string, privateReceipt: boolean) {
-  const room = mx.getRoom(roomId);
-  if (!room) return;
+const canUseWebNotifications = (): boolean =>
+  typeof window !== 'undefined' && 'Notification' in window;
 
-  const userId = mx.getUserId();
-  if (!userId) return;
+const invokeDesktopNotificationCommand = async <T>(
+  command: string,
+  payload?: Record<string, unknown>
+): Promise<T> => {
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<T>(command, payload);
+};
 
-  const timeline = room.getLiveTimeline().getEvents();
-  const publicReadEventId = room.getEventReadUpTo(userId);
-  const fullyReadEventId = getRoomFullyReadEventId(room);
-  if (timeline.length === 0) return;
-  const latestEvent = getLatestValidEvent(timeline);
-  if (latestEvent === null) return;
-  const latestEventId = latestEvent.getId();
-  if (!latestEventId) return;
+export const getNotificationState = (): AppNotificationPermission => {
+  if (isDesktopUpdaterSupported()) {
+    return 'prompt';
+  }
 
-  const fullyReadUpToDate = latestEventId === fullyReadEventId;
-  const publicReadUpToDate = latestEventId === publicReadEventId;
+  if (canUseWebNotifications()) {
+    return normalizePermission(window.Notification.permission);
+  }
 
-  if (
-    (privateReceipt && fullyReadUpToDate) ||
-    (!privateReceipt && fullyReadUpToDate && publicReadUpToDate)
-  ) {
-    setOptimisticRoomReadMarker(roomId, latestEventId, userId);
-    dispatchRoomMarkedAsRead(roomId);
+  return 'denied';
+};
+
+export const getDesktopNotificationState = async (): Promise<AppNotificationPermission> => {
+  if (!isDesktopUpdaterSupported()) {
+    return getNotificationState();
+  }
+
+  try {
+    const permission = await invokeDesktopNotificationCommand<string>(
+      'desktop_notification_permission_state'
+    );
+    return normalizePermission(permission);
+  } catch {
+    return getNotificationState();
+  }
+};
+
+export const requestNotificationPermission = async (): Promise<AppNotificationPermission> => {
+  if (isDesktopUpdaterSupported()) {
+    try {
+      const permission = await invokeDesktopNotificationCommand<string>(
+        'request_desktop_notification_permission'
+      );
+      return normalizePermission(permission);
+    } catch {
+      return getNotificationState();
+    }
+  }
+
+  if (!canUseWebNotifications()) {
+    return 'denied';
+  }
+
+  const permission = await window.Notification.requestPermission();
+  return normalizePermission(permission);
+};
+
+export const sendAppNotification = async ({
+  title,
+  body,
+  icon,
+  badge,
+  silent,
+  onClick,
+}: AppNotificationOptions): Promise<Notification | void> => {
+  if (isDesktopUpdaterSupported()) {
+    const permission = await getDesktopNotificationState();
+    if (permission !== 'granted') {
+      return;
+    }
+
+    const payload: DesktopNotificationPayload = { title };
+    if (body) payload.body = body;
+    if (silent) payload.silent = true;
+
+    try {
+      await invokeDesktopNotificationCommand('send_desktop_notification', { payload });
+    } catch {
+      // Ignore notification delivery failures to avoid breaking message flow.
+    }
     return;
   }
 
-  if (privateReceipt) {
-    try {
-      await mx.setRoomReadMarkers(roomId, latestEventId, undefined, latestEvent);
-    } catch (error) {
-      await Promise.all([
-        mx
-          .setRoomAccountData(roomId, FULLY_READ_EVENT_TYPE, { event_id: latestEventId })
-          .catch(() => undefined),
-        mx.sendReceipt(latestEvent, PRIVATE_RECEIPT_TYPE).catch(() => undefined),
-      ]);
-    }
-  } else {
-    try {
-      await mx.setRoomReadMarkers(roomId, latestEventId, latestEvent);
-    } catch (error) {
-      await Promise.all([
-        mx
-          .setRoomAccountData(roomId, FULLY_READ_EVENT_TYPE, { event_id: latestEventId })
-          .catch(() => undefined),
-        mx.sendReadReceipt(latestEvent, ReceiptType.Read).catch(() => undefined),
-      ]);
-    }
+  if (!canUseWebNotifications() || normalizePermission(window.Notification.permission) !== 'granted') {
+    return;
   }
 
-  setOptimisticRoomReadMarker(roomId, latestEventId, userId);
-  dispatchRoomMarkedAsRead(roomId);
-}
+  const notification = new window.Notification(title, {
+    icon,
+    badge,
+    body,
+    silent,
+  });
+
+  if (onClick) {
+    notification.onclick = () => {
+      onClick();
+      notification.close();
+    };
+  }
+
+  return notification;
+};
