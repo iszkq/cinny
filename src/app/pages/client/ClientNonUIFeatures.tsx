@@ -58,6 +58,7 @@ import { startClient } from '../../../client/initMatrix';
 import {
   applyAccountPinPolicyContent,
   hasAccountPin,
+  isDesktopPinLockSupported,
   lockScreenForAccount,
   syncAccountPinPolicy,
 } from '../../utils/pinLock';
@@ -789,6 +790,10 @@ function AccountPinPolicyFeature() {
   const session = getFallbackSession();
 
   useEffect(() => {
+    if (!isDesktopPinLockSupported()) {
+      return undefined;
+    }
+
     const baseUrl = session?.baseUrl;
     const accessToken = session?.accessToken;
     const userId = mx.getUserId();
