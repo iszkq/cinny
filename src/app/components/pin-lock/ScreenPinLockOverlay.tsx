@@ -10,6 +10,7 @@ import {
   getAccountPinLabel,
   hasAccountPin,
   isAccountPinPolicyEnabled,
+  isDesktopPinLockSupported,
   isAccountScreenLocked,
 } from '../../utils/pinLock';
 import { AccountDataEvent, CinnyAccountPinPolicyContent } from '../../../types/matrix/accountData';
@@ -77,7 +78,7 @@ export function ScreenPinLockGate({ children }: ScreenPinLockGateProps) {
   const userId = mx.getUserId();
   const baseUrl = session?.baseUrl;
 
-  if (!userId || !baseUrl) {
+  if (!isDesktopPinLockSupported() || !userId || !baseUrl) {
     return <>{children}</>;
   }
 
