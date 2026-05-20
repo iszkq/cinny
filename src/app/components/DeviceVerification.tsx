@@ -32,6 +32,7 @@ import { AsyncStatus, useAsyncCallback } from '../hooks/useAsyncCallback';
 import { ContainerColor } from '../styles/ContainerColor.css';
 import { useMatrixClient } from '../hooks/useMatrixClient';
 import { restoreKeyBackupAndDecrypt } from '../utils/keyBackup';
+import { crossSignCurrentDevice } from '../utils/matrix-crypto';
 
 const DialogHeaderStyles: CSSProperties = {
   padding: `0 ${config.space.S200} 0 ${config.space.S400}`,
@@ -260,7 +261,10 @@ export function DeviceVerification({ request, onExit }: DeviceVerificationProps)
     }
 
     restoreHandledRef.current = true;
-    void restoreKeyBackupAndDecrypt(mx).catch(() => undefined);
+    void (async () => {
+      await crossSignCurrentDevice(mx).catch(() => undefined);
+      await restoreKeyBackupAndDecrypt(mx).catch(() => undefined);
+    })();
   }, [mx, phase, request]);
 
   return (

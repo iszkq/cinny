@@ -21,6 +21,7 @@ import { useMatrixClient } from '../hooks/useMatrixClient';
 import { AsyncStatus, useAsyncCallback } from '../hooks/useAsyncCallback';
 import { storePrivateKey } from '../../client/secretStorageKeys';
 import { restoreKeyBackupAndDecrypt } from '../utils/keyBackup';
+import { crossSignCurrentDevice } from '../utils/matrix-crypto';
 
 export enum ManualVerificationMethod {
   RecoveryPassphrase = 'passphrase',
@@ -141,6 +142,7 @@ export function ManualVerificationTile({
 
       await crypto.bootstrapSecretStorage({});
       await crypto.bootstrapCrossSigning({});
+      await crossSignCurrentDevice(mx).catch(() => undefined);
 
       await restoreKeyBackupAndDecrypt(mx).catch(() => undefined);
     },

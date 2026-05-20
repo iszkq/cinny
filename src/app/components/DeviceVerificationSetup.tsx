@@ -25,6 +25,7 @@ import { ActionUIA, ActionUIAFlowsLoader } from './ActionUIA';
 import { useMatrixClient } from '../hooks/useMatrixClient';
 import { useAlive } from '../hooks/useAlive';
 import { UseStateProvider } from './UseStateProvider';
+import { crossSignCurrentDevice } from '../utils/matrix-crypto';
 
 type UIACallback<T> = (
   authDict: AuthDict | null
@@ -154,6 +155,7 @@ function SetupVerification({ onComplete }: SetupVerificationProps) {
           authUploadDeviceSigningKeys,
           setupNewCrossSigning: true,
         });
+        await crossSignCurrentDevice(mx).catch(() => undefined);
 
         await crypto.resetKeyBackup();
 
