@@ -16,6 +16,7 @@ type SyncStatusProps = {
 const SYNCING_BANNER_STATES = new Set<SyncState>([SyncState.Catchup]);
 const SYNC_STATUS_REFRESH_INTERVAL_MS = 2000;
 const RECENT_SYNC_NETWORK_ERROR_WINDOW_MS = 30000;
+const SYNC_NETWORK_ERROR_RECOVERY_GRACE_MS = 10000;
 const STALE_SYNC_RESPONSE_WINDOW_MS = SYNC_POLL_TIMEOUT_MS + 15000;
 const HUNG_SYNC_REQUEST_WINDOW_MS = SYNC_POLL_TIMEOUT_MS + 15000;
 
@@ -64,6 +65,9 @@ export function SyncStatus({ mx }: SyncStatusProps) {
     now - diagnostics.lastSyncNetworkErrorAt <= RECENT_SYNC_NETWORK_ERROR_WINDOW_MS;
   const syncRequestStartedAfterNetworkError =
     diagnostics.lastSyncRequestAt > diagnostics.lastSyncNetworkErrorAt;
+  const syncNetworkErrorStillRecovering =
+    diagnostics.lastSyncNetworkErrorAt > 0 &&
+    now - diagnostics.lastSyncNetworkErrorAt < SYNC_NETWORK_ERROR_RECOVERY_GRACE_MS;
   const staleSyncResponse =
     !pendingSyncRequest &&
     diagnostics.lastSyncResponseAt > 0 &&
@@ -73,6 +77,7 @@ export function SyncStatus({ mx }: SyncStatusProps) {
     now - diagnostics.lastSyncRequestAt >= HUNG_SYNC_REQUEST_WINDOW_MS;
   const degradedTransport =
     recentSyncNetworkError &&
+    !syncNetworkErrorStillRecovering &&
     (!syncRequestStartedAfterNetworkError || staleSyncResponse || hungSyncRequest);
 
   if (offline) {

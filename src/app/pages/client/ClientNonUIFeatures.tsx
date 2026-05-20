@@ -81,6 +81,7 @@ const SYNC_RECOVERY_WATCHDOG_INTERVAL_MS = 5000;
 const SYNC_RECOVERY_PENDING_RETRY_WATCHDOG_INTERVAL_MS = 12000;
 const SYNC_RECOVERY_STALL_MS = 30000;
 const SYNC_RECOVERY_STALE_TRANSPORT_MS = 75000;
+const SYNC_RECOVERY_ERROR_RETRY_GRACE_MS = 10000;
 const SYNC_RECOVERY_STALE_RESPONSE_MS = 45000;
 const SYNC_RECOVERY_HUNG_REQUEST_MS = 45000;
 const SYNC_RECOVERY_FORCE_RESTART_MS = 18000;
@@ -389,7 +390,7 @@ function SyncRecoveryFeature() {
     if (
       lastSyncNetworkErrorAt > 0 &&
       !syncRequestStartedAfterNetworkError &&
-      now - lastSyncNetworkErrorAt <= SYNC_RECOVERY_STALE_RESPONSE_MS
+      now - lastSyncNetworkErrorAt >= SYNC_RECOVERY_ERROR_RETRY_GRACE_MS
     ) {
       return true;
     }
@@ -447,8 +448,12 @@ function SyncRecoveryFeature() {
           return;
         }
 
+        if (syncState !== SyncState.Error) {
+          return;
+        }
+
         const retried = mx.retryImmediately();
-        if (!retried && syncState === SyncState.Error) {
+        if (!retried) {
           mx.stopClient();
           await startClient(mx);
         }
@@ -497,7 +502,7 @@ function SyncRecoveryFeature() {
 
       trackReconnectState(state, previous);
 
-      if (state === SyncState.Reconnecting || state === SyncState.Error) {
+      if (state === SyncState.Error) {
         recoverSync(shouldForceRestartSync(state));
       }
     };
