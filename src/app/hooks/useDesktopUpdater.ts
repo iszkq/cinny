@@ -8,6 +8,7 @@ import {
 import {
   checkForDesktopUpdate,
   fetchLatestDesktopRelease,
+  installPendingDesktopUpdate,
   isDesktopUpdaterSupported,
   PendingDesktopUpdate,
   relaunchDesktopApp,
@@ -37,6 +38,12 @@ export const formatDesktopUpdateProgress = (downloaded: number, contentLength: n
 export const getDesktopUpdateErrorMessage = (error: unknown): string => {
   const message = error instanceof Error ? error.message : String(error);
 
+  if (/downloadAndInstall is not a function/i.test(message)) {
+    return '\u5f53\u524d\u66f4\u65b0\u5bf9\u8c61\u5df2\u4e22\u5931\u4e0b\u8f7d\u65b9\u6cd5\uff0c\u8bf7\u91cd\u65b0\u68c0\u67e5\u66f4\u65b0\u540e\u518d\u8bd5\u3002';
+  }
+  if (/Updater download API is unavailable/i.test(message)) {
+    return '\u5f53\u524d\u684c\u9762\u7aef\u6784\u5efa\u7f3a\u5c11\u53ef\u7528\u7684\u81ea\u52a8\u66f4\u65b0\u4e0b\u8f7d\u63a5\u53e3\u3002';
+  }
   if (/pubkey/i.test(message) || /signature/i.test(message)) {
     return '\u81ea\u52a8\u66f4\u65b0\u5df2\u63a5\u5165\uff0c\u4f46\u5f53\u524d\u7f3a\u5c11\u6709\u6548\u7684\u66f4\u65b0\u516c\u94a5\u6216\u7b7e\u540d\u914d\u7f6e\u3002';
   }
@@ -104,12 +111,11 @@ export const useDesktopUpdater = () => {
             fetchLatestDesktopRelease().catch(() => undefined),
           ]);
           const resolvedUpdate =
-            update && latestRelease?.version === update.version && latestRelease.body
-              ? {
-                  ...update,
+            update && latestRelease?.version === update.version
+              ? Object.assign(update, {
                   body: update.body ?? latestRelease.body,
                   date: update.date ?? latestRelease.date,
-                }
+                })
               : update;
 
           setState((current) => {
@@ -191,7 +197,7 @@ export const useDesktopUpdater = () => {
 
     ongoingInstallPromise = (async () => {
       try {
-        await pendingUpdate.downloadAndInstall((event: UpdaterProgressEvent) => {
+        await installPendingDesktopUpdate(pendingUpdate, (event: UpdaterProgressEvent) => {
           setState((current) => {
             if (event.event === 'Started') {
               return {
