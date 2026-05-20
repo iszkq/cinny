@@ -12,6 +12,7 @@ import { useEmailNotifications } from '../../../hooks/useEmailNotifications';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { isDesktopUpdaterSupported } from '../../../utils/desktopUpdater';
+import { requestNotificationPermission as requestAppNotificationPermission } from '../../../utils/notifications';
 
 function EmailNotification() {
   const mx = useMatrixClient();
@@ -105,12 +106,8 @@ export function SystemNotification() {
     }
   }, [notifPermission, setShowNotifications, showNotifications]);
 
-  const requestNotificationPermission = async () => {
-    if (!('Notification' in window)) {
-      return;
-    }
-
-    const permission = await window.Notification.requestPermission();
+  const handleRequestNotificationPermission = async () => {
+    const permission = await requestAppNotificationPermission();
     setShowNotifications(permission === 'granted');
   };
 
@@ -128,11 +125,11 @@ export function SystemNotification() {
           description={
             notifPermission === 'denied' ? (
               <Text as="span" style={{ color: color.Critical.Main }} size="T200">
-                {'Notification' in window
-                  ? desktopSupported
-                    ? '\u684c\u9762\u901a\u77e5\u6743\u9650\u5df2\u88ab\u7981\u7528\uff0c\u8bf7\u5728\u7cfb\u7edf\u901a\u77e5\u8bbe\u7f6e\u91cc\u5141\u8bb8\u661f\u706b\u684c\u9762\u7248\u53d1\u9001\u901a\u77e5\u3002'
-                    : '\u901a\u77e5\u6743\u9650\u5df2\u88ab\u7981\u7528\uff0c\u8bf7\u5728\u6d4f\u89c8\u5668\u5730\u5740\u680f\u6216\u7ad9\u70b9\u6743\u9650\u8bbe\u7f6e\u91cc\u5141\u8bb8\u901a\u77e5\u3002'
-                  : '\u5f53\u524d\u7cfb\u7edf\u4e0d\u652f\u6301\u901a\u77e5\u529f\u80fd\u3002'}
+                {desktopSupported
+                  ? '\u684c\u9762\u901a\u77e5\u6743\u9650\u5df2\u88ab\u7981\u7528\uff0c\u8bf7\u5728\u7cfb\u7edf\u901a\u77e5\u8bbe\u7f6e\u91cc\u5141\u8bb8\u661f\u706b\u684c\u9762\u7248\u53d1\u9001\u901a\u77e5\u3002'
+                  : 'Notification' in window
+                    ? '\u901a\u77e5\u6743\u9650\u5df2\u88ab\u7981\u7528\uff0c\u8bf7\u5728\u6d4f\u89c8\u5668\u5730\u5740\u680f\u6216\u7ad9\u70b9\u6743\u9650\u8bbe\u7f6e\u91cc\u5141\u8bb8\u901a\u77e5\u3002'
+                    : '\u5f53\u524d\u7cfb\u7edf\u4e0d\u652f\u6301\u901a\u77e5\u529f\u80fd\u3002'}
               </Text>
             ) : (
               <span>
@@ -144,7 +141,7 @@ export function SystemNotification() {
           }
           after={
             notifPermission === 'prompt' ? (
-              <Button size="300" radii="300" onClick={requestNotificationPermission}>
+              <Button size="300" radii="300" onClick={handleRequestNotificationPermission}>
                 <Text size="B300">{'\u542f\u7528'}</Text>
               </Button>
             ) : (
