@@ -508,7 +508,7 @@ const useLiveEventArrive = (room: Room, onArrive: (mEvent: MatrixEvent) => void)
       removed,
       data
     ) => {
-      if (eventRoom?.roomId !== room.roomId || !data.liveEvent) return;
+      if (eventRoom?.roomId !== room.roomId || !data?.liveEvent) return;
       onArrive(mEvent);
     };
     const handleRedaction: RoomEventHandlerMap[RoomEvent.Redaction] = (mEvent, eventRoom) => {
