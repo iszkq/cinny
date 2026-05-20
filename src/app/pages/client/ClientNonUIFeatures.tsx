@@ -54,7 +54,7 @@ import {
   CinnyAISettingsContent,
   CinnyAccountPinPolicyContent,
 } from '../../../types/matrix/accountData';
-import { startClient } from '../../../client/initMatrix';
+import { getSyncTransportDiagnostics, startClient } from '../../../client/initMatrix';
 import {
   applyAccountPinPolicyContent,
   hasAccountPin,
@@ -67,13 +67,18 @@ import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
 import { useDesktopUpdater } from '../../hooks/useDesktopUpdater';
 import { sendAppNotification } from '../../utils/notifications';
 
-const HEALTHY_SYNC_STATES = new Set<SyncState>([SyncState.Syncing]);
+const ACTIVE_SYNC_STATES = new Set<SyncState>([
+  SyncState.Prepared,
+  SyncState.Catchup,
+  SyncState.Syncing,
+]);
 const FAILED_PENDING_MESSAGE_STATUS = 'not_sent';
 const EXTERNAL_LINK_SELECTOR = 'a[href]';
 const SYNC_RECOVERY_RETRY_INTERVAL_MS = 4000;
 const SYNC_RECOVERY_WATCHDOG_INTERVAL_MS = 10000;
 const SYNC_RECOVERY_PENDING_RETRY_WATCHDOG_INTERVAL_MS = 12000;
 const SYNC_RECOVERY_STALL_MS = 30000;
+const SYNC_RECOVERY_STALE_TRANSPORT_MS = 75000;
 const SYNC_RECOVERY_FORCE_RESTART_MS = 18000;
 const SYNC_RECOVERY_BURST_WINDOW_MS = 60000;
 const SYNC_RECOVERY_BURST_THRESHOLD = 4;
@@ -123,6 +128,19 @@ const playAudio = (audioElement: HTMLAudioElement | null) => {
   if (playPromise) {
     playPromise.catch(() => undefined);
   }
+};
+
+const isActiveSyncState = (state: SyncState | null | undefined): state is SyncState =>
+  Boolean(state && ACTIVE_SYNC_STATES.has(state));
+
+const getLastSyncTransportActivityAt = (mx: MatrixClient): number => {
+  const diagnostics = getSyncTransportDiagnostics(mx);
+
+  return Math.max(
+    diagnostics.lastRequestAt,
+    diagnostics.lastResponseAt,
+    diagnostics.lastErrorAt
+  );
 };
 
 const getPendingEventKey = (mEvent: MatrixEvent): string | undefined => {
@@ -297,7 +315,7 @@ function SyncRecoveryFeature() {
 
   const trackReconnectState = useCallback(
     (state: SyncState | null, previous?: SyncState | null) => {
-      if (!state || HEALTHY_SYNC_STATES.has(state)) {
+      if (!state || isActiveSyncState(state)) {
         resetReconnectTracking();
         return;
       }
@@ -357,6 +375,16 @@ function SyncRecoveryFeature() {
     [getReconnectDuration]
   );
 
+  const hasStaleSyncTransport = useCallback(() => {
+    const lastSyncTransportActivityAt = getLastSyncTransportActivityAt(mx);
+
+    if (lastSyncTransportActivityAt === 0) {
+      return false;
+    }
+
+    return Date.now() - lastSyncTransportActivityAt >= SYNC_RECOVERY_STALE_TRANSPORT_MS;
+  }, [mx]);
+
   const recoverSync = useCallback(
     (forceRestart = false) => {
       if (typeof navigator !== 'undefined' && navigator.onLine === false) {
@@ -369,7 +397,7 @@ function SyncRecoveryFeature() {
       }
 
       const syncState = mx.getSyncState();
-      if (!forceRestart && syncState && HEALTHY_SYNC_STATES.has(syncState)) {
+      if (!forceRestart && isActiveSyncState(syncState)) {
         return;
       }
 
@@ -403,7 +431,7 @@ function SyncRecoveryFeature() {
 
   const retryPendingMessages = useCallback(() => {
     const syncState = mx.getSyncState();
-    if (!syncState || !HEALTHY_SYNC_STATES.has(syncState)) {
+    if (!isActiveSyncState(syncState)) {
       return;
     }
 
@@ -428,7 +456,7 @@ function SyncRecoveryFeature() {
 
   useEffect(() => {
     const handleSync: ClientEventHandlerMap[ClientEvent.Sync] = (state, previous) => {
-      if (state && HEALTHY_SYNC_STATES.has(state)) {
+      if (isActiveSyncState(state)) {
         lastHealthySyncRef.current = Date.now();
         resetReconnectTracking();
         retryPendingMessages();
@@ -474,7 +502,12 @@ function SyncRecoveryFeature() {
       }
 
       const syncState = mx.getSyncState();
-      if (syncState && HEALTHY_SYNC_STATES.has(syncState)) {
+      if (hasStaleSyncTransport()) {
+        recoverSync(true);
+        return;
+      }
+
+      if (isActiveSyncState(syncState)) {
         return;
       }
 
@@ -504,7 +537,7 @@ function SyncRecoveryFeature() {
       window.clearInterval(recoveryTimer);
       window.clearInterval(pendingRetryTimer);
     };
-  }, [mx, recoverSync, retryPendingMessages, shouldForceRestartSync]);
+  }, [hasStaleSyncTransport, mx, recoverSync, retryPendingMessages, shouldForceRestartSync]);
 
   return null;
 }
@@ -853,6 +886,7 @@ function FaviconUpdater() {
     unread: APP_LOGO_URL,
     highlight: APP_LOGO_URL,
   });
+  const baseTitleRef = useRef<string>();
 
   useEffect(() => {
     let mounted = true;
@@ -874,6 +908,10 @@ function FaviconUpdater() {
   }, []);
 
   useEffect(() => {
+    if (!baseTitleRef.current) {
+      baseTitleRef.current = document.title || '星火';
+    }
+
     let notification = false;
     let highlight = false;
     roomToUnread.forEach((unread) => {
@@ -887,14 +925,27 @@ function FaviconUpdater() {
 
     if (highlight) {
       setFavicon(faviconUrls.highlight);
-      return;
-    }
-    if (notification) {
+    } else if (notification) {
       setFavicon(faviconUrls.unread);
-      return;
+    } else {
+      setFavicon(faviconUrls.normal);
     }
-    setFavicon(faviconUrls.normal);
+
+    const titlePrefix = highlight ? '\u25cf ' : notification ? '\u2022 ' : '';
+    const nextTitle = `${titlePrefix}${baseTitleRef.current}`;
+    if (document.title !== nextTitle) {
+      document.title = nextTitle;
+    }
   }, [roomToUnread, faviconUrls]);
+
+  useEffect(
+    () => () => {
+      if (baseTitleRef.current) {
+        document.title = baseTitleRef.current;
+      }
+    },
+    []
+  );
 
   return null;
 }
@@ -930,7 +981,7 @@ function InviteNotifications() {
   }, []);
 
   useEffect(() => {
-    if (invites.length > perviousInviteLen && mx.getSyncState() === 'SYNCING') {
+    if (invites.length > perviousInviteLen && isActiveSyncState(mx.getSyncState())) {
       if (showNotifications) {
         void notify(invites.length - perviousInviteLen);
       }
@@ -1006,7 +1057,7 @@ function MessageNotifications() {
       removed,
       data
     ) => {
-      if (mx.getSyncState() !== 'SYNCING') return;
+      if (!isActiveSyncState(mx.getSyncState())) return;
       if (
         !room ||
         !data.liveEvent ||
