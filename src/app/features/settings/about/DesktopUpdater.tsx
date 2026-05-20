@@ -5,6 +5,7 @@ import { ReleaseNotes } from '../../../components/ReleaseNotes';
 import { SequenceCard } from '../../../components/sequence-card';
 import { SettingTile } from '../../../components/setting-tile';
 import { useDesktopUpdater } from '../../../hooks/useDesktopUpdater';
+import { openDesktopUpdateDownloadUrl } from '../../../utils/desktopUpdater';
 import { SequenceCardStyle } from '../styles.css';
 
 export function DesktopUpdater() {
@@ -29,6 +30,7 @@ export function DesktopUpdater() {
   const releaseNotesBody = pendingUpdate?.body ?? latestRelease?.body;
   const showReleaseNotes = Boolean(pendingUpdate || latestRelease);
   const statusText = progressText ?? message;
+  const manualDownloadUrl = pendingUpdate?.downloadUrl ?? latestRelease?.downloadUrl;
 
   useEffect(() => {
     if (!desktopSupported || lastCheckedAt || status === 'checking' || status === 'downloading') {
@@ -98,6 +100,19 @@ export function DesktopUpdater() {
                   <Text size="B300">
                     {downloading ? '\u5b89\u88c5\u4e2d...' : '\u4e0b\u8f7d\u5e76\u5b89\u88c5'}
                   </Text>
+                </Button>
+              )}
+              {manualDownloadUrl && (
+                <Button
+                  variant="Secondary"
+                  fill="Soft"
+                  size="300"
+                  radii="300"
+                  onClick={() => {
+                    void openDesktopUpdateDownloadUrl(manualDownloadUrl);
+                  }}
+                >
+                  <Text size="B300">{'\u624b\u52a8\u4e0b\u8f7d'}</Text>
                 </Button>
               )}
             </Box>
