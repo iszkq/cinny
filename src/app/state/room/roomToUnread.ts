@@ -245,8 +245,13 @@ export const useBindRoomToUnreadAtom = (mx: MatrixClient, unreadAtom: typeof roo
       removed: boolean,
       data: IRoomTimelineData
     ) => {
-      if (!room || !data.liveEvent || room.isSpaceRoom() || !isNotificationEvent(mEvent)) return;
-      syncRoomUnread(room);
+      if (!room || !data?.liveEvent || room.isSpaceRoom() || !isNotificationEvent(mEvent)) return;
+
+      try {
+        syncRoomUnread(room);
+      } catch {
+        // Unread bookkeeping must never interrupt sync event processing.
+      }
     };
     mx.on(RoomEvent.Timeline, handleTimelineEvent);
     return () => {
