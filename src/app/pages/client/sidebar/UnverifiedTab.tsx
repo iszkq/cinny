@@ -9,12 +9,8 @@ import {
 import { useDeviceIds, useDeviceList, useSplitCurrentDevice } from '../../../hooks/useDeviceList';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import * as css from './UnverifiedTab.css';
-import {
-  useDeviceVerificationStatus,
-  useUnverifiedDeviceCount,
-  VerificationStatus,
-} from '../../../hooks/useDeviceVerificationStatus';
-import { useCrossSigningActive } from '../../../hooks/useCrossSigning';
+import { useUnverifiedDeviceCount } from '../../../hooks/useDeviceVerificationStatus';
+import { useCrossSigningActive, useCrossSigningReady } from '../../../hooks/useCrossSigning';
 import { Modal500 } from '../../../components/Modal500';
 import { Settings, SettingsPages } from '../../../features/settings';
 
@@ -25,13 +21,8 @@ function UnverifiedIndicator() {
   const [devices] = useDeviceList();
 
   const [currentDevice, otherDevices] = useSplitCurrentDevice(devices);
-
-  const verificationStatus = useDeviceVerificationStatus(
-    crypto,
-    mx.getSafeUserId(),
-    currentDevice?.device_id
-  );
-  const unverified = verificationStatus === VerificationStatus.Unverified;
+  const crossSigningReady = useCrossSigningReady(crypto);
+  const unverified = Boolean(currentDevice && crossSigningReady === false);
 
   const otherDevicesId = useDeviceIds(otherDevices);
   const unverifiedDeviceCount = useUnverifiedDeviceCount(
@@ -49,7 +40,9 @@ function UnverifiedIndicator() {
     <>
       {hasUnverified && (
         <SidebarItem active={settings} className={css.UnverifiedTab}>
-          <SidebarItemTooltip tooltip={unverified ? 'Unverified Device' : 'Unverified Devices'}>
+          <SidebarItemTooltip
+            tooltip={unverified ? 'Current Device Unverified' : 'Other Devices Unverified'}
+          >
             {(triggerRef) => (
               <SidebarAvatar
                 className={unverified ? css.UnverifiedAvatar : css.UnverifiedOtherAvatar}

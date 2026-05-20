@@ -59,26 +59,35 @@ export function SyncStatus({ mx }: SyncStatusProps) {
   const diagnostics = getSyncTransportDiagnostics(mx);
   const now = Date.now();
   const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+  const lastObservedSyncActivityAt = Math.max(
+    diagnostics.lastSyncResponseAt,
+    diagnostics.lastSyncRealtimeActivityAt
+  );
   const pendingSyncRequest = diagnostics.lastSyncRequestAt > diagnostics.lastSyncResponseAt;
   const recentSyncNetworkError =
     diagnostics.lastSyncNetworkErrorAt > 0 &&
     now - diagnostics.lastSyncNetworkErrorAt <= RECENT_SYNC_NETWORK_ERROR_WINDOW_MS;
-  const syncRequestStartedAfterNetworkError =
-    diagnostics.lastSyncRequestAt > diagnostics.lastSyncNetworkErrorAt;
+  const syncActivityObservedAfterNetworkError =
+    Math.max(
+      diagnostics.lastSyncRequestAt,
+      diagnostics.lastSyncResponseAt,
+      diagnostics.lastSyncRealtimeActivityAt
+    ) > diagnostics.lastSyncNetworkErrorAt;
   const syncNetworkErrorStillRecovering =
     diagnostics.lastSyncNetworkErrorAt > 0 &&
     now - diagnostics.lastSyncNetworkErrorAt < SYNC_NETWORK_ERROR_RECOVERY_GRACE_MS;
   const staleSyncResponse =
     !pendingSyncRequest &&
-    diagnostics.lastSyncResponseAt > 0 &&
-    now - diagnostics.lastSyncResponseAt >= STALE_SYNC_RESPONSE_WINDOW_MS;
+    lastObservedSyncActivityAt > 0 &&
+    now - lastObservedSyncActivityAt >= STALE_SYNC_RESPONSE_WINDOW_MS;
   const hungSyncRequest =
     pendingSyncRequest &&
-    now - diagnostics.lastSyncRequestAt >= HUNG_SYNC_REQUEST_WINDOW_MS;
+    now - Math.max(diagnostics.lastSyncRequestAt, diagnostics.lastSyncRealtimeActivityAt) >=
+      HUNG_SYNC_REQUEST_WINDOW_MS;
   const degradedTransport =
     recentSyncNetworkError &&
     !syncNetworkErrorStillRecovering &&
-    (!syncRequestStartedAfterNetworkError || staleSyncResponse || hungSyncRequest);
+    (!syncActivityObservedAfterNetworkError || staleSyncResponse || hungSyncRequest);
 
   if (offline) {
     return (

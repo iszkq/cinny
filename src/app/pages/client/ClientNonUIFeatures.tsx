@@ -56,7 +56,11 @@ import {
   CinnyAISettingsContent,
   CinnyAccountPinPolicyContent,
 } from '../../../types/matrix/accountData';
-import { getSyncTransportDiagnostics, startClient } from '../../../client/initMatrix';
+import {
+  getSyncTransportDiagnostics,
+  markSyncRealtimeActivity,
+  startClient,
+} from '../../../client/initMatrix';
 import {
   applyAccountPinPolicyContent,
   hasAccountPin,
@@ -154,7 +158,8 @@ const getLastSyncTransportActivityAt = (mx: MatrixClient): number => {
   return Math.max(
     diagnostics.lastSyncRequestAt,
     diagnostics.lastSyncResponseAt,
-    diagnostics.lastSyncErrorAt
+    diagnostics.lastSyncErrorAt,
+    diagnostics.lastSyncRealtimeActivityAt
   );
 };
 
@@ -357,7 +362,11 @@ function SyncRecoveryFeature() {
   const getLastSuccessfulSyncAt = useCallback(() => {
     const diagnostics = getSyncTransportDiagnostics(mx);
 
-    return Math.max(lastHealthySyncRef.current, diagnostics.lastSyncResponseAt);
+    return Math.max(
+      lastHealthySyncRef.current,
+      diagnostics.lastSyncResponseAt,
+      diagnostics.lastSyncRealtimeActivityAt
+    );
   }, [mx]);
 
   const trackReconnectState = useCallback(
@@ -427,11 +436,16 @@ function SyncRecoveryFeature() {
     const { lastSyncRequestAt, lastSyncResponseAt, lastSyncNetworkErrorAt } = diagnostics;
     const now = Date.now();
     const pendingSyncRequest = lastSyncRequestAt > lastSyncResponseAt;
-    const syncRequestStartedAfterNetworkError = lastSyncRequestAt > lastSyncNetworkErrorAt;
+    const syncActivityObservedAfterNetworkError =
+      Math.max(
+        lastSyncRequestAt,
+        lastSyncResponseAt,
+        diagnostics.lastSyncRealtimeActivityAt
+      ) > lastSyncNetworkErrorAt;
 
     if (
       lastSyncNetworkErrorAt > 0 &&
-      !syncRequestStartedAfterNetworkError &&
+      !syncActivityObservedAfterNetworkError &&
       now - lastSyncNetworkErrorAt >= SYNC_RECOVERY_ERROR_RETRY_GRACE_MS
     ) {
       return true;
@@ -577,6 +591,7 @@ function SyncRecoveryFeature() {
     const handleSync: ClientEventHandlerMap[ClientEvent.Sync] = (state, previous) => {
       if (isActiveSyncState(state)) {
         lastHealthySyncRef.current = Date.now();
+        markSyncRealtimeActivity(mx);
         resetReconnectTracking();
         retryPendingMessages();
         return;
@@ -602,6 +617,8 @@ function SyncRecoveryFeature() {
 
     const handleToDeviceEvent: ClientEventHandlerMap[ClientEvent.ToDeviceEvent] = () => {
       lastHealthySyncRef.current = Date.now();
+      markSyncRealtimeActivity(mx);
+      void retryLiveTimelineDecryptions(mx);
       triggerRetry();
     };
 
@@ -616,13 +633,15 @@ function SyncRecoveryFeature() {
       removed,
       data
     ) => {
-      if (!room || toStartOfTimeline || removed || !data.liveEvent) {
+      if (!room || toStartOfTimeline || removed || !data?.liveEvent) {
         return;
       }
 
       lastHealthySyncRef.current = Date.now();
+      markSyncRealtimeActivity(mx);
 
       if (mEvent.isEncrypted() || mEvent.isDecryptionFailure()) {
+        void decryptAllTimelineEvent(mx, room.getLiveTimeline()).catch(() => undefined);
         triggerRetry();
       }
     };
@@ -1231,7 +1250,7 @@ function MessageNotifications() {
       if (!isActiveSyncState(mx.getSyncState())) return;
       if (
         !room ||
-        !data.liveEvent ||
+        !data?.liveEvent ||
         room.isSpaceRoom() ||
         !isNotificationEvent(mEvent) ||
         getNotificationType(mx, room.roomId) === NotificationType.Mute
@@ -1239,41 +1258,45 @@ function MessageNotifications() {
         return;
       }
 
-      const sender = mEvent.getSender();
-      const eventId = mEvent.getId();
-      if (!sender || !eventId || mEvent.getSender() === mx.getUserId()) return;
-      const unreadInfo = getUnreadInfo(mx, room);
-      const cachedUnreadInfo = unreadCacheRef.current.get(room.roomId);
-      unreadCacheRef.current.set(room.roomId, unreadInfo);
-      const suppressDesktopNotification =
-        document.hasFocus() && (selectedRoomId === room.roomId || notificationSelected);
+      try {
+        const sender = mEvent.getSender();
+        const eventId = mEvent.getId();
+        if (!sender || !eventId || mEvent.getSender() === mx.getUserId()) return;
+        const unreadInfo = getUnreadInfo(mx, room);
+        const cachedUnreadInfo = unreadCacheRef.current.get(room.roomId);
+        unreadCacheRef.current.set(room.roomId, unreadInfo);
+        const suppressDesktopNotification =
+          document.hasFocus() && (selectedRoomId === room.roomId || notificationSelected);
 
-      if (!suppressDesktopNotification) {
-        if (unreadInfo.total === 0) return;
-        if (
-          cachedUnreadInfo &&
-          unreadEqual(unreadInfoToUnread(cachedUnreadInfo), unreadInfoToUnread(unreadInfo))
-        ) {
-          return;
+        if (!suppressDesktopNotification) {
+          if (unreadInfo.total === 0) return;
+          if (
+            cachedUnreadInfo &&
+            unreadEqual(unreadInfoToUnread(cachedUnreadInfo), unreadInfoToUnread(unreadInfo))
+          ) {
+            return;
+          }
         }
-      }
 
-      if (!suppressDesktopNotification && showNotifications) {
-        const avatarMxc =
-          room.getAvatarFallbackMember()?.getMxcAvatarUrl() ?? room.getMxcAvatarUrl();
-        void notify({
-          roomName: room.name ?? 'Unknown',
-          roomAvatar: avatarMxc
-            ? mxcUrlToHttp(mx, avatarMxc, useAuthentication, 96, 96, 'crop') ?? undefined
-            : undefined,
-          username: getMemberDisplayName(room, sender) ?? getMxIdLocalPart(sender) ?? sender,
-          roomId: room.roomId,
-          eventId,
-        });
-      }
+        if (!suppressDesktopNotification && showNotifications) {
+          const avatarMxc =
+            room.getAvatarFallbackMember()?.getMxcAvatarUrl() ?? room.getMxcAvatarUrl();
+          void notify({
+            roomName: room.name ?? 'Unknown',
+            roomAvatar: avatarMxc
+              ? mxcUrlToHttp(mx, avatarMxc, useAuthentication, 96, 96, 'crop') ?? undefined
+              : undefined,
+            username: getMemberDisplayName(room, sender) ?? getMxIdLocalPart(sender) ?? sender,
+            roomId: room.roomId,
+            eventId,
+          });
+        }
 
-      if (notificationSound) {
-        playSound();
+        if (notificationSound) {
+          playSound();
+        }
+      } catch {
+        // Notification failures must not interrupt sync event processing.
       }
     };
     mx.on(RoomEvent.Timeline, handleTimelineEvent);
