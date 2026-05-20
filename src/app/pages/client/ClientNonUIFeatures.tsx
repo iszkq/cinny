@@ -5,6 +5,8 @@ import {
   ClientEvent,
   ClientEventHandlerMap,
   MatrixEvent,
+  MatrixEventEvent,
+  MatrixEventHandlerMap,
   MatrixClient,
   Room,
   RoomEvent,
@@ -139,9 +141,9 @@ const getLastSyncTransportActivityAt = (mx: MatrixClient): number => {
   const diagnostics = getSyncTransportDiagnostics(mx);
 
   return Math.max(
-    diagnostics.lastRequestAt,
-    diagnostics.lastResponseAt,
-    diagnostics.lastErrorAt
+    diagnostics.lastSyncRequestAt,
+    diagnostics.lastSyncResponseAt,
+    diagnostics.lastSyncErrorAt
   );
 };
 
@@ -379,22 +381,31 @@ function SyncRecoveryFeature() {
 
   const hasStaleSyncTransport = useCallback(() => {
     const diagnostics = getSyncTransportDiagnostics(mx);
-    const { lastRequestAt, lastResponseAt, lastNetworkErrorAt } = diagnostics;
+    const { lastSyncRequestAt, lastSyncResponseAt, lastSyncNetworkErrorAt } = diagnostics;
     const now = Date.now();
+    const pendingSyncRequest = lastSyncRequestAt > lastSyncResponseAt;
+    const syncRequestStartedAfterNetworkError = lastSyncRequestAt > lastSyncNetworkErrorAt;
 
     if (
-      lastNetworkErrorAt > 0 &&
-      (lastResponseAt === 0 || lastNetworkErrorAt >= lastResponseAt) &&
-      now - lastNetworkErrorAt <= SYNC_RECOVERY_STALE_RESPONSE_MS
+      lastSyncNetworkErrorAt > 0 &&
+      !syncRequestStartedAfterNetworkError &&
+      now - lastSyncNetworkErrorAt <= SYNC_RECOVERY_STALE_RESPONSE_MS
     ) {
       return true;
     }
 
-    if (lastResponseAt > 0 && now - lastResponseAt >= SYNC_RECOVERY_STALE_RESPONSE_MS) {
+    if (
+      !pendingSyncRequest &&
+      lastSyncResponseAt > 0 &&
+      now - lastSyncResponseAt >= SYNC_RECOVERY_STALE_RESPONSE_MS
+    ) {
       return true;
     }
 
-    if (lastRequestAt > lastResponseAt && now - lastRequestAt >= SYNC_RECOVERY_HUNG_REQUEST_MS) {
+    if (
+      pendingSyncRequest &&
+      now - lastSyncRequestAt >= SYNC_RECOVERY_HUNG_REQUEST_MS
+    ) {
       return true;
     }
 
@@ -496,6 +507,28 @@ function SyncRecoveryFeature() {
       mx.removeListener(ClientEvent.Sync, handleSync);
     };
   }, [mx, recoverSync, resetReconnectTracking, retryPendingMessages, shouldForceRestartSync, trackReconnectState]);
+
+  useEffect(() => {
+    const triggerRetry: () => void = () => {
+      retryPendingMessages();
+    };
+
+    const handleToDeviceEvent: ClientEventHandlerMap[ClientEvent.ToDeviceEvent] = () => {
+      triggerRetry();
+    };
+
+    const handleEventDecrypted: MatrixEventHandlerMap[MatrixEventEvent.Decrypted] = () => {
+      triggerRetry();
+    };
+
+    mx.on(ClientEvent.ToDeviceEvent, handleToDeviceEvent);
+    mx.on(MatrixEventEvent.Decrypted, handleEventDecrypted);
+
+    return () => {
+      mx.removeListener(ClientEvent.ToDeviceEvent, handleToDeviceEvent);
+      mx.removeListener(MatrixEventEvent.Decrypted, handleEventDecrypted);
+    };
+  }, [mx, retryPendingMessages]);
 
   useEffect(() => {
     const recoverVisibleSession = () => {

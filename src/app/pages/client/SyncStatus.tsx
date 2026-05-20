@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Box, config, Line, Text } from 'folds';
 import { useSyncState } from '../../hooks/useSyncState';
 import { ContainerColor } from '../../styles/ContainerColor.css';
-import { getSyncTransportDiagnostics } from '../../../client/initMatrix';
+import { getSyncTransportDiagnostics, SYNC_POLL_TIMEOUT_MS } from '../../../client/initMatrix';
 
 type StateData = {
   current: SyncState | null;
@@ -15,8 +15,9 @@ type SyncStatusProps = {
 
 const SYNCING_BANNER_STATES = new Set<SyncState>([SyncState.Catchup]);
 const SYNC_STATUS_REFRESH_INTERVAL_MS = 2000;
-const RECENT_NETWORK_ERROR_WINDOW_MS = 20000;
-const STALE_SYNC_RESPONSE_WINDOW_MS = 15000;
+const RECENT_SYNC_NETWORK_ERROR_WINDOW_MS = 30000;
+const STALE_SYNC_RESPONSE_WINDOW_MS = SYNC_POLL_TIMEOUT_MS + 15000;
+const HUNG_SYNC_REQUEST_WINDOW_MS = SYNC_POLL_TIMEOUT_MS + 15000;
 
 export function SyncStatus({ mx }: SyncStatusProps) {
   const [stateData, setStateData] = useState<StateData>({
@@ -57,21 +58,22 @@ export function SyncStatus({ mx }: SyncStatusProps) {
   const diagnostics = getSyncTransportDiagnostics(mx);
   const now = Date.now();
   const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
-  const recentNetworkError =
-    diagnostics.lastNetworkErrorAt > 0 &&
-    now - diagnostics.lastNetworkErrorAt <= RECENT_NETWORK_ERROR_WINDOW_MS;
+  const pendingSyncRequest = diagnostics.lastSyncRequestAt > diagnostics.lastSyncResponseAt;
+  const recentSyncNetworkError =
+    diagnostics.lastSyncNetworkErrorAt > 0 &&
+    now - diagnostics.lastSyncNetworkErrorAt <= RECENT_SYNC_NETWORK_ERROR_WINDOW_MS;
+  const syncRequestStartedAfterNetworkError =
+    diagnostics.lastSyncRequestAt > diagnostics.lastSyncNetworkErrorAt;
   const staleSyncResponse =
-    diagnostics.lastResponseAt > 0 &&
-    now - diagnostics.lastResponseAt >= STALE_SYNC_RESPONSE_WINDOW_MS;
+    !pendingSyncRequest &&
+    diagnostics.lastSyncResponseAt > 0 &&
+    now - diagnostics.lastSyncResponseAt >= STALE_SYNC_RESPONSE_WINDOW_MS;
   const hungSyncRequest =
-    diagnostics.lastRequestAt > diagnostics.lastResponseAt &&
-    now - diagnostics.lastRequestAt >= STALE_SYNC_RESPONSE_WINDOW_MS;
+    pendingSyncRequest &&
+    now - diagnostics.lastSyncRequestAt >= HUNG_SYNC_REQUEST_WINDOW_MS;
   const degradedTransport =
-    recentNetworkError &&
-    (diagnostics.lastResponseAt === 0 ||
-      diagnostics.lastNetworkErrorAt >= diagnostics.lastResponseAt ||
-      staleSyncResponse ||
-      hungSyncRequest);
+    recentSyncNetworkError &&
+    (!syncRequestStartedAfterNetworkError || staleSyncResponse || hungSyncRequest);
 
   if (offline) {
     return (
