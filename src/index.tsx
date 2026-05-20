@@ -17,8 +17,16 @@ import App from './app/pages/App';
 import './app/i18n';
 import { pushSessionToSW } from './sw-session';
 import { getFallbackSession } from './app/state/sessions';
+import { isDesktopUpdaterSupported } from './app/utils/desktopUpdater';
+import { applyDesktopStartupPinLock } from './app/utils/pinLock';
 
 document.body.classList.add(configClass, varsClass);
+
+const fallbackSession = getFallbackSession();
+
+if (isDesktopUpdaterSupported()) {
+  applyDesktopStartupPinLock(fallbackSession?.baseUrl, fallbackSession?.userId);
+}
 
 // Register Service Worker
 if ('serviceWorker' in navigator) {
