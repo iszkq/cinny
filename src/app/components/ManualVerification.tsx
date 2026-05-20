@@ -20,6 +20,7 @@ import { SecretStorageRecoveryKey, SecretStorageRecoveryPassphrase } from './Sec
 import { useMatrixClient } from '../hooks/useMatrixClient';
 import { AsyncStatus, useAsyncCallback } from '../hooks/useAsyncCallback';
 import { storePrivateKey } from '../../client/secretStorageKeys';
+import { restoreKeyBackupAndDecrypt } from '../utils/keyBackup';
 
 export enum ManualVerificationMethod {
   RecoveryPassphrase = 'passphrase',
@@ -138,10 +139,10 @@ export function ManualVerificationTile({
 
       storePrivateKey(secretStorageKeyId, recoveryKey);
 
-      await crypto.bootstrapCrossSigning({});
       await crypto.bootstrapSecretStorage({});
+      await crypto.bootstrapCrossSigning({});
 
-      await crypto.loadSessionBackupPrivateKeyFromSecretStorage();
+      await restoreKeyBackupAndDecrypt(mx).catch(() => undefined);
     },
     [mx, secretStorageKeyId]
   );

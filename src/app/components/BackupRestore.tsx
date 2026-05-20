@@ -30,6 +30,8 @@ import {
 } from '../hooks/useKeyBackup';
 import { stopPropagation } from '../utils/keyboard';
 import { useRestoreBackupOnVerification } from '../hooks/useRestoreBackupOnVerification';
+import { useMatrixClient } from '../hooks/useMatrixClient';
+import { restoreKeyBackupAndDecrypt } from '../utils/keyBackup';
 
 type BackupStatusProps = {
   enabled: boolean;
@@ -135,6 +137,7 @@ type BackupRestoreTileProps = {
   crypto: CryptoApi;
 };
 export function BackupRestoreTile({ crypto }: BackupRestoreTileProps) {
+  const mx = useMatrixClient();
   const [restoreProgress, setRestoreProgress] = useAtom(backupRestoreProgressAtom);
   const restoring =
     restoreProgress.status === BackupProgressStatus.Fetching ||
@@ -152,12 +155,12 @@ export function BackupRestoreTile({ crypto }: BackupRestoreTileProps) {
 
   const [restoreState, restoreBackup] = useAsyncCallback<void, Error, []>(
     useCallback(async () => {
-      await crypto.restoreKeyBackup({
+      await restoreKeyBackupAndDecrypt(mx, {
         progressCallback(progress) {
           setRestoreProgress(progress);
         },
       });
-    }, [crypto, setRestoreProgress])
+    }, [mx, setRestoreProgress])
   );
 
   const handleRestore = () => {
