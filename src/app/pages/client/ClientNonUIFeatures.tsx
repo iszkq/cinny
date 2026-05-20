@@ -75,10 +75,12 @@ const ACTIVE_SYNC_STATES = new Set<SyncState>([
 const FAILED_PENDING_MESSAGE_STATUS = 'not_sent';
 const EXTERNAL_LINK_SELECTOR = 'a[href]';
 const SYNC_RECOVERY_RETRY_INTERVAL_MS = 4000;
-const SYNC_RECOVERY_WATCHDOG_INTERVAL_MS = 10000;
+const SYNC_RECOVERY_WATCHDOG_INTERVAL_MS = 5000;
 const SYNC_RECOVERY_PENDING_RETRY_WATCHDOG_INTERVAL_MS = 12000;
 const SYNC_RECOVERY_STALL_MS = 30000;
 const SYNC_RECOVERY_STALE_TRANSPORT_MS = 75000;
+const SYNC_RECOVERY_STALE_RESPONSE_MS = 45000;
+const SYNC_RECOVERY_HUNG_REQUEST_MS = 45000;
 const SYNC_RECOVERY_FORCE_RESTART_MS = 18000;
 const SYNC_RECOVERY_BURST_WINDOW_MS = 60000;
 const SYNC_RECOVERY_BURST_THRESHOLD = 4;
@@ -376,13 +378,32 @@ function SyncRecoveryFeature() {
   );
 
   const hasStaleSyncTransport = useCallback(() => {
-    const lastSyncTransportActivityAt = getLastSyncTransportActivityAt(mx);
+    const diagnostics = getSyncTransportDiagnostics(mx);
+    const { lastRequestAt, lastResponseAt, lastNetworkErrorAt } = diagnostics;
+    const now = Date.now();
 
+    if (
+      lastNetworkErrorAt > 0 &&
+      (lastResponseAt === 0 || lastNetworkErrorAt >= lastResponseAt) &&
+      now - lastNetworkErrorAt <= SYNC_RECOVERY_STALE_RESPONSE_MS
+    ) {
+      return true;
+    }
+
+    if (lastResponseAt > 0 && now - lastResponseAt >= SYNC_RECOVERY_STALE_RESPONSE_MS) {
+      return true;
+    }
+
+    if (lastRequestAt > lastResponseAt && now - lastRequestAt >= SYNC_RECOVERY_HUNG_REQUEST_MS) {
+      return true;
+    }
+
+    const lastSyncTransportActivityAt = getLastSyncTransportActivityAt(mx);
     if (lastSyncTransportActivityAt === 0) {
       return false;
     }
 
-    return Date.now() - lastSyncTransportActivityAt >= SYNC_RECOVERY_STALE_TRANSPORT_MS;
+    return now - lastSyncTransportActivityAt >= SYNC_RECOVERY_STALE_TRANSPORT_MS;
   }, [mx]);
 
   const recoverSync = useCallback(
@@ -477,18 +498,20 @@ function SyncRecoveryFeature() {
   }, [mx, recoverSync, resetReconnectTracking, retryPendingMessages, shouldForceRestartSync, trackReconnectState]);
 
   useEffect(() => {
-    const handleOnline = () => {
-      recoverSync();
+    const recoverVisibleSession = () => {
+      recoverSync(hasStaleSyncTransport());
       retryPendingMessages();
     };
+
+    const handleOnline = () => {
+      recoverVisibleSession();
+    };
     const handleFocus = () => {
-      recoverSync();
-      retryPendingMessages();
+      recoverVisibleSession();
     };
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        recoverSync();
-        retryPendingMessages();
+        recoverVisibleSession();
       }
     };
 

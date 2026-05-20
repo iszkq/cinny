@@ -13,7 +13,7 @@ import {
   Spinner,
   Text,
 } from 'folds';
-import { HttpApiEvent, HttpApiEventHandlerMap, MatrixClient } from 'matrix-js-sdk';
+import { HttpApiEvent, HttpApiEventHandlerMap, MatrixClient, SyncState } from 'matrix-js-sdk';
 import FocusTrap from 'focus-trap-react';
 import React, { MouseEventHandler, ReactNode, useCallback, useEffect, useState } from 'react';
 import {
@@ -39,6 +39,12 @@ import { SyncStatus } from './SyncStatus';
 import { AuthMetadataProvider } from '../../hooks/useAuthMetadata';
 import { getFallbackSession } from '../../state/sessions';
 import { AutoDiscovery } from './AutoDiscovery';
+
+const ACTIVE_SYNC_STATES = new Set<SyncState>([
+  SyncState.Prepared,
+  SyncState.Catchup,
+  SyncState.Syncing,
+]);
 
 function ClientRootLoading() {
   return (
@@ -206,7 +212,7 @@ export function ClientRoot({ children }: ClientRootProps) {
   useSyncState(
     mx,
     useCallback((state) => {
-      if (state === 'PREPARED') {
+      if (state && ACTIVE_SYNC_STATES.has(state)) {
         setLoading(false);
       }
     }, [])
