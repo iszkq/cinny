@@ -27,6 +27,7 @@ import { allInvitesAtom } from '../../state/room-list/inviteList';
 import { usePreviousValue } from '../../hooks/usePreviousValue';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { getInboxInvitesPath, getInboxNotificationsPath } from '../pathUtils';
+import { DesktopUpdatePrompt } from '../../components/DesktopUpdatePrompt';
 import {
   getMemberDisplayName,
   getNotificationType,
@@ -62,6 +63,7 @@ import {
 } from '../../utils/pinLock';
 import { openExternalUrl, shouldOpenHrefExternally } from '../../utils/desktop';
 import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
+import { useDesktopUpdater } from '../../hooks/useDesktopUpdater';
 import { sendAppNotification } from '../../utils/notifications';
 
 const HEALTHY_SYNC_STATES = new Set<SyncState>([
@@ -78,6 +80,9 @@ const SYNC_RECOVERY_STALL_MS = 30000;
 const SYNC_RECOVERY_FORCE_RESTART_MS = 18000;
 const SYNC_RECOVERY_BURST_WINDOW_MS = 60000;
 const SYNC_RECOVERY_BURST_THRESHOLD = 4;
+const DESKTOP_UPDATE_AUTO_CHECK_DELAY_MS = 4000;
+const DESKTOP_UPDATE_AUTO_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const DESKTOP_UPDATE_AUTO_CHECK_FOCUS_COOLDOWN_MS = 15 * 60 * 1000;
 
 const createFaviconUrl = async (logoUrl: string, badgeColor?: string): Promise<string> => {
   const img = await loadImageElement(logoUrl);
@@ -591,6 +596,78 @@ function DesktopPinLockShortcutFeature() {
   return null;
 }
 
+function DesktopAutoUpdateFeature() {
+  const { desktopSupported, pendingUpdate, checkForUpdates } = useDesktopUpdater();
+  const [promptOpen, setPromptOpen] = useState(false);
+  const promptedVersionRef = useRef<string>();
+  const lastAutoCheckAtRef = useRef(0);
+
+  useEffect(() => {
+    if (!desktopSupported) {
+      return undefined;
+    }
+
+    const triggerCheck = (force = false) => {
+      const now = Date.now();
+      if (!force && now - lastAutoCheckAtRef.current < DESKTOP_UPDATE_AUTO_CHECK_FOCUS_COOLDOWN_MS) {
+        return;
+      }
+
+      lastAutoCheckAtRef.current = now;
+      void checkForUpdates({ silentIfLatest: true, showErrors: false });
+    };
+
+    const initialTimer = window.setTimeout(() => {
+      triggerCheck(true);
+    }, DESKTOP_UPDATE_AUTO_CHECK_DELAY_MS);
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        triggerCheck(true);
+      }
+    }, DESKTOP_UPDATE_AUTO_CHECK_INTERVAL_MS);
+
+    const handleFocus = () => {
+      if (document.visibilityState === 'visible') {
+        triggerCheck();
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        triggerCheck();
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.clearTimeout(initialTimer);
+      window.clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [checkForUpdates, desktopSupported]);
+
+  useEffect(() => {
+    const version = pendingUpdate?.version;
+
+    if (!version) {
+      setPromptOpen(false);
+      return;
+    }
+
+    if (promptedVersionRef.current === version) {
+      return;
+    }
+
+    promptedVersionRef.current = version;
+    setPromptOpen(true);
+  }, [pendingUpdate?.version]);
+
+  return <DesktopUpdatePrompt open={promptOpen} requestClose={() => setPromptOpen(false)} />;
+}
+
 function PersonalPackSyncFeature() {
   const mx = useMatrixClient();
 
@@ -1012,6 +1089,7 @@ export function ClientNonUIFeatures({ children }: ClientNonUIFeaturesProps) {
       <SyncRecoveryFeature />
       <DesktopExternalLinkFeature />
       <DesktopPinLockShortcutFeature />
+      <DesktopAutoUpdateFeature />
       <AccountPinPolicyFeature />
       <PersonalPackSyncFeature />
       <AISettingsAccountDataFeature />
