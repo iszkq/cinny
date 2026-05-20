@@ -4,6 +4,7 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
+    "notification:default",
     "process:default",
     "updater:default"
   ]
