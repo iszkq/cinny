@@ -67,11 +67,7 @@ import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
 import { useDesktopUpdater } from '../../hooks/useDesktopUpdater';
 import { sendAppNotification } from '../../utils/notifications';
 
-const HEALTHY_SYNC_STATES = new Set<SyncState>([
-  SyncState.Prepared,
-  SyncState.Syncing,
-  SyncState.Catchup,
-]);
+const HEALTHY_SYNC_STATES = new Set<SyncState>([SyncState.Syncing]);
 const FAILED_PENDING_MESSAGE_STATUS = 'not_sent';
 const EXTERNAL_LINK_SELECTOR = 'a[href]';
 const SYNC_RECOVERY_RETRY_INTERVAL_MS = 4000;
