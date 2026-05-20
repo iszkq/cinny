@@ -32,6 +32,13 @@ const baseBackupRestoreProgressAtom = atom<IBackupProgress>({
   status: BackupProgressStatus.Idle,
 });
 
+export const setBackupRestoreProgressAtom = atom(
+  null,
+  (_get, set, progress: IBackupProgress) => {
+    set(baseBackupRestoreProgressAtom, progress);
+  }
+);
+
 export const backupRestoreProgressAtom = atom<
   IBackupProgress,
   [ImportRoomKeyProgressData],
