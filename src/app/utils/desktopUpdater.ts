@@ -20,7 +20,9 @@ export type PendingDesktopUpdate = {
   version: string;
   date?: string;
   body?: string;
-  downloadAndInstall: (callback?: (event: UpdaterProgressEvent) => void) => Promise<void>;
+  downloadAndInstall?: (callback?: (event: UpdaterProgressEvent) => void) => Promise<void>;
+  download?: (callback?: (event: UpdaterProgressEvent) => void) => Promise<void>;
+  install?: () => Promise<void>;
 };
 
 export type DesktopUpdateReleaseInfo = {
@@ -53,6 +55,24 @@ export const checkForDesktopUpdate = async (): Promise<PendingDesktopUpdate | un
   const { check } = await import('@tauri-apps/plugin-updater');
   const update = await check();
   return update as PendingDesktopUpdate | undefined;
+};
+
+export const installPendingDesktopUpdate = async (
+  update: PendingDesktopUpdate,
+  callback?: (event: UpdaterProgressEvent) => void
+): Promise<void> => {
+  if (typeof update.downloadAndInstall === 'function') {
+    await update.downloadAndInstall(callback);
+    return;
+  }
+
+  if (typeof update.download === 'function' && typeof update.install === 'function') {
+    await update.download(callback);
+    await update.install();
+    return;
+  }
+
+  throw new Error('Updater download API is unavailable in the current desktop build.');
 };
 
 const parseLatestDesktopManifest = (payload: {
