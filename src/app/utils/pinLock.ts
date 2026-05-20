@@ -22,24 +22,19 @@ type AccountPinPolicyState = {
   config?: AccountPinConfig;
 };
 
-export type AccountPinLoginRequirement = 'none' | 'prompt' | 'setup';
+export type AccountPinLoginRequirement = 'none' | 'prompt';
 
 const ACCOUNT_PIN_CONFIGS_KEY = 'starfire-account-pin-configs';
 const SCREEN_LOCK_STATE_KEY = 'starfire-screen-lock-state';
-const DESKTOP_STARTUP_PIN_LOCK_KEY = 'starfire-desktop-startup-pin-lock';
 const PIN_LOCK_CHANGE_EVENT = 'starfire-pin-lock-change';
 const PIN_LOCK_ITERATIONS = 150000;
 const PIN_CODE_REGEX = /^\d{4,12}$/;
 const ACCOUNT_PIN_POLICY_VERSION = 1;
+let recentlyVerifiedAccountKey: string | undefined;
 
 const safeLocalStorage = (): Storage | undefined => {
   if (typeof window === 'undefined') return undefined;
   return window.localStorage;
-};
-
-const safeSessionStorage = (): Storage | undefined => {
-  if (typeof window === 'undefined') return undefined;
-  return window.sessionStorage;
 };
 
 const emitPinLockChange = () => {
@@ -102,7 +97,7 @@ const isNonEmptyString = (value: unknown): value is string =>
 const ensurePinCode = (pin: string) => {
   const normalizedPin = pin.trim();
   if (!PIN_CODE_REGEX.test(normalizedPin)) {
-    throw new Error('PIN must be 4-12 digits.');
+    throw new Error('PIN \u7801\u9700\u4e3a 4 \u5230 12 \u4f4d\u6570\u5b57\u3002');
   }
   return normalizedPin;
 };
@@ -294,7 +289,7 @@ const fetchAccountPinPolicyContent = async (
     return undefined;
   }
   if (!response.ok) {
-    throw new Error('Unable to fetch PIN policy.');
+    throw new Error('\u65e0\u6cd5\u83b7\u53d6 PIN \u7b56\u7565\u3002');
   }
 
   return (await response.json()) as CinnyAccountPinPolicyContent;
@@ -316,7 +311,7 @@ const saveAccountPinPolicyContent = async (
   });
 
   if (!response.ok) {
-    throw new Error('Unable to save PIN policy.');
+    throw new Error('\u65e0\u6cd5\u4fdd\u5b58 PIN \u7b56\u7565\u3002');
   }
 };
 
@@ -359,7 +354,7 @@ export const enableAccountPin = async (
   pin: string
 ): Promise<AccountPinConfig> => {
   if (!supportsPinLock()) {
-    throw new Error('Current environment does not support Web Crypto.');
+    throw new Error('\u5f53\u524d\u73af\u5883\u4e0d\u652f\u6301 Web Crypto\u3002');
   }
 
   const config = await createPinConfig(pin);
@@ -394,11 +389,14 @@ export const changeAccountPin = async (
   baseUrl: string,
   userId: string,
   currentPin: string,
-  nextPin: string
+  nextPin: string,
+  currentConfig?: AccountPinConfig
 ): Promise<AccountPinConfig> => {
-  const verified = await verifyAccountPin(baseUrl, userId, currentPin);
+  const verified = currentConfig
+    ? await verifyPinConfig(currentPin, currentConfig)
+    : await verifyAccountPin(baseUrl, userId, currentPin);
   if (!verified) {
-    throw new Error('Current PIN is incorrect.');
+    throw new Error('\u5f53\u524d PIN \u7801\u9519\u8bef\u3002');
   }
 
   return enableAccountPin(baseUrl, userId, nextPin);
@@ -411,7 +409,7 @@ export const disableAccountPin = async (
 ): Promise<void> => {
   const verified = await verifyAccountPin(baseUrl, userId, pin);
   if (!verified) {
-    throw new Error('Current PIN is incorrect.');
+    throw new Error('\u5f53\u524d PIN \u7801\u9519\u8bef\u3002');
   }
 
   clearLocalAccountPin(baseUrl, userId);
@@ -465,7 +463,7 @@ export const applyAccountPinPolicyContent = (
     return true;
   }
 
-  if (!remotePolicy.enabled && localConfig && remotePolicy.updatedAt > localConfig.updatedAt) {
+  if (!remotePolicy.enabled && localConfig) {
     clearLocalAccountPin(baseUrl, userId);
   }
 
@@ -482,17 +480,10 @@ export const syncAccountPinPolicy = async (
   const remotePolicy = getAccountPinPolicyState(remoteContent);
 
   if (!remotePolicy.enabled) {
-    if (!localConfig) {
-      return false;
-    }
-
-    if (remotePolicy.updatedAt > localConfig.updatedAt) {
+    if (localConfig) {
       clearLocalAccountPin(baseUrl, userId);
-      return false;
     }
-
-    await enableAccountPinPolicy(baseUrl, userId, accessToken, localConfig.updatedAt, localConfig);
-    return true;
+    return false;
   }
 
   if (remotePolicy.config) {
@@ -541,23 +532,34 @@ export const resolveAccountPinLoginRequirement = async (
         return 'prompt';
       }
 
-      return 'setup';
+      return 'none';
     }
 
     if (localConfig) {
-      if (remotePolicy.updatedAt > localConfig.updatedAt) {
-        clearLocalAccountPin(baseUrl, userId);
-        return 'none';
-      }
-
-      await enableAccountPinPolicy(baseUrl, userId, accessToken, localConfig.updatedAt, localConfig);
-      return 'prompt';
+      clearLocalAccountPin(baseUrl, userId);
     }
 
     return 'none';
   } catch {
     return localConfig ? 'prompt' : 'none';
   }
+};
+
+export const markAccountPinVerified = (baseUrl: string, userId: string) => {
+  recentlyVerifiedAccountKey = getAccountPinKey(baseUrl, userId);
+};
+
+export const consumeRecentAccountPinVerification = (
+  baseUrl: string,
+  userId: string
+): boolean => {
+  const accountKey = getAccountPinKey(baseUrl, userId);
+  if (recentlyVerifiedAccountKey !== accountKey) {
+    return false;
+  }
+
+  recentlyVerifiedAccountKey = undefined;
+  return true;
 };
 
 export const lockScreenForAccount = (baseUrl: string, userId: string) => {
@@ -573,13 +575,6 @@ export const lockScreenForAccount = (baseUrl: string, userId: string) => {
 export const applyDesktopStartupPinLock = (baseUrl?: string, userId?: string) => {
   if (!isDesktopPinLockSupported()) return;
   if (!baseUrl || !userId) return;
-
-  const sessionStorage = safeSessionStorage();
-  if (sessionStorage?.getItem(DESKTOP_STARTUP_PIN_LOCK_KEY) === 'applied') {
-    return;
-  }
-
-  sessionStorage?.setItem(DESKTOP_STARTUP_PIN_LOCK_KEY, 'applied');
 
   if (hasAccountPin(baseUrl, userId)) {
     lockScreenForAccount(baseUrl, userId);
