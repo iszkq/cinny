@@ -75,6 +75,11 @@ const ACTIVE_SYNC_STATES = new Set<SyncState>([
   SyncState.Syncing,
 ]);
 const FAILED_PENDING_MESSAGE_STATUS = 'not_sent';
+const ACTIVE_PENDING_MESSAGE_STATUSES = new Set<PendingMessageStatus>([
+  'encrypting',
+  'queued',
+  'sending',
+]);
 const EXTERNAL_LINK_SELECTOR = 'a[href]';
 const SYNC_RECOVERY_RETRY_INTERVAL_MS = 4000;
 const SYNC_RECOVERY_WATCHDOG_INTERVAL_MS = 5000;
@@ -85,11 +90,16 @@ const SYNC_RECOVERY_ERROR_RETRY_GRACE_MS = 10000;
 const SYNC_RECOVERY_STALE_RESPONSE_MS = 45000;
 const SYNC_RECOVERY_HUNG_REQUEST_MS = 45000;
 const SYNC_RECOVERY_FORCE_RESTART_MS = 18000;
+const SYNC_RECOVERY_HARD_RESTART_STALE_MS = 90000;
+const SYNC_RECOVERY_HARD_RESTART_COOLDOWN_MS = 90000;
+const SYNC_RECOVERY_HARD_RESTART_DELAY_MS = 750;
 const SYNC_RECOVERY_BURST_WINDOW_MS = 60000;
 const SYNC_RECOVERY_BURST_THRESHOLD = 4;
 const DESKTOP_UPDATE_AUTO_CHECK_DELAY_MS = 4000;
 const DESKTOP_UPDATE_AUTO_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const DESKTOP_UPDATE_AUTO_CHECK_FOCUS_COOLDOWN_MS = 15 * 60 * 1000;
+
+type PendingMessageStatus = 'encrypting' | 'queued' | 'sending' | 'not_sent' | 'cancelled';
 
 const createFaviconUrl = async (logoUrl: string, badgeColor?: string): Promise<string> => {
   const img = await loadImageElement(logoUrl);
@@ -158,13 +168,18 @@ const getPendingEventKey = (mEvent: MatrixEvent): string | undefined => {
   return mEvent.getId() ?? txnId;
 };
 
+const getPendingMessageStatus = (mEvent: MatrixEvent): PendingMessageStatus | undefined => {
+  const status = (mEvent as MatrixEvent & { status?: unknown }).status;
+  return typeof status === 'string' ? (status as PendingMessageStatus) : undefined;
+};
+
 const isRetryablePendingEvent = (
   mx: MatrixClient,
   mEvent: MatrixEvent,
   retryingEventIds?: Set<string>
 ): boolean => {
   const eventKey = getPendingEventKey(mEvent);
-  const status = (mEvent as MatrixEvent & { status?: unknown }).status;
+  const status = getPendingMessageStatus(mEvent);
 
   return Boolean(
     eventKey &&
@@ -196,6 +211,26 @@ const hasRetryableTimelineDecryptions = (mx: MatrixClient): boolean =>
       .getEvents()
       .some((event) => event.isDecryptionFailure())
   );
+
+const hasActiveOutboundPendingEvents = (mx: MatrixClient): boolean =>
+  mx.getRooms().some((room) => {
+    const pendingEvents =
+      (
+        room as Room & {
+          getPendingEvents?: () => MatrixEvent[];
+        }
+      ).getPendingEvents?.() ?? [];
+
+    return pendingEvents.some((mEvent) => {
+      const status = getPendingMessageStatus(mEvent);
+
+      return Boolean(
+        status &&
+          ACTIVE_PENDING_MESSAGE_STATUSES.has(status) &&
+          mEvent.getSender() === mx.getUserId()
+      );
+    });
+  });
 
 const retryPendingEvents = async (
   mx: MatrixClient,
@@ -300,6 +335,7 @@ function SyncRecoveryFeature() {
   const lastRecoveryAttemptRef = useRef(0);
   const lastPendingRetryAtRef = useRef(0);
   const retryingPendingEventIdsRef = useRef<Set<string>>(new Set());
+  const lastHardRestartAtRef = useRef(0);
   const reconnectStartedAtRef = useRef<number>();
   const reconnectBurstCountRef = useRef(0);
   const lastReconnectTransitionAtRef = useRef(0);
@@ -317,6 +353,12 @@ function SyncRecoveryFeature() {
 
     return Date.now() - reconnectStartedAtRef.current;
   }, []);
+
+  const getLastSuccessfulSyncAt = useCallback(() => {
+    const diagnostics = getSyncTransportDiagnostics(mx);
+
+    return Math.max(lastHealthySyncRef.current, diagnostics.lastSyncResponseAt);
+  }, [mx]);
 
   const trackReconnectState = useCallback(
     (state: SyncState | null, previous?: SyncState | null) => {
@@ -363,7 +405,7 @@ function SyncRecoveryFeature() {
 
       if (
         reconnectBurstCountRef.current >= SYNC_RECOVERY_BURST_THRESHOLD &&
-        Date.now() - lastHealthySyncRef.current >= 10000
+        Date.now() - getLastSuccessfulSyncAt() >= 10000
       ) {
         return true;
       }
@@ -377,7 +419,7 @@ function SyncRecoveryFeature() {
 
       return false;
     },
-    [getReconnectDuration]
+    [getLastSuccessfulSyncAt, getReconnectDuration]
   );
 
   const hasStaleSyncTransport = useCallback(() => {
@@ -418,6 +460,34 @@ function SyncRecoveryFeature() {
     return now - lastSyncTransportActivityAt >= SYNC_RECOVERY_STALE_TRANSPORT_MS;
   }, [mx]);
 
+  const shouldHardRestartSync = useCallback(
+    (syncState: SyncState | null, forceRestart: boolean, now: number) => {
+      if (!forceRestart || !mx.clientRunning || syncState === SyncState.Stopped) {
+        return false;
+      }
+
+      if (now - lastHardRestartAtRef.current < SYNC_RECOVERY_HARD_RESTART_COOLDOWN_MS) {
+        return false;
+      }
+
+      if (hasActiveOutboundPendingEvents(mx)) {
+        return false;
+      }
+
+      const diagnostics = getSyncTransportDiagnostics(mx);
+      const lastSuccessfulSyncAt = getLastSuccessfulSyncAt();
+      const pendingSyncRequest = diagnostics.lastSyncRequestAt > diagnostics.lastSyncResponseAt;
+      const staleSuccessfulSync =
+        now - lastSuccessfulSyncAt >= SYNC_RECOVERY_HARD_RESTART_STALE_MS;
+      const severelyHungSyncRequest =
+        pendingSyncRequest &&
+        now - diagnostics.lastSyncRequestAt >= SYNC_RECOVERY_HARD_RESTART_STALE_MS;
+
+      return staleSuccessfulSync || severelyHungSyncRequest;
+    },
+    [getLastSuccessfulSyncAt, mx]
+  );
+
   const recoverSync = useCallback(
     (forceRestart = false) => {
       if (typeof navigator !== 'undefined' && navigator.onLine === false) {
@@ -453,6 +523,18 @@ function SyncRecoveryFeature() {
           return;
         }
 
+        if (shouldHardRestartSync(syncState, forceRestart, now)) {
+          lastHardRestartAtRef.current = now;
+          mx.stopClient();
+
+          await new Promise<void>((resolve) => {
+            window.setTimeout(resolve, SYNC_RECOVERY_HARD_RESTART_DELAY_MS);
+          });
+
+          await startClient(mx);
+          return;
+        }
+
         const retried = mx.retryImmediately();
         if (!retried && !mx.clientRunning) {
           await startClient(mx);
@@ -463,7 +545,7 @@ function SyncRecoveryFeature() {
           recoveryPromiseRef.current = undefined;
         });
     },
-    [mx]
+    [mx, shouldHardRestartSync]
   );
 
   const retryPendingMessages = useCallback(() => {
@@ -519,6 +601,7 @@ function SyncRecoveryFeature() {
     };
 
     const handleToDeviceEvent: ClientEventHandlerMap[ClientEvent.ToDeviceEvent] = () => {
+      lastHealthySyncRef.current = Date.now();
       triggerRetry();
     };
 
@@ -526,12 +609,32 @@ function SyncRecoveryFeature() {
       triggerRetry();
     };
 
+    const handleRoomTimeline: RoomEventHandlerMap[RoomEvent.Timeline] = (
+      mEvent,
+      room,
+      toStartOfTimeline,
+      removed,
+      data
+    ) => {
+      if (!room || toStartOfTimeline || removed || !data.liveEvent) {
+        return;
+      }
+
+      lastHealthySyncRef.current = Date.now();
+
+      if (mEvent.isEncrypted() || mEvent.isDecryptionFailure()) {
+        triggerRetry();
+      }
+    };
+
     mx.on(ClientEvent.ToDeviceEvent, handleToDeviceEvent);
     mx.on(MatrixEventEvent.Decrypted, handleEventDecrypted);
+    mx.on(RoomEvent.Timeline, handleRoomTimeline);
 
     return () => {
       mx.removeListener(ClientEvent.ToDeviceEvent, handleToDeviceEvent);
       mx.removeListener(MatrixEventEvent.Decrypted, handleEventDecrypted);
+      mx.removeListener(RoomEvent.Timeline, handleRoomTimeline);
     };
   }, [mx, retryPendingMessages]);
 
@@ -572,7 +675,7 @@ function SyncRecoveryFeature() {
         return;
       }
 
-      if (Date.now() - lastHealthySyncRef.current < SYNC_RECOVERY_STALL_MS) {
+      if (Date.now() - getLastSuccessfulSyncAt() < SYNC_RECOVERY_STALL_MS) {
         return;
       }
 
@@ -598,7 +701,14 @@ function SyncRecoveryFeature() {
       window.clearInterval(recoveryTimer);
       window.clearInterval(pendingRetryTimer);
     };
-  }, [hasStaleSyncTransport, mx, recoverSync, retryPendingMessages, shouldForceRestartSync]);
+  }, [
+    getLastSuccessfulSyncAt,
+    hasStaleSyncTransport,
+    mx,
+    recoverSync,
+    retryPendingMessages,
+    shouldForceRestartSync,
+  ]);
 
   return null;
 }
