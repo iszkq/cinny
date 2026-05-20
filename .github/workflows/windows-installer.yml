@@ -90,7 +90,8 @@ jobs:
 
           $signature = (Get-Content -LiteralPath $signatureFile.FullName -Raw).Trim()
           $assetName = [System.Uri]::EscapeDataString($setupFile.Name)
-          $releaseBody = gh release view $env:RELEASE_TAG --repo $env:RELEASE_REPOSITORY --json body --jq '.body'
+          $releaseMetadata = gh release view $env:RELEASE_TAG --repo $env:RELEASE_REPOSITORY --json body | ConvertFrom-Json
+          $releaseBody = [string]$releaseMetadata.body
           if ([string]::IsNullOrWhiteSpace($releaseBody)) {
             $releaseBody = "Starfire v$version"
           }
