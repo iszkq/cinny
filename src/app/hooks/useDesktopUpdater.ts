@@ -12,6 +12,7 @@ import {
   installPendingDesktopUpdate,
   isDesktopUpdaterSupported,
   normalizeDesktopUpdateVersion,
+  openDesktopUpdateDownloadUrl,
   PendingDesktopUpdate,
   PendingDesktopUpdateHandle,
   pendingDesktopUpdatesMatch,
@@ -69,6 +70,24 @@ export const getDesktopUpdateErrorMessage = (error: unknown): string => {
   return `\u68c0\u67e5\u66f4\u65b0\u5931\u8d25\uff1a${message}`;
 };
 
+const canFallbackToManualDownload = (
+  error: unknown,
+  pendingUpdate?: PendingDesktopUpdate
+): pendingUpdate is PendingDesktopUpdate & { downloadUrl: string } => {
+  if (!pendingUpdate?.downloadUrl) {
+    return false;
+  }
+
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    /No installable desktop update is available/i.test(message) ||
+    /downloadAndInstall is not a function/i.test(message) ||
+    /Updater download API is unavailable/i.test(message) ||
+    /pubkey/i.test(message) ||
+    /signature/i.test(message)
+  );
+};
+
 const mergePendingUpdateInfo = (
   update?: PendingDesktopUpdateHandle,
   latestRelease?: PendingDesktopUpdate
@@ -90,6 +109,7 @@ const mergePendingUpdateInfo = (
     ...pendingUpdate,
     body: pendingUpdate.body ?? latestRelease.body,
     date: pendingUpdate.date ?? latestRelease.date,
+    downloadUrl: pendingUpdate.downloadUrl ?? latestRelease.downloadUrl,
   };
 };
 
@@ -133,6 +153,10 @@ export const useDesktopUpdater = () => {
     async (options: CheckForUpdatesOptions = {}): Promise<PendingDesktopUpdate | undefined> => {
       const { silentIfLatest = false, showErrors = true } = options;
       const previousState = stateRef.current;
+
+      if (ongoingInstallPromise || previousState.status === 'downloading') {
+        return previousState.pendingUpdate;
+      }
 
       if (!desktopSupported) {
         if (showErrors) {
@@ -337,6 +361,22 @@ export const useDesktopUpdater = () => {
 
         await relaunchDesktopApp().catch(() => undefined);
       } catch (error) {
+        if (canFallbackToManualDownload(error, expectedUpdate)) {
+          await openDesktopUpdateDownloadUrl(expectedUpdate.downloadUrl).catch(() => undefined);
+          pendingUpdateHandle = undefined;
+          setState((current) => ({
+            ...current,
+            status: 'error',
+            message:
+              '\u81ea\u52a8\u5b89\u88c5\u672a\u80fd\u7ee7\u7eed\uff0c\u5df2\u4e3a\u4f60\u6253\u5f00\u624b\u52a8\u4e0b\u8f7d\u94fe\u63a5\u3002\u4e0b\u8f7d\u5b8c\u6210\u540e\u53ef\u76f4\u63a5\u5b89\u88c5\u65b0\u7248\u672c\u3002',
+            pendingUpdate: expectedUpdate,
+            downloadedBytes: 0,
+            contentLength: 0,
+            lastCheckedAt: Date.now(),
+          }));
+          return;
+        }
+
         pendingUpdateHandle = undefined;
         setState((current) => ({
           ...current,
