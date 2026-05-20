@@ -1,6 +1,11 @@
 import React, { FormEventHandler, useState } from 'react';
 import { Box, Button, Input, Text, color } from 'folds';
-import { enableAccountPin, isPinCodeFormatValid, supportsPinLock } from '../../utils/pinLock';
+import {
+  AccountPinConfig,
+  enableAccountPin,
+  isPinCodeFormatValid,
+  supportsPinLock,
+} from '../../utils/pinLock';
 import { PinLockDialogShell } from './PinLockShell';
 import * as css from './style.css';
 
@@ -10,7 +15,7 @@ type LocalPinSetupFormProps = {
   submitLabel: string;
   cancelLabel?: string;
   onCancel?: () => void;
-  onSuccess: () => void | Promise<void>;
+  onSuccess: (config: AccountPinConfig) => void | Promise<void>;
   autoFocus?: boolean;
 };
 
@@ -48,8 +53,8 @@ export function LocalPinSetupForm({
     setError(undefined);
 
     try {
-      await enableAccountPin(baseUrl, userId, pin);
-      await onSuccess();
+      const config = await enableAccountPin(baseUrl, userId, pin);
+      await onSuccess(config);
     } catch (err) {
       setError(err instanceof Error ? err.message : '启用 PIN 失败，请稍后重试。');
     } finally {
@@ -129,7 +134,8 @@ type LocalPinSetupDialogProps = {
   submitLabel: string;
   cancelLabel?: string;
   onCancel?: () => void;
-  onSuccess: () => void | Promise<void>;
+  onSuccess: (config: AccountPinConfig) => void | Promise<void>;
+  embedded?: boolean;
 };
 
 export function LocalPinSetupDialog({
@@ -141,9 +147,15 @@ export function LocalPinSetupDialog({
   cancelLabel,
   onCancel,
   onSuccess,
+  embedded,
 }: LocalPinSetupDialogProps) {
   return (
-    <PinLockDialogShell title={title} description={description} requestClose={onCancel}>
+    <PinLockDialogShell
+      title={title}
+      description={description}
+      requestClose={onCancel}
+      embedded={embedded}
+    >
       <LocalPinSetupForm
         baseUrl={baseUrl}
         userId={userId}

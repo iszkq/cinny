@@ -51,12 +51,34 @@ export function PinLockCard({
   );
 }
 
-type PinLockDialogShellProps = PinLockCardProps;
+type PinLockDialogShellModeProps = PinLockCardProps & {
+  embedded?: boolean;
+};
 
 export function PinLockDialogShell({
   requestClose,
+  embedded,
   ...props
-}: PinLockDialogShellProps) {
+}: PinLockDialogShellModeProps) {
+  const card = <PinLockCard requestClose={requestClose} {...props} />;
+
+  if (embedded) {
+    return (
+      <Box className={css.EmbeddedOverlay}>
+        <FocusTrap
+          focusTrapOptions={{
+            initialFocus: false,
+            clickOutsideDeactivates: Boolean(requestClose),
+            onDeactivate: requestClose,
+            escapeDeactivates: requestClose ? stopPropagation : false,
+          }}
+        >
+          {card}
+        </FocusTrap>
+      </Box>
+    );
+  }
+
   return (
     <Overlay open backdrop={<OverlayBackdrop />}>
       <OverlayCenter>
@@ -69,7 +91,7 @@ export function PinLockDialogShell({
               escapeDeactivates: requestClose ? stopPropagation : false,
             }}
           >
-            <PinLockCard requestClose={requestClose} {...props} />
+            {card}
           </FocusTrap>
         </Box>
       </OverlayCenter>

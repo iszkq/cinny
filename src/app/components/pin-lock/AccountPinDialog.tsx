@@ -1,6 +1,12 @@
 import React, { FormEventHandler, useState } from 'react';
 import { Box, Button, Input, Text, color } from 'folds';
-import { getAccountPinLabel, isPinCodeFormatValid, verifyAccountPin } from '../../utils/pinLock';
+import {
+  AccountPinConfig,
+  getAccountPinLabel,
+  isPinCodeFormatValid,
+  verifyAccountPin,
+  verifyPinConfig,
+} from '../../utils/pinLock';
 import { PinLockDialogShell } from './PinLockShell';
 import * as css from './style.css';
 
@@ -12,6 +18,7 @@ type AccountPinFormProps = {
   onCancel?: () => void;
   onSuccess: () => void | Promise<void>;
   autoFocus?: boolean;
+  pinConfig?: AccountPinConfig;
 };
 
 export function AccountPinForm({
@@ -22,6 +29,7 @@ export function AccountPinForm({
   onCancel,
   onSuccess,
   autoFocus,
+  pinConfig,
 }: AccountPinFormProps) {
   const [pin, setPin] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -39,7 +47,9 @@ export function AccountPinForm({
     setError(undefined);
 
     try {
-      const verified = await verifyAccountPin(baseUrl, userId, pin);
+      const verified = pinConfig
+        ? await verifyPinConfig(pin, pinConfig)
+        : await verifyAccountPin(baseUrl, userId, pin);
       if (!verified) {
         setError('PIN 码错误，请重试。');
         return;
@@ -110,6 +120,8 @@ type AccountPinDialogProps = {
   cancelLabel?: string;
   onCancel?: () => void;
   onSuccess: () => void | Promise<void>;
+  pinConfig?: AccountPinConfig;
+  embedded?: boolean;
 };
 
 export function AccountPinDialog({
@@ -121,6 +133,8 @@ export function AccountPinDialog({
   cancelLabel,
   onCancel,
   onSuccess,
+  pinConfig,
+  embedded,
 }: AccountPinDialogProps) {
   return (
     <PinLockDialogShell
@@ -128,6 +142,7 @@ export function AccountPinDialog({
       description={description}
       accountLabel={getAccountPinLabel(baseUrl, userId)}
       requestClose={onCancel}
+      embedded={embedded}
     >
       <AccountPinForm
         baseUrl={baseUrl}
@@ -137,6 +152,7 @@ export function AccountPinDialog({
         onCancel={onCancel}
         onSuccess={onSuccess}
         autoFocus
+        pinConfig={pinConfig}
       />
     </PinLockDialogShell>
   );

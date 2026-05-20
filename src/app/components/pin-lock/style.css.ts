@@ -9,6 +9,20 @@ export const DialogViewport = style({
   paddingLeft: `max(${config.space.S300}, env(safe-area-inset-left, 0px))`,
 });
 
+export const EmbeddedOverlay = style({
+  position: 'fixed',
+  inset: 0,
+  zIndex: 2,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  paddingTop: `max(${config.space.S300}, env(safe-area-inset-top, 0px))`,
+  paddingRight: `max(${config.space.S300}, env(safe-area-inset-right, 0px))`,
+  paddingBottom: `max(${config.space.S300}, env(safe-area-inset-bottom, 0px))`,
+  paddingLeft: `max(${config.space.S300}, env(safe-area-inset-left, 0px))`,
+  background: 'rgba(18, 24, 20, 0.38)',
+});
+
 export const Card = style({
   width: `min(${toRem(560)}, calc(100vw - ${toRem(32)}))`,
   maxHeight: 'min(88vh, 44rem)',
