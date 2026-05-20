@@ -5,6 +5,8 @@ import {
   ClientEvent,
   ClientEventHandlerMap,
   MatrixEvent,
+  MatrixClient,
+  Room,
   RoomEvent,
   RoomEventHandlerMap,
   SyncState,
@@ -13,7 +15,13 @@ import { roomToUnreadAtom, unreadEqual, unreadInfoToUnread } from '../../state/r
 import NotificationSound from '../../../../public/sound/notification.ogg';
 import InviteSound from '../../../../public/sound/invite.ogg';
 import { APP_LOGO_URL } from '../../constants/branding';
-import { loadImageElement, notificationPermission, setFavicon } from '../../utils/dom';
+import {
+  editableActiveElement,
+  loadImageElement,
+  notificationPermission,
+  setFavicon,
+  targetFromEvent,
+} from '../../utils/dom';
 import { useSetting } from '../../state/hooks/settings';
 import { settingsAtom } from '../../state/settings';
 import { allInvitesAtom } from '../../state/room-list/inviteList';
@@ -25,6 +33,7 @@ import {
   getNotificationType,
   getUnreadInfo,
   isNotificationEvent,
+  decryptAllTimelineEvent,
 } from '../../utils/room';
 import { NotificationType, UnreadInfo } from '../../../types/matrix/room';
 import { AccountDataEvent } from '../../../types/matrix/accountData';
@@ -48,8 +57,11 @@ import {
 import { startClient } from '../../../client/initMatrix';
 import {
   applyAccountPinPolicyContent,
+  hasAccountPin,
+  lockScreenForAccount,
   syncAccountPinPolicy,
 } from '../../utils/pinLock';
+import { openExternalUrl, shouldOpenHrefExternally } from '../../utils/desktop';
 import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
 
 const HEALTHY_SYNC_STATES = new Set<SyncState>([
@@ -57,6 +69,8 @@ const HEALTHY_SYNC_STATES = new Set<SyncState>([
   SyncState.Syncing,
   SyncState.Catchup,
 ]);
+const FAILED_PENDING_MESSAGE_STATUS = 'not_sent';
+const EXTERNAL_LINK_SELECTOR = 'a[href]';
 
 const createFaviconUrl = async (logoUrl: string, badgeColor?: string): Promise<string> => {
   const img = await loadImageElement(logoUrl);
@@ -100,6 +114,81 @@ const playAudio = (audioElement: HTMLAudioElement | null) => {
   if (playPromise) {
     playPromise.catch(() => undefined);
   }
+};
+
+const getPendingEventKey = (mEvent: MatrixEvent): string | undefined => {
+  const txnId = (
+    mEvent as MatrixEvent & {
+      getTxnId?: () => string | undefined;
+    }
+  ).getTxnId?.();
+
+  return mEvent.getId() ?? txnId;
+};
+
+const retryPendingEvents = async (
+  mx: MatrixClient,
+  retryingEventIds: Set<string>
+): Promise<void> => {
+  const resendEvent = (
+    mx as MatrixClient & {
+      resendEvent?: (event: MatrixEvent, eventRoom: Room) => Promise<unknown>;
+    }
+  ).resendEvent;
+
+  if (typeof resendEvent !== 'function') {
+    return;
+  }
+
+  const retryTasks = mx.getRooms().flatMap((room) => {
+    const pendingEvents =
+      (
+        room as Room & {
+          getPendingEvents?: () => MatrixEvent[];
+        }
+      ).getPendingEvents?.() ?? [];
+
+    return pendingEvents.flatMap((mEvent) => {
+      const eventKey = getPendingEventKey(mEvent);
+      const status = (mEvent as MatrixEvent & { status?: unknown }).status;
+
+      if (
+        !eventKey ||
+        retryingEventIds.has(eventKey) ||
+        mEvent.getSender() !== mx.getUserId() ||
+        status !== FAILED_PENDING_MESSAGE_STATUS
+      ) {
+        return [];
+      }
+
+      retryingEventIds.add(eventKey);
+
+      return [
+        resendEvent.call(mx, mEvent, room).catch(() => undefined).finally(() => {
+          retryingEventIds.delete(eventKey);
+        }),
+      ];
+    });
+  });
+
+  await Promise.all(retryTasks);
+};
+
+const retryLiveTimelineDecryptions = async (mx: MatrixClient): Promise<void> => {
+  const retryTasks = mx.getRooms().flatMap((room) => {
+    const liveTimeline = room.getLiveTimeline();
+    const hasRetryableEvents = liveTimeline
+      .getEvents()
+      .some((event) => event.isEncrypted() || event.isDecryptionFailure());
+
+    if (!hasRetryableEvents) {
+      return [];
+    }
+
+    return [decryptAllTimelineEvent(mx, liveTimeline).catch(() => undefined)];
+  });
+
+  await Promise.all(retryTasks);
 };
 
 function SystemEmojiFeature() {
@@ -146,6 +235,8 @@ function SyncRecoveryFeature() {
   const recoveryPromiseRef = useRef<Promise<void>>();
   const lastHealthySyncRef = useRef(Date.now());
   const lastRecoveryAttemptRef = useRef(0);
+  const lastPendingRetryAtRef = useRef(0);
+  const retryingPendingEventIdsRef = useRef<Set<string>>(new Set());
 
   const recoverSync = useCallback(
     (forceRestart = false) => {
@@ -191,10 +282,33 @@ function SyncRecoveryFeature() {
     [mx]
   );
 
+  const retryPendingMessages = useCallback(() => {
+    if (!isDesktopUpdaterSupported()) {
+      return;
+    }
+
+    const syncState = mx.getSyncState();
+    if (!syncState || !HEALTHY_SYNC_STATES.has(syncState)) {
+      return;
+    }
+
+    const now = Date.now();
+    if (now - lastPendingRetryAtRef.current < 5000) {
+      return;
+    }
+
+    lastPendingRetryAtRef.current = now;
+    void Promise.allSettled([
+      retryPendingEvents(mx, retryingPendingEventIdsRef.current),
+      retryLiveTimelineDecryptions(mx),
+    ]);
+  }, [mx]);
+
   useEffect(() => {
     const handleSync: ClientEventHandlerMap[ClientEvent.Sync] = (state) => {
       if (state && HEALTHY_SYNC_STATES.has(state)) {
         lastHealthySyncRef.current = Date.now();
+        retryPendingMessages();
         return;
       }
 
@@ -207,14 +321,21 @@ function SyncRecoveryFeature() {
     return () => {
       mx.removeListener(ClientEvent.Sync, handleSync);
     };
-  }, [mx, recoverSync]);
+  }, [mx, recoverSync, retryPendingMessages]);
 
   useEffect(() => {
-    const handleOnline = () => recoverSync();
-    const handleFocus = () => recoverSync();
+    const handleOnline = () => {
+      recoverSync();
+      retryPendingMessages();
+    };
+    const handleFocus = () => {
+      recoverSync();
+      retryPendingMessages();
+    };
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         recoverSync();
+        retryPendingMessages();
       }
     };
 
@@ -245,7 +366,91 @@ function SyncRecoveryFeature() {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.clearInterval(recoveryTimer);
     };
-  }, [mx, recoverSync]);
+  }, [mx, recoverSync, retryPendingMessages]);
+
+  return null;
+}
+
+function DesktopExternalLinkFeature() {
+  useEffect(() => {
+    if (!isDesktopUpdaterSupported()) {
+      return undefined;
+    }
+
+    const handleClick = (evt: MouseEvent) => {
+      if (evt.defaultPrevented || evt.button !== 0) {
+        return;
+      }
+
+      const anchor = targetFromEvent(evt, EXTERNAL_LINK_SELECTOR) as HTMLAnchorElement | undefined;
+      if (!anchor || anchor.hasAttribute('download')) {
+        return;
+      }
+
+      if (anchor.dataset.mentionId || anchor.dataset.mentionEventId || anchor.dataset.mentionVia) {
+        return;
+      }
+
+      const href = anchor.getAttribute('href');
+      if (!shouldOpenHrefExternally(href)) {
+        return;
+      }
+
+      evt.preventDefault();
+      void openExternalUrl(anchor.href || href);
+    };
+
+    document.addEventListener('click', handleClick, true);
+    return () => {
+      document.removeEventListener('click', handleClick, true);
+    };
+  }, []);
+
+  return null;
+}
+
+function DesktopPinLockShortcutFeature() {
+  const mx = useMatrixClient();
+  const session = getFallbackSession();
+
+  useEffect(() => {
+    if (!isDesktopUpdaterSupported()) {
+      return undefined;
+    }
+
+    const baseUrl = session?.baseUrl;
+    const userId = mx.getUserId();
+
+    if (!baseUrl || !userId) {
+      return undefined;
+    }
+
+    const handleKeyDown = (evt: KeyboardEvent) => {
+      if (editableActiveElement()) {
+        return;
+      }
+
+      if (!(evt.ctrlKey || evt.metaKey) || evt.altKey || evt.shiftKey) {
+        return;
+      }
+
+      if (evt.key.toLowerCase() !== 'l') {
+        return;
+      }
+
+      if (!hasAccountPin(baseUrl, userId)) {
+        return;
+      }
+
+      evt.preventDefault();
+      lockScreenForAccount(baseUrl, userId);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [mx, session?.baseUrl]);
 
   return null;
 }
@@ -669,6 +874,8 @@ export function ClientNonUIFeatures({ children }: ClientNonUIFeaturesProps) {
       <PageZoomFeature />
       <PresenceSyncFeature />
       <SyncRecoveryFeature />
+      <DesktopExternalLinkFeature />
+      <DesktopPinLockShortcutFeature />
       <AccountPinPolicyFeature />
       <PersonalPackSyncFeature />
       <AISettingsAccountDataFeature />
