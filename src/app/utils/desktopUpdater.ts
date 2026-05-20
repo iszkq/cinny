@@ -20,6 +20,9 @@ export type PendingDesktopUpdate = {
   version: string;
   date?: string;
   body?: string;
+};
+
+export type PendingDesktopUpdateHandle = PendingDesktopUpdate & {
   downloadAndInstall?: (callback?: (event: UpdaterProgressEvent) => void) => Promise<void>;
   download?: (callback?: (event: UpdaterProgressEvent) => void) => Promise<void>;
   install?: () => Promise<void>;
@@ -47,18 +50,51 @@ export const isDesktopUpdaterSupported = (): boolean =>
     Boolean((window as TauriWindow).__TAURI_INTERNALS__) ||
     /tauri/i.test(window.navigator.userAgent));
 
-export const checkForDesktopUpdate = async (): Promise<PendingDesktopUpdate | undefined> => {
+export const checkForDesktopUpdate = async (): Promise<PendingDesktopUpdateHandle | undefined> => {
   if (!isDesktopUpdaterSupported()) {
     throw new Error('Desktop updater is only available in the Tauri desktop app.');
   }
 
   const { check } = await import('@tauri-apps/plugin-updater');
   const update = await check();
-  return update as PendingDesktopUpdate | undefined;
+  return update as PendingDesktopUpdateHandle | undefined;
 };
 
+export const normalizeDesktopUpdateVersion = (version: string): string =>
+  version.replace(/^v/i, '').trim();
+
+export const pendingDesktopUpdatesMatch = (
+  left?: Pick<PendingDesktopUpdate, 'version'>,
+  right?: Pick<PendingDesktopUpdate, 'version'>
+): boolean => {
+  if (!left || !right) return false;
+
+  return normalizeDesktopUpdateVersion(left.version) === normalizeDesktopUpdateVersion(right.version);
+};
+
+export const toPendingDesktopUpdate = (
+  update?: PendingDesktopUpdate | PendingDesktopUpdateHandle
+): PendingDesktopUpdate | undefined => {
+  if (!update) return undefined;
+
+  return {
+    version: update.version,
+    date: update.date,
+    body: update.body,
+  };
+};
+
+export const canInstallPendingDesktopUpdate = (
+  update?: Partial<PendingDesktopUpdateHandle>
+): update is PendingDesktopUpdateHandle =>
+  Boolean(
+    update &&
+      (typeof update.downloadAndInstall === 'function' ||
+        (typeof update.download === 'function' && typeof update.install === 'function'))
+  );
+
 export const installPendingDesktopUpdate = async (
-  update: PendingDesktopUpdate,
+  update: PendingDesktopUpdateHandle,
   callback?: (event: UpdaterProgressEvent) => void
 ): Promise<void> => {
   if (typeof update.downloadAndInstall === 'function') {
