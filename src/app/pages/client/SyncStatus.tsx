@@ -6,7 +6,6 @@ import { ContainerColor } from '../../styles/ContainerColor.css';
 
 type StateData = {
   current: SyncState | null;
-  previous: SyncState | null | undefined;
 };
 
 type SyncStatusProps = {
@@ -15,27 +14,21 @@ type SyncStatusProps = {
 export function SyncStatus({ mx }: SyncStatusProps) {
   const [stateData, setStateData] = useState<StateData>({
     current: null,
-    previous: undefined,
   });
 
   useSyncState(
     mx,
-    useCallback((current, previous) => {
+    useCallback((current) => {
       setStateData((s) => {
-        if (s.current === current && s.previous === previous) {
+        if (s.current === current) {
           return s;
         }
-        return { current, previous };
+        return { current };
       });
     }, [])
   );
 
-  if (
-    (stateData.current === SyncState.Prepared ||
-      stateData.current === SyncState.Syncing ||
-      stateData.current === SyncState.Catchup) &&
-    stateData.previous !== SyncState.Syncing
-  ) {
+  if (stateData.current === SyncState.Prepared || stateData.current === SyncState.Catchup) {
     return (
       <Box direction="Column" shrink="No">
         <Box
