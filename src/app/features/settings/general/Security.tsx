@@ -13,10 +13,9 @@ import {
   PinLockDialogShell,
 } from '../../../components/pin-lock';
 import {
+  createDisabledAccountPinPolicyContent,
+  createEnabledAccountPinPolicyContent,
   changeAccountPin,
-  clearLocalAccountPin,
-  disableAccountPinPolicy,
-  enableAccountPinPolicy,
   getAccountPinKey,
   getAccountPinLabel,
   isAccountPinPolicyEnabled,
@@ -40,7 +39,6 @@ type PinDialogMode = 'setup' | 'change' | 'disable' | undefined;
 type ChangePinDialogProps = {
   baseUrl: string;
   userId: string;
-  accessToken: string;
   syncPolicy: boolean;
   requestClose: () => void;
 };
@@ -48,10 +46,10 @@ type ChangePinDialogProps = {
 function ChangePinDialog({
   baseUrl,
   userId,
-  accessToken,
   syncPolicy,
   requestClose,
 }: ChangePinDialogProps) {
+  const mx = useMatrixClient();
   const [currentPin, setCurrentPin] = useState('');
   const [nextPin, setNextPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
@@ -78,7 +76,10 @@ function ChangePinDialog({
       const config = await changeAccountPin(baseUrl, userId, currentPin, nextPin);
 
       if (syncPolicy) {
-        await enableAccountPinPolicy(baseUrl, userId, accessToken, config.updatedAt, config);
+        await mx.setAccountData(
+          AccountDataEvent.CinnyAccountPinPolicy,
+          createEnabledAccountPinPolicyContent(config)
+        );
       }
 
       requestClose();
@@ -179,7 +180,6 @@ export function Security({ requestClose }: SecurityProps) {
 
   const userId = mx.getUserId();
   const baseUrl = session?.baseUrl;
-  const accessToken = session?.accessToken;
   const pinSupported = supportsPinLock();
   const desktopPinSupported = isDesktopPinLockSupported();
   const policyEnabled = isAccountPinPolicyEnabled(
@@ -192,7 +192,7 @@ export function Security({ requestClose }: SecurityProps) {
   );
   const accountPinEnabled = policyEnabled || localPinEnabled;
 
-  if (!desktopPinSupported || !userId || !baseUrl || !accessToken) {
+  if (!desktopPinSupported || !userId || !baseUrl) {
     return null;
   }
 
@@ -301,7 +301,10 @@ export function Security({ requestClose }: SecurityProps) {
           onCancel={() => setDialogMode(undefined)}
           embedded
           onSuccess={async (config) => {
-            await enableAccountPinPolicy(baseUrl, userId, accessToken, config.updatedAt, config);
+            await mx.setAccountData(
+              AccountDataEvent.CinnyAccountPinPolicy,
+              createEnabledAccountPinPolicyContent(config)
+            );
             setDialogMode(undefined);
           }}
         />
@@ -310,7 +313,6 @@ export function Security({ requestClose }: SecurityProps) {
         <ChangePinDialog
           baseUrl={baseUrl}
           userId={userId}
-          accessToken={accessToken}
           syncPolicy={accountPinEnabled}
           requestClose={() => setDialogMode(undefined)}
         />
@@ -325,8 +327,10 @@ export function Security({ requestClose }: SecurityProps) {
           embedded
           onCancel={() => setDialogMode(undefined)}
           onSuccess={async () => {
-            await disableAccountPinPolicy(baseUrl, userId, accessToken);
-            clearLocalAccountPin(baseUrl, userId);
+            await mx.setAccountData(
+              AccountDataEvent.CinnyAccountPinPolicy,
+              createDisabledAccountPinPolicyContent()
+            );
             setDialogMode(undefined);
           }}
         />
