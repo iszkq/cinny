@@ -6,17 +6,23 @@ import {
   desktopUpdaterStateAtom,
 } from '../state/desktopUpdater';
 import {
+  canInstallPendingDesktopUpdate,
   checkForDesktopUpdate,
   fetchLatestDesktopRelease,
   installPendingDesktopUpdate,
   isDesktopUpdaterSupported,
+  normalizeDesktopUpdateVersion,
   PendingDesktopUpdate,
+  PendingDesktopUpdateHandle,
+  pendingDesktopUpdatesMatch,
   relaunchDesktopApp,
+  toPendingDesktopUpdate,
   UpdaterProgressEvent,
 } from '../utils/desktopUpdater';
 
-let ongoingCheckPromise: Promise<PendingDesktopUpdate | undefined> | undefined;
+let ongoingCheckPromise: Promise<PendingDesktopUpdateHandle | undefined> | undefined;
 let ongoingInstallPromise: Promise<void> | undefined;
+let pendingUpdateHandle: PendingDesktopUpdateHandle | undefined;
 
 type CheckForUpdatesOptions = {
   silentIfLatest?: boolean;
@@ -38,6 +44,9 @@ export const formatDesktopUpdateProgress = (downloaded: number, contentLength: n
 export const getDesktopUpdateErrorMessage = (error: unknown): string => {
   const message = error instanceof Error ? error.message : String(error);
 
+  if (/No installable desktop update is available/i.test(message)) {
+    return '\u5f53\u524d\u66f4\u65b0\u53e5\u67c4\u5df2\u5931\u6548\uff0c\u8bf7\u91cd\u65b0\u68c0\u67e5\u66f4\u65b0\u540e\u518d\u8bd5\u3002';
+  }
   if (/downloadAndInstall is not a function/i.test(message)) {
     return '\u5f53\u524d\u66f4\u65b0\u5bf9\u8c61\u5df2\u4e22\u5931\u4e0b\u8f7d\u65b9\u6cd5\uff0c\u8bf7\u91cd\u65b0\u68c0\u67e5\u66f4\u65b0\u540e\u518d\u8bd5\u3002';
   }
@@ -58,6 +67,55 @@ export const getDesktopUpdateErrorMessage = (error: unknown): string => {
   }
 
   return `\u68c0\u67e5\u66f4\u65b0\u5931\u8d25\uff1a${message}`;
+};
+
+const mergePendingUpdateInfo = (
+  update?: PendingDesktopUpdateHandle,
+  latestRelease?: PendingDesktopUpdate
+): PendingDesktopUpdate | undefined => {
+  if (!update) {
+    return undefined;
+  }
+
+  const pendingUpdate = toPendingDesktopUpdate(update);
+  if (!pendingUpdate) {
+    return undefined;
+  }
+
+  if (!latestRelease || !pendingDesktopUpdatesMatch(update, latestRelease)) {
+    return pendingUpdate;
+  }
+
+  return {
+    ...pendingUpdate,
+    body: pendingUpdate.body ?? latestRelease.body,
+    date: pendingUpdate.date ?? latestRelease.date,
+  };
+};
+
+const resolveInstallablePendingUpdate = async (
+  expectedUpdate?: PendingDesktopUpdate
+): Promise<PendingDesktopUpdateHandle> => {
+  const normalizedExpectedVersion = expectedUpdate
+    ? normalizeDesktopUpdateVersion(expectedUpdate.version)
+    : undefined;
+
+  if (
+    pendingUpdateHandle &&
+    canInstallPendingDesktopUpdate(pendingUpdateHandle) &&
+    (!normalizedExpectedVersion ||
+      normalizeDesktopUpdateVersion(pendingUpdateHandle.version) === normalizedExpectedVersion)
+  ) {
+    return pendingUpdateHandle;
+  }
+
+  const refreshedUpdate = await checkForDesktopUpdate();
+  if (!refreshedUpdate || !canInstallPendingDesktopUpdate(refreshedUpdate)) {
+    throw new Error('No installable desktop update is available.');
+  }
+
+  pendingUpdateHandle = refreshedUpdate;
+  return refreshedUpdate;
 };
 
 export const useDesktopUpdater = () => {
@@ -110,16 +168,12 @@ export const useDesktopUpdater = () => {
             checkForDesktopUpdate(),
             fetchLatestDesktopRelease().catch(() => undefined),
           ]);
-          const resolvedUpdate =
-            update && latestRelease?.version === update.version
-              ? Object.assign(update, {
-                  body: update.body ?? latestRelease.body,
-                  date: update.date ?? latestRelease.date,
-                })
-              : update;
+          pendingUpdateHandle = update;
+          const resolvedUpdate = mergePendingUpdateInfo(update, latestRelease);
 
           setState((current) => {
             if (!resolvedUpdate) {
+              pendingUpdateHandle = undefined;
               return {
                 ...current,
                 status: 'latest',
@@ -150,7 +204,7 @@ export const useDesktopUpdater = () => {
             };
           });
 
-          return resolvedUpdate;
+          return update;
         } catch (error) {
           if (showErrors) {
             setState((current) => ({
@@ -184,12 +238,12 @@ export const useDesktopUpdater = () => {
       return ongoingInstallPromise;
     }
 
-    const pendingUpdate = state.pendingUpdate;
+    const expectedUpdate = state.pendingUpdate;
     setState((current) => ({
       ...current,
       status: 'downloading',
-      message: `\u6b63\u5728\u4e0b\u8f7d\u5e76\u5b89\u88c5 ${formatDesktopUpdateVersion(
-        pendingUpdate.version
+      message: `\u6b63\u5728\u51c6\u5907\u4e0b\u8f7d\u5e76\u5b89\u88c5 ${formatDesktopUpdateVersion(
+        expectedUpdate.version
       )}...`,
       downloadedBytes: 0,
       contentLength: 0,
@@ -197,26 +251,78 @@ export const useDesktopUpdater = () => {
 
     ongoingInstallPromise = (async () => {
       try {
-        await installPendingDesktopUpdate(pendingUpdate, (event: UpdaterProgressEvent) => {
-          setState((current) => {
-            if (event.event === 'Started') {
-              return {
-                ...current,
-                contentLength: event.data.contentLength ?? 0,
-                downloadedBytes: 0,
-              };
-            }
+        let installableUpdate = await resolveInstallablePendingUpdate(expectedUpdate);
+        let installVersionLabel = formatDesktopUpdateVersion(installableUpdate.version);
 
-            if (event.event === 'Progress') {
-              return {
-                ...current,
-                downloadedBytes: current.downloadedBytes + event.data.chunkLength,
-              };
-            }
+        if (!pendingDesktopUpdatesMatch(expectedUpdate, installableUpdate)) {
+          const nextPendingUpdate = toPendingDesktopUpdate(installableUpdate) ?? expectedUpdate;
+          setState((current) => ({
+            ...current,
+            pendingUpdate: nextPendingUpdate,
+            message: `\u6b63\u5728\u51c6\u5907\u4e0b\u8f7d\u5e76\u5b89\u88c5 ${installVersionLabel}...`,
+          }));
+        } else {
+          setState((current) => ({
+            ...current,
+            message: `\u6b63\u5728\u4e0b\u8f7d\u5e76\u5b89\u88c5 ${installVersionLabel}...`,
+          }));
+        }
 
-            return current;
+        const runInstall = async (updateHandle: PendingDesktopUpdateHandle) => {
+          await installPendingDesktopUpdate(updateHandle, (event: UpdaterProgressEvent) => {
+            setState((current) => {
+              if (event.event === 'Started') {
+                return {
+                  ...current,
+                  contentLength: event.data.contentLength ?? 0,
+                  downloadedBytes: 0,
+                  message: `\u6b63\u5728\u4e0b\u8f7d\u5e76\u5b89\u88c5 ${formatDesktopUpdateVersion(
+                    updateHandle.version
+                  )}...`,
+                };
+              }
+
+              if (event.event === 'Progress') {
+                return {
+                  ...current,
+                  downloadedBytes: current.downloadedBytes + event.data.chunkLength,
+                };
+              }
+
+              return current;
+            });
           });
-        });
+        };
+
+        try {
+          await runInstall(installableUpdate);
+        } catch (error) {
+          if (!canInstallPendingDesktopUpdate(installableUpdate)) {
+            throw error;
+          }
+
+          if (
+            /downloadAndInstall is not a function/i.test(
+              error instanceof Error ? error.message : String(error)
+            )
+          ) {
+            pendingUpdateHandle = undefined;
+            installableUpdate = await resolveInstallablePendingUpdate(expectedUpdate);
+            installVersionLabel = formatDesktopUpdateVersion(installableUpdate.version);
+            setState((current) => ({
+              ...current,
+              pendingUpdate: toPendingDesktopUpdate(installableUpdate) ?? current.pendingUpdate,
+              message: `\u6b63\u5728\u4e0b\u8f7d\u5e76\u5b89\u88c5 ${installVersionLabel}...`,
+              downloadedBytes: 0,
+              contentLength: 0,
+            }));
+            await runInstall(installableUpdate);
+          } else {
+            throw error;
+          }
+        }
+
+        pendingUpdateHandle = undefined;
 
         setState((current) => ({
           ...current,
@@ -231,6 +337,7 @@ export const useDesktopUpdater = () => {
 
         await relaunchDesktopApp().catch(() => undefined);
       } catch (error) {
+        pendingUpdateHandle = undefined;
         setState((current) => ({
           ...current,
           status: 'error',
