@@ -20,11 +20,11 @@ export function UnreadBadgeCenter({ children }: { children: ReactNode }) {
 export function UnreadBadge({ highlight, count }: UnreadBadgeProps) {
   return (
     <Badge
-      variant={highlight ? 'Success' : 'Secondary'}
+      variant="Success"
       size={count > 0 ? '400' : '200'}
       fill="Solid"
       radii="Pill"
-      outlined={false}
+      outlined={Boolean(highlight && count > 0)}
     >
       {count > 0 && (
         <Text as="span" size="L400">
