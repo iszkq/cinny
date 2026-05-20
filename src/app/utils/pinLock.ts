@@ -24,6 +24,7 @@ export type AccountPinLoginRequirement = 'none' | 'prompt' | 'setup';
 
 const ACCOUNT_PIN_CONFIGS_KEY = 'starfire-account-pin-configs';
 const SCREEN_LOCK_STATE_KEY = 'starfire-screen-lock-state';
+const DESKTOP_STARTUP_PIN_LOCK_KEY = 'starfire-desktop-startup-pin-lock';
 const PIN_LOCK_CHANGE_EVENT = 'starfire-pin-lock-change';
 const PIN_LOCK_ITERATIONS = 150000;
 const PIN_CODE_REGEX = /^\d{4,12}$/;
@@ -32,6 +33,11 @@ const ACCOUNT_PIN_POLICY_VERSION = 1;
 const safeLocalStorage = (): Storage | undefined => {
   if (typeof window === 'undefined') return undefined;
   return window.localStorage;
+};
+
+const safeSessionStorage = (): Storage | undefined => {
+  if (typeof window === 'undefined') return undefined;
+  return window.sessionStorage;
 };
 
 const emitPinLockChange = () => {
@@ -424,6 +430,21 @@ export const lockScreenForAccount = (baseUrl: string, userId: string) => {
     locked: true,
     accountKey,
   });
+};
+
+export const applyDesktopStartupPinLock = (baseUrl?: string, userId?: string) => {
+  if (!baseUrl || !userId) return;
+
+  const sessionStorage = safeSessionStorage();
+  if (sessionStorage?.getItem(DESKTOP_STARTUP_PIN_LOCK_KEY) === 'applied') {
+    return;
+  }
+
+  sessionStorage?.setItem(DESKTOP_STARTUP_PIN_LOCK_KEY, 'applied');
+
+  if (hasAccountPin(baseUrl, userId)) {
+    lockScreenForAccount(baseUrl, userId);
+  }
 };
 
 export const clearScreenLock = () => {
