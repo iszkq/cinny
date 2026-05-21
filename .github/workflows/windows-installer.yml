@@ -69,6 +69,9 @@ jobs:
           RELEASE_REPOSITORY: ${{ github.repository }}
         run: |
           $version = $env:RELEASE_TAG -replace '^v', ''
+          if ($version -notmatch '^\d+\.\d+\.\d+([-.+][0-9A-Za-z.-]+)?$') {
+            throw "Invalid release tag '$($env:RELEASE_TAG)'. Use tags like v1.0.1, not v.1.0.1. The updater manifest version must be plain semver like 1.0.1."
+          }
           $setupFile = Get-ChildItem -Path 'src-tauri/target/release/bundle/nsis' -Filter '*-setup.exe' | Select-Object -First 1
           $signatureFile = Get-ChildItem -Path 'src-tauri/target/release/bundle/nsis' -Filter '*-setup.exe.sig' | Select-Object -First 1
           if (-not $setupFile) {
