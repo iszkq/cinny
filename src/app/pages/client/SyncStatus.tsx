@@ -6,29 +6,37 @@ import { ContainerColor } from '../../styles/ContainerColor.css';
 
 type StateData = {
   current: SyncState | null;
+  previous: SyncState | null | undefined;
 };
 
 type SyncStatusProps = {
   mx: MatrixClient;
 };
+
 export function SyncStatus({ mx }: SyncStatusProps) {
   const [stateData, setStateData] = useState<StateData>({
     current: null,
+    previous: undefined,
   });
 
   useSyncState(
     mx,
-    useCallback((current) => {
+    useCallback((current, previous) => {
       setStateData((s) => {
-        if (s.current === current) {
+        if (s.current === current && s.previous === previous) {
           return s;
         }
-        return { current };
+        return { current, previous };
       });
     }, [])
   );
 
-  if (stateData.current === SyncState.Prepared || stateData.current === SyncState.Catchup) {
+  if (
+    (stateData.current === SyncState.Prepared ||
+      stateData.current === SyncState.Syncing ||
+      stateData.current === SyncState.Catchup) &&
+    stateData.previous !== SyncState.Syncing
+  ) {
     return (
       <Box direction="Column" shrink="No">
         <Box

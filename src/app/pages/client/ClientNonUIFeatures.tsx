@@ -3,13 +3,9 @@ import React, { ReactNode, useCallback, useEffect, useRef, useState } from 'reac
 import { useNavigate } from 'react-router-dom';
 import {
   ClientEvent,
-  ClientEventHandlerMap,
   MatrixEvent,
-  MatrixClient,
-  Room,
   RoomEvent,
   RoomEventHandlerMap,
-  SyncState,
 } from 'matrix-js-sdk';
 import { roomToUnreadAtom, unreadEqual, unreadInfoToUnread } from '../../state/room/roomToUnread';
 import NotificationSound from '../../../../public/sound/notification.ogg';
@@ -33,7 +29,6 @@ import {
   getNotificationType,
   getUnreadInfo,
   isNotificationEvent,
-  decryptAllTimelineEvent,
 } from '../../utils/room';
 import { NotificationType, UnreadInfo } from '../../../types/matrix/room';
 import { AccountDataEvent } from '../../../types/matrix/accountData';
@@ -54,7 +49,6 @@ import {
   CinnyAISettingsContent,
   CinnyAccountPinPolicyContent,
 } from '../../../types/matrix/accountData';
-import { startClient } from '../../../client/initMatrix';
 import {
   applyAccountPinPolicyContent,
   hasAccountPin,
@@ -67,16 +61,7 @@ import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
 import { useDesktopUpdater } from '../../hooks/useDesktopUpdater';
 import { sendAppNotification } from '../../utils/notifications';
 
-const HEALTHY_SYNC_STATES = new Set<SyncState>([SyncState.Syncing]);
-const FAILED_PENDING_MESSAGE_STATUS = 'not_sent';
 const EXTERNAL_LINK_SELECTOR = 'a[href]';
-const SYNC_RECOVERY_RETRY_INTERVAL_MS = 4000;
-const SYNC_RECOVERY_WATCHDOG_INTERVAL_MS = 10000;
-const SYNC_RECOVERY_PENDING_RETRY_WATCHDOG_INTERVAL_MS = 12000;
-const SYNC_RECOVERY_STALL_MS = 30000;
-const SYNC_RECOVERY_FORCE_RESTART_MS = 18000;
-const SYNC_RECOVERY_BURST_WINDOW_MS = 60000;
-const SYNC_RECOVERY_BURST_THRESHOLD = 4;
 const DESKTOP_UPDATE_AUTO_CHECK_DELAY_MS = 4000;
 const DESKTOP_UPDATE_AUTO_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const DESKTOP_UPDATE_AUTO_CHECK_FOCUS_COOLDOWN_MS = 15 * 60 * 1000;
@@ -125,112 +110,6 @@ const playAudio = (audioElement: HTMLAudioElement | null) => {
   }
 };
 
-const getPendingEventKey = (mEvent: MatrixEvent): string | undefined => {
-  const txnId = (
-    mEvent as MatrixEvent & {
-      getTxnId?: () => string | undefined;
-    }
-  ).getTxnId?.();
-
-  return mEvent.getId() ?? txnId;
-};
-
-const isRetryablePendingEvent = (
-  mx: MatrixClient,
-  mEvent: MatrixEvent,
-  retryingEventIds?: Set<string>
-): boolean => {
-  const eventKey = getPendingEventKey(mEvent);
-  const status = (mEvent as MatrixEvent & { status?: unknown }).status;
-
-  return Boolean(
-    eventKey &&
-      !retryingEventIds?.has(eventKey) &&
-      mEvent.getSender() === mx.getUserId() &&
-      status === FAILED_PENDING_MESSAGE_STATUS
-  );
-};
-
-const hasRetryablePendingEvents = (
-  mx: MatrixClient,
-  retryingEventIds: Set<string>
-): boolean =>
-  mx.getRooms().some((room) => {
-    const pendingEvents =
-      (
-        room as Room & {
-          getPendingEvents?: () => MatrixEvent[];
-        }
-      ).getPendingEvents?.() ?? [];
-
-    return pendingEvents.some((mEvent) => isRetryablePendingEvent(mx, mEvent, retryingEventIds));
-  });
-
-const hasRetryableTimelineDecryptions = (mx: MatrixClient): boolean =>
-  mx.getRooms().some((room) =>
-    room
-      .getLiveTimeline()
-      .getEvents()
-      .some((event) => event.isDecryptionFailure())
-  );
-
-const retryPendingEvents = async (
-  mx: MatrixClient,
-  retryingEventIds: Set<string>
-): Promise<void> => {
-  const resendEvent = (
-    mx as MatrixClient & {
-      resendEvent?: (event: MatrixEvent, eventRoom: Room) => Promise<unknown>;
-    }
-  ).resendEvent;
-
-  if (typeof resendEvent !== 'function') {
-    return;
-  }
-
-  const retryTasks = mx.getRooms().flatMap((room) => {
-    const pendingEvents =
-      (
-        room as Room & {
-          getPendingEvents?: () => MatrixEvent[];
-        }
-      ).getPendingEvents?.() ?? [];
-
-    return pendingEvents.flatMap((mEvent) => {
-      const eventKey = getPendingEventKey(mEvent);
-
-      if (!eventKey || !isRetryablePendingEvent(mx, mEvent, retryingEventIds)) {
-        return [];
-      }
-
-      retryingEventIds.add(eventKey);
-
-      return [
-        resendEvent.call(mx, mEvent, room).catch(() => undefined).finally(() => {
-          retryingEventIds.delete(eventKey);
-        }),
-      ];
-    });
-  });
-
-  await Promise.all(retryTasks);
-};
-
-const retryLiveTimelineDecryptions = async (mx: MatrixClient): Promise<void> => {
-  const retryTasks = mx.getRooms().flatMap((room) => {
-    const liveTimeline = room.getLiveTimeline();
-    const hasRetryableEvents = liveTimeline.getEvents().some((event) => event.isDecryptionFailure());
-
-    if (!hasRetryableEvents) {
-      return [];
-    }
-
-    return [decryptAllTimelineEvent(mx, liveTimeline).catch(() => undefined)];
-  });
-
-  await Promise.all(retryTasks);
-};
-
 function SystemEmojiFeature() {
   const [twitterEmoji] = useSetting(settingsAtom, 'twitterEmoji');
 
@@ -266,245 +145,6 @@ function PresenceSyncFeature() {
     });
     updatePresence?.catch(() => undefined);
   }, [mx, presenceVisibility]);
-
-  return null;
-}
-
-function SyncRecoveryFeature() {
-  const mx = useMatrixClient();
-  const recoveryPromiseRef = useRef<Promise<void>>();
-  const lastHealthySyncRef = useRef(Date.now());
-  const lastRecoveryAttemptRef = useRef(0);
-  const lastPendingRetryAtRef = useRef(0);
-  const retryingPendingEventIdsRef = useRef<Set<string>>(new Set());
-  const reconnectStartedAtRef = useRef<number>();
-  const reconnectBurstCountRef = useRef(0);
-  const lastReconnectTransitionAtRef = useRef(0);
-
-  const resetReconnectTracking = useCallback(() => {
-    reconnectStartedAtRef.current = undefined;
-    reconnectBurstCountRef.current = 0;
-    lastReconnectTransitionAtRef.current = 0;
-  }, []);
-
-  const getReconnectDuration = useCallback(() => {
-    if (typeof reconnectStartedAtRef.current !== 'number') {
-      return 0;
-    }
-
-    return Date.now() - reconnectStartedAtRef.current;
-  }, []);
-
-  const trackReconnectState = useCallback(
-    (state: SyncState | null, previous?: SyncState | null) => {
-      if (!state || HEALTHY_SYNC_STATES.has(state)) {
-        resetReconnectTracking();
-        return;
-      }
-
-      if (state !== SyncState.Reconnecting && state !== SyncState.Error && state !== SyncState.Stopped) {
-        return;
-      }
-
-      const now = Date.now();
-      if (typeof reconnectStartedAtRef.current !== 'number') {
-        reconnectStartedAtRef.current = now;
-      }
-
-      if (previous !== state) {
-        if (
-          lastReconnectTransitionAtRef.current > 0 &&
-          now - lastReconnectTransitionAtRef.current <= SYNC_RECOVERY_BURST_WINDOW_MS
-        ) {
-          reconnectBurstCountRef.current += 1;
-        } else {
-          reconnectBurstCountRef.current = 1;
-        }
-
-        lastReconnectTransitionAtRef.current = now;
-      }
-    },
-    [resetReconnectTracking]
-  );
-
-  const shouldForceRestartSync = useCallback(
-    (syncState: SyncState | null) => {
-      if (syncState === SyncState.Stopped) {
-        return true;
-      }
-
-      const reconnectDuration = getReconnectDuration();
-      if (reconnectDuration >= SYNC_RECOVERY_FORCE_RESTART_MS) {
-        return true;
-      }
-
-      if (
-        reconnectBurstCountRef.current >= SYNC_RECOVERY_BURST_THRESHOLD &&
-        Date.now() - lastHealthySyncRef.current >= 10000
-      ) {
-        return true;
-      }
-
-      if (
-        syncState === SyncState.Error &&
-        reconnectDuration >= SYNC_RECOVERY_RETRY_INTERVAL_MS * 2
-      ) {
-        return true;
-      }
-
-      return false;
-    },
-    [getReconnectDuration]
-  );
-
-  const recoverSync = useCallback(
-    (forceRestart = false) => {
-      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-        return;
-      }
-
-      const now = Date.now();
-      if (now - lastRecoveryAttemptRef.current < SYNC_RECOVERY_RETRY_INTERVAL_MS) {
-        return;
-      }
-
-      const syncState = mx.getSyncState();
-      if (!forceRestart && syncState && HEALTHY_SYNC_STATES.has(syncState)) {
-        return;
-      }
-
-      if (recoveryPromiseRef.current) {
-        return;
-      }
-
-      lastRecoveryAttemptRef.current = now;
-      recoveryPromiseRef.current = (async () => {
-        if (!mx.clientRunning || syncState === SyncState.Stopped || forceRestart) {
-          if (mx.clientRunning) {
-            mx.stopClient();
-          }
-          await startClient(mx);
-          return;
-        }
-
-        const retried = mx.retryImmediately();
-        if (!retried && syncState === SyncState.Error) {
-          mx.stopClient();
-          await startClient(mx);
-        }
-      })()
-        .catch(() => undefined)
-        .finally(() => {
-          recoveryPromiseRef.current = undefined;
-        });
-    },
-    [mx]
-  );
-
-  const retryPendingMessages = useCallback(() => {
-    const syncState = mx.getSyncState();
-    if (!syncState || !HEALTHY_SYNC_STATES.has(syncState)) {
-      return;
-    }
-
-    if (
-      !hasRetryablePendingEvents(mx, retryingPendingEventIdsRef.current) &&
-      !hasRetryableTimelineDecryptions(mx)
-    ) {
-      return;
-    }
-
-    const now = Date.now();
-    if (now - lastPendingRetryAtRef.current < SYNC_RECOVERY_RETRY_INTERVAL_MS) {
-      return;
-    }
-
-    lastPendingRetryAtRef.current = now;
-    void Promise.allSettled([
-      retryPendingEvents(mx, retryingPendingEventIdsRef.current),
-      retryLiveTimelineDecryptions(mx),
-    ]);
-  }, [mx]);
-
-  useEffect(() => {
-    const handleSync: ClientEventHandlerMap[ClientEvent.Sync] = (state, previous) => {
-      if (state && HEALTHY_SYNC_STATES.has(state)) {
-        lastHealthySyncRef.current = Date.now();
-        resetReconnectTracking();
-        retryPendingMessages();
-        return;
-      }
-
-      trackReconnectState(state, previous);
-
-      if (state === SyncState.Reconnecting || state === SyncState.Error) {
-        recoverSync(shouldForceRestartSync(state));
-      }
-    };
-
-    mx.on(ClientEvent.Sync, handleSync);
-    return () => {
-      mx.removeListener(ClientEvent.Sync, handleSync);
-    };
-  }, [mx, recoverSync, resetReconnectTracking, retryPendingMessages, shouldForceRestartSync, trackReconnectState]);
-
-  useEffect(() => {
-    const handleOnline = () => {
-      recoverSync();
-      retryPendingMessages();
-    };
-    const handleFocus = () => {
-      recoverSync();
-      retryPendingMessages();
-    };
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        recoverSync();
-        retryPendingMessages();
-      }
-    };
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('focus', handleFocus);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    const recoveryTimer = window.setInterval(() => {
-      if (document.visibilityState !== 'visible') {
-        return;
-      }
-
-      const syncState = mx.getSyncState();
-      if (syncState && HEALTHY_SYNC_STATES.has(syncState)) {
-        return;
-      }
-
-      if (Date.now() - lastHealthySyncRef.current < SYNC_RECOVERY_STALL_MS) {
-        return;
-      }
-
-      recoverSync(shouldForceRestartSync(syncState));
-    }, SYNC_RECOVERY_WATCHDOG_INTERVAL_MS);
-
-    const pendingRetryTimer = window.setInterval(() => {
-      if (document.visibilityState !== 'visible') {
-        return;
-      }
-
-      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-        return;
-      }
-
-      retryPendingMessages();
-    }, SYNC_RECOVERY_PENDING_RETRY_WATCHDOG_INTERVAL_MS);
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('focus', handleFocus);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.clearInterval(recoveryTimer);
-      window.clearInterval(pendingRetryTimer);
-    };
-  }, [mx, recoverSync, retryPendingMessages, shouldForceRestartSync]);
 
   return null;
 }
@@ -1087,7 +727,6 @@ export function ClientNonUIFeatures({ children }: ClientNonUIFeaturesProps) {
       <SystemEmojiFeature />
       <PageZoomFeature />
       <PresenceSyncFeature />
-      <SyncRecoveryFeature />
       <DesktopExternalLinkFeature />
       <DesktopPinLockShortcutFeature />
       <DesktopAutoUpdateFeature />
