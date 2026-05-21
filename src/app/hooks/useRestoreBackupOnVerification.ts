@@ -7,6 +7,7 @@ import {
 } from '../state/backupRestore';
 import { useMatrixClient } from './useMatrixClient';
 import { useKeyBackupDecryptionKeyCached } from './useKeyBackup';
+import { restoreKeyBackupAndDecrypt } from '../utils/keyBackup';
 
 export const useRestoreBackupOnVerification = () => {
   const setRestoreProgress = useSetAtom(backupRestoreProgressAtom);
@@ -29,8 +30,7 @@ export const useRestoreBackupOnVerification = () => {
         return;
       }
 
-      restorePromiseRef.current = crypto
-        .restoreKeyBackup({
+      restorePromiseRef.current = restoreKeyBackupAndDecrypt(mx, {
           progressCallback(progress) {
             setRestoreProgress(progress);
           },
