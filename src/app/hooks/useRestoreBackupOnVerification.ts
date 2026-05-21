@@ -1,17 +1,12 @@
 import { useSetAtom } from 'jotai';
 import { useCallback, useRef } from 'react';
-import {
-  BackupProgressStatus,
-  backupRestoreProgressAtom,
-  setBackupRestoreProgressAtom,
-} from '../state/backupRestore';
+import { backupRestoreProgressAtom } from '../state/backupRestore';
 import { useMatrixClient } from './useMatrixClient';
 import { useKeyBackupDecryptionKeyCached } from './useKeyBackup';
-import { restoreKeyBackupAndDecrypt } from '../utils/keyBackup';
+import { retryDecryptLoadedTimelines } from '../utils/keyBackup';
 
 export const useRestoreBackupOnVerification = () => {
   const setRestoreProgress = useSetAtom(backupRestoreProgressAtom);
-  const setRestoreProgressState = useSetAtom(setBackupRestoreProgressAtom);
 
   const mx = useMatrixClient();
   const restorePromiseRef = useRef<Promise<void>>();
@@ -24,30 +19,22 @@ export const useRestoreBackupOnVerification = () => {
 
       const crypto = mx.getCrypto();
       if (!crypto) {
-        setRestoreProgressState({
-          status: BackupProgressStatus.Idle,
-        });
         return;
       }
 
-      restorePromiseRef.current = restoreKeyBackupAndDecrypt(mx, {
+      restorePromiseRef.current = crypto
+        .restoreKeyBackup({
           progressCallback(progress) {
             setRestoreProgress(progress);
           },
         })
         .then(() => {
-          setRestoreProgressState({
-            status: BackupProgressStatus.Done,
-          });
+          void retryDecryptLoadedTimelines(mx);
         })
-        .catch(() => {
-          setRestoreProgressState({
-            status: BackupProgressStatus.Idle,
-          });
-        })
+        .catch(() => undefined)
         .finally(() => {
           restorePromiseRef.current = undefined;
         });
-    }, [mx, setRestoreProgress, setRestoreProgressState])
+    }, [mx, setRestoreProgress])
   );
 };
