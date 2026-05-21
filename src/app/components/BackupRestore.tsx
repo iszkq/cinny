@@ -1,5 +1,5 @@
 import React, { MouseEventHandler, useCallback, useState } from 'react';
-import { useAtomValue, useSetAtom } from 'jotai';
+import { useAtom } from 'jotai';
 import { CryptoApi, KeyBackupInfo } from 'matrix-js-sdk/lib/crypto-api';
 import {
   Badge,
@@ -22,7 +22,6 @@ import FocusTrap from 'focus-trap-react';
 import {
   BackupProgressStatus,
   backupRestoreProgressAtom,
-  setBackupRestoreProgressAtom,
 } from '../state/backupRestore';
 import { InfoCard } from './info-card';
 import { AsyncStatus, useAsyncCallback } from '../hooks/useAsyncCallback';
@@ -35,7 +34,7 @@ import {
 import { useMatrixClient } from '../hooks/useMatrixClient';
 import { stopPropagation } from '../utils/keyboard';
 import { useRestoreBackupOnVerification } from '../hooks/useRestoreBackupOnVerification';
-import { restoreKeyBackupAndDecrypt } from '../utils/keyBackup';
+import { retryDecryptLoadedTimelines } from '../utils/keyBackup';
 
 type BackupStatusProps = {
   enabled: boolean;
@@ -142,9 +141,7 @@ type BackupRestoreTileProps = {
 };
 export function BackupRestoreTile({ crypto }: BackupRestoreTileProps) {
   const mx = useMatrixClient();
-  const restoreProgress = useAtomValue(backupRestoreProgressAtom);
-  const setRestoreProgress = useSetAtom(backupRestoreProgressAtom);
-  const setRestoreProgressState = useSetAtom(setBackupRestoreProgressAtom);
+  const [restoreProgress, setRestoreProgress] = useAtom(backupRestoreProgressAtom);
   const restoring =
     restoreProgress.status === BackupProgressStatus.Fetching ||
     restoreProgress.status === BackupProgressStatus.Loading;
@@ -161,21 +158,13 @@ export function BackupRestoreTile({ crypto }: BackupRestoreTileProps) {
 
   const [restoreState, restoreBackup] = useAsyncCallback<void, Error, []>(
     useCallback(async () => {
-      let succeeded = false;
-
-      try {
-        await restoreKeyBackupAndDecrypt(mx, {
-          progressCallback(progress) {
-            setRestoreProgress(progress);
-          },
-        });
-        succeeded = true;
-      } finally {
-        setRestoreProgressState({
-          status: succeeded ? BackupProgressStatus.Done : BackupProgressStatus.Idle,
-        });
-      }
-    }, [mx, setRestoreProgress, setRestoreProgressState])
+      await crypto.restoreKeyBackup({
+        progressCallback(progress) {
+          setRestoreProgress(progress);
+        },
+      });
+      void retryDecryptLoadedTimelines(mx);
+    }, [crypto, mx, setRestoreProgress])
   );
 
   const handleRestore = () => {
