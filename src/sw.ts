@@ -116,7 +116,7 @@ function requestSession(client: Client): Promise<SessionInfo | undefined> {
 
 async function requestSessionWithTimeout(
   clientId: string,
-  timeoutMs = 3000
+  timeoutMs = 8000
 ): Promise<SessionInfo | undefined> {
   const client = await self.clients.get(clientId);
   if (!client) return undefined;
@@ -178,11 +178,12 @@ function validMediaRequest(url: string, baseUrl: string): boolean {
   });
 }
 
-function fetchConfig(token: string): RequestInit {
+function fetchConfig(token: string, request?: Request): RequestInit {
+  const headers = new Headers(request?.headers);
+  headers.set('Authorization', `Bearer ${token}`);
+
   return {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
+    headers,
     cache: 'default',
   };
 }
@@ -250,10 +251,10 @@ async function cacheMediaResponse(url: string, response: Response) {
   await trimAuthMediaCache(cache);
 }
 
-async function fetchAndCacheMedia(url: string, token: string): Promise<Response> {
-  const response = await fetch(url, fetchConfig(token));
+async function fetchAndCacheMedia(request: Request, token: string): Promise<Response> {
+  const response = await fetch(request, fetchConfig(token, request));
 
-  void cacheMediaResponse(url, response.clone()).catch(() => undefined);
+  void cacheMediaResponse(request.url, response.clone()).catch(() => undefined);
 
   return response;
 }
@@ -268,7 +269,13 @@ self.addEventListener('fetch', (event: FetchEvent) => {
 
   event.respondWith(
     (async () => {
-      const session = sessions.get(clientId) ?? (await requestSessionWithTimeout(clientId));
+      const currentSession = sessions.get(clientId);
+
+      if (!currentSession && event.request.headers.has('Authorization')) {
+        return fetch(event.request);
+      }
+
+      const session = currentSession ?? (await requestSessionWithTimeout(clientId));
 
       if (!session || !validMediaRequest(url, session.baseUrl)) {
         return fetch(event.request);
@@ -279,7 +286,7 @@ self.addEventListener('fetch', (event: FetchEvent) => {
         return cachedResponse;
       }
 
-      return fetchAndCacheMedia(url, session.accessToken);
+      return fetchAndCacheMedia(event.request, session.accessToken);
     })()
   );
 });
