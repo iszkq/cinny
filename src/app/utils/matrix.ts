@@ -105,10 +105,11 @@ export const fetchMediaWithAuth = async (
     headers,
   };
 
+  let initialResponse: Response | undefined;
   try {
-    const response = await fetch(src, requestInit);
-    if (response.ok || !src.includes('/_matrix/client/v1/media/')) {
-      return response;
+    initialResponse = await fetch(src, requestInit);
+    if (initialResponse.ok || !src.includes('/_matrix/client/v1/media/')) {
+      return initialResponse;
     }
   } catch {
     if (!src.includes('/_matrix/client/v1/media/')) {
@@ -124,7 +125,7 @@ export const fetchMediaWithAuth = async (
     for (const legacyPath of legacyPaths) {
       const legacyUrl = src.replace(authPath, legacyPath);
       try {
-        const response = await fetch(legacyUrl, init);
+        const response = await fetch(legacyUrl, requestInit);
         if (response.ok) {
           return response;
         }
@@ -134,7 +135,11 @@ export const fetchMediaWithAuth = async (
     }
   }
 
-  return fetch(src, requestInit);
+  if (initialResponse) {
+    return initialResponse;
+  }
+
+  throw new Error('Failed to fetch media.');
 };
 
 export const isServerName = (serverName: string): boolean => DOMAIN_REGEX.test(serverName);
@@ -428,6 +433,9 @@ export const mxcUrlToHttp = (
 
 export const downloadMedia = async (src: string): Promise<Blob> => {
   const res = await fetchMediaWithAuth(src, { method: 'GET' });
+  if (!res.ok) {
+    throw new Error(`Failed to fetch media (${res.status})`);
+  }
   const blob = await res.blob();
   return blob;
 };
