@@ -124,9 +124,7 @@ export function ImageGroupIcon<T extends string>({
 }: ImageGroupIconProps<T>) {
   const desktopSupported = isDesktopUpdaterSupported();
   const { displayUrl, hasFailed, isLoaded, requestKey, handleLoad, handleError } =
-    useStableMediaUrl(url, fallbackUrl, {
-      preferObjectUrl: !desktopSupported,
-    });
+    useStableMediaUrl(url, fallbackUrl);
 
   return (
     <SidebarBtn active={active} id={id} label={label} onClick={onClick}>

@@ -42,7 +42,6 @@ export function Preview({ previewAtom }: PreviewProps) {
     useStableMediaUrl(primaryUrl, fallbackUrl, {
       mimeType: info?.mimetype,
       fallbackMimeType: info?.mimetype,
-      preferObjectUrl: !desktopSupported,
     });
 
   if (!shortcode) return null;

@@ -82,7 +82,6 @@ export function CustomEmojiItem({ mx, useAuthentication, image }: CustomEmojiIte
     useStableMediaUrl(primaryUrl, fallbackUrl, {
       mimeType: image.info?.mimetype,
       fallbackMimeType: image.info?.mimetype,
-      preferObjectUrl: !desktopSupported,
     });
 
   return (
@@ -160,7 +159,6 @@ export function StickerItem({ mx, useAuthentication, image }: StickerItemProps) 
     useStableMediaUrl(primaryUrl, fallbackUrl, {
       mimeType: image.info?.mimetype,
       fallbackMimeType: image.info?.mimetype,
-      preferObjectUrl: !desktopSupported,
     });
 
   return (

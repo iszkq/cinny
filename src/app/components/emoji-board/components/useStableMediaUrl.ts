@@ -21,9 +21,6 @@ type UseStableMediaUrlOptions = {
   preferObjectUrl?: boolean;
 };
 
-const MAX_MEDIA_RETRY_COUNT = 12;
-const MEDIA_RETRY_BASE_DELAY_MS = 250;
-const MEDIA_RETRY_MAX_DELAY_MS = 1200;
 const PREFERRED_OBJECT_URL_WAIT_MS = 700;
 
 const buildMediaCandidates = (
@@ -71,7 +68,6 @@ export const useStableMediaUrl = (
   const [desktopSrc, setDesktopSrc] = useState<string | undefined>();
   const [desktopFallbackSrc, setDesktopFallbackSrc] = useState<string | undefined>();
   const [loadedDisplayUrl, setLoadedDisplayUrl] = useState<string | undefined>();
-  const [retryCount, setRetryCount] = useState(0);
   const [preferredObjectUrlReady, setPreferredObjectUrlReady] = useState(
     !preferObjectUrl || disableObjectUrlCache
   );
@@ -112,7 +108,6 @@ export const useStableMediaUrl = (
     setDesktopSrc(undefined);
     setDesktopFallbackSrc(undefined);
     setLoadedDisplayUrl(undefined);
-    setRetryCount(0);
     setPreferredObjectUrlReady(!preferObjectUrl || disableObjectUrlCache || (!src && !fallbackSrc));
   }, [disableObjectUrlCache, fallbackSrc, preferObjectUrl, src]);
 
@@ -223,7 +218,7 @@ export const useStableMediaUrl = (
     !loadedDisplayUrl &&
     !waitingForPreferredObjectUrl &&
     (activeCandidates.length === 0 || candidateIndex >= activeCandidates.length);
-  const requestKey = `${candidateIndex}-${cacheVersion}-${retryCount}-${displayUrl ?? 'empty'}`;
+  const requestKey = `${candidateIndex}-${cacheVersion}-${displayUrl ?? 'empty'}`;
   const isLoaded = Boolean(loadedDisplayUrl && loadedDisplayUrl === displayUrl);
 
   useEffect(() => {
@@ -233,49 +228,6 @@ export const useStableMediaUrl = (
       releaseObjectUrl(displayUrl);
     };
   }, [displayUrl]);
-
-  useEffect(() => {
-    if (!hasFailed || loadedDisplayUrl || retryCount >= MAX_MEDIA_RETRY_COUNT) {
-      return undefined;
-    }
-
-    const retryTimer = window.setTimeout(() => {
-      setRetryCount((prev) => prev + 1);
-      setCacheVersion((prev) => prev + 1);
-      setCandidateIndex(0);
-
-      if (!disableObjectUrlCache && src) {
-        void primeCachedMediaObjectUrl(src);
-      }
-      if (!disableObjectUrlCache && fallbackSrc && fallbackSrc !== src) {
-        void primeCachedMediaObjectUrl(fallbackSrc);
-      }
-      if (desktopSupported && src) {
-        void primeDesktopMediaAssetUrl(src, 'visible', options.mimeType);
-      }
-      if (desktopSupported && fallbackSrc && fallbackSrc !== src) {
-        void primeDesktopMediaAssetUrl(
-          fallbackSrc,
-          'background',
-          options.fallbackMimeType ?? options.mimeType
-        );
-      }
-    }, Math.min(MEDIA_RETRY_BASE_DELAY_MS * (retryCount + 1), MEDIA_RETRY_MAX_DELAY_MS));
-
-    return () => {
-      window.clearTimeout(retryTimer);
-    };
-  }, [
-    desktopSupported,
-    disableObjectUrlCache,
-    fallbackSrc,
-    hasFailed,
-    loadedDisplayUrl,
-    options.fallbackMimeType,
-    options.mimeType,
-    retryCount,
-    src,
-  ]);
 
   const handleLoad = useCallback(() => {
     if (
