@@ -4,10 +4,7 @@ import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { decryptFile, downloadEncryptedMedia, mxcUrlToHttp } from '../../../utils/matrix';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
-import { primeCachedMediaObjectUrl } from '../../../utils/mediaUrlCache';
-import { releaseObjectUrl, retainObjectUrl } from '../../../utils/objectUrlRetainer';
 import { FALLBACK_MIMETYPE } from '../../../utils/mimeTypes';
-import { getSessionMediaCacheKey, loadSessionMediaUrl } from '../../../utils/sessionMediaCache';
 
 export type ThumbnailContentProps = {
   info: IThumbnailContent;
@@ -29,38 +26,19 @@ export function ThumbnailContent({ info, renderImage }: ThumbnailContentProps) {
       const mediaUrl = mxcUrlToHttp(mx, thumbMxcUrl, useAuthentication);
       if (!mediaUrl) throw new Error('Invalid media URL');
       if (encInfo) {
-        return loadSessionMediaUrl(
-          getSessionMediaCacheKey('thumbnail', mediaUrl, thumbInfo.mimetype ?? FALLBACK_MIMETYPE),
-          async () =>
-            downloadEncryptedMedia(mediaUrl, (encBuf) =>
-              decryptFile(encBuf, thumbInfo.mimetype ?? FALLBACK_MIMETYPE, encInfo)
-            )
+        const fileContent = await downloadEncryptedMedia(mediaUrl, (encBuf) =>
+          decryptFile(encBuf, thumbInfo.mimetype ?? FALLBACK_MIMETYPE, encInfo)
         );
+        return URL.createObjectURL(fileContent);
       }
 
-      if (useAuthentication) {
-        return (await primeCachedMediaObjectUrl(mediaUrl, 'visible')) ?? mediaUrl;
-      }
-
-      return (await primeCachedMediaObjectUrl(mediaUrl, 'visible')) ?? mediaUrl;
+      return mediaUrl;
     }, [mx, info, useAuthentication])
   );
 
   useEffect(() => {
     loadThumbSrc();
   }, [loadThumbSrc]);
-
-  useEffect(() => {
-    const retainedSrc = thumbSrcState.status === AsyncStatus.Success ? thumbSrcState.data : undefined;
-    retainObjectUrl(retainedSrc);
-
-    return () => {
-      releaseObjectUrl(retainedSrc);
-    };
-  }, [
-    thumbSrcState.status,
-    thumbSrcState.status === AsyncStatus.Success ? thumbSrcState.data : undefined,
-  ]);
 
   return thumbSrcState.status === AsyncStatus.Success ? renderImage(thumbSrcState.data) : null;
 }

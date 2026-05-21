@@ -27,14 +27,8 @@ import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { validBlurHash } from '../../../utils/blurHash';
 import { bytesToSize } from '../../../utils/common';
 import { stopPropagation } from '../../../utils/keyboard';
-import * as mediaUrlCache from '../../../utils/mediaUrlCache';
 import { FALLBACK_MIMETYPE } from '../../../utils/mimeTypes';
 import { decryptFile, downloadEncryptedMedia, mxcUrlToHttp } from '../../../utils/matrix';
-import {
-  getSessionMediaCacheKey,
-  isSessionMediaObjectUrl,
-  loadSessionMediaUrl,
-} from '../../../utils/sessionMediaCache';
 import {
   releaseObjectUrl,
   retainObjectUrl,
@@ -116,7 +110,6 @@ const VIEWER_THUMBNAIL_PRELOAD_DELAY_MS = 80;
 
 const revokeBlobUrl = (src?: string) => {
   if (!src?.startsWith('blob:')) return;
-  if (mediaUrlCache.isCachedMediaObjectUrl?.(src) || isSessionMediaObjectUrl(src)) return;
   revokeObjectUrlWhenPossible(src);
 };
 
@@ -225,20 +218,13 @@ export const ImageContent = as<'div', ImageContentProps>(
         if (!mediaUrl) throw new Error('Invalid media URL');
 
         if (targetEncInfo) {
-          return loadSessionMediaUrl(
-            getSessionMediaCacheKey('image', mediaUrl, targetMimeType ?? FALLBACK_MIMETYPE),
-            async () =>
-              downloadEncryptedMedia(mediaUrl, (encBuf) =>
-                decryptFile(encBuf, targetMimeType ?? FALLBACK_MIMETYPE, targetEncInfo)
-              )
+          const fileContent = await downloadEncryptedMedia(mediaUrl, (encBuf) =>
+            decryptFile(encBuf, targetMimeType ?? FALLBACK_MIMETYPE, targetEncInfo)
           );
+          return URL.createObjectURL(fileContent);
         }
 
-        if (useAuthentication) {
-          return (await mediaUrlCache.primeCachedMediaObjectUrl(mediaUrl, 'visible')) ?? mediaUrl;
-        }
-
-        return (await mediaUrlCache.primeCachedMediaObjectUrl(mediaUrl, 'visible')) ?? mediaUrl;
+        return mediaUrl;
       },
       [mx, useAuthentication]
     );

@@ -1,5 +1,5 @@
 /* eslint-disable jsx-a11y/media-has-caption */
-import React, { ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+import React, { ReactNode, useCallback, useRef, useState } from 'react';
 import {
   Badge,
   Box,
@@ -36,12 +36,6 @@ import {
   mxcUrlToHttp,
 } from '../../../utils/matrix';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
-import {
-  primeCachedMediaObjectUrl,
-  primePersistentMediaUrl,
-} from '../../../utils/mediaUrlCache';
-import { releaseObjectUrl, retainObjectUrl } from '../../../utils/objectUrlRetainer';
-import { getSessionMediaCacheKey, loadSessionMediaUrl } from '../../../utils/sessionMediaCache';
 import {
   MAX_AUDIO_TRANSCRIPTION_DURATION_MS,
   useAudioTranscription,
@@ -105,20 +99,10 @@ export function AudioContent({
       const mediaUrl = mxcUrlToHttp(mx, url, useAuthentication);
       if (!mediaUrl) throw new Error('Invalid media URL');
 
-      if (encInfo) {
-        return loadSessionMediaUrl(
-          getSessionMediaCacheKey('audio', mediaUrl, mimeType),
-          async () =>
-            downloadEncryptedMedia(mediaUrl, (encBuf) => decryptFile(encBuf, mimeType, encInfo))
-        );
-      }
-
-      if (!useAuthentication) {
-        return (await primeCachedMediaObjectUrl(mediaUrl, 'visible')) ?? mediaUrl;
-      }
-
-      void primePersistentMediaUrl(mediaUrl);
-      return (await primeCachedMediaObjectUrl(mediaUrl, 'visible')) ?? mediaUrl;
+      const fileContent = encInfo
+        ? await downloadEncryptedMedia(mediaUrl, (encBuf) => decryptFile(encBuf, mimeType, encInfo))
+        : await downloadMedia(mediaUrl);
+      return URL.createObjectURL(fileContent);
     }, [mx, url, useAuthentication, mimeType, encInfo])
   );
 
@@ -197,15 +181,6 @@ export function AudioContent({
       getBlob: loadAudioBlob,
     }).catch(() => undefined);
   };
-
-  useEffect(() => {
-    const retainedSrc = srcState.status === AsyncStatus.Success ? srcState.data : undefined;
-    retainObjectUrl(retainedSrc);
-
-    return () => {
-      releaseObjectUrl(retainedSrc);
-    };
-  }, [srcState.status, srcState.status === AsyncStatus.Success ? srcState.data : undefined]);
 
   return renderMediaControl({
     after: (

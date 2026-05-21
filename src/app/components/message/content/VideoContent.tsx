@@ -27,16 +27,11 @@ import { bytesToSize, millisecondsToMinutesAndSeconds } from '../../../utils/com
 import {
   decryptFile,
   downloadEncryptedMedia,
+  downloadMedia,
   mxcUrlToHttp,
 } from '../../../utils/matrix';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { validBlurHash } from '../../../utils/blurHash';
-import {
-  primeCachedMediaObjectUrl,
-  primePersistentMediaUrl,
-} from '../../../utils/mediaUrlCache';
-import { releaseObjectUrl, retainObjectUrl } from '../../../utils/objectUrlRetainer';
-import { getSessionMediaCacheKey, loadSessionMediaUrl } from '../../../utils/sessionMediaCache';
 
 type RenderVideoProps = {
   title: string;
@@ -89,22 +84,12 @@ export const VideoContent = as<'div', VideoContentProps>(
         const mediaUrl = mxcUrlToHttp(mx, url, useAuthentication);
         if (!mediaUrl) throw new Error('Invalid media URL');
 
-        if (encInfo) {
-          return loadSessionMediaUrl(
-            getSessionMediaCacheKey('video', mediaUrl, mimeType),
-            async () =>
-              downloadEncryptedMedia(mediaUrl, (encBuf) =>
-                decryptFile(encBuf, mimeType, encInfo)
-              )
-          );
-        }
-
-        if (!useAuthentication) {
-          return (await primeCachedMediaObjectUrl(mediaUrl, 'visible')) ?? mediaUrl;
-        }
-
-        void primePersistentMediaUrl(mediaUrl);
-        return (await primeCachedMediaObjectUrl(mediaUrl, 'visible')) ?? mediaUrl;
+        const fileContent = encInfo
+          ? await downloadEncryptedMedia(mediaUrl, (encBuf) =>
+              decryptFile(encBuf, mimeType, encInfo)
+            )
+          : await downloadMedia(mediaUrl);
+        return URL.createObjectURL(fileContent);
       }, [mx, url, useAuthentication, mimeType, encInfo])
     );
 
@@ -124,15 +109,6 @@ export const VideoContent = as<'div', VideoContentProps>(
     useEffect(() => {
       if (autoPlay) loadSrc();
     }, [autoPlay, loadSrc]);
-
-    useEffect(() => {
-      const retainedSrc = srcState.status === AsyncStatus.Success ? srcState.data : undefined;
-      retainObjectUrl(retainedSrc);
-
-      return () => {
-        releaseObjectUrl(retainedSrc);
-      };
-    }, [srcState.status, srcState.status === AsyncStatus.Success ? srcState.data : undefined]);
 
     return (
       <Box className={classNames(css.RelativeBase, className)} {...props} ref={ref}>
