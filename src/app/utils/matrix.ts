@@ -105,17 +105,51 @@ export const fetchMediaWithAuth = async (
     ...init,
     headers,
   };
+  const tokenUrl = attachMediaAccessToken(src, resolvedAccessToken, resolvedBaseUrl) ?? src;
+  const authenticatedMediaRequest = src.includes('/_matrix/client/v1/media/');
+  const tryFetch = async (url: string, request?: RequestInit): Promise<Response | undefined> => {
+    try {
+      return await fetch(url, request);
+    } catch {
+      return undefined;
+    }
+  };
+
+  if (!authenticatedMediaRequest) {
+    const tokenResponse = tokenUrl !== src ? await tryFetch(tokenUrl, init) : undefined;
+    if (tokenResponse?.ok) {
+      return tokenResponse;
+    }
+
+    const plainResponse = await tryFetch(src, init);
+    if (plainResponse?.ok) {
+      return plainResponse;
+    }
+
+    const authResponse = await tryFetch(src, requestInit);
+    if (authResponse?.ok) {
+      return authResponse;
+    }
+
+    if (authResponse) {
+      return authResponse;
+    }
+
+    if (tokenResponse) {
+      return tokenResponse;
+    }
+
+    if (plainResponse) {
+      return plainResponse;
+    }
+
+    throw new Error('Failed to fetch media.');
+  }
 
   let initialResponse: Response | undefined;
-  try {
-    initialResponse = await fetch(src, requestInit);
-    if (initialResponse.ok || !src.includes('/_matrix/client/v1/media/')) {
-      return initialResponse;
-    }
-  } catch {
-    if (!src.includes('/_matrix/client/v1/media/')) {
-      throw new Error('Failed to fetch media.');
-    }
+  initialResponse = await tryFetch(src, requestInit);
+  if (initialResponse?.ok) {
+    return initialResponse;
   }
 
   for (const [authPath, legacyPaths] of AUTH_MEDIA_TO_LEGACY_MEDIA_PATHS) {
@@ -127,22 +161,17 @@ export const fetchMediaWithAuth = async (
       const legacyUrl = src.replace(authPath, legacyPath);
       const legacyUrlWithToken =
         attachMediaAccessToken(legacyUrl, resolvedAccessToken, resolvedBaseUrl) ?? legacyUrl;
-      try {
-        const response = await fetch(legacyUrlWithToken, init);
-        if (response.ok) {
-          disableAuthenticatedMediaForSession();
-          return response;
-        }
-      } catch {
-        try {
-          const response = await fetch(legacyUrl, init);
-          if (response.ok) {
-            disableAuthenticatedMediaForSession();
-            return response;
-          }
-        } catch {
-          // Try the next legacy endpoint candidate.
-        }
+
+      const tokenResponse = await tryFetch(legacyUrlWithToken, init);
+      if (tokenResponse?.ok) {
+        disableAuthenticatedMediaForSession();
+        return tokenResponse;
+      }
+
+      const plainResponse = await tryFetch(legacyUrl, init);
+      if (plainResponse?.ok) {
+        disableAuthenticatedMediaForSession();
+        return plainResponse;
       }
     }
   }
