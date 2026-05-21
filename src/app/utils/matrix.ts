@@ -18,100 +18,14 @@ import { IAudioInfo, IImageInfo, IThumbnailContent, IVideoInfo } from '../../typ
 import { AccountDataEvent } from '../../types/matrix/accountData';
 import { getStateEvent } from './room';
 import { Membership, StateEvent } from '../../types/matrix/room';
-import { getFallbackSession } from '../state/sessions';
 
 const DOMAIN_REGEX = /\b(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}\b/;
-const MATRIX_MEDIA_PATHS = [
-  '/_matrix/client/v1/media/download',
-  '/_matrix/client/v1/media/thumbnail',
-  '/_matrix/media/v3/download',
-  '/_matrix/media/v3/thumbnail',
-  '/_matrix/media/r0/download',
-  '/_matrix/media/r0/thumbnail',
-];
-
-const AUTH_MEDIA_PATH_TO_FALLBACK_PATH: Record<string, string[]> = {
-  '/_matrix/client/v1/media/download': [
-    '/_matrix/media/v3/download',
-    '/_matrix/media/r0/download',
-  ],
-  '/_matrix/client/v1/media/thumbnail': [
-    '/_matrix/media/v3/thumbnail',
-    '/_matrix/media/r0/thumbnail',
-  ],
-};
-
-const isSessionMediaUrl = (src: string, baseUrl: string): boolean => {
-  try {
-    const currentUrl =
-      typeof window === 'undefined' ? baseUrl : window.location.href;
-    const mediaUrl = new URL(src, currentUrl);
-    return MATRIX_MEDIA_PATHS.some((path) =>
-      mediaUrl.href.startsWith(new URL(path, baseUrl).href)
-    );
-  } catch {
-    return false;
-  }
-};
 
 export const fetchMediaWithAuth = async (
   src: string,
   init?: RequestInit
 ): Promise<Response> => {
-  const session = getFallbackSession();
-  if (!session || !isSessionMediaUrl(src, session.baseUrl)) {
-    return fetch(src, init);
-  }
-
-  const headers = new Headers(init?.headers);
-  if (!headers.has('Authorization')) {
-    headers.set('Authorization', `Bearer ${session.accessToken}`);
-  }
-
-  const primaryResponse = await fetch(src, {
-    ...init,
-    headers,
-  });
-
-  if (primaryResponse.ok) {
-    return primaryResponse;
-  }
-
-  const fallbackUrls: string[] = [];
-  try {
-    const currentUrl = typeof window === 'undefined' ? session.baseUrl : window.location.href;
-    const mediaUrl = new URL(src, currentUrl);
-    const fallbackPaths = Object.entries(AUTH_MEDIA_PATH_TO_FALLBACK_PATH).find(([path]) =>
-      mediaUrl.pathname.startsWith(path)
-    )?.[1];
-
-    fallbackUrls.push(mediaUrl.toString());
-
-    fallbackPaths?.forEach((fallbackPath) => {
-      const fallbackUrl = new URL(mediaUrl.toString());
-      fallbackUrl.pathname = mediaUrl.pathname.replace(
-        /^\/_matrix\/client\/v1\/media\/(download|thumbnail)/,
-        fallbackPath
-      );
-      fallbackUrls.push(fallbackUrl.toString());
-    });
-  } catch {
-    fallbackUrls.push(src);
-  }
-
-  const uniqueFallbackUrls = Array.from(new Set(fallbackUrls)).filter((url) => url !== src);
-  for (const fallbackUrl of uniqueFallbackUrls) {
-    // Some homeserver/media proxy setups advertise authenticated media, but desktop/webview
-    // fetches still only succeed against the public media endpoints.
-    // eslint-disable-next-line no-await-in-loop
-    const fallbackResponse = await fetch(fallbackUrl, init).catch(() => undefined);
-    if (fallbackResponse?.ok) {
-      return fallbackResponse;
-    }
-  }
-
-  const plainResponse = await fetch(src, init).catch(() => undefined);
-  return plainResponse ?? primaryResponse;
+  return fetch(src, init);
 };
 
 export const isServerName = (serverName: string): boolean => DOMAIN_REGEX.test(serverName);
@@ -404,12 +318,7 @@ export const mxcUrlToHttp = (
   );
 
 export const downloadMedia = async (src: string): Promise<Blob> => {
-  // Prefer a direct Authorization header for JS downloads, while the service worker keeps
-  // authenticated media working for <img>/<video> tags that cannot set headers.
   const res = await fetchMediaWithAuth(src, { method: 'GET' });
-  if (!res.ok) {
-    throw new Error(`Failed to download media: ${res.status} ${res.statusText}`);
-  }
   const blob = await res.blob();
   return blob;
 };
