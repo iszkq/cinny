@@ -47,8 +47,7 @@ const buildMediaCandidates = (
       }
     }
 
-    const allowSourceDisplay = !options.preferObjectUrl || source.startsWith('blob:');
-    if (allowSourceDisplay && !seenDisplayUrls.has(source)) {
+    if (!seenDisplayUrls.has(source)) {
       candidates.push({ source, displayUrl: source });
       seenDisplayUrls.add(source);
     }
