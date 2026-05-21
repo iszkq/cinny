@@ -16,6 +16,7 @@ import {
   VerifyCurrentDeviceTile,
 } from './Verification';
 import {
+  useDeviceVerificationStatus,
   useUnverifiedDeviceCount,
   VerificationStatus,
 } from '../../../hooks/useDeviceVerificationStatus';
@@ -23,7 +24,7 @@ import {
   useSecretStorageDefaultKeyId,
   useSecretStorageKeyContent,
 } from '../../../hooks/useSecretStorage';
-import { useCrossSigningActive, useCrossSigningReady } from '../../../hooks/useCrossSigning';
+import { useCrossSigningActive } from '../../../hooks/useCrossSigning';
 import { BackupRestoreTile } from '../../../components/BackupRestore';
 
 function DevicesPlaceholder() {
@@ -42,16 +43,14 @@ export function Devices({ requestClose }: DevicesProps) {
   const mx = useMatrixClient();
   const crypto = mx.getCrypto();
   const crossSigningActive = useCrossSigningActive();
-  const crossSigningReady = useCrossSigningReady(crypto);
   const [devices, refreshDeviceList] = useDeviceList();
 
   const [currentDevice, otherDevices] = useSplitCurrentDevice(devices);
-  const verificationStatus =
-    crossSigningReady === true
-      ? VerificationStatus.Verified
-      : crossSigningActive
-      ? VerificationStatus.Unverified
-      : VerificationStatus.Unknown;
+  const verificationStatus = useDeviceVerificationStatus(
+    crypto,
+    mx.getSafeUserId(),
+    currentDevice?.device_id
+  );
 
   const otherDevicesId = useDeviceIds(otherDevices);
   const unverifiedDeviceCount = useUnverifiedDeviceCount(
