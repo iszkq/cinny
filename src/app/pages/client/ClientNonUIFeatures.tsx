@@ -62,7 +62,7 @@ import { useDesktopUpdater } from '../../hooks/useDesktopUpdater';
 import { sendAppNotification } from '../../utils/notifications';
 
 const EXTERNAL_LINK_SELECTOR = 'a[href]';
-const DESKTOP_UPDATE_AUTO_CHECK_DELAY_MS = 4000;
+const DESKTOP_UPDATE_AUTO_CHECK_DELAY_MS = 30000;
 const DESKTOP_UPDATE_AUTO_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const DESKTOP_UPDATE_AUTO_CHECK_FOCUS_COOLDOWN_MS = 15 * 60 * 1000;
 
@@ -139,7 +139,6 @@ function PresenceSyncFeature() {
   const [presenceVisibility] = useSetting(settingsAtom, 'presenceVisibility');
 
   useEffect(() => {
-    void mx.setSyncPresence?.(presenceVisibility);
     const updatePresence = mx.setPresence?.({
       presence: presenceVisibility,
     });

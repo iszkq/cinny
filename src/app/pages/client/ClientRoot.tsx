@@ -40,12 +40,6 @@ import { AuthMetadataProvider } from '../../hooks/useAuthMetadata';
 import { getFallbackSession } from '../../state/sessions';
 import { AutoDiscovery } from './AutoDiscovery';
 
-const ACTIVE_SYNC_STATES = new Set<SyncState>([
-  SyncState.Prepared,
-  SyncState.Catchup,
-  SyncState.Syncing,
-]);
-
 function ClientRootLoading() {
   return (
     <SplashScreen>
@@ -212,7 +206,7 @@ export function ClientRoot({ children }: ClientRootProps) {
   useSyncState(
     mx,
     useCallback((state) => {
-      if (state && ACTIVE_SYNC_STATES.has(state)) {
+      if (state === SyncState.Prepared) {
         setLoading(false);
       }
     }, [])

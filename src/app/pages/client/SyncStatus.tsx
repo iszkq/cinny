@@ -21,10 +21,15 @@ export function SyncStatus({ mx }: SyncStatusProps) {
     previous: undefined,
   });
   const [visibleStateData, setVisibleStateData] = useState<StateData>(stateData);
+  const [syncEstablished, setSyncEstablished] = useState(false);
 
   useSyncState(
     mx,
     useCallback((current, previous) => {
+      if (current === SyncState.Prepared) {
+        setSyncEstablished(true);
+      }
+
       setStateData((s) => {
         if (s.current === current && s.previous === previous) {
           return s;
@@ -48,6 +53,14 @@ export function SyncStatus({ mx }: SyncStatusProps) {
     setVisibleStateData(stateData);
     return undefined;
   }, [stateData]);
+
+  if (
+    !syncEstablished &&
+    (visibleStateData.current === SyncState.Reconnecting ||
+      visibleStateData.current === SyncState.Error)
+  ) {
+    return null;
+  }
 
   if (
     (visibleStateData.current === SyncState.Prepared ||
