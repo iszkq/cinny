@@ -18,169 +18,15 @@ import { IAudioInfo, IImageInfo, IThumbnailContent, IVideoInfo } from '../../typ
 import { AccountDataEvent } from '../../types/matrix/accountData';
 import { getStateEvent } from './room';
 import { Membership, StateEvent } from '../../types/matrix/room';
-import { getFallbackSession } from '../state/sessions';
-import { disableAuthenticatedMediaForSession } from '../hooks/useMediaAuthentication';
 
 const DOMAIN_REGEX = /\b(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}\b/;
-const MATRIX_MEDIA_PATHS = [
-  '/_matrix/client/v1/media/download',
-  '/_matrix/client/v1/media/thumbnail',
-  '/_matrix/media/v1/download',
-  '/_matrix/media/v1/thumbnail',
-  '/_matrix/media/v3/download',
-  '/_matrix/media/v3/thumbnail',
-  '/_matrix/media/r0/download',
-  '/_matrix/media/r0/thumbnail',
-];
-const AUTH_MEDIA_TO_LEGACY_MEDIA_PATHS: Array<[string, string[]]> = [
-  ['/_matrix/client/v1/media/download', ['/_matrix/media/v3/download', '/_matrix/media/r0/download']],
-  [
-    '/_matrix/client/v1/media/thumbnail',
-    ['/_matrix/media/v3/thumbnail', '/_matrix/media/r0/thumbnail'],
-  ],
-];
-
-const isMatrixMediaUrl = (url: string, baseUrl?: string): boolean => {
-  try {
-    const parsedUrl = new URL(
-      url,
-      typeof window !== 'undefined' ? window.location.origin : baseUrl ?? 'https://cinny.in'
-    );
-    const isMediaPath = MATRIX_MEDIA_PATHS.some((path) => parsedUrl.pathname.startsWith(path));
-
-    if (!isMediaPath) {
-      return false;
-    }
-
-    if (!baseUrl) {
-      return true;
-    }
-
-    return parsedUrl.origin === new URL(baseUrl).origin;
-  } catch {
-    return false;
-  }
-};
-
-export const attachMediaAccessToken = (
-  url: string | null,
-  accessToken?: string,
-  baseUrl?: string
-): string | null => {
-  if (!url || !accessToken || !isMatrixMediaUrl(url, baseUrl)) {
-    return url;
-  }
-
-  try {
-    const parsedUrl = new URL(url);
-    if (!parsedUrl.searchParams.has('access_token')) {
-      parsedUrl.searchParams.set('access_token', accessToken);
-    }
-    return parsedUrl.toString();
-  } catch {
-    return url;
-  }
-};
 
 export const fetchMediaWithAuth = async (
   src: string,
-  init?: RequestInit,
-  accessToken?: string,
-  baseUrl?: string
+  init?: RequestInit
 ): Promise<Response> => {
-  const fallbackSession = getFallbackSession();
-  const resolvedAccessToken = accessToken ?? fallbackSession?.accessToken;
-  const resolvedBaseUrl = baseUrl ?? fallbackSession?.baseUrl;
-
-  if (!resolvedAccessToken || !isMatrixMediaUrl(src, resolvedBaseUrl)) {
-    return fetch(src, init);
-  }
-
-  const headers = new Headers(init?.headers);
-  if (!headers.has('Authorization')) {
-    headers.set('Authorization', `Bearer ${resolvedAccessToken}`);
-  }
-
-  const requestInit = {
-    ...init,
-    headers,
-  };
-  const tokenUrl = attachMediaAccessToken(src, resolvedAccessToken, resolvedBaseUrl) ?? src;
-  const authenticatedMediaRequest = src.includes('/_matrix/client/v1/media/');
-  const tryFetch = async (url: string, request?: RequestInit): Promise<Response | undefined> => {
-    try {
-      return await fetch(url, request);
-    } catch {
-      return undefined;
-    }
-  };
-
-  if (!authenticatedMediaRequest) {
-    const tokenResponse = tokenUrl !== src ? await tryFetch(tokenUrl, init) : undefined;
-    if (tokenResponse?.ok) {
-      return tokenResponse;
-    }
-
-    const plainResponse = await tryFetch(src, init);
-    if (plainResponse?.ok) {
-      return plainResponse;
-    }
-
-    const authResponse = await tryFetch(src, requestInit);
-    if (authResponse?.ok) {
-      return authResponse;
-    }
-
-    if (authResponse) {
-      return authResponse;
-    }
-
-    if (tokenResponse) {
-      return tokenResponse;
-    }
-
-    if (plainResponse) {
-      return plainResponse;
-    }
-
-    throw new Error('Failed to fetch media.');
-  }
-
-  let initialResponse: Response | undefined;
-  initialResponse = await tryFetch(src, requestInit);
-  if (initialResponse?.ok) {
-    return initialResponse;
-  }
-
-  for (const [authPath, legacyPaths] of AUTH_MEDIA_TO_LEGACY_MEDIA_PATHS) {
-    if (!src.includes(authPath)) {
-      continue;
-    }
-
-    for (const legacyPath of legacyPaths) {
-      const legacyUrl = src.replace(authPath, legacyPath);
-      const legacyUrlWithToken =
-        attachMediaAccessToken(legacyUrl, resolvedAccessToken, resolvedBaseUrl) ?? legacyUrl;
-
-      const tokenResponse = await tryFetch(legacyUrlWithToken, init);
-      if (tokenResponse?.ok) {
-        disableAuthenticatedMediaForSession();
-        return tokenResponse;
-      }
-
-      const plainResponse = await tryFetch(legacyUrl, init);
-      if (plainResponse?.ok) {
-        disableAuthenticatedMediaForSession();
-        return plainResponse;
-      }
-    }
-  }
-
-  if (initialResponse) {
-    return initialResponse;
-  }
-
-  throw new Error('Failed to fetch media.');
+  // Authenticated Matrix media is handled by the service worker, same as upstream Cinny.
+  return fetch(src, init);
 };
 
 export const isServerName = (serverName: string): boolean => DOMAIN_REGEX.test(serverName);
@@ -473,10 +319,8 @@ export const mxcUrlToHttp = (
   );
 
 export const downloadMedia = async (src: string): Promise<Blob> => {
-  const res = await fetchMediaWithAuth(src, { method: 'GET' });
-  if (!res.ok) {
-    throw new Error(`Failed to fetch media (${res.status})`);
-  }
+  // this request is authenticated by service worker
+  const res = await fetch(src, { method: 'GET' });
   const blob = await res.blob();
   return blob;
 };
