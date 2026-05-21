@@ -105,6 +105,16 @@ self.addEventListener('message', (event: ExtendableMessageEvent) => {
 });
 
 const MEDIA_PATHS = ['/_matrix/client/v1/media/download', '/_matrix/client/v1/media/thumbnail'];
+const AUTH_MEDIA_PATH_TO_FALLBACK_PATH: Record<string, string[]> = {
+  '/_matrix/client/v1/media/download': [
+    '/_matrix/media/v3/download',
+    '/_matrix/media/r0/download',
+  ],
+  '/_matrix/client/v1/media/thumbnail': [
+    '/_matrix/media/v3/thumbnail',
+    '/_matrix/media/r0/thumbnail',
+  ],
+};
 
 function mediaPath(url: string): boolean {
   try {
@@ -131,6 +141,95 @@ function fetchConfig(token: string): RequestInit {
   };
 }
 
+function getPublicMediaFallbackUrls(url: string): string[] {
+  try {
+    const mediaUrl = new URL(url);
+    const fallbackPaths = Object.entries(AUTH_MEDIA_PATH_TO_FALLBACK_PATH).find(([path]) =>
+      mediaUrl.pathname.startsWith(path)
+    )?.[1];
+
+    if (!fallbackPaths) {
+      return [];
+    }
+
+    return fallbackPaths.map((fallbackPath) => {
+      const fallbackUrl = new URL(mediaUrl.toString());
+      fallbackUrl.pathname = mediaUrl.pathname.replace(
+        /^\/_matrix\/client\/v1\/media\/(download|thumbnail)/,
+        fallbackPath
+      );
+      return fallbackUrl.toString();
+    });
+  } catch {
+    return [];
+  }
+}
+
+async function toSafeMediaResponse(response: Response): Promise<Response | undefined> {
+  try {
+    const mediaBlob = await response.blob();
+    const headers = new Headers(response.headers);
+    headers.delete('content-length');
+    headers.delete('content-encoding');
+    headers.delete('transfer-encoding');
+
+    return new Response(mediaBlob, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
+  } catch {
+    return undefined;
+  }
+}
+
+async function fetchMediaWithFallback(
+  request: Request,
+  session: SessionInfo | undefined
+): Promise<Response> {
+  if (session && validMediaRequest(request.url, session.baseUrl)) {
+    const authedResponse = await fetch(request.url, fetchConfig(session.accessToken)).catch(
+      () => undefined
+    );
+    if (authedResponse?.ok) {
+      const safeAuthedResponse = await toSafeMediaResponse(authedResponse);
+      if (safeAuthedResponse) {
+        return safeAuthedResponse;
+      }
+    }
+  }
+
+  const originalResponse = await fetch(request).catch(() => undefined);
+  if (originalResponse?.ok) {
+    const safeOriginalResponse = await toSafeMediaResponse(originalResponse);
+    if (safeOriginalResponse) {
+      return safeOriginalResponse;
+    }
+  }
+
+  const fallbackUrls = getPublicMediaFallbackUrls(request.url);
+  for (const fallbackUrl of fallbackUrls) {
+    // eslint-disable-next-line no-await-in-loop
+    const fallbackResponse = await fetch(fallbackUrl).catch(() => undefined);
+    if (fallbackResponse?.ok) {
+      // eslint-disable-next-line no-await-in-loop
+      const safeFallbackResponse = await toSafeMediaResponse(fallbackResponse);
+      if (safeFallbackResponse) {
+        return safeFallbackResponse;
+      }
+    }
+  }
+
+  if (originalResponse && !originalResponse.ok) {
+    return originalResponse;
+  }
+
+  return new Response(null, {
+    status: 502,
+    statusText: 'Media fetch failed',
+  });
+}
+
 self.addEventListener('fetch', (event: FetchEvent) => {
   const { url, method } = event.request;
 
@@ -141,18 +240,13 @@ self.addEventListener('fetch', (event: FetchEvent) => {
 
   const session = sessions.get(clientId);
   if (session) {
-    if (validMediaRequest(url, session.baseUrl)) {
-      event.respondWith(fetch(url, fetchConfig(session.accessToken)));
-    }
+    event.respondWith(fetchMediaWithFallback(event.request, session));
     return;
   }
 
   event.respondWith(
     requestSessionWithTimeout(clientId).then((s) => {
-      if (s && validMediaRequest(url, s.baseUrl)) {
-        return fetch(url, fetchConfig(s.accessToken));
-      }
-      return fetch(event.request);
+      return fetchMediaWithFallback(event.request, s);
     })
   );
 });
