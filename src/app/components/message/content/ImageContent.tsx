@@ -107,6 +107,8 @@ export type ImageContentProps = {
 
 const VIEWER_THUMBNAIL_PRELOAD_LIMIT = 18;
 const VIEWER_THUMBNAIL_PRELOAD_DELAY_MS = 80;
+const INLINE_IMAGE_RETRY_LIMIT = 5;
+const INLINE_IMAGE_RETRY_DELAY_MS = 450;
 
 const revokeBlobUrl = (src?: string) => {
   if (!src?.startsWith('blob:')) return;
@@ -145,6 +147,7 @@ export const ImageContent = as<'div', ImageContentProps>(
     const [blurred, setBlurred] = useState(markedAsSpoiler ?? false);
     const [viewerLoadNonce, setViewerLoadNonce] = useState(0);
     const [viewerPreviewVersion, setViewerPreviewVersion] = useState(0);
+    const [imageLoadNonce, setImageLoadNonce] = useState(0);
     const [viewerMediaState, setViewerMediaState] = useState<ViewerMediaState>({
       status: AsyncStatus.Idle,
     });
@@ -159,6 +162,8 @@ export const ImageContent = as<'div', ImageContentProps>(
     const viewerTrapRef = useRef<HTMLDivElement>(null);
     const viewerCacheRef = useRef<Map<string, string>>(new Map());
     const viewerPreloadRef = useRef<Set<string>>(new Set());
+    const imageRetryCountRef = useRef(0);
+    const imageRetryTimerRef = useRef<number>();
 
     const setViewerCachedSrc = useCallback((itemId: string, nextSrc: string) => {
       const currentSrc = viewerCacheRef.current.get(itemId);
@@ -267,16 +272,41 @@ export const ImageContent = as<'div', ImageContentProps>(
     );
 
     const handleLoad = () => {
+      imageRetryCountRef.current = 0;
+      if (typeof imageRetryTimerRef.current === 'number') {
+        window.clearTimeout(imageRetryTimerRef.current);
+        imageRetryTimerRef.current = undefined;
+      }
       setLoad(true);
+      setError(false);
     };
 
     const handleError = () => {
       setLoad(false);
       setError(true);
+
+      if (imageRetryCountRef.current >= INLINE_IMAGE_RETRY_LIMIT) {
+        return;
+      }
+
+      imageRetryCountRef.current += 1;
+      if (typeof imageRetryTimerRef.current === 'number') {
+        window.clearTimeout(imageRetryTimerRef.current);
+      }
+      imageRetryTimerRef.current = window.setTimeout(() => {
+        setError(false);
+        setImageLoadNonce((value) => value + 1);
+      }, INLINE_IMAGE_RETRY_DELAY_MS * imageRetryCountRef.current);
     };
 
     const handleRetry = () => {
+      if (typeof imageRetryTimerRef.current === 'number') {
+        window.clearTimeout(imageRetryTimerRef.current);
+        imageRetryTimerRef.current = undefined;
+      }
+      imageRetryCountRef.current = 0;
       setError(false);
+      setImageLoadNonce((value) => value + 1);
       void loadSrc().catch(() => undefined);
     };
 
@@ -287,7 +317,22 @@ export const ImageContent = as<'div', ImageContentProps>(
     useEffect(() => {
       setLoad(false);
       setError(false);
+      setImageLoadNonce(0);
+      imageRetryCountRef.current = 0;
+      if (typeof imageRetryTimerRef.current === 'number') {
+        window.clearTimeout(imageRetryTimerRef.current);
+        imageRetryTimerRef.current = undefined;
+      }
     }, [url]);
+
+    useEffect(
+      () => () => {
+        if (typeof imageRetryTimerRef.current === 'number') {
+          window.clearTimeout(imageRetryTimerRef.current);
+        }
+      },
+      []
+    );
 
     useEffect(() => {
       if (!autoPlay) return;
@@ -631,7 +676,10 @@ export const ImageContent = as<'div', ImageContentProps>(
         )}
 
         {srcState.status === AsyncStatus.Success && (
-          <Box className={classNames(css.MediaContainer, blurred && css.Blur)}>
+          <Box
+            key={`${srcState.data}-${imageLoadNonce}`}
+            className={classNames(css.MediaContainer, blurred && css.Blur)}
+          >
             {renderImage({
               alt: body,
               title: body,
