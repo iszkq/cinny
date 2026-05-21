@@ -60,6 +60,9 @@ export const getDesktopUpdateErrorMessage = (error: unknown): string => {
   if (/invalid type:\s*sequence,\s*expected a string/i.test(message)) {
     return '\u53d1\u5e03\u7684 latest.json \u683c\u5f0f\u4e0d\u6b63\u786e\uff1anotes \u5b57\u6bb5\u88ab\u751f\u6210\u6210\u4e86\u5217\u8868\uff0c\u9700\u8981\u6539\u56de\u6587\u672c\u540e\u91cd\u65b0\u4e0a\u4f20\u3002';
   }
+  if (/parsing major version number|unexpected character|semver/i.test(message)) {
+    return '\u53d1\u5e03\u7684 latest.json \u7248\u672c\u53f7\u4e0d\u5408\u6cd5\uff1aversion \u5fc5\u987b\u662f 1.0.1 \u8fd9\u6837\u7684 semver\uff0c\u4e0d\u8981\u5199\u6210 v.1.0.1 \u6216 .1.0.1\u3002';
+  }
   if (/endpoint/i.test(message) || /404|204|json/i.test(message)) {
     return '\u672a\u80fd\u83b7\u53d6\u66f4\u65b0\u4fe1\u606f\uff0c\u8bf7\u68c0\u67e5\u66f4\u65b0\u5730\u5740\u548c\u53d1\u5e03\u7684 latest.json \u6587\u4ef6\u3002';
   }
