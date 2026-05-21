@@ -234,6 +234,10 @@ export const ImageContent = as<'div', ImageContentProps>(
           );
         }
 
+        if (useAuthentication) {
+          return (await mediaUrlCache.primeCachedMediaObjectUrl(mediaUrl, 'visible')) ?? mediaUrl;
+        }
+
         void mediaUrlCache.primePersistentMediaUrl(mediaUrl);
         return (await mediaUrlCache.getPreparedMediaUrl(mediaUrl, 'visible')) ?? mediaUrl;
       },

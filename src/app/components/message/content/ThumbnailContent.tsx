@@ -6,6 +6,7 @@ import { decryptFile, downloadEncryptedMedia, mxcUrlToHttp } from '../../../util
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import {
   getPreparedMediaUrl,
+  primeCachedMediaObjectUrl,
   primePersistentMediaUrl,
 } from '../../../utils/mediaUrlCache';
 import { releaseObjectUrl, retainObjectUrl } from '../../../utils/objectUrlRetainer';
@@ -39,6 +40,10 @@ export function ThumbnailContent({ info, renderImage }: ThumbnailContentProps) {
               decryptFile(encBuf, thumbInfo.mimetype ?? FALLBACK_MIMETYPE, encInfo)
             )
         );
+      }
+
+      if (useAuthentication) {
+        return (await primeCachedMediaObjectUrl(mediaUrl, 'visible')) ?? mediaUrl;
       }
 
       void primePersistentMediaUrl(mediaUrl);
