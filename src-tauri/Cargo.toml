@@ -1,6 +1,6 @@
 [package]
 name = "cinny-desktop"
-version = "1.0.0"
+version = "1.0.1"
 description = "星火桌面客户端"
 authors = ["Cinny contributors"]
 license = "AGPL-3.0-only"
