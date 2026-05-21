@@ -72,6 +72,11 @@ const RECENT_GROUP_ID = 'recent_group';
 const SEARCH_GROUP_ID = 'search_group';
 const PRIORITY_PACK_PRELOAD_COUNT = 4;
 const PRIORITY_PACK_VISIBLE_URL_LIMIT = 160;
+const WEB_PRIORITY_PACK_PRELOAD_COUNT = 2;
+const WEB_PRIORITY_PACK_VISIBLE_URL_LIMIT = 48;
+const WEB_BACKGROUND_PRELOAD_INITIAL_DELAY_MS = 900;
+const WEB_BACKGROUND_PRELOAD_BATCH_SIZE = 16;
+const WEB_BACKGROUND_PRELOAD_BATCH_DELAY_MS = 650;
 
 type ImagePackMode = 'contextual' | 'personal';
 
@@ -556,8 +561,12 @@ export function EmojiBoard({
 
   const emojiTab = tab === EmojiBoardTab.Emoji;
   const usage = emojiTab ? ImageUsage.Emoticon : ImageUsage.Sticker;
-  const priorityPackPreloadCount = desktopSupported ? 3 : PRIORITY_PACK_PRELOAD_COUNT;
-  const priorityPackVisibleUrlLimit = desktopSupported ? 160 : PRIORITY_PACK_VISIBLE_URL_LIMIT;
+  const priorityPackPreloadCount = desktopSupported
+    ? PRIORITY_PACK_PRELOAD_COUNT
+    : WEB_PRIORITY_PACK_PRELOAD_COUNT;
+  const priorityPackVisibleUrlLimit = desktopSupported
+    ? PRIORITY_PACK_VISIBLE_URL_LIMIT
+    : WEB_PRIORITY_PACK_VISIBLE_URL_LIMIT;
 
   const previewAtom = useMemo(
     () => createPreviewDataAtom(emojiTab ? DefaultEmojiPreview : undefined),
@@ -778,8 +787,65 @@ export function EmojiBoard({
     }
 
     let disposed = false;
+    const backgroundTimers: number[] = [];
     const preloadTimer = window.setTimeout(() => {
       if (disposed) {
+        return;
+      }
+
+      if (!desktopSupported) {
+        const visibleUrls = new Set<string>();
+        const backgroundUrls: string[] = [];
+
+        priorityPacks.forEach((pack, packIndex) => {
+          const mediaUrls = getPackMediaUrls(pack);
+          const visibleLimit =
+            packIndex === 0
+              ? priorityPackVisibleUrlLimit
+              : Math.max(12, Math.floor(priorityPackVisibleUrlLimit / 2));
+
+          mediaUrls.forEach((mediaUrl, mediaIndex) => {
+            if (mediaIndex < visibleLimit) {
+              visibleUrls.add(mediaUrl);
+              return;
+            }
+
+            backgroundUrls.push(mediaUrl);
+          });
+        });
+
+        visibleUrls.forEach((mediaUrl) => {
+          void primeCachedMediaObjectUrl(mediaUrl, 'visible');
+        });
+
+        const backgroundQueue = Array.from(
+          new Set(backgroundUrls.filter((mediaUrl) => !visibleUrls.has(mediaUrl)))
+        );
+
+        for (
+          let batchStart = 0;
+          batchStart < backgroundQueue.length;
+          batchStart += WEB_BACKGROUND_PRELOAD_BATCH_SIZE
+        ) {
+          const batch = backgroundQueue.slice(
+            batchStart,
+            batchStart + WEB_BACKGROUND_PRELOAD_BATCH_SIZE
+          );
+          const batchIndex = batchStart / WEB_BACKGROUND_PRELOAD_BATCH_SIZE;
+
+          backgroundTimers.push(
+            window.setTimeout(() => {
+              if (disposed) {
+                return;
+              }
+
+              batch.forEach((mediaUrl) => {
+                void primePersistentMediaUrl(mediaUrl, 'background');
+              });
+            }, WEB_BACKGROUND_PRELOAD_INITIAL_DELAY_MS + batchIndex * WEB_BACKGROUND_PRELOAD_BATCH_DELAY_MS)
+          );
+        }
+
         return;
       }
 
@@ -797,8 +863,9 @@ export function EmojiBoard({
     return () => {
       disposed = true;
       window.clearTimeout(preloadTimer);
+      backgroundTimers.forEach((timer) => window.clearTimeout(timer));
     };
-  }, [getPackMediaUrls, priorityPackVisibleUrlLimit, priorityPacks]);
+  }, [desktopSupported, getPackMediaUrls, priorityPackVisibleUrlLimit, priorityPacks]);
 
   // sync active sidebar tab with scroll
   useEffect(() => {
