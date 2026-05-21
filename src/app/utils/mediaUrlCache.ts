@@ -4,8 +4,10 @@ import { getFallbackSession } from '../state/sessions';
 
 const LEGACY_PERSISTENT_MEDIA_CACHE = 'cinny-auth-media-v2';
 const PERSISTENT_MEDIA_CACHE_PREFIX = 'cinny-auth-media-v3';
-const PERSISTENT_MEDIA_PRELOAD_CONCURRENCY = 4;
-const OBJECT_URL_MEDIA_PRELOAD_CONCURRENCY = 4;
+const PERSISTENT_MEDIA_PRELOAD_CONCURRENCY = 2;
+const OBJECT_URL_MEDIA_PRELOAD_CONCURRENCY = 2;
+
+type MediaCachePriority = 'visible' | 'background';
 
 type DeviceMemoryNavigator = Navigator & {
   deviceMemory?: number;
@@ -72,12 +74,15 @@ const { maxEntries: MAX_PERSISTENT_MEDIA_ENTRIES } = getPersistentMediaLimits();
 
 type PersistentMediaTask = {
   src: string;
+  priority: MediaCachePriority;
   resolve: () => void;
 };
 
 const persistedMediaUrls = new Set<string>();
 const pendingPersistentMedia = new Map<string, Promise<void>>();
-const persistentMediaQueue: PersistentMediaTask[] = [];
+const queuedPersistentMediaTasks = new Map<string, PersistentMediaTask>();
+const visiblePersistentMediaQueue: PersistentMediaTask[] = [];
+const backgroundPersistentMediaQueue: PersistentMediaTask[] = [];
 let activePersistentMediaTasks = 0;
 
 type ObjectUrlMediaEntry = {
@@ -88,7 +93,7 @@ type ObjectUrlMediaEntry = {
 type ObjectUrlMediaTask = {
   src: string;
   resolve: (value: string | undefined) => void;
-  priority: 'visible' | 'background';
+  priority: MediaCachePriority;
 };
 
 const objectUrlMediaCache = new Map<string, ObjectUrlMediaEntry>();
@@ -180,6 +185,7 @@ const createObjectUrlFromMedia = async (src: string): Promise<string | undefined
 
   const pendingPersistent = pendingPersistentMedia.get(src);
   if (pendingPersistent) {
+    promotePersistentMediaTask(src);
     await pendingPersistent.catch(() => undefined);
   }
 
@@ -212,6 +218,24 @@ const promoteObjectUrlMediaTask = (src: string) => {
   removeQueuedObjectUrlMediaTask(backgroundObjectUrlMediaQueue, src);
   queuedTask.priority = 'visible';
   visibleObjectUrlMediaQueue.push(queuedTask);
+};
+
+const removeQueuedPersistentMediaTask = (queue: PersistentMediaTask[], src: string) => {
+  const queueIndex = queue.findIndex((task) => task.src === src);
+  if (queueIndex >= 0) {
+    queue.splice(queueIndex, 1);
+  }
+};
+
+const promotePersistentMediaTask = (src: string) => {
+  const queuedTask = queuedPersistentMediaTasks.get(src);
+  if (!queuedTask || queuedTask.priority === 'visible') {
+    return;
+  }
+
+  removeQueuedPersistentMediaTask(backgroundPersistentMediaQueue, src);
+  queuedTask.priority = 'visible';
+  visiblePersistentMediaQueue.push(queuedTask);
 };
 
 const flushObjectUrlMediaQueue = () => {
@@ -276,7 +300,9 @@ const getPersistentMediaCacheName = (): string =>
 const resetInMemoryMediaCaches = () => {
   persistedMediaUrls.clear();
   pendingPersistentMedia.clear();
-  persistentMediaQueue.length = 0;
+  queuedPersistentMediaTasks.clear();
+  visiblePersistentMediaQueue.length = 0;
+  backgroundPersistentMediaQueue.length = 0;
 
   pendingObjectUrlMedia.clear();
   queuedObjectUrlMediaTasks.clear();
@@ -394,11 +420,12 @@ const ensurePersistentMedia = async (src: string): Promise<Response | undefined>
 const flushPersistentMediaQueue = () => {
   while (
     activePersistentMediaTasks < PERSISTENT_MEDIA_PRELOAD_CONCURRENCY &&
-    persistentMediaQueue.length > 0
+    (visiblePersistentMediaQueue.length > 0 || backgroundPersistentMediaQueue.length > 0)
   ) {
-    const task = persistentMediaQueue.shift();
+    const task = visiblePersistentMediaQueue.shift() ?? backgroundPersistentMediaQueue.shift();
     if (!task) return;
 
+    queuedPersistentMediaTasks.delete(task.src);
     activePersistentMediaTasks += 1;
 
     ensurePersistentMedia(task.src)
@@ -412,7 +439,10 @@ const flushPersistentMediaQueue = () => {
   }
 };
 
-export const primePersistentMediaUrl = (src?: string): Promise<void> | undefined => {
+export const primePersistentMediaUrl = (
+  src?: string,
+  priority: MediaCachePriority = 'background'
+): Promise<void> | undefined => {
   syncPersistentMediaNamespace();
 
   if (!src || persistedMediaUrls.has(src)) {
@@ -421,11 +451,22 @@ export const primePersistentMediaUrl = (src?: string): Promise<void> | undefined
 
   const existingPromise = pendingPersistentMedia.get(src);
   if (existingPromise) {
+    if (priority === 'visible') {
+      promotePersistentMediaTask(src);
+    }
     return existingPromise;
   }
 
   const preloadPromise = new Promise<void>((resolve) => {
-    persistentMediaQueue.push({ src, resolve });
+    const task: PersistentMediaTask = { src, priority, resolve };
+    queuedPersistentMediaTasks.set(src, task);
+
+    if (priority === 'visible') {
+      visiblePersistentMediaQueue.push(task);
+      return;
+    }
+
+    backgroundPersistentMediaQueue.push(task);
   });
 
   pendingPersistentMedia.set(src, preloadPromise);
@@ -441,7 +482,7 @@ export const getCachedMediaObjectUrl = (src?: string): string | undefined => {
 
 export const getPreparedMediaUrl = async (
   src?: string,
-  priority: 'visible' | 'background' = 'visible',
+  priority: MediaCachePriority = 'visible',
   timeoutMs = 120
 ): Promise<string | undefined> => {
   syncPersistentMediaNamespace();
@@ -510,7 +551,7 @@ export const subscribeCachedMediaObjectUrl = (
 
 export const primeCachedMediaObjectUrl = (
   src?: string,
-  priority: 'visible' | 'background' = 'visible'
+  priority: MediaCachePriority = 'visible'
 ): Promise<string | undefined> | undefined => {
   syncPersistentMediaNamespace();
 

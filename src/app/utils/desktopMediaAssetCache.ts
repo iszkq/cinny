@@ -11,7 +11,7 @@ type DesktopMediaTask = {
   resolve: (value: string | undefined) => void;
 };
 
-const DESKTOP_MEDIA_PRELOAD_CONCURRENCY = 4;
+const DESKTOP_MEDIA_PRELOAD_CONCURRENCY = 2;
 
 type FallbackSession = {
   baseUrl: string;
