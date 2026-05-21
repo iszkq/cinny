@@ -3,8 +3,12 @@ import { Dialog, Header, config, Box, Text, Button, Spinner, color } from 'folds
 import { AsyncStatus, useAsyncCallback } from '../hooks/useAsyncCallback';
 import { logoutClient } from '../../client/initMatrix';
 import { useMatrixClient } from '../hooks/useMatrixClient';
-import { useCrossSigningActive, useCrossSigningReady } from '../hooks/useCrossSigning';
+import { useCrossSigningActive } from '../hooks/useCrossSigning';
 import { InfoCard } from './info-card';
+import {
+  useDeviceVerificationStatus,
+  VerificationStatus,
+} from '../hooks/useDeviceVerificationStatus';
 
 type LogoutDialogProps = {
   handleClose: () => void;
@@ -14,8 +18,11 @@ export const LogoutDialog = forwardRef<HTMLDivElement, LogoutDialogProps>(
     const mx = useMatrixClient();
     const hasEncryptedRoom = !!mx.getRooms().find((room) => room.hasEncryptionStateEvent());
     const crossSigningActive = useCrossSigningActive();
-    const crossSigningReady = useCrossSigningReady(mx.getCrypto());
-    const currentDeviceUnverified = crossSigningActive && crossSigningReady === false;
+    const verificationStatus = useDeviceVerificationStatus(
+      mx.getCrypto(),
+      mx.getSafeUserId(),
+      mx.getDeviceId() ?? undefined
+    );
 
     const [logoutState, logout] = useAsyncCallback<void, Error, []>(
       useCallback(async () => {
@@ -42,7 +49,7 @@ export const LogoutDialog = forwardRef<HTMLDivElement, LogoutDialogProps>(
         <Box style={{ padding: config.space.S400 }} direction="Column" gap="400">
           {hasEncryptedRoom &&
             (crossSigningActive ? (
-              currentDeviceUnverified && (
+              verificationStatus === VerificationStatus.Unverified && (
                 <InfoCard
                   variant="Critical"
               title="设备未验证"
