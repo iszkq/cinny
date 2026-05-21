@@ -57,12 +57,6 @@ export const backupRestoreProgressAtom = atom<
       const { total, successes, failures } = progress;
 
       const downloaded = successes + failures;
-      if (downloaded === total) {
-        set(baseBackupRestoreProgressAtom, {
-          status: BackupProgressStatus.Done,
-        });
-        return;
-      }
       set(baseBackupRestoreProgressAtom, {
         status: BackupProgressStatus.Loading,
         data: {
