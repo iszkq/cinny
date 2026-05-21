@@ -37,7 +37,7 @@ import {
 } from '../../../utils/matrix';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import {
-  getPreparedMediaUrl,
+  primeCachedMediaObjectUrl,
   primePersistentMediaUrl,
 } from '../../../utils/mediaUrlCache';
 import { releaseObjectUrl, retainObjectUrl } from '../../../utils/objectUrlRetainer';
@@ -113,8 +113,12 @@ export function AudioContent({
         );
       }
 
+      if (!useAuthentication) {
+        return (await primeCachedMediaObjectUrl(mediaUrl, 'visible')) ?? mediaUrl;
+      }
+
       void primePersistentMediaUrl(mediaUrl);
-      return (await getPreparedMediaUrl(mediaUrl, 'visible')) ?? mediaUrl;
+      return (await primeCachedMediaObjectUrl(mediaUrl, 'visible')) ?? mediaUrl;
     }, [mx, url, useAuthentication, mimeType, encInfo])
   );
 

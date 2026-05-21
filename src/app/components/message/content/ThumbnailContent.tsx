@@ -4,11 +4,7 @@ import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { decryptFile, downloadEncryptedMedia, mxcUrlToHttp } from '../../../utils/matrix';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
-import {
-  getPreparedMediaUrl,
-  primeCachedMediaObjectUrl,
-  primePersistentMediaUrl,
-} from '../../../utils/mediaUrlCache';
+import { primeCachedMediaObjectUrl } from '../../../utils/mediaUrlCache';
 import { releaseObjectUrl, retainObjectUrl } from '../../../utils/objectUrlRetainer';
 import { FALLBACK_MIMETYPE } from '../../../utils/mimeTypes';
 import { getSessionMediaCacheKey, loadSessionMediaUrl } from '../../../utils/sessionMediaCache';
@@ -46,8 +42,7 @@ export function ThumbnailContent({ info, renderImage }: ThumbnailContentProps) {
         return (await primeCachedMediaObjectUrl(mediaUrl, 'visible')) ?? mediaUrl;
       }
 
-      void primePersistentMediaUrl(mediaUrl);
-      return (await getPreparedMediaUrl(mediaUrl, 'visible')) ?? mediaUrl;
+      return (await primeCachedMediaObjectUrl(mediaUrl, 'visible')) ?? mediaUrl;
     }, [mx, info, useAuthentication])
   );
 
