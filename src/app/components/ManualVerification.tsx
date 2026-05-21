@@ -129,7 +129,7 @@ export function ManualVerificationTile({
       : ManualVerificationMethod.RecoveryKey
   );
 
-  const verifyAndRestoreBackup = useCallback(
+  const verifyDevice = useCallback(
     async (recoveryKey: Uint8Array) => {
       const crypto = mx.getCrypto();
       if (!crypto) {
@@ -139,15 +139,14 @@ export function ManualVerificationTile({
       storePrivateKey(secretStorageKeyId, recoveryKey);
 
       await crypto.bootstrapCrossSigning({});
-      await crypto.bootstrapSecretStorage({});
-
-      await crypto.loadSessionBackupPrivateKeyFromSecretStorage();
+      // Load backup keys without blocking the verification UI.
+      void crypto.loadSessionBackupPrivateKeyFromSecretStorage().catch(() => undefined);
     },
     [mx, secretStorageKeyId]
   );
 
   const [verifyState, handleDecodedRecoveryKey] = useAsyncCallback<void, Error, [Uint8Array]>(
-    verifyAndRestoreBackup
+    verifyDevice
   );
   const verifying = verifyState.status === AsyncStatus.Loading;
 
