@@ -380,15 +380,21 @@ export type DownloadFileProps = {
   encInfo?: EncryptedAttachmentInfo;
 };
 export function DownloadFile({ body, mimeType, url, info, encInfo }: DownloadFileProps) {
-  const loadRemoteFile = useLoadRemoteFile(mimeType, url, encInfo);
+  const mx = useMatrixClient();
+  const useAuthentication = useMediaAuthentication();
 
   const [downloadState, download] = useAsyncCallback(
     useCallback(async () => {
-      const fileContent = await loadRemoteFile();
+      const mediaUrl = mxcUrlToHttp(mx, url, useAuthentication);
+      if (!mediaUrl) throw new Error('Invalid media URL');
+      const fileContent = encInfo
+        ? await downloadEncryptedMedia(mediaUrl, (encBuf) => decryptFile(encBuf, mimeType, encInfo))
+        : await downloadMedia(mediaUrl);
+
       const fileURL = URL.createObjectURL(fileContent);
       FileSaver.saveAs(fileURL, body);
       return fileURL;
-    }, [loadRemoteFile, body])
+    }, [mx, url, useAuthentication, mimeType, encInfo, body])
   );
 
   return downloadState.status === AsyncStatus.Error ? (
