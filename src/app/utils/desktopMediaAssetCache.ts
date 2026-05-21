@@ -5,7 +5,6 @@ type DesktopMediaPriority = 'visible' | 'background';
 type DesktopMediaTask = {
   cacheKey: string;
   accountKey: string;
-  accessToken: string;
   sourceUrl: string;
   mimeType?: string;
   priority: DesktopMediaPriority;
@@ -17,7 +16,6 @@ const DESKTOP_MEDIA_PRELOAD_CONCURRENCY = 2;
 type FallbackSession = {
   baseUrl: string;
   userId: string;
-  accessToken: string;
 };
 
 const cachedDesktopMediaAssetUrls = new Map<string, string>();
@@ -42,16 +40,14 @@ const getDesktopFallbackSession = (): FallbackSession | undefined => {
 
   const baseUrl = window.localStorage.getItem('cinny_hs_base_url');
   const userId = window.localStorage.getItem('cinny_user_id');
-  const accessToken = window.localStorage.getItem('cinny_access_token');
 
-  if (!baseUrl || !userId || !accessToken) {
+  if (!baseUrl || !userId) {
     return undefined;
   }
 
   return {
     baseUrl,
     userId,
-    accessToken,
   };
 };
 
@@ -70,9 +66,7 @@ const normalizeSourceForKey = (sourceUrl: string): string => {
     parsed.searchParams.delete('access_token');
 
     const sortedSearchParams = Array.from(parsed.searchParams.entries()).sort((left, right) =>
-      left[0] === right[0]
-        ? left[1].localeCompare(right[1])
-        : left[0].localeCompare(right[0])
+      left[0] === right[0] ? left[1].localeCompare(right[1]) : left[0].localeCompare(right[0])
     );
     parsed.search = '';
 
@@ -106,7 +100,6 @@ const promoteDesktopMediaTask = (cacheKey: string) => {
 
 const cacheDesktopMediaAssetOnDisk = async (
   accountKey: string,
-  accessToken: string,
   sourceUrl: string,
   mimeType?: string
 ): Promise<string | undefined> => {
@@ -114,7 +107,6 @@ const cacheDesktopMediaAssetOnDisk = async (
   const localPath = await invoke<string>('cache_desktop_media_asset', {
     request: {
       accountKey,
-      accessToken,
       sourceUrl,
       mimeType,
     },
@@ -136,7 +128,7 @@ const flushDesktopMediaQueue = () => {
     queuedDesktopMediaTasks.delete(task.cacheKey);
     activeDesktopMediaTasks += 1;
 
-    cacheDesktopMediaAssetOnDisk(task.accountKey, task.accessToken, task.sourceUrl, task.mimeType)
+    cacheDesktopMediaAssetOnDisk(task.accountKey, task.sourceUrl, task.mimeType)
       .catch(() => undefined)
       .then((assetUrl) => {
         if (assetUrl) {
@@ -162,9 +154,8 @@ export const primeDesktopMediaAssetUrl = (
     return undefined;
   }
 
-  const session = getDesktopFallbackSession();
   const accountKey = getDesktopMediaAccountKey();
-  if (!session || !accountKey) {
+  if (!accountKey) {
     return undefined;
   }
 
@@ -186,7 +177,6 @@ export const primeDesktopMediaAssetUrl = (
     const task: DesktopMediaTask = {
       cacheKey,
       accountKey,
-      accessToken: session.accessToken,
       sourceUrl,
       mimeType,
       priority,
