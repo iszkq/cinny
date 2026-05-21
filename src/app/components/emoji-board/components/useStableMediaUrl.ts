@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   getCachedMediaObjectUrl,
+  getPreparedMediaUrl,
   primeCachedMediaObjectUrl,
   subscribeCachedMediaObjectUrl,
 } from '../../../utils/mediaUrlCache';
@@ -23,6 +24,7 @@ type UseStableMediaUrlOptions = {
 const MAX_MEDIA_RETRY_COUNT = 12;
 const MEDIA_RETRY_BASE_DELAY_MS = 250;
 const MEDIA_RETRY_MAX_DELAY_MS = 1200;
+const PREFERRED_OBJECT_URL_WAIT_MS = 700;
 
 const buildMediaCandidates = (
   options: UseStableMediaUrlOptions,
@@ -62,6 +64,7 @@ export const useStableMediaUrl = (
   options: UseStableMediaUrlOptions = {}
 ) => {
   const disableObjectUrlCache = options.disableObjectUrlCache ?? false;
+  const preferObjectUrl = options.preferObjectUrl ?? false;
   const desktopSupported = isDesktopUpdaterSupported();
   const [candidateIndex, setCandidateIndex] = useState(0);
   const [cacheVersion, setCacheVersion] = useState(0);
@@ -69,6 +72,9 @@ export const useStableMediaUrl = (
   const [desktopFallbackSrc, setDesktopFallbackSrc] = useState<string | undefined>();
   const [loadedDisplayUrl, setLoadedDisplayUrl] = useState<string | undefined>();
   const [retryCount, setRetryCount] = useState(0);
+  const [preferredObjectUrlReady, setPreferredObjectUrlReady] = useState(
+    !preferObjectUrl || disableObjectUrlCache
+  );
 
   const candidates = useMemo(
     () =>
@@ -90,13 +96,25 @@ export const useStableMediaUrl = (
     ]
   );
 
+  const hasObjectUrlCandidate = candidates.some(
+    (candidate) => candidate.displayUrl !== candidate.source
+  );
+  const waitingForPreferredObjectUrl =
+    preferObjectUrl &&
+    !disableObjectUrlCache &&
+    !hasObjectUrlCandidate &&
+    !preferredObjectUrlReady &&
+    Boolean(src || fallbackSrc);
+  const activeCandidates = waitingForPreferredObjectUrl ? [] : candidates;
+
   useEffect(() => {
     setCandidateIndex(0);
     setDesktopSrc(undefined);
     setDesktopFallbackSrc(undefined);
     setLoadedDisplayUrl(undefined);
     setRetryCount(0);
-  }, [src, fallbackSrc]);
+    setPreferredObjectUrlReady(!preferObjectUrl || disableObjectUrlCache || (!src && !fallbackSrc));
+  }, [disableObjectUrlCache, fallbackSrc, preferObjectUrl, src]);
 
   useEffect(() => {
     if (!desktopSupported) {
@@ -169,9 +187,42 @@ export const useStableMediaUrl = (
     };
   }, [disableObjectUrlCache, src, fallbackSrc]);
 
-  const activeCandidate = candidates[candidateIndex];
+  useEffect(() => {
+    if (!preferObjectUrl || disableObjectUrlCache || (!src && !fallbackSrc)) {
+      return undefined;
+    }
+
+    let disposed = false;
+
+    const preparePreferredUrl = async () => {
+      await Promise.all([
+        getPreparedMediaUrl(src, 'visible', PREFERRED_OBJECT_URL_WAIT_MS),
+        fallbackSrc && fallbackSrc !== src
+          ? getPreparedMediaUrl(fallbackSrc, 'background', PREFERRED_OBJECT_URL_WAIT_MS)
+          : undefined,
+      ]).catch(() => undefined);
+
+      if (disposed) {
+        return;
+      }
+
+      setPreferredObjectUrlReady(true);
+      setCacheVersion((prev) => prev + 1);
+    };
+
+    void preparePreferredUrl();
+
+    return () => {
+      disposed = true;
+    };
+  }, [disableObjectUrlCache, fallbackSrc, preferObjectUrl, src]);
+
+  const activeCandidate = activeCandidates[candidateIndex];
   const displayUrl = loadedDisplayUrl ?? activeCandidate?.displayUrl;
-  const hasFailed = !loadedDisplayUrl && (candidates.length === 0 || candidateIndex >= candidates.length);
+  const hasFailed =
+    !loadedDisplayUrl &&
+    !waitingForPreferredObjectUrl &&
+    (activeCandidates.length === 0 || candidateIndex >= activeCandidates.length);
   const requestKey = `${candidateIndex}-${cacheVersion}-${retryCount}-${displayUrl ?? 'empty'}`;
   const isLoaded = Boolean(loadedDisplayUrl && loadedDisplayUrl === displayUrl);
 
@@ -242,8 +293,8 @@ export const useStableMediaUrl = (
       return;
     }
 
-    setCandidateIndex((currentIndex) => Math.min(currentIndex + 1, candidates.length));
-  }, [candidates.length, loadedDisplayUrl]);
+    setCandidateIndex((currentIndex) => Math.min(currentIndex + 1, activeCandidates.length));
+  }, [activeCandidates.length, loadedDisplayUrl]);
 
   return {
     displayUrl,
