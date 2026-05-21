@@ -1,4 +1,4 @@
-import React, { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { ReactNode, useCallback, useEffect, useState } from 'react';
 import {
   Badge,
   Box,
@@ -22,20 +22,15 @@ import FocusTrap from 'focus-trap-react';
 import { EncryptedAttachmentInfo } from 'browser-encrypt-attachment';
 import { IImageInfo, MATRIX_BLUR_HASH_PROPERTY_NAME } from '../../../../types/matrix/common';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
-import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
-import { validBlurHash } from '../../../utils/blurHash';
-import { bytesToSize } from '../../../utils/common';
-import { stopPropagation } from '../../../utils/keyboard';
-import { FALLBACK_MIMETYPE } from '../../../utils/mimeTypes';
-import { decryptFile, downloadEncryptedMedia, mxcUrlToHttp } from '../../../utils/matrix';
-import {
-  releaseObjectUrl,
-  retainObjectUrl,
-  revokeObjectUrlWhenPossible,
-} from '../../../utils/objectUrlRetainer';
-import { ScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
 import * as css from './style.css';
+import { bytesToSize } from '../../../utils/common';
+import { FALLBACK_MIMETYPE } from '../../../utils/mimeTypes';
+import { stopPropagation } from '../../../utils/keyboard';
+import { decryptFile, downloadEncryptedMedia, mxcUrlToHttp } from '../../../utils/matrix';
+import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
+import { ModalWide } from '../../../styles/Modal.css';
+import { validBlurHash } from '../../../utils/blurHash';
 
 type RenderViewerProps = {
   src: string;
@@ -54,7 +49,6 @@ type RenderViewerProps = {
   activeItemId?: string;
   onSelectItem?: (itemId: string) => void;
 };
-
 export type ViewerImageItem = {
   id: string;
   body: string;
@@ -63,7 +57,6 @@ export type ViewerImageItem = {
   info?: IImageInfo;
   encInfo?: EncryptedAttachmentInfo;
 };
-
 type RenderImageProps = {
   alt: string;
   title: string;
@@ -73,23 +66,6 @@ type RenderImageProps = {
   onClick: () => void;
   tabIndex: number;
 };
-
-type ViewerMediaState =
-  | {
-      status: AsyncStatus.Idle | AsyncStatus.Loading;
-      itemId?: string;
-    }
-  | {
-      status: AsyncStatus.Success;
-      itemId: string;
-      src: string;
-    }
-  | {
-      status: AsyncStatus.Error;
-      itemId: string;
-      error: unknown;
-    };
-
 export type ImageContentProps = {
   body: string;
   mimeType?: string;
@@ -104,17 +80,6 @@ export type ImageContentProps = {
   renderViewer: (props: RenderViewerProps) => ReactNode;
   renderImage: (props: RenderImageProps) => ReactNode;
 };
-
-const VIEWER_THUMBNAIL_PRELOAD_LIMIT = 18;
-const VIEWER_THUMBNAIL_PRELOAD_DELAY_MS = 80;
-const INLINE_IMAGE_RETRY_LIMIT = 5;
-const INLINE_IMAGE_RETRY_DELAY_MS = 450;
-
-const revokeBlobUrl = (src?: string) => {
-  if (!src?.startsWith('blob:')) return;
-  revokeObjectUrlWhenPossible(src);
-};
-
 export const ImageContent = as<'div', ImageContentProps>(
   (
     {
@@ -128,7 +93,7 @@ export const ImageContent = as<'div', ImageContentProps>(
       markedAsSpoiler,
       spoilerReason,
       viewerItems,
-      viewerItemId: initialViewerItemKey,
+      viewerItemId,
       renderViewer,
       renderImage,
       ...props
@@ -137,432 +102,45 @@ export const ImageContent = as<'div', ImageContentProps>(
   ) => {
     const mx = useMatrixClient();
     const useAuthentication = useMediaAuthentication();
-    const screenSize = useScreenSizeContext();
-    const mobile = screenSize === ScreenSize.Mobile;
     const blurHash = validBlurHash(info?.[MATRIX_BLUR_HASH_PROPERTY_NAME]);
 
     const [load, setLoad] = useState(false);
     const [error, setError] = useState(false);
     const [viewer, setViewer] = useState(false);
     const [blurred, setBlurred] = useState(markedAsSpoiler ?? false);
-    const [viewerLoadNonce, setViewerLoadNonce] = useState(0);
-    const [viewerPreviewVersion, setViewerPreviewVersion] = useState(0);
-    const [imageLoadNonce, setImageLoadNonce] = useState(0);
-    const [viewerMediaState, setViewerMediaState] = useState<ViewerMediaState>({
-      status: AsyncStatus.Idle,
-    });
-    const [viewerDisplayedState, setViewerDisplayedState] = useState<
-      | {
-          itemId: string;
-          src: string;
-        }
-      | undefined
-    >();
 
-    const viewerTrapRef = useRef<HTMLDivElement>(null);
-    const viewerCacheRef = useRef<Map<string, string>>(new Map());
-    const viewerPreloadRef = useRef<Set<string>>(new Set());
-    const imageRetryCountRef = useRef(0);
-    const imageRetryTimerRef = useRef<number>();
-
-    const setViewerCachedSrc = useCallback((itemId: string, nextSrc: string) => {
-      const currentSrc = viewerCacheRef.current.get(itemId);
-      if (currentSrc === nextSrc) {
-        return;
-      }
-
-      if (currentSrc) {
-        revokeBlobUrl(currentSrc);
-        releaseObjectUrl(currentSrc);
-      }
-
-      viewerCacheRef.current.set(itemId, nextSrc);
-      retainObjectUrl(nextSrc);
-    }, []);
-
-    const clearViewerCache = useCallback(() => {
-      viewerCacheRef.current.forEach((cachedSrc) => {
-        revokeBlobUrl(cachedSrc);
-        releaseObjectUrl(cachedSrc);
-      });
-      viewerCacheRef.current.clear();
-    }, []);
-
-    const baseViewerItem = useMemo<ViewerImageItem>(
-      () => ({
-        id: initialViewerItemKey ?? url,
-        body,
-        mimeType,
-        url,
-        info,
-        encInfo,
-      }),
-      [body, encInfo, info, initialViewerItemKey, mimeType, url]
-    );
-
-    const galleryItems = useMemo(() => {
-      const itemMap = new Map<string, ViewerImageItem>();
-      [...(viewerItems ?? []), baseViewerItem].forEach((item) => {
-        if (!itemMap.has(item.id)) {
-          itemMap.set(item.id, item);
-        }
-      });
-      return Array.from(itemMap.values());
-    }, [baseViewerItem, viewerItems]);
-
-    const initialViewerItemId = baseViewerItem.id;
-    const [viewerItemId, setViewerItemId] = useState(initialViewerItemId);
-
-    const loadMediaSrc = useCallback(
-      async (
-        targetUrl: string,
-        targetMimeType?: string,
-        targetEncInfo?: EncryptedAttachmentInfo
-      ) => {
-        const mediaUrl = mxcUrlToHttp(mx, targetUrl, useAuthentication);
+    const [srcState, loadSrc] = useAsyncCallback(
+      useCallback(async () => {
+        const mediaUrl = mxcUrlToHttp(mx, url, useAuthentication);
         if (!mediaUrl) throw new Error('Invalid media URL');
-
-        if (targetEncInfo) {
+        if (encInfo) {
           const fileContent = await downloadEncryptedMedia(mediaUrl, (encBuf) =>
-            decryptFile(encBuf, targetMimeType ?? FALLBACK_MIMETYPE, targetEncInfo)
+            decryptFile(encBuf, mimeType ?? FALLBACK_MIMETYPE, encInfo)
           );
           return URL.createObjectURL(fileContent);
         }
-
         return mediaUrl;
-      },
-      [mx, useAuthentication]
-    );
-
-    const [srcState, loadSrc] = useAsyncCallback(
-      useCallback(
-        async () => loadMediaSrc(url, mimeType, encInfo),
-        [encInfo, loadMediaSrc, mimeType, url]
-      )
-    );
-
-    const viewerIndex = Math.max(
-      galleryItems.findIndex((item) => item.id === viewerItemId),
-      0
-    );
-    const currentViewerItem = galleryItems[viewerIndex] ?? baseViewerItem;
-
-    const preloadViewerItem = useCallback(
-      (item?: ViewerImageItem) => {
-        if (!item || item.id === currentViewerItem.id) return;
-        if (viewerCacheRef.current.has(item.id) || viewerPreloadRef.current.has(item.id)) return;
-
-        viewerPreloadRef.current.add(item.id);
-        loadMediaSrc(item.url, item.mimeType, item.encInfo)
-          .then((loadedSrc) => {
-            if (viewerCacheRef.current.has(item.id)) {
-              revokeBlobUrl(loadedSrc);
-              return;
-            }
-
-            setViewerCachedSrc(item.id, loadedSrc);
-            setViewerPreviewVersion((value) => value + 1);
-          })
-          .catch(() => {})
-          .finally(() => {
-            viewerPreloadRef.current.delete(item.id);
-          });
-      },
-      [currentViewerItem.id, loadMediaSrc, setViewerCachedSrc]
+      }, [mx, url, useAuthentication, mimeType, encInfo])
     );
 
     const handleLoad = () => {
-      imageRetryCountRef.current = 0;
-      if (typeof imageRetryTimerRef.current === 'number') {
-        window.clearTimeout(imageRetryTimerRef.current);
-        imageRetryTimerRef.current = undefined;
-      }
       setLoad(true);
-      setError(false);
     };
-
     const handleError = () => {
       setLoad(false);
       setError(true);
-
-      if (imageRetryCountRef.current >= INLINE_IMAGE_RETRY_LIMIT) {
-        return;
-      }
-
-      imageRetryCountRef.current += 1;
-      if (typeof imageRetryTimerRef.current === 'number') {
-        window.clearTimeout(imageRetryTimerRef.current);
-      }
-      imageRetryTimerRef.current = window.setTimeout(() => {
-        setError(false);
-        setImageLoadNonce((value) => value + 1);
-      }, INLINE_IMAGE_RETRY_DELAY_MS * imageRetryCountRef.current);
     };
 
     const handleRetry = () => {
-      if (typeof imageRetryTimerRef.current === 'number') {
-        window.clearTimeout(imageRetryTimerRef.current);
-        imageRetryTimerRef.current = undefined;
-      }
-      imageRetryCountRef.current = 0;
       setError(false);
-      setImageLoadNonce((value) => value + 1);
-      void loadSrc().catch(() => undefined);
+      loadSrc();
     };
 
     useEffect(() => {
-      setBlurred(markedAsSpoiler ?? false);
-    }, [markedAsSpoiler]);
-
-    useEffect(() => {
-      setLoad(false);
-      setError(false);
-      setImageLoadNonce(0);
-      imageRetryCountRef.current = 0;
-      if (typeof imageRetryTimerRef.current === 'number') {
-        window.clearTimeout(imageRetryTimerRef.current);
-        imageRetryTimerRef.current = undefined;
-      }
-    }, [url]);
-
-    useEffect(
-      () => () => {
-        if (typeof imageRetryTimerRef.current === 'number') {
-          window.clearTimeout(imageRetryTimerRef.current);
-        }
-      },
-      []
-    );
-
-    useEffect(() => {
-      if (!autoPlay) return;
-      void loadSrc().catch(() => undefined);
+      if (autoPlay) loadSrc();
     }, [autoPlay, loadSrc]);
 
-    useEffect(() => {
-      setViewerItemId(initialViewerItemId);
-    }, [initialViewerItemId]);
-
-    useEffect(() => {
-      if (galleryItems.some((item) => item.id === viewerItemId)) return;
-      setViewerItemId(initialViewerItemId);
-    }, [galleryItems, initialViewerItemId, viewerItemId]);
-
-    useEffect(() => {
-      if (!viewer) {
-        setViewerMediaState({ status: AsyncStatus.Idle });
-        return;
-      }
-
-      if (currentViewerItem.id === baseViewerItem.id && srcState.status === AsyncStatus.Success) {
-        setViewerMediaState({
-          status: AsyncStatus.Success,
-          itemId: currentViewerItem.id,
-          src: srcState.data,
-        });
-        return;
-      }
-
-      const cachedViewerSrc = viewerCacheRef.current.get(currentViewerItem.id);
-      if (cachedViewerSrc) {
-        setViewerMediaState({
-          status: AsyncStatus.Success,
-          itemId: currentViewerItem.id,
-          src: cachedViewerSrc,
-        });
-        return;
-      }
-
-      let disposed = false;
-      setViewerMediaState({
-        status: AsyncStatus.Loading,
-        itemId: currentViewerItem.id,
-      });
-
-      loadMediaSrc(currentViewerItem.url, currentViewerItem.mimeType, currentViewerItem.encInfo)
-        .then((loadedSrc) => {
-          if (disposed) {
-            revokeBlobUrl(loadedSrc);
-            return;
-          }
-
-          setViewerCachedSrc(currentViewerItem.id, loadedSrc);
-          setViewerPreviewVersion((value) => value + 1);
-          setViewerMediaState({
-            status: AsyncStatus.Success,
-            itemId: currentViewerItem.id,
-            src: loadedSrc,
-          });
-        })
-        .catch((viewerError) => {
-          if (disposed) return;
-          setViewerMediaState({
-            status: AsyncStatus.Error,
-            itemId: currentViewerItem.id,
-            error: viewerError,
-          });
-        });
-
-      return () => {
-        disposed = true;
-      };
-    }, [
-      baseViewerItem.id,
-      currentViewerItem,
-      loadMediaSrc,
-      setViewerCachedSrc,
-      srcState,
-      viewer,
-      viewerLoadNonce,
-    ]);
-
-    useEffect(() => {
-      if (!viewer) return;
-
-      preloadViewerItem(galleryItems[viewerIndex - 1]);
-      preloadViewerItem(galleryItems[viewerIndex + 1]);
-    }, [galleryItems, preloadViewerItem, viewer, viewerIndex]);
-
-    useEffect(() => {
-      if (!viewer) {
-        return undefined;
-      }
-
-      const preloadCandidates = galleryItems
-        .map((item, index) => ({ item, index }))
-        .filter(
-          ({ item }) =>
-            item.id !== currentViewerItem.id &&
-            !!item.encInfo &&
-            !viewerCacheRef.current.has(item.id) &&
-            !viewerPreloadRef.current.has(item.id)
-        )
-        .sort(
-          (itemA, itemB) =>
-            Math.abs(itemA.index - viewerIndex) - Math.abs(itemB.index - viewerIndex)
-        )
-        .slice(0, VIEWER_THUMBNAIL_PRELOAD_LIMIT);
-
-      const preloadTimers = preloadCandidates.map(({ item }, index) =>
-        window.setTimeout(() => {
-          preloadViewerItem(item);
-        }, index * VIEWER_THUMBNAIL_PRELOAD_DELAY_MS)
-      );
-
-      return () => {
-        preloadTimers.forEach((timer) => window.clearTimeout(timer));
-      };
-    }, [currentViewerItem.id, galleryItems, preloadViewerItem, viewer, viewerIndex]);
-
-    useEffect(
-      () => () => {
-        clearViewerCache();
-      },
-      [clearViewerCache]
-    );
-
-    useEffect(() => {
-      const retainedSrc = srcState.status === AsyncStatus.Success ? srcState.data : undefined;
-      retainObjectUrl(retainedSrc);
-
-      return () => {
-        revokeBlobUrl(retainedSrc);
-        releaseObjectUrl(retainedSrc);
-      };
-    }, [srcState.status, srcState.status === AsyncStatus.Success ? srcState.data : undefined]);
-
-    const activeViewerSrc =
-      currentViewerItem.id === baseViewerItem.id && srcState.status === AsyncStatus.Success
-        ? srcState.data
-        : viewerMediaState.status === AsyncStatus.Success &&
-            viewerMediaState.itemId === currentViewerItem.id
-          ? viewerMediaState.src
-          : undefined;
-
-    useEffect(() => {
-      if (!viewer) return;
-
-      if (activeViewerSrc) {
-        setViewerDisplayedState({
-          itemId: currentViewerItem.id,
-          src: activeViewerSrc,
-        });
-      }
-    }, [activeViewerSrc, currentViewerItem.id, viewer]);
-
-    const getViewerPreviewSrc = useCallback(
-      (item: ViewerImageItem): string | undefined => {
-        if (item.id === baseViewerItem.id && srcState.status === AsyncStatus.Success) {
-          return srcState.data;
-        }
-
-        if (item.id === currentViewerItem.id && activeViewerSrc) {
-          return activeViewerSrc;
-        }
-
-        const cachedViewerSrc = viewerCacheRef.current.get(item.id);
-        if (cachedViewerSrc) {
-          return cachedViewerSrc;
-        }
-
-        if (item.encInfo) {
-          return undefined;
-        }
-
-        return mxcUrlToHttp(mx, item.url, useAuthentication, 160, 160, 'scale') ?? undefined;
-      },
-      [
-        activeViewerSrc,
-        baseViewerItem.id,
-        currentViewerItem.id,
-        mx,
-        srcState,
-        useAuthentication,
-        viewerPreviewVersion,
-      ]
-    );
-
-    const viewerPreviewItems = useMemo(
-      () =>
-        galleryItems.map((item) => ({
-          id: item.id,
-          alt: item.body,
-          previewSrc: getViewerPreviewSrc(item),
-        })),
-      [galleryItems, getViewerPreviewSrc]
-    );
-
-    const openViewer = () => {
-      setViewerItemId(initialViewerItemId);
-      if (srcState.status === AsyncStatus.Success) {
-        setViewerDisplayedState({
-          itemId: baseViewerItem.id,
-          src: srcState.data,
-        });
-      } else {
-        setViewerDisplayedState(undefined);
-      }
-      setViewer(true);
-    };
-
-    const closeViewer = () => {
-      setViewer(false);
-      setViewerItemId(initialViewerItemId);
-      setViewerMediaState({ status: AsyncStatus.Idle });
-      setViewerDisplayedState(undefined);
-    };
-
-    const canPrev = viewerIndex > 0;
-    const canNext = viewerIndex < galleryItems.length - 1;
-
-    const renderedViewerSrc = activeViewerSrc ?? viewerDisplayedState?.src;
-    const safeRenderedViewerSrc = renderedViewerSrc ?? '';
-    const shouldRenderViewer =
-      safeRenderedViewerSrc.length > 0 && viewerMediaState.status !== AsyncStatus.Error;
-    const viewerLoading =
-      viewer &&
-      (!activeViewerSrc || viewerDisplayedState?.itemId !== currentViewerItem.id) &&
-      viewerMediaState.status !== AsyncStatus.Error;
+    const viewerAlt = viewerItems?.find((item) => item.id === viewerItemId)?.body ?? body;
 
     return (
       <Box className={classNames(css.RelativeBase, className)} {...props} ref={ref}>
@@ -572,84 +150,26 @@ export const ImageContent = as<'div', ImageContentProps>(
               <FocusTrap
                 focusTrapOptions={{
                   initialFocus: false,
-                  fallbackFocus: () => viewerTrapRef.current as HTMLDivElement,
-                  onDeactivate: closeViewer,
+                  onDeactivate: () => setViewer(false),
                   clickOutsideDeactivates: true,
                   escapeDeactivates: stopPropagation,
                 }}
               >
-                <div ref={viewerTrapRef} tabIndex={-1} style={{ outline: 'none' }}>
-                  <Modal
-                    size="500"
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      width: mobile ? 'var(--app-width, 100vw)' : 'min(88vw, 1080px)',
-                      minWidth: mobile ? 'var(--app-width, 100vw)' : 'min(88vw, 1080px)',
-                      maxWidth: mobile ? 'var(--app-width, 100vw)' : 'min(88vw, 1080px)',
-                      height: mobile ? 'var(--app-height, 100dvh)' : 'min(84dvh, 780px)',
-                      minHeight: mobile
-                        ? 'var(--app-height, 100dvh)'
-                        : 'min(84dvh, 780px)',
-                      maxHeight: mobile
-                        ? 'var(--app-height, 100dvh)'
-                        : 'min(84dvh, 780px)',
-                      padding: 0,
-                      background: 'transparent',
-                      boxShadow: 'none',
-                      border: 'none',
-                      borderRadius: mobile ? 0 : undefined,
-                      overflow: 'hidden',
-                    }}
-                    onContextMenu={(evt: React.MouseEvent) => evt.stopPropagation()}
-                  >
-                    {shouldRenderViewer ? (
-                      renderViewer({
-                        src: safeRenderedViewerSrc,
-                        alt: currentViewerItem.body,
-                        loading: viewerLoading,
-                        requestClose: closeViewer,
-                        canPrev,
-                        canNext,
-                        onPrev: canPrev
-                          ? () => setViewerItemId(galleryItems[viewerIndex - 1].id)
-                          : undefined,
-                        onNext: canNext
-                          ? () => setViewerItemId(galleryItems[viewerIndex + 1].id)
-                          : undefined,
-                        items: viewerPreviewItems,
-                        activeItemId: currentViewerItem.id,
-                        onSelectItem: setViewerItemId,
-                      })
-                    ) : (
-                      <Box
-                        alignItems="Center"
-                        justifyContent="Center"
-                        direction="Column"
-                        gap="300"
-                        style={{ minHeight: '70vh' }}
-                      >
-                        <Spinner variant="Secondary" />
-                        {viewerMediaState.status === AsyncStatus.Error && (
-                          <Button
-                            size="300"
-                            variant="Secondary"
-                            fill="Soft"
-                            radii="300"
-                            onClick={() => setViewerLoadNonce((value) => value + 1)}
-                          >
-                            <Text size="B300">{'\u91cd\u65b0\u52a0\u8f7d'}</Text>
-                          </Button>
-                        )}
-                      </Box>
-                    )}
-                  </Modal>
-                </div>
+                <Modal
+                  className={ModalWide}
+                  size="500"
+                  onContextMenu={(evt: any) => evt.stopPropagation()}
+                >
+                  {renderViewer({
+                    src: srcState.data,
+                    alt: viewerAlt,
+                    requestClose: () => setViewer(false),
+                  })}
+                </Modal>
               </FocusTrap>
             </OverlayCenter>
           </Overlay>
         )}
-
         {typeof blurHash === 'string' && !load && (
           <BlurhashCanvas
             style={{ width: '100%', height: '100%' }}
@@ -659,7 +179,6 @@ export const ImageContent = as<'div', ImageContentProps>(
             punch={1}
           />
         )}
-
         {!autoPlay && !markedAsSpoiler && srcState.status === AsyncStatus.Idle && (
           <Box className={css.AbsoluteContainer} alignItems="Center" justifyContent="Center">
             <Button
@@ -667,31 +186,26 @@ export const ImageContent = as<'div', ImageContentProps>(
               fill="Solid"
               radii="300"
               size="300"
-              onClick={() => void loadSrc().catch(() => undefined)}
+              onClick={loadSrc}
               before={<Icon size="Inherit" src={Icons.Photo} filled />}
             >
-              <Text size="B300">{'\u67e5\u770b'}</Text>
+              <Text size="B300">View</Text>
             </Button>
           </Box>
         )}
-
         {srcState.status === AsyncStatus.Success && (
-          <Box
-            key={`${srcState.data}-${imageLoadNonce}`}
-            className={classNames(css.MediaContainer, blurred && css.Blur)}
-          >
+          <Box className={classNames(css.AbsoluteContainer, blurred && css.Blur)}>
             {renderImage({
               alt: body,
               title: body,
               src: srcState.data,
               onLoad: handleLoad,
               onError: handleError,
-              onClick: openViewer,
+              onClick: () => setViewer(true),
               tabIndex: 0,
             })}
           </Box>
         )}
-
         {blurred && !error && srcState.status !== AsyncStatus.Error && (
           <Box className={css.AbsoluteContainer} alignItems="Center" justifyContent="Center">
             <TooltipProvider
@@ -715,17 +229,16 @@ export const ImageContent = as<'div', ImageContentProps>(
                   onClick={() => {
                     setBlurred(false);
                     if (srcState.status === AsyncStatus.Idle) {
-                      void loadSrc().catch(() => undefined);
+                      loadSrc();
                     }
                   }}
                 >
-                  <Text size="B300">{'\u663e\u793a\u5267\u900f'}</Text>
+                  <Text size="B300">Spoiler</Text>
                 </Chip>
               )}
             </TooltipProvider>
           </Box>
         )}
-
         {(srcState.status === AsyncStatus.Loading || srcState.status === AsyncStatus.Success) &&
           !load &&
           !blurred && (
@@ -733,13 +246,12 @@ export const ImageContent = as<'div', ImageContentProps>(
               <Spinner variant="Secondary" />
             </Box>
           )}
-
         {(error || srcState.status === AsyncStatus.Error) && (
           <Box className={css.AbsoluteContainer} alignItems="Center" justifyContent="Center">
             <TooltipProvider
               tooltip={
                 <Tooltip variant="Critical">
-                  <Text>{'\u56fe\u7247\u52a0\u8f7d\u5931\u8d25'}</Text>
+                  <Text>Failed to load image!</Text>
                 </Tooltip>
               }
               position="Top"
@@ -756,13 +268,12 @@ export const ImageContent = as<'div', ImageContentProps>(
                   onClick={handleRetry}
                   before={<Icon size="Inherit" src={Icons.Warning} filled />}
                 >
-                  <Text size="B300">{'\u91cd\u8bd5'}</Text>
+                  <Text size="B300">Retry</Text>
                 </Button>
               )}
             </TooltipProvider>
           </Box>
         )}
-
         {!load && typeof info?.size === 'number' && (
           <Box className={css.AbsoluteFooter} justifyContent="End" alignContent="Center" gap="200">
             <Badge variant="Secondary" fill="Soft">
