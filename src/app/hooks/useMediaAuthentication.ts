@@ -1,11 +1,10 @@
 import { useSpecVersions } from './useSpecVersions';
 
 export const useMediaAuthentication = (): boolean => {
-  const { versions, unstable_features: unstableFeatures } = useSpecVersions();
+  const { unstable_features: unstableFeatures } = useSpecVersions();
 
-  // Media authentication is introduced in spec version 1.11.
-  const authenticatedMedia =
-    unstableFeatures?.['org.matrix.msc3916.stable'] || versions.includes('v1.11');
-
-  return authenticatedMedia;
+  // Be conservative here. Some deployments report newer spec versions but still
+  // behave unreliably on authenticated media endpoints, which breaks attachment
+  // downloads and image loading hard enough to disrupt sync UX.
+  return unstableFeatures?.['org.matrix.msc3916.stable'] === true;
 };
