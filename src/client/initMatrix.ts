@@ -9,7 +9,6 @@ import {
 import { cryptoCallbacks } from './secretStorageKeys';
 import { getSettings } from '../app/state/settings';
 import { clearNavToActivePathStore } from '../app/state/navToActivePath';
-import { attachMediaAccessToken } from '../app/utils/matrix';
 import { restorePinLockStorage, snapshotPinLockStorage } from '../app/utils/pinLock';
 import { pushSessionToSW } from '../sw-session';
 
@@ -20,7 +19,6 @@ type Session = {
   deviceId: string;
 };
 
-const SYNC_POLL_TIMEOUT_MS = 30000;
 const PRIVATE_RECEIPT_TYPE = 'm.read.private' as ReceiptType;
 
 const patchedReadReceiptClients = new WeakSet<MatrixClient>();
@@ -186,21 +184,6 @@ const patchReadReceiptTransport = (mx: MatrixClient) => {
   }
 };
 
-const patchMediaUrlBuilder = (mx: MatrixClient, session: Session) => {
-  const originalMxcUrlToHttp = mx.mxcUrlToHttp.bind(mx);
-
-  mx.mxcUrlToHttp = ((...args: Parameters<MatrixClient['mxcUrlToHttp']>) => {
-    const mediaUrl = originalMxcUrlToHttp(...args);
-    const useAuthentication = Boolean(args[6]);
-
-    return attachMediaAccessToken(
-      mediaUrl,
-      useAuthentication ? session.accessToken : undefined,
-      session.baseUrl
-    );
-  }) as MatrixClient['mxcUrlToHttp'];
-};
-
 export const initClient = async (session: Session): Promise<MatrixClient> => {
   patchGlobalReadReceiptFetch();
 
@@ -224,8 +207,6 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
     verificationMethods: ['m.sas.v1'],
   });
 
-  patchMediaUrlBuilder(mx, session);
-
   await indexedDBStore.startup();
   await mx.initRustCrypto();
   patchReadReceiptTransport(mx);
@@ -239,7 +220,6 @@ export const startClient = async (mx: MatrixClient) => {
   await mx.setSyncPresence?.(getSettings().presenceVisibility);
   await mx.startClient({
     lazyLoadMembers: true,
-    pollTimeout: SYNC_POLL_TIMEOUT_MS,
   });
 };
 
