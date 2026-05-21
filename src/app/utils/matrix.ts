@@ -31,6 +31,13 @@ const MATRIX_MEDIA_PATHS = [
   '/_matrix/media/r0/download',
   '/_matrix/media/r0/thumbnail',
 ];
+const AUTH_MEDIA_TO_LEGACY_MEDIA_PATHS: Array<[string, string[]]> = [
+  ['/_matrix/client/v1/media/download', ['/_matrix/media/v3/download', '/_matrix/media/r0/download']],
+  [
+    '/_matrix/client/v1/media/thumbnail',
+    ['/_matrix/media/v3/thumbnail', '/_matrix/media/r0/thumbnail'],
+  ],
+];
 
 const isMatrixMediaUrl = (url: string, baseUrl?: string): boolean => {
   try {
@@ -93,10 +100,41 @@ export const fetchMediaWithAuth = async (
     headers.set('Authorization', `Bearer ${resolvedAccessToken}`);
   }
 
-  return fetch(src, {
+  const requestInit = {
     ...init,
     headers,
-  });
+  };
+
+  try {
+    const response = await fetch(src, requestInit);
+    if (response.ok || !src.includes('/_matrix/client/v1/media/')) {
+      return response;
+    }
+  } catch {
+    if (!src.includes('/_matrix/client/v1/media/')) {
+      throw new Error('Failed to fetch media.');
+    }
+  }
+
+  for (const [authPath, legacyPaths] of AUTH_MEDIA_TO_LEGACY_MEDIA_PATHS) {
+    if (!src.includes(authPath)) {
+      continue;
+    }
+
+    for (const legacyPath of legacyPaths) {
+      const legacyUrl = src.replace(authPath, legacyPath);
+      try {
+        const response = await fetch(legacyUrl, init);
+        if (response.ok) {
+          return response;
+        }
+      } catch {
+        // Try the next legacy endpoint candidate.
+      }
+    }
+  }
+
+  return fetch(src, requestInit);
 };
 
 export const isServerName = (serverName: string): boolean => DOMAIN_REGEX.test(serverName);
