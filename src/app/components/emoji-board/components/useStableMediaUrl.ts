@@ -17,9 +17,12 @@ type UseStableMediaUrlOptions = {
   disableObjectUrlCache?: boolean;
   mimeType?: string;
   fallbackMimeType?: string;
+  preferObjectUrl?: boolean;
 };
 
 const MAX_MEDIA_RETRY_COUNT = 12;
+const MEDIA_RETRY_BASE_DELAY_MS = 250;
+const MEDIA_RETRY_MAX_DELAY_MS = 1200;
 
 const buildMediaCandidates = (
   options: UseStableMediaUrlOptions,
@@ -44,7 +47,8 @@ const buildMediaCandidates = (
       }
     }
 
-    if (!seenDisplayUrls.has(source)) {
+    const allowSourceDisplay = !options.preferObjectUrl || source.startsWith('blob:');
+    if (allowSourceDisplay && !seenDisplayUrls.has(source)) {
       candidates.push({ source, displayUrl: source });
       seenDisplayUrls.add(source);
     }
@@ -70,13 +74,21 @@ export const useStableMediaUrl = (
   const candidates = useMemo(
     () =>
       buildMediaCandidates(
-        { disableObjectUrlCache },
+        { disableObjectUrlCache, preferObjectUrl: options.preferObjectUrl },
         desktopSrc,
         src,
         desktopFallbackSrc,
         fallbackSrc
       ),
-    [cacheVersion, desktopFallbackSrc, desktopSrc, disableObjectUrlCache, fallbackSrc, src]
+    [
+      cacheVersion,
+      desktopFallbackSrc,
+      desktopSrc,
+      disableObjectUrlCache,
+      fallbackSrc,
+      options.preferObjectUrl,
+      src,
+    ]
   );
 
   useEffect(() => {
@@ -198,7 +210,7 @@ export const useStableMediaUrl = (
           options.fallbackMimeType ?? options.mimeType
         );
       }
-    }, Math.min(1200 * (retryCount + 1), 4000));
+    }, Math.min(MEDIA_RETRY_BASE_DELAY_MS * (retryCount + 1), MEDIA_RETRY_MAX_DELAY_MS));
 
     return () => {
       window.clearTimeout(retryTimer);
