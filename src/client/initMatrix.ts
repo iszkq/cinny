@@ -20,28 +20,16 @@ type Session = {
   deviceId: string;
 };
 
-export const SYNC_POLL_TIMEOUT_MS = 30000;
+const SYNC_POLL_TIMEOUT_MS = 30000;
 const PRIVATE_RECEIPT_TYPE = 'm.read.private' as ReceiptType;
 
 const patchedReadReceiptClients = new WeakSet<MatrixClient>();
-const syncTransportDiagnostics = new WeakMap<MatrixClient, SyncTransportDiagnostics>();
 let globalReadReceiptFetchPatched = false;
-
-type SyncTransportDiagnostics = {
-  lastSyncRequestAt: number;
-  lastSyncResponseAt: number;
-  lastSyncErrorAt: number;
-  lastSyncNetworkErrorAt: number;
-  lastSyncRealtimeActivityAt: number;
-  lastSyncNetworkErrorMessage?: string;
-};
 
 const shouldBlockReadReceipts = () => !getSettings().sendReadReceipts;
 
 const isReadReceiptPath = (path: string) =>
   path.includes('/receipt/m.read') && !path.includes('/receipt/m.read.private');
-
-const isSyncPath = (path: string) => path.includes('/sync');
 
 const getRequestPath = (pathOrUrl: string) => {
   try {
@@ -50,104 +38,6 @@ const getRequestPath = (pathOrUrl: string) => {
     return new URL(pathOrUrl, baseOrigin).pathname;
   } catch {
     return pathOrUrl;
-  }
-};
-
-const getOrCreateSyncTransportDiagnostics = (mx: MatrixClient): SyncTransportDiagnostics => {
-  const currentDiagnostics = syncTransportDiagnostics.get(mx);
-  if (currentDiagnostics) {
-    return currentDiagnostics;
-  }
-
-  const nextDiagnostics: SyncTransportDiagnostics = {
-    lastSyncRequestAt: 0,
-    lastSyncResponseAt: 0,
-    lastSyncErrorAt: 0,
-    lastSyncNetworkErrorAt: 0,
-    lastSyncRealtimeActivityAt: 0,
-    lastSyncNetworkErrorMessage: undefined,
-  };
-  syncTransportDiagnostics.set(mx, nextDiagnostics);
-  return nextDiagnostics;
-};
-
-export const getSyncTransportDiagnostics = (mx: MatrixClient): SyncTransportDiagnostics =>
-  getOrCreateSyncTransportDiagnostics(mx);
-
-export const markSyncRealtimeActivity = (mx: MatrixClient) => {
-  const diagnostics = getOrCreateSyncTransportDiagnostics(mx);
-  diagnostics.lastSyncRealtimeActivityAt = Date.now();
-};
-
-const getErrorMessage = (error: unknown): string | undefined => {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  if (typeof error === 'string') {
-    return error;
-  }
-
-  if (
-    error &&
-    typeof error === 'object' &&
-    'message' in error &&
-    typeof (error as { message?: unknown }).message === 'string'
-  ) {
-    return (error as { message: string }).message;
-  }
-
-  return undefined;
-};
-
-const isLikelyAbortError = (error: unknown): boolean => {
-  if (error instanceof DOMException && error.name === 'AbortError') {
-    return true;
-  }
-
-  const message = getErrorMessage(error);
-  return typeof message === 'string' && /abort(ed)?/i.test(message);
-};
-
-const isLikelyNetworkTransportError = (error: unknown): boolean => {
-  if (isLikelyAbortError(error)) {
-    return false;
-  }
-
-  const message = getErrorMessage(error);
-  if (!message) {
-    return false;
-  }
-
-  return /networkerror|network error|failed to fetch|fetch failed|load failed|network request failed/i.test(
-    message
-  );
-};
-
-const trackSyncTransportError = (mx: MatrixClient, error: unknown) => {
-  const diagnostics = getOrCreateSyncTransportDiagnostics(mx);
-  diagnostics.lastSyncErrorAt = Date.now();
-
-  if (isLikelyNetworkTransportError(error)) {
-    diagnostics.lastSyncNetworkErrorAt = diagnostics.lastSyncErrorAt;
-    diagnostics.lastSyncNetworkErrorMessage = getErrorMessage(error);
-  }
-};
-
-const trackSyncTransportRequest = async <T>(
-  mx: MatrixClient,
-  request: () => Promise<T>
-): Promise<T> => {
-  const diagnostics = getOrCreateSyncTransportDiagnostics(mx);
-  diagnostics.lastSyncRequestAt = Date.now();
-
-  try {
-    const result = await request();
-    diagnostics.lastSyncResponseAt = Date.now();
-    return result;
-  } catch (error) {
-    trackSyncTransportError(mx, error);
-    throw error;
   }
 };
 
@@ -270,13 +160,6 @@ const patchReadReceiptTransport = (mx: MatrixClient) => {
     if (typeof path === 'string' && shouldBlockReadReceiptRequest(method, path)) {
       return Promise.resolve({}) as ReturnType<typeof mx.http.authedRequest>;
     }
-
-    if (typeof path === 'string' && isSyncPath(getRequestPath(path))) {
-      return trackSyncTransportRequest(mx, () => originalAuthedRequest(...args)) as ReturnType<
-        typeof mx.http.authedRequest
-      >;
-    }
-
     return originalAuthedRequest(...args);
   }) as typeof mx.http.authedRequest;
 
@@ -287,13 +170,6 @@ const patchReadReceiptTransport = (mx: MatrixClient) => {
       if (typeof path === 'string' && shouldBlockReadReceiptRequest(method, path)) {
         return Promise.resolve({}) as ReturnType<typeof mx.http.request>;
       }
-
-      if (typeof path === 'string' && isSyncPath(getRequestPath(path))) {
-        return trackSyncTransportRequest(mx, () => originalRequest(...args)) as ReturnType<
-          typeof mx.http.request
-        >;
-      }
-
       return originalRequest(...args);
     }) as typeof mx.http.request;
   }
@@ -305,14 +181,6 @@ const patchReadReceiptTransport = (mx: MatrixClient) => {
       if (typeof path === 'string' && shouldBlockReadReceiptRequest(method, path)) {
         return Promise.resolve({}) as ReturnType<typeof mx.http.requestOtherUrl>;
       }
-
-      if (typeof path === 'string' && isSyncPath(getRequestPath(path))) {
-        return trackSyncTransportRequest(
-          mx,
-          () => originalRequestOtherUrl(...args)
-        ) as ReturnType<typeof mx.http.requestOtherUrl>;
-      }
-
       return originalRequestOtherUrl(...args);
     }) as typeof mx.http.requestOtherUrl;
   }
