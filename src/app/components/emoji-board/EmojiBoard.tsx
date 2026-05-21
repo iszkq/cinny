@@ -70,8 +70,8 @@ import { getEmojiBoardMediaCandidates, getEmojiBoardMediaUrls } from './componen
 
 const RECENT_GROUP_ID = 'recent_group';
 const SEARCH_GROUP_ID = 'search_group';
-const PRIORITY_PACK_PRELOAD_COUNT = 2;
-const PRIORITY_PACK_VISIBLE_URL_LIMIT = 64;
+const PRIORITY_PACK_PRELOAD_COUNT = 4;
+const PRIORITY_PACK_VISIBLE_URL_LIMIT = 160;
 
 type ImagePackMode = 'contextual' | 'personal';
 
