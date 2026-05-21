@@ -1,4 +1,4 @@
-import { ClientEvent, Room, RoomEvent } from 'matrix-js-sdk';
+import { ClientEvent, Room, RoomEvent, SyncState } from 'matrix-js-sdk';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AccountDataEvent } from '../../types/matrix/accountData';
 import { Membership, StateEvent } from '../../types/matrix/room';
@@ -26,14 +26,58 @@ import {
   getEmojiBoardMediaCandidates,
   getEmojiBoardMediaUrls,
 } from '../components/emoji-board/components/media';
+import { useSyncState } from './useSyncState';
 
-const GLOBAL_IMAGE_PACK_WARM_DELAY_MS = 0;
-const GLOBAL_IMAGE_PACK_OBJECT_WARM_DELAY_MS = 120;
-const WEB_IMAGE_PACK_PERSISTENT_WARM_DELAY_MS = 0;
-const WEB_IMAGE_PACK_OBJECT_WARM_DELAY_MS = 300;
+const GLOBAL_IMAGE_PACK_WARM_DELAY_MS = 45000;
+const GLOBAL_IMAGE_PACK_OBJECT_WARM_DELAY_MS = 48000;
+const WEB_IMAGE_PACK_PERSISTENT_WARM_DELAY_MS = 12000;
+const WEB_IMAGE_PACK_OBJECT_WARM_DELAY_MS = 15000;
+const WEB_IMAGE_PACK_WARM_BATCH_SIZE = 12;
+const WEB_IMAGE_PACK_OBJECT_WARM_LIMIT = 64;
 const IMAGE_PACK_AVATAR_SIZE = 64;
 const IMAGE_PACK_EMOTICON_SIZE = 64;
 const IMAGE_PACK_STICKER_SIZE = 256;
+
+const mediaWarmSyncReady = (state: SyncState | null | undefined): boolean =>
+  state === SyncState.Prepared || state === SyncState.Syncing;
+
+const browserReadyForBackgroundMedia = (): boolean =>
+  typeof document === 'undefined' ||
+  ((typeof navigator === 'undefined' || navigator.onLine !== false) &&
+    document.visibilityState === 'visible');
+
+const useBackgroundMediaWarmReady = () => {
+  const mx = useMatrixClient();
+  const [syncReady, setSyncReady] = useState(() => mediaWarmSyncReady(mx.getSyncState()));
+  const [browserReady, setBrowserReady] = useState(browserReadyForBackgroundMedia);
+
+  useSyncState(
+    mx,
+    useCallback((state) => {
+      setSyncReady(mediaWarmSyncReady(state));
+    }, [])
+  );
+
+  useEffect(() => {
+    const updateBrowserReady = () => {
+      setBrowserReady(browserReadyForBackgroundMedia());
+    };
+
+    window.addEventListener('focus', updateBrowserReady);
+    window.addEventListener('online', updateBrowserReady);
+    window.addEventListener('offline', updateBrowserReady);
+    document.addEventListener('visibilitychange', updateBrowserReady);
+
+    return () => {
+      window.removeEventListener('focus', updateBrowserReady);
+      window.removeEventListener('online', updateBrowserReady);
+      window.removeEventListener('offline', updateBrowserReady);
+      document.removeEventListener('visibilitychange', updateBrowserReady);
+    };
+  }, []);
+
+  return syncReady && browserReady;
+};
 
 const warmImagePackMedia = (
   mx: ReturnType<typeof useMatrixClient>,
@@ -62,17 +106,54 @@ const warmImagePackObjectUrls = (
   });
 };
 
-const warmImagePackPrimaryObjectUrls = (
+const scheduleWebImagePackMediaWarm = (
   mx: ReturnType<typeof useMatrixClient>,
   useAuthentication: boolean,
   packs: ImagePack[],
   usages: ImageUsage[]
 ) => {
-  const mediaUrls = getImagePackPrimaryMediaUrls(mx, useAuthentication, packs, usages);
+  let disposed = false;
+  const timers: number[] = [];
+  const persistentUrls = Array.from(getImagePackMediaUrls(mx, useAuthentication, packs, usages));
+  const objectUrls = Array.from(getImagePackPrimaryMediaUrls(mx, useAuthentication, packs, usages))
+    .slice(0, WEB_IMAGE_PACK_OBJECT_WARM_LIMIT);
 
-  mediaUrls.forEach((mediaUrl) => {
+  const scheduleBatch = (
+    urls: string[],
+    initialDelay: number,
+    action: (mediaUrl: string) => void
+  ) => {
+    for (
+      let batchStart = 0;
+      batchStart < urls.length;
+      batchStart += WEB_IMAGE_PACK_WARM_BATCH_SIZE
+    ) {
+      const batch = urls.slice(batchStart, batchStart + WEB_IMAGE_PACK_WARM_BATCH_SIZE);
+      const batchIndex = batchStart / WEB_IMAGE_PACK_WARM_BATCH_SIZE;
+
+      timers.push(
+        window.setTimeout(() => {
+          if (disposed) {
+            return;
+          }
+
+          batch.forEach(action);
+        }, initialDelay + batchIndex * 900)
+      );
+    }
+  };
+
+  scheduleBatch(objectUrls, 0, (mediaUrl) => {
     void primeCachedMediaObjectUrl(mediaUrl, 'background');
   });
+  scheduleBatch(persistentUrls, WEB_IMAGE_PACK_OBJECT_WARM_DELAY_MS, (mediaUrl) => {
+    void primePersistentMediaUrl(mediaUrl, 'background');
+  });
+
+  return () => {
+    disposed = true;
+    timers.forEach((timer) => window.clearTimeout(timer));
+  };
 };
 
 const useJoinedRooms = () => {
@@ -503,6 +584,7 @@ export const useAllPersonalImagePacks = (): ImagePack[] => {
 export const useWarmImagePackMedia = (rooms: Room[]) => {
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
+  const warmReady = useBackgroundMediaWarmReady();
   const userPack = useUserImagePack();
   const customUserPacks = useCustomUserImagePacks();
   const globalPacks = useGlobalImagePacks();
@@ -514,16 +596,21 @@ export const useWarmImagePackMedia = (rooms: Room[]) => {
   );
 
   useEffect(() => {
+    if (!warmReady) {
+      return;
+    }
+
     warmImagePackMedia(mx, useAuthentication, relevantPacks, [
       ImageUsage.Emoticon,
       ImageUsage.Sticker,
     ]);
-  }, [mx, relevantPacks, useAuthentication]);
+  }, [mx, relevantPacks, useAuthentication, warmReady]);
 };
 
 export const useWarmAllImagePackMedia = () => {
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
+  const warmReady = useBackgroundMediaWarmReady();
   const userPack = useUserImagePack();
   const customUserPacks = useCustomUserImagePacks();
   const globalPacks = useGlobalImagePacks();
@@ -536,7 +623,7 @@ export const useWarmAllImagePackMedia = () => {
   );
 
   useEffect(() => {
-    if (relevantPacks.length === 0) {
+    if (!warmReady || relevantPacks.length === 0) {
       return undefined;
     }
 
@@ -570,12 +657,13 @@ export const useWarmAllImagePackMedia = () => {
         window.clearTimeout(objectDelayTimer);
       }
     };
-  }, [mx, relevantPacks, useAuthentication]);
+  }, [mx, relevantPacks, useAuthentication, warmReady]);
 };
 
 export const useWarmWebImagePackMedia = () => {
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
+  const warmReady = useBackgroundMediaWarmReady();
   const userPack = useUserImagePack();
   const customUserPacks = useCustomUserImagePacks();
 
@@ -585,42 +673,32 @@ export const useWarmWebImagePackMedia = () => {
   );
 
   useEffect(() => {
-    if (relevantPacks.length === 0) {
+    if (!warmReady || relevantPacks.length === 0) {
       return undefined;
     }
 
     let disposed = false;
-    let persistentDelayTimer: number | undefined;
-    let objectDelayTimer: number | undefined;
-    persistentDelayTimer = window.setTimeout(() => {
+    let warmCleanup: (() => void) | undefined;
+    const warmDelayTimer = window.setTimeout(() => {
       if (!disposed) {
-        warmImagePackMedia(mx, useAuthentication, relevantPacks, [ImageUsage.Emoticon]);
-      }
-    }, WEB_IMAGE_PACK_PERSISTENT_WARM_DELAY_MS);
-
-    objectDelayTimer = window.setTimeout(() => {
-      if (!disposed) {
-        warmImagePackPrimaryObjectUrls(mx, useAuthentication, relevantPacks, [
+        warmCleanup = scheduleWebImagePackMediaWarm(mx, useAuthentication, relevantPacks, [
           ImageUsage.Emoticon,
         ]);
       }
-    }, WEB_IMAGE_PACK_OBJECT_WARM_DELAY_MS);
+    }, WEB_IMAGE_PACK_PERSISTENT_WARM_DELAY_MS);
 
     return () => {
       disposed = true;
-      if (typeof persistentDelayTimer === 'number') {
-        window.clearTimeout(persistentDelayTimer);
-      }
-      if (typeof objectDelayTimer === 'number') {
-        window.clearTimeout(objectDelayTimer);
-      }
+      window.clearTimeout(warmDelayTimer);
+      warmCleanup?.();
     };
-  }, [mx, relevantPacks, useAuthentication]);
+  }, [mx, relevantPacks, useAuthentication, warmReady]);
 };
 
 export const useWarmUniversalImagePackMedia = () => {
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
+  const warmReady = useBackgroundMediaWarmReady();
   const userPack = useUserImagePack();
   const customUserPacks = useCustomUserImagePacks();
   const globalPacks = useGlobalImagePacks();
@@ -631,7 +709,7 @@ export const useWarmUniversalImagePackMedia = () => {
   );
 
   useEffect(() => {
-    if (relevantPacks.length === 0) {
+    if (!warmReady || relevantPacks.length === 0) {
       return undefined;
     }
 
@@ -665,12 +743,13 @@ export const useWarmUniversalImagePackMedia = () => {
         window.clearTimeout(objectDelayTimer);
       }
     };
-  }, [mx, relevantPacks, useAuthentication]);
+  }, [mx, relevantPacks, useAuthentication, warmReady]);
 };
 
 export const useWarmPersonalImagePackMedia = () => {
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
+  const warmReady = useBackgroundMediaWarmReady();
   const userPack = useUserImagePack();
   const customUserPacks = useCustomUserImagePacks();
 
@@ -680,7 +759,7 @@ export const useWarmPersonalImagePackMedia = () => {
   );
 
   useEffect(() => {
-    if (relevantPacks.length === 0) {
+    if (!warmReady || relevantPacks.length === 0) {
       return undefined;
     }
 
@@ -714,5 +793,5 @@ export const useWarmPersonalImagePackMedia = () => {
         window.clearTimeout(objectDelayTimer);
       }
     };
-  }, [mx, relevantPacks, useAuthentication]);
+  }, [mx, relevantPacks, useAuthentication, warmReady]);
 };
