@@ -19,10 +19,7 @@ import {
   Text,
 } from 'folds';
 import FocusTrap from 'focus-trap-react';
-import {
-  BackupProgressStatus,
-  backupRestoreProgressAtom,
-} from '../state/backupRestore';
+import { BackupProgressStatus, backupRestoreProgressAtom } from '../state/backupRestore';
 import { InfoCard } from './info-card';
 import { AsyncStatus, useAsyncCallback } from '../hooks/useAsyncCallback';
 import {
@@ -31,10 +28,8 @@ import {
   useKeyBackupSync,
   useKeyBackupTrust,
 } from '../hooks/useKeyBackup';
-import { useMatrixClient } from '../hooks/useMatrixClient';
 import { stopPropagation } from '../utils/keyboard';
 import { useRestoreBackupOnVerification } from '../hooks/useRestoreBackupOnVerification';
-import { retryDecryptLoadedTimelines } from '../utils/keyBackup';
 
 type BackupStatusProps = {
   enabled: boolean;
@@ -140,7 +135,6 @@ type BackupRestoreTileProps = {
   crypto: CryptoApi;
 };
 export function BackupRestoreTile({ crypto }: BackupRestoreTileProps) {
-  const mx = useMatrixClient();
   const [restoreProgress, setRestoreProgress] = useAtom(backupRestoreProgressAtom);
   const restoring =
     restoreProgress.status === BackupProgressStatus.Fetching ||
@@ -163,8 +157,7 @@ export function BackupRestoreTile({ crypto }: BackupRestoreTileProps) {
           setRestoreProgress(progress);
         },
       });
-      void retryDecryptLoadedTimelines(mx);
-    }, [crypto, mx, setRestoreProgress])
+    }, [crypto, setRestoreProgress])
   );
 
   const handleRestore = () => {
