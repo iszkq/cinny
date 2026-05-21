@@ -3,36 +3,10 @@
 export type {};
 declare const self: ServiceWorkerGlobalScope;
 
-type DeviceMemoryNavigator = Navigator & {
-  deviceMemory?: number;
-};
-
 type SessionInfo = {
   accessToken: string;
   baseUrl: string;
-  userId?: string;
 };
-
-const LEGACY_AUTH_MEDIA_CACHE = 'cinny-auth-media-v2';
-const AUTH_MEDIA_CACHE_PREFIX = 'cinny-auth-media-v3';
-
-const getAuthMediaCacheEntryLimit = () => {
-  const deviceMemory = (self.navigator as DeviceMemoryNavigator | undefined)?.deviceMemory;
-
-  if (typeof deviceMemory === 'number') {
-    if (deviceMemory <= 4) {
-      return 600;
-    }
-
-    if (deviceMemory >= 8) {
-      return 2400;
-    }
-  }
-
-  return 1200;
-};
-
-const MAX_AUTH_MEDIA_CACHE_ENTRIES = getAuthMediaCacheEntryLimit();
 
 /**
  * Store session per client (tab)
@@ -55,39 +29,11 @@ async function cleanupDeadClients() {
   });
 }
 
-function hashNamespace(value: string): string {
-  let hash = 2166136261;
-
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-
-  return (hash >>> 0).toString(36);
-}
-
-function getAuthMediaCacheName(session: SessionInfo): string {
-  const namespace = `${session.baseUrl.toLowerCase()}::${session.userId?.toLowerCase() ?? 'guest'}`;
-  return `${AUTH_MEDIA_CACHE_PREFIX}-${hashNamespace(namespace)}`;
-}
-
-async function cleanupStaleCaches() {
-  const cacheKeys = await caches.keys();
-  const staleKeys = cacheKeys.filter(
-    (key) => key === LEGACY_AUTH_MEDIA_CACHE || key === AUTH_MEDIA_CACHE_PREFIX
-  );
-
-  await Promise.all(staleKeys.map((key) => caches.delete(key)));
-}
-
-function setSession(clientId: string, accessToken: any, baseUrl: any, userId: any) {
+function setSession(clientId: string, accessToken: any, baseUrl: any) {
   if (typeof accessToken === 'string' && typeof baseUrl === 'string') {
-    sessions.set(clientId, {
-      accessToken,
-      baseUrl,
-      userId: typeof userId === 'string' ? userId : undefined,
-    });
+    sessions.set(clientId, { accessToken, baseUrl });
   } else {
+    // Logout or invalid session
     sessions.delete(clientId);
   }
 
@@ -139,7 +85,6 @@ self.addEventListener('activate', (event: ExtendableEvent) => {
     (async () => {
       await self.clients.claim();
       await cleanupDeadClients();
-      await cleanupStaleCaches();
     })()
   );
 });
@@ -151,24 +96,15 @@ self.addEventListener('message', (event: ExtendableMessageEvent) => {
   const client = event.source as Client | null;
   if (!client) return;
 
-  const { type, accessToken, baseUrl, userId } = event.data || {};
+  const { type, accessToken, baseUrl } = event.data || {};
 
   if (type === 'setSession') {
-    setSession(client.id, accessToken, baseUrl, userId);
-    void cleanupDeadClients();
+    setSession(client.id, accessToken, baseUrl);
+    cleanupDeadClients();
   }
 });
 
-const MEDIA_PATHS = [
-  '/_matrix/client/v1/media/download',
-  '/_matrix/client/v1/media/thumbnail',
-  '/_matrix/media/v1/download',
-  '/_matrix/media/v1/thumbnail',
-  '/_matrix/media/v3/download',
-  '/_matrix/media/v3/thumbnail',
-  '/_matrix/media/r0/download',
-  '/_matrix/media/r0/thumbnail',
-];
+const MEDIA_PATHS = ['/_matrix/client/v1/media/download', '/_matrix/client/v1/media/thumbnail'];
 
 function mediaPath(url: string): boolean {
   try {
@@ -195,52 +131,6 @@ function fetchConfig(token: string): RequestInit {
   };
 }
 
-async function trimAuthMediaCache(cache: Cache) {
-  const cachedRequests = await cache.keys();
-  if (cachedRequests.length <= MAX_AUTH_MEDIA_CACHE_ENTRIES) {
-    return;
-  }
-
-  await Promise.all(
-    cachedRequests
-      .slice(0, cachedRequests.length - MAX_AUTH_MEDIA_CACHE_ENTRIES)
-      .map((request) => cache.delete(request))
-  );
-}
-
-async function touchCachedMedia(cache: Cache, url: string, response: Response) {
-  await cache.delete(url);
-  await cache.put(url, response);
-}
-
-async function getCachedMedia(url: string, cacheName: string): Promise<Response | undefined> {
-  const cache = await caches.open(cacheName);
-  const cachedResponse = await cache.match(url);
-
-  if (!cachedResponse) {
-    return undefined;
-  }
-
-  await touchCachedMedia(cache, url, cachedResponse.clone());
-  return cachedResponse;
-}
-
-async function fetchAndCacheMedia(
-  url: string,
-  token: string,
-  cacheName: string
-): Promise<Response> {
-  const response = await fetch(url, fetchConfig(token));
-
-  if (response.ok) {
-    const cache = await caches.open(cacheName);
-    await cache.put(url, response.clone());
-    await trimAuthMediaCache(cache);
-  }
-
-  return response;
-}
-
 self.addEventListener('fetch', (event: FetchEvent) => {
   const { url, method } = event.request;
 
@@ -249,21 +139,20 @@ self.addEventListener('fetch', (event: FetchEvent) => {
   const { clientId } = event;
   if (!clientId) return;
 
+  const session = sessions.get(clientId);
+  if (session) {
+    if (validMediaRequest(url, session.baseUrl)) {
+      event.respondWith(fetch(url, fetchConfig(session.accessToken)));
+    }
+    return;
+  }
+
   event.respondWith(
-    (async () => {
-      const session = sessions.get(clientId) ?? (await requestSessionWithTimeout(clientId));
-
-      if (!session || !validMediaRequest(url, session.baseUrl)) {
-        return fetch(event.request);
+    requestSessionWithTimeout(clientId).then((s) => {
+      if (s && validMediaRequest(url, s.baseUrl)) {
+        return fetch(url, fetchConfig(s.accessToken));
       }
-
-      const cacheName = getAuthMediaCacheName(session);
-      const cachedResponse = await getCachedMedia(url, cacheName);
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-
-      return fetchAndCacheMedia(url, session.accessToken, cacheName);
-    })()
+      return fetch(event.request);
+    })
   );
 });
