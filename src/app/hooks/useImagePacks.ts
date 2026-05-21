@@ -29,7 +29,8 @@ import {
 
 const GLOBAL_IMAGE_PACK_WARM_DELAY_MS = 0;
 const GLOBAL_IMAGE_PACK_OBJECT_WARM_DELAY_MS = 120;
-const WEB_IMAGE_PACK_OBJECT_WARM_DELAY_MS = 8000;
+const WEB_IMAGE_PACK_PERSISTENT_WARM_DELAY_MS = 0;
+const WEB_IMAGE_PACK_OBJECT_WARM_DELAY_MS = 300;
 const IMAGE_PACK_AVATAR_SIZE = 64;
 const IMAGE_PACK_EMOTICON_SIZE = 64;
 const IMAGE_PACK_STICKER_SIZE = 256;
@@ -589,7 +590,14 @@ export const useWarmWebImagePackMedia = () => {
     }
 
     let disposed = false;
+    let persistentDelayTimer: number | undefined;
     let objectDelayTimer: number | undefined;
+    persistentDelayTimer = window.setTimeout(() => {
+      if (!disposed) {
+        warmImagePackMedia(mx, useAuthentication, relevantPacks, [ImageUsage.Emoticon]);
+      }
+    }, WEB_IMAGE_PACK_PERSISTENT_WARM_DELAY_MS);
+
     objectDelayTimer = window.setTimeout(() => {
       if (!disposed) {
         warmImagePackPrimaryObjectUrls(mx, useAuthentication, relevantPacks, [
@@ -600,6 +608,9 @@ export const useWarmWebImagePackMedia = () => {
 
     return () => {
       disposed = true;
+      if (typeof persistentDelayTimer === 'number') {
+        window.clearTimeout(persistentDelayTimer);
+      }
       if (typeof objectDelayTimer === 'number') {
         window.clearTimeout(objectDelayTimer);
       }
