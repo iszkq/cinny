@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use mime_guess::get_mime_extensions_str;
 use reqwest::header::CONTENT_TYPE;
+use reqwest::{Client, Response, Url};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Manager};
@@ -15,6 +16,7 @@ const MEDIA_FILE_PREFIX: &str = "media.";
 pub struct DesktopMediaCacheRequest {
     pub source_url: String,
     pub account_key: String,
+    pub access_token: Option<String>,
     pub mime_type: Option<String>,
 }
 
@@ -148,6 +150,112 @@ fn resolve_media_extension(
         .unwrap_or_else(|| "bin".to_owned())
 }
 
+fn build_media_fallback_urls(source_url: &str) -> Vec<String> {
+    const AUTH_MEDIA_FALLBACKS: [(&str, [&str; 2]); 2] = [
+        (
+            "/_matrix/client/v1/media/download",
+            ["/_matrix/media/v3/download", "/_matrix/media/r0/download"],
+        ),
+        (
+            "/_matrix/client/v1/media/thumbnail",
+            ["/_matrix/media/v3/thumbnail", "/_matrix/media/r0/thumbnail"],
+        ),
+    ];
+
+    let Ok(parsed) = Url::parse(source_url) else {
+        return Vec::new();
+    };
+    let path = parsed.path().to_owned();
+
+    AUTH_MEDIA_FALLBACKS
+        .iter()
+        .find_map(|(auth_path, fallback_paths)| {
+            path.strip_prefix(auth_path).map(|path_suffix| {
+                fallback_paths
+                    .iter()
+                    .map(|fallback_path| {
+                        let mut fallback_url = parsed.clone();
+                        fallback_url.set_path(&format!("{fallback_path}{path_suffix}"));
+                        fallback_url.to_string()
+                    })
+                    .collect::<Vec<_>>()
+            })
+        })
+        .unwrap_or_default()
+}
+
+async fn send_media_request(
+    client: &Client,
+    source_url: &str,
+    access_token: Option<&str>,
+) -> Result<Response, String> {
+    let request = client.get(source_url);
+    let request =
+        if let Some(access_token) = access_token.filter(|token| !token.trim().is_empty()) {
+            request.bearer_auth(access_token)
+        } else {
+            request
+        };
+
+    request
+        .send()
+        .await
+        .map_err(|error| format!("failed to download desktop media asset: {error}"))
+}
+
+async fn fetch_media_response(
+    client: &Client,
+    source_url: &str,
+    access_token: Option<&str>,
+) -> Result<Response, String> {
+    let primary_response = send_media_request(client, source_url, access_token).await?;
+    if primary_response.status().is_success() {
+        return Ok(primary_response);
+    }
+
+    let fallback_urls = build_media_fallback_urls(source_url);
+    let mut last_status = Some(primary_response.status());
+    let mut last_error: Option<String> = None;
+
+    for fallback_url in fallback_urls {
+        match send_media_request(client, &fallback_url, None).await {
+            Ok(fallback_response) => {
+                if fallback_response.status().is_success() {
+                    return Ok(fallback_response);
+                }
+                last_status = Some(fallback_response.status());
+            }
+            Err(error) => {
+                last_error = Some(error);
+            }
+        }
+    }
+
+    if access_token.is_some() {
+        match send_media_request(client, source_url, None).await {
+            Ok(plain_response) => {
+                if plain_response.status().is_success() {
+                    return Ok(plain_response);
+                }
+                last_status = Some(plain_response.status());
+            }
+            Err(error) => {
+                last_error = Some(error);
+            }
+        }
+    }
+
+    match last_status {
+        Some(status) => Err(format!(
+            "failed to download desktop media asset: HTTP {}",
+            status
+        )),
+        None => Err(
+            last_error.unwrap_or_else(|| "failed to download desktop media asset".to_owned())
+        ),
+    }
+}
+
 #[tauri::command]
 pub async fn cache_desktop_media_asset(
     app: AppHandle,
@@ -168,18 +276,9 @@ pub async fn cache_desktop_media_asset(
         return Ok(cached_file.to_string_lossy().into_owned());
     }
 
-    let response = reqwest::Client::new()
-        .get(source_url)
-        .send()
-        .await
-        .map_err(|error| format!("failed to download desktop media asset: {error}"))?;
-
-    if !response.status().is_success() {
-        return Err(format!(
-            "failed to download desktop media asset: HTTP {}",
-            response.status()
-        ));
-    }
+    let client = Client::new();
+    let response =
+        fetch_media_response(&client, source_url, request.access_token.as_deref()).await?;
 
     let response_mime_type = response
         .headers()
