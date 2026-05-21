@@ -19,6 +19,7 @@ import { AccountDataEvent } from '../../types/matrix/accountData';
 import { getStateEvent } from './room';
 import { Membership, StateEvent } from '../../types/matrix/room';
 import { getFallbackSession } from '../state/sessions';
+import { disableAuthenticatedMediaForSession } from '../hooks/useMediaAuthentication';
 
 const DOMAIN_REGEX = /\b(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}\b/;
 const MATRIX_MEDIA_PATHS = [
@@ -124,13 +125,24 @@ export const fetchMediaWithAuth = async (
 
     for (const legacyPath of legacyPaths) {
       const legacyUrl = src.replace(authPath, legacyPath);
+      const legacyUrlWithToken =
+        attachMediaAccessToken(legacyUrl, resolvedAccessToken, resolvedBaseUrl) ?? legacyUrl;
       try {
-        const response = await fetch(legacyUrl, requestInit);
+        const response = await fetch(legacyUrlWithToken, init);
         if (response.ok) {
+          disableAuthenticatedMediaForSession();
           return response;
         }
       } catch {
-        // Try the next legacy endpoint candidate.
+        try {
+          const response = await fetch(legacyUrl, init);
+          if (response.ok) {
+            disableAuthenticatedMediaForSession();
+            return response;
+          }
+        } catch {
+          // Try the next legacy endpoint candidate.
+        }
       }
     }
   }
