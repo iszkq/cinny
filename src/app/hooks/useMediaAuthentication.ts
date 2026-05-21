@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useSpecVersions } from './useSpecVersions';
 
 const MEDIA_AUTH_STATE_CHANGE_EVENT = 'cinny:media-auth-state-change';
+const FORCE_LEGACY_MEDIA_ENDPOINTS = true;
 let authenticatedMediaDisabledForSession = false;
 
 const dispatchMediaAuthStateChange = () => {
@@ -31,6 +32,10 @@ export const useMediaAuthentication = (): boolean => {
       window.removeEventListener(MEDIA_AUTH_STATE_CHANGE_EVENT, handleChange);
     };
   }, []);
+
+  if (FORCE_LEGACY_MEDIA_ENDPOINTS) {
+    return false;
+  }
 
   // Be conservative here. Some deployments report newer spec versions but still
   // behave unreliably on authenticated media endpoints, which breaks attachment
