@@ -683,6 +683,7 @@ export const useWarmWebImagePackMedia = () => {
       if (!disposed) {
         warmCleanup = scheduleWebImagePackMediaWarm(mx, useAuthentication, relevantPacks, [
           ImageUsage.Emoticon,
+          ImageUsage.Sticker,
         ]);
       }
     }, WEB_IMAGE_PACK_PERSISTENT_WARM_DELAY_MS);
