@@ -43,6 +43,13 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register(swUrl).then(sendSessionToSW);
   navigator.serviceWorker.ready.then(sendSessionToSW);
   navigator.serviceWorker.addEventListener('controllerchange', sendSessionToSW);
+  window.addEventListener('focus', sendSessionToSW);
+  window.addEventListener('online', sendSessionToSW);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      sendSessionToSW();
+    }
+  });
 
   navigator.serviceWorker.addEventListener('message', (ev) => {
     const { type } = ev.data ?? {};
