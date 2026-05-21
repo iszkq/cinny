@@ -30,6 +30,17 @@ const MATRIX_MEDIA_PATHS = [
   '/_matrix/media/r0/thumbnail',
 ];
 
+const AUTH_MEDIA_PATH_TO_FALLBACK_PATH: Record<string, string[]> = {
+  '/_matrix/client/v1/media/download': [
+    '/_matrix/media/v3/download',
+    '/_matrix/media/r0/download',
+  ],
+  '/_matrix/client/v1/media/thumbnail': [
+    '/_matrix/media/v3/thumbnail',
+    '/_matrix/media/r0/thumbnail',
+  ],
+};
+
 const isSessionMediaUrl = (src: string, baseUrl: string): boolean => {
   try {
     const currentUrl =
@@ -57,10 +68,50 @@ export const fetchMediaWithAuth = async (
     headers.set('Authorization', `Bearer ${session.accessToken}`);
   }
 
-  return fetch(src, {
+  const primaryResponse = await fetch(src, {
     ...init,
     headers,
   });
+
+  if (primaryResponse.ok) {
+    return primaryResponse;
+  }
+
+  const fallbackUrls: string[] = [];
+  try {
+    const currentUrl = typeof window === 'undefined' ? session.baseUrl : window.location.href;
+    const mediaUrl = new URL(src, currentUrl);
+    const fallbackPaths = Object.entries(AUTH_MEDIA_PATH_TO_FALLBACK_PATH).find(([path]) =>
+      mediaUrl.pathname.startsWith(path)
+    )?.[1];
+
+    fallbackUrls.push(mediaUrl.toString());
+
+    fallbackPaths?.forEach((fallbackPath) => {
+      const fallbackUrl = new URL(mediaUrl.toString());
+      fallbackUrl.pathname = mediaUrl.pathname.replace(
+        /^\/_matrix\/client\/v1\/media\/(download|thumbnail)/,
+        fallbackPath
+      );
+      fallbackUrls.push(fallbackUrl.toString());
+    });
+  } catch {
+    fallbackUrls.push(src);
+  }
+
+  const uniqueFallbackUrls = Array.from(new Set(fallbackUrls)).filter((url) => url !== src);
+  for (const fallbackUrl of uniqueFallbackUrls) {
+    // Some homeserver/media proxy setups advertise authenticated media, but desktop/webview
+    // fetches still only succeed against the public media endpoints.
+    // eslint-disable-next-line no-await-in-loop
+    const fallbackResponse = await fetch(fallbackUrl, init).catch(() => undefined);
+    if (fallbackResponse?.ok) {
+      return fallbackResponse;
+    }
+  }
+
+  const plainResponse = await fetch(src, init).catch(() => undefined);
+  return plainResponse ?? primaryResponse;
 };
 
 export const isServerName = (serverName: string): boolean => DOMAIN_REGEX.test(serverName);
