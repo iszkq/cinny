@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { useSpecVersions } from './useSpecVersions';
 
 const MEDIA_AUTH_STATE_CHANGE_EVENT = 'cinny:media-auth-state-change';
-const FORCE_LEGACY_MEDIA_ENDPOINTS = true;
 let authenticatedMediaDisabledForSession = false;
 
 const dispatchMediaAuthStateChange = () => {
@@ -17,7 +16,7 @@ export const disableAuthenticatedMediaForSession = (): void => {
 };
 
 export const useMediaAuthentication = (): boolean => {
-  const { unstable_features: unstableFeatures } = useSpecVersions();
+  const { versions, unstable_features: unstableFeatures } = useSpecVersions();
   const [disabled, setDisabled] = useState(authenticatedMediaDisabledForSession);
 
   useEffect(() => {
@@ -33,12 +32,8 @@ export const useMediaAuthentication = (): boolean => {
     };
   }, []);
 
-  if (FORCE_LEGACY_MEDIA_ENDPOINTS) {
-    return false;
-  }
+  const authenticatedMedia =
+    unstableFeatures?.['org.matrix.msc3916.stable'] === true || versions.includes('v1.11');
 
-  // Be conservative here. Some deployments report newer spec versions but still
-  // behave unreliably on authenticated media endpoints, which breaks attachment
-  // downloads and image loading hard enough to disrupt sync UX.
-  return unstableFeatures?.['org.matrix.msc3916.stable'] === true && !disabled;
+  return authenticatedMedia && !disabled;
 };
