@@ -1,5 +1,5 @@
 import React, { MouseEventHandler, useCallback, useState } from 'react';
-import { useAtom } from 'jotai';
+import { useAtom, useSetAtom } from 'jotai';
 import { CryptoApi, KeyBackupInfo } from 'matrix-js-sdk/lib/crypto-api';
 import {
   Badge,
@@ -19,7 +19,11 @@ import {
   Text,
 } from 'folds';
 import FocusTrap from 'focus-trap-react';
-import { BackupProgressStatus, backupRestoreProgressAtom } from '../state/backupRestore';
+import {
+  BackupProgressStatus,
+  backupRestoreProgressAtom,
+  setBackupRestoreProgressAtom,
+} from '../state/backupRestore';
 import { InfoCard } from './info-card';
 import { AsyncStatus, useAsyncCallback } from '../hooks/useAsyncCallback';
 import {
@@ -64,13 +68,10 @@ function BackupSyncing({ count }: BackupSyncingProps) {
 
 function BackupProgressFetching() {
   return (
-    <Box grow="Yes" gap="200" alignItems="Center">
+    <Box grow="Yes" gap="200" alignItems="Center" justifyContent="End">
       <Badge variant="Secondary" fill="Solid" radii="300">
-        <Text size="L400">Restoring: 0%</Text>
+        <Text size="L400">Restoring...</Text>
       </Badge>
-      <Box grow="Yes" direction="Column">
-        <ProgressBar variant="Secondary" size="300" min={0} max={1} value={0} />
-      </Box>
       <Spinner size="50" variant="Secondary" fill="Soft" />
     </Box>
   );
@@ -136,6 +137,7 @@ type BackupRestoreTileProps = {
 };
 export function BackupRestoreTile({ crypto }: BackupRestoreTileProps) {
   const [restoreProgress, setRestoreProgress] = useAtom(backupRestoreProgressAtom);
+  const setBackupRestoreProgress = useSetAtom(setBackupRestoreProgressAtom);
   const restoring =
     restoreProgress.status === BackupProgressStatus.Fetching ||
     restoreProgress.status === BackupProgressStatus.Loading;
@@ -152,12 +154,18 @@ export function BackupRestoreTile({ crypto }: BackupRestoreTileProps) {
 
   const [restoreState, restoreBackup] = useAsyncCallback<void, Error, []>(
     useCallback(async () => {
-      await crypto.restoreKeyBackup({
-        progressCallback(progress) {
-          setRestoreProgress(progress);
-        },
-      });
-    }, [crypto, setRestoreProgress])
+      try {
+        await crypto.restoreKeyBackup({
+          progressCallback(progress) {
+            setRestoreProgress(progress);
+          },
+        });
+        setBackupRestoreProgress({ status: BackupProgressStatus.Done });
+      } catch (error) {
+        setBackupRestoreProgress({ status: BackupProgressStatus.Idle });
+        throw error;
+      }
+    }, [crypto, setBackupRestoreProgress, setRestoreProgress])
   );
 
   const handleRestore = () => {
