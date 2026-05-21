@@ -4,7 +4,7 @@ import {
   VerificationRequest,
   Verifier,
 } from 'matrix-js-sdk/lib/crypto-api';
-import React, { CSSProperties, useCallback, useEffect, useRef, useState } from 'react';
+import React, { CSSProperties, useCallback, useEffect, useState } from 'react';
 import { VerificationMethod } from 'matrix-js-sdk/lib/types';
 import {
   Box,
@@ -30,9 +30,6 @@ import {
 } from '../hooks/useVerificationRequest';
 import { AsyncStatus, useAsyncCallback } from '../hooks/useAsyncCallback';
 import { ContainerColor } from '../styles/ContainerColor.css';
-import { useMatrixClient } from '../hooks/useMatrixClient';
-import { restoreKeyBackupAndDecrypt } from '../utils/keyBackup';
-import { crossSignCurrentDevice } from '../utils/matrix-crypto';
 
 const DialogHeaderStyles: CSSProperties = {
   padding: `0 ${config.space.S200} 0 ${config.space.S400}`,
@@ -235,13 +232,7 @@ type DeviceVerificationProps = {
   onExit: () => void;
 };
 export function DeviceVerification({ request, onExit }: DeviceVerificationProps) {
-  const mx = useMatrixClient();
   const phase = useVerificationRequestPhase(request);
-  const restoreHandledRef = useRef(false);
-
-  useEffect(() => {
-    restoreHandledRef.current = false;
-  }, [request]);
 
   const handleCancel = useCallback(() => {
     if (request.phase !== VerificationPhase.Done && request.phase !== VerificationPhase.Cancelled) {
@@ -254,18 +245,6 @@ export function DeviceVerification({ request, onExit }: DeviceVerificationProps)
   const handleStart = useCallback(async () => {
     await request.startVerification(VerificationMethod.Sas);
   }, [request]);
-
-  useEffect(() => {
-    if (phase !== VerificationPhase.Done || !request.isSelfVerification || restoreHandledRef.current) {
-      return;
-    }
-
-    restoreHandledRef.current = true;
-    void (async () => {
-      await crossSignCurrentDevice(mx).catch(() => undefined);
-      await restoreKeyBackupAndDecrypt(mx).catch(() => undefined);
-    })();
-  }, [mx, phase, request]);
 
   return (
     <Overlay open backdrop={<OverlayBackdrop />}>
