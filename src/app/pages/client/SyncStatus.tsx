@@ -13,7 +13,13 @@ type SyncStatusProps = {
   mx: MatrixClient;
 };
 
-const RECONNECTING_VISIBLE_DELAY_MS = 3500;
+const CONNECTION_ISSUE_VISIBLE_DELAY_MS = 10000;
+
+const isConnectionIssueState = (state: SyncState | null): boolean =>
+  state === SyncState.Reconnecting || state === SyncState.Error;
+
+const isHealthySyncState = (state: SyncState | null): boolean =>
+  state === SyncState.Prepared || state === SyncState.Syncing || state === SyncState.Catchup;
 
 export function SyncStatus({ mx }: SyncStatusProps) {
   const [stateData, setStateData] = useState<StateData>({
@@ -22,11 +28,12 @@ export function SyncStatus({ mx }: SyncStatusProps) {
   });
   const [visibleStateData, setVisibleStateData] = useState<StateData>(stateData);
   const [syncEstablished, setSyncEstablished] = useState(false);
+  const [connectionIssueSince, setConnectionIssueSince] = useState<number | null>(null);
 
   useSyncState(
     mx,
     useCallback((current, previous) => {
-      if (current === SyncState.Prepared) {
+      if (isHealthySyncState(current)) {
         setSyncEstablished(true);
       }
 
@@ -40,10 +47,25 @@ export function SyncStatus({ mx }: SyncStatusProps) {
   );
 
   useEffect(() => {
-    if (stateData.current === SyncState.Reconnecting || stateData.current === SyncState.Error) {
+    if (isConnectionIssueState(stateData.current)) {
+      setConnectionIssueSince((prev) => prev ?? Date.now());
+      return undefined;
+    }
+
+    setConnectionIssueSince(null);
+    return undefined;
+  }, [stateData.current]);
+
+  useEffect(() => {
+    if (isConnectionIssueState(stateData.current)) {
+      const issueSince = connectionIssueSince ?? Date.now();
+      const visibleInMs = Math.max(
+        0,
+        issueSince + CONNECTION_ISSUE_VISIBLE_DELAY_MS - Date.now()
+      );
       const reconnectingTimer = window.setTimeout(() => {
         setVisibleStateData(stateData);
-      }, RECONNECTING_VISIBLE_DELAY_MS);
+      }, visibleInMs);
 
       return () => {
         window.clearTimeout(reconnectingTimer);
@@ -52,7 +74,7 @@ export function SyncStatus({ mx }: SyncStatusProps) {
 
     setVisibleStateData(stateData);
     return undefined;
-  }, [stateData]);
+  }, [connectionIssueSince, stateData]);
 
   if (
     !syncEstablished &&
@@ -63,8 +85,7 @@ export function SyncStatus({ mx }: SyncStatusProps) {
   }
 
   if (
-    (visibleStateData.current === SyncState.Prepared ||
-      visibleStateData.current === SyncState.Catchup) &&
+    isHealthySyncState(visibleStateData.current) &&
     visibleStateData.previous !== SyncState.Syncing
   ) {
     return (
