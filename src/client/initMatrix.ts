@@ -3,11 +3,9 @@ import {
   MatrixClient,
   IndexedDBStore,
   IndexedDBCryptoStore,
-  ReceiptType,
 } from 'matrix-js-sdk';
 
 import { cryptoCallbacks } from './secretStorageKeys';
-import { getSettings } from '../app/state/settings';
 import { clearNavToActivePathStore } from '../app/state/navToActivePath';
 import { restorePinLockStorage, snapshotPinLockStorage } from '../app/utils/pinLock';
 import { pushSessionToSW } from '../sw-session';
@@ -19,174 +17,7 @@ type Session = {
   deviceId: string;
 };
 
-const PRIVATE_RECEIPT_TYPE = 'm.read.private' as ReceiptType;
-
-const patchedReadReceiptClients = new WeakSet<MatrixClient>();
-let globalReadReceiptFetchPatched = false;
-
-const shouldBlockReadReceipts = () => !getSettings().sendReadReceipts;
-
-const isReadReceiptPath = (path: string) =>
-  path.includes('/receipt/m.read') && !path.includes('/receipt/m.read.private');
-
-const getRequestPath = (pathOrUrl: string) => {
-  try {
-    const baseOrigin =
-      typeof window !== 'undefined' ? window.location.origin : 'https://app.cinny.in';
-    return new URL(pathOrUrl, baseOrigin).pathname;
-  } catch {
-    return pathOrUrl;
-  }
-};
-
-const shouldBlockReadReceiptRequest = (method: string | undefined, pathOrUrl: string) => {
-  const normalizedMethod = (method ?? 'GET').toUpperCase();
-  if (normalizedMethod === 'GET' || normalizedMethod === 'HEAD') return false;
-  return shouldBlockReadReceipts() && isReadReceiptPath(getRequestPath(pathOrUrl));
-};
-
-const createBlockedReadReceiptResponse = () =>
-  new Response('{}', {
-    status: 200,
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  });
-
-const patchGlobalReadReceiptFetch = () => {
-  if (globalReadReceiptFetchPatched || typeof globalThis.fetch !== 'function') return;
-  globalReadReceiptFetchPatched = true;
-
-  const originalFetch = globalThis.fetch.bind(globalThis);
-
-  globalThis.fetch = ((
-    input: RequestInfo | URL,
-    init?: RequestInit
-  ): ReturnType<typeof globalThis.fetch> => {
-    const requestUrl =
-      typeof input === 'string'
-        ? input
-        : input instanceof URL
-        ? input.toString()
-        : input.url;
-    const requestMethod =
-      init?.method ??
-      (typeof Request !== 'undefined' && input instanceof Request ? input.method : undefined);
-
-    if (shouldBlockReadReceiptRequest(requestMethod, requestUrl)) {
-      return Promise.resolve(createBlockedReadReceiptResponse()) as ReturnType<
-        typeof globalThis.fetch
-      >;
-    }
-
-    return originalFetch(input, init);
-  }) as typeof globalThis.fetch;
-};
-
-const patchReadReceiptTransport = (mx: MatrixClient) => {
-  if (patchedReadReceiptClients.has(mx)) return;
-  patchedReadReceiptClients.add(mx);
-
-  const originalSendReceipt = mx.sendReceipt.bind(mx);
-  mx.sendReceipt = ((
-    ...args: Parameters<MatrixClient['sendReceipt']>
-  ): ReturnType<MatrixClient['sendReceipt']> => {
-    const [event, receiptType, body, unthreaded] = args;
-    if (shouldBlockReadReceipts() && receiptType === ReceiptType.Read) {
-      return originalSendReceipt(
-        event,
-        PRIVATE_RECEIPT_TYPE,
-        body,
-        unthreaded
-      ) as ReturnType<MatrixClient['sendReceipt']>;
-    }
-    return originalSendReceipt(...args);
-  }) as MatrixClient['sendReceipt'];
-
-  const originalSendReadReceipt = mx.sendReadReceipt.bind(mx);
-  mx.sendReadReceipt = ((
-    ...args: Parameters<MatrixClient['sendReadReceipt']>
-  ): ReturnType<MatrixClient['sendReadReceipt']> => {
-    const [event, receiptType, unthreaded] = args;
-    if (shouldBlockReadReceipts() && (!receiptType || receiptType === ReceiptType.Read)) {
-      return originalSendReadReceipt(
-        event,
-        PRIVATE_RECEIPT_TYPE,
-        unthreaded
-      ) as ReturnType<MatrixClient['sendReadReceipt']>;
-    }
-    return originalSendReadReceipt(...args);
-  }) as MatrixClient['sendReadReceipt'];
-
-  const originalSetRoomReadMarkers = mx.setRoomReadMarkers.bind(mx);
-  mx.setRoomReadMarkers = ((
-    ...args: Parameters<MatrixClient['setRoomReadMarkers']>
-  ): ReturnType<MatrixClient['setRoomReadMarkers']> => {
-    if (shouldBlockReadReceipts()) {
-      const [roomId, rmEventId, rrEvent, rpEvent] = args;
-      return originalSetRoomReadMarkers(
-        roomId,
-        rmEventId,
-        undefined,
-        rpEvent ?? rrEvent
-      ) as ReturnType<MatrixClient['setRoomReadMarkers']>;
-    }
-    return originalSetRoomReadMarkers(...args);
-  }) as MatrixClient['setRoomReadMarkers'];
-
-  const originalSetRoomReadMarkersHttpRequest = mx.setRoomReadMarkersHttpRequest.bind(mx);
-  mx.setRoomReadMarkersHttpRequest = ((
-    ...args: Parameters<MatrixClient['setRoomReadMarkersHttpRequest']>
-  ): ReturnType<MatrixClient['setRoomReadMarkersHttpRequest']> => {
-    if (shouldBlockReadReceipts()) {
-      const [roomId, rmEventId, rrEventId, rpEventId] = args;
-      return originalSetRoomReadMarkersHttpRequest(
-        roomId,
-        rmEventId,
-        undefined,
-        rpEventId ?? rrEventId
-      ) as ReturnType<MatrixClient['setRoomReadMarkersHttpRequest']>;
-    }
-    return originalSetRoomReadMarkersHttpRequest(...args);
-  }) as MatrixClient['setRoomReadMarkersHttpRequest'];
-
-  const originalAuthedRequest = mx.http.authedRequest.bind(mx.http);
-  mx.http.authedRequest = ((
-    ...args: Parameters<typeof mx.http.authedRequest>
-  ): ReturnType<typeof mx.http.authedRequest> => {
-    const [method, path] = args;
-    if (typeof path === 'string' && shouldBlockReadReceiptRequest(method, path)) {
-      return Promise.resolve({}) as ReturnType<typeof mx.http.authedRequest>;
-    }
-    return originalAuthedRequest(...args);
-  }) as typeof mx.http.authedRequest;
-
-  if (typeof mx.http.request === 'function') {
-    const originalRequest = mx.http.request.bind(mx.http);
-    mx.http.request = ((...args: Parameters<typeof mx.http.request>) => {
-      const [method, path] = args;
-      if (typeof path === 'string' && shouldBlockReadReceiptRequest(method, path)) {
-        return Promise.resolve({}) as ReturnType<typeof mx.http.request>;
-      }
-      return originalRequest(...args);
-    }) as typeof mx.http.request;
-  }
-
-  if (typeof mx.http.requestOtherUrl === 'function') {
-    const originalRequestOtherUrl = mx.http.requestOtherUrl.bind(mx.http);
-    mx.http.requestOtherUrl = ((...args: Parameters<typeof mx.http.requestOtherUrl>) => {
-      const [method, path] = args;
-      if (typeof path === 'string' && shouldBlockReadReceiptRequest(method, path)) {
-        return Promise.resolve({}) as ReturnType<typeof mx.http.requestOtherUrl>;
-      }
-      return originalRequestOtherUrl(...args);
-    }) as typeof mx.http.requestOtherUrl;
-  }
-};
-
 export const initClient = async (session: Session): Promise<MatrixClient> => {
-  patchGlobalReadReceiptFetch();
-
   const indexedDBStore = new IndexedDBStore({
     indexedDB: global.indexedDB,
     localStorage: global.localStorage,
@@ -209,7 +40,6 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
 
   await indexedDBStore.startup();
   await mx.initRustCrypto();
-  patchReadReceiptTransport(mx);
 
   mx.setMaxListeners(50);
 
@@ -217,7 +47,6 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
 };
 
 export const startClient = async (mx: MatrixClient) => {
-  await mx.setSyncPresence?.(getSettings().presenceVisibility);
   await mx.startClient({
     lazyLoadMembers: true,
   });
