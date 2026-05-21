@@ -18,15 +18,49 @@ import { IAudioInfo, IImageInfo, IThumbnailContent, IVideoInfo } from '../../typ
 import { AccountDataEvent } from '../../types/matrix/accountData';
 import { getStateEvent } from './room';
 import { Membership, StateEvent } from '../../types/matrix/room';
+import { getFallbackSession } from '../state/sessions';
 
 const DOMAIN_REGEX = /\b(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}\b/;
+const MATRIX_MEDIA_PATHS = [
+  '/_matrix/client/v1/media/download',
+  '/_matrix/client/v1/media/thumbnail',
+  '/_matrix/media/v3/download',
+  '/_matrix/media/v3/thumbnail',
+  '/_matrix/media/r0/download',
+  '/_matrix/media/r0/thumbnail',
+];
+
+const isSessionMediaUrl = (src: string, baseUrl: string): boolean => {
+  try {
+    const currentUrl =
+      typeof window === 'undefined' ? baseUrl : window.location.href;
+    const mediaUrl = new URL(src, currentUrl);
+    return MATRIX_MEDIA_PATHS.some((path) =>
+      mediaUrl.href.startsWith(new URL(path, baseUrl).href)
+    );
+  } catch {
+    return false;
+  }
+};
 
 export const fetchMediaWithAuth = async (
   src: string,
   init?: RequestInit
 ): Promise<Response> => {
-  // Authenticated Matrix media is handled by the service worker, same as upstream Cinny.
-  return fetch(src, init);
+  const session = getFallbackSession();
+  if (!session || !isSessionMediaUrl(src, session.baseUrl)) {
+    return fetch(src, init);
+  }
+
+  const headers = new Headers(init?.headers);
+  if (!headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${session.accessToken}`);
+  }
+
+  return fetch(src, {
+    ...init,
+    headers,
+  });
 };
 
 export const isServerName = (serverName: string): boolean => DOMAIN_REGEX.test(serverName);
@@ -319,8 +353,12 @@ export const mxcUrlToHttp = (
   );
 
 export const downloadMedia = async (src: string): Promise<Blob> => {
-  // this request is authenticated by service worker
-  const res = await fetch(src, { method: 'GET' });
+  // Prefer a direct Authorization header for JS downloads, while the service worker keeps
+  // authenticated media working for <img>/<video> tags that cannot set headers.
+  const res = await fetchMediaWithAuth(src, { method: 'GET' });
+  if (!res.ok) {
+    throw new Error(`Failed to download media: ${res.status} ${res.statusText}`);
+  }
   const blob = await res.blob();
   return blob;
 };
