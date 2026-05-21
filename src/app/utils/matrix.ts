@@ -18,14 +18,103 @@ import { IAudioInfo, IImageInfo, IThumbnailContent, IVideoInfo } from '../../typ
 import { AccountDataEvent } from '../../types/matrix/accountData';
 import { getStateEvent } from './room';
 import { Membership, StateEvent } from '../../types/matrix/room';
+import { getFallbackSession } from '../state/sessions';
 
 const DOMAIN_REGEX = /\b(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}\b/;
+const AUTH_MEDIA_PATH_TO_FALLBACK_PATH: Record<string, string[]> = {
+  '/_matrix/client/v1/media/download': [
+    '/_matrix/media/v3/download',
+    '/_matrix/media/r0/download',
+  ],
+  '/_matrix/client/v1/media/thumbnail': [
+    '/_matrix/media/v3/thumbnail',
+    '/_matrix/media/r0/thumbnail',
+  ],
+};
 
 export const fetchMediaWithAuth = async (
   src: string,
   init?: RequestInit
 ): Promise<Response> => {
   return fetch(src, init);
+};
+
+const getAbsoluteUrl = (src: string, baseUrl: string): URL | undefined => {
+  try {
+    const currentUrl = typeof window === 'undefined' ? baseUrl : window.location.href;
+    return new URL(src, currentUrl);
+  } catch {
+    return undefined;
+  }
+};
+
+const isSessionMediaUrl = (src: string, baseUrl: string): boolean => {
+  const mediaUrl = getAbsoluteUrl(src, baseUrl);
+  if (!mediaUrl) {
+    return false;
+  }
+
+  return Object.keys(AUTH_MEDIA_PATH_TO_FALLBACK_PATH).some((path) =>
+    mediaUrl.href.startsWith(new URL(path, baseUrl).href)
+  );
+};
+
+const getPublicMediaFallbackUrls = (src: string, baseUrl: string): string[] => {
+  const mediaUrl = getAbsoluteUrl(src, baseUrl);
+  if (!mediaUrl) {
+    return [];
+  }
+
+  const fallbackPaths = Object.entries(AUTH_MEDIA_PATH_TO_FALLBACK_PATH).find(([path]) =>
+    mediaUrl.pathname.startsWith(path)
+  )?.[1];
+
+  if (!fallbackPaths) {
+    return [];
+  }
+
+  return fallbackPaths.map((fallbackPath) => {
+    const fallbackUrl = new URL(mediaUrl.toString());
+    fallbackUrl.pathname = mediaUrl.pathname.replace(
+      /^\/_matrix\/client\/v1\/media\/(download|thumbnail)/,
+      fallbackPath
+    );
+    return fallbackUrl.toString();
+  });
+};
+
+const fetchMediaForDownloadFallback = async (
+  src: string,
+  init?: RequestInit
+): Promise<Response | undefined> => {
+  const session = getFallbackSession();
+  if (!session || !isSessionMediaUrl(src, session.baseUrl)) {
+    return undefined;
+  }
+
+  const headers = new Headers(init?.headers);
+  if (!headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${session.accessToken}`);
+  }
+
+  const authResponse = await fetch(src, {
+    ...init,
+    headers,
+  }).catch(() => undefined);
+  if (authResponse?.ok) {
+    return authResponse;
+  }
+
+  const fallbackUrls = getPublicMediaFallbackUrls(src, session.baseUrl);
+  for (const fallbackUrl of fallbackUrls) {
+    // eslint-disable-next-line no-await-in-loop
+    const fallbackResponse = await fetch(fallbackUrl, init).catch(() => undefined);
+    if (fallbackResponse?.ok) {
+      return fallbackResponse;
+    }
+  }
+
+  return undefined;
 };
 
 export const isServerName = (serverName: string): boolean => DOMAIN_REGEX.test(serverName);
@@ -318,8 +407,16 @@ export const mxcUrlToHttp = (
   );
 
 export const downloadMedia = async (src: string): Promise<Blob> => {
-  const res = await fetchMediaWithAuth(src, { method: 'GET' });
-  const blob = await res.blob();
+  const init: RequestInit = { method: 'GET' };
+  const res = await fetchMediaWithAuth(src, init).catch(() => undefined);
+  const downloadResponse =
+    res && res.ok ? res : await fetchMediaForDownloadFallback(src, init);
+
+  if (!downloadResponse) {
+    throw new Error('Failed to download media');
+  }
+
+  const blob = await downloadResponse.blob();
   return blob;
 };
 
