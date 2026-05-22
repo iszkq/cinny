@@ -11,10 +11,6 @@ import {
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { FALLBACK_MIMETYPE } from '../../../utils/mimeTypes';
 import { primeCachedMediaObjectUrl } from '../../../utils/mediaUrlCache';
-import {
-  loadDesktopMediaAssetBytes,
-  primeDesktopMediaAssetUrl,
-} from '../../../utils/desktopMediaAssetCache';
 
 export type ThumbnailContentProps = {
   info: IThumbnailContent;
@@ -36,30 +32,10 @@ export function ThumbnailContent({ info, renderImage }: ThumbnailContentProps) {
       const mediaUrl = mxcUrlToHttp(mx, thumbMxcUrl, useAuthentication);
       if (!mediaUrl) throw new Error('Invalid media URL');
       if (encInfo) {
-        const desktopMediaAsset = await loadDesktopMediaAssetBytes(
-          mediaUrl,
-          'visible',
-          thumbInfo.mimetype ?? FALLBACK_MIMETYPE
+        const fileContent = await downloadEncryptedMedia(mediaUrl, (encBuf) =>
+          decryptFile(encBuf, thumbInfo.mimetype ?? FALLBACK_MIMETYPE, encInfo)
         );
-        const fileContent = desktopMediaAsset
-          ? await decryptFile(
-              desktopMediaAsset.bytes.slice().buffer,
-              thumbInfo.mimetype ?? desktopMediaAsset.mimeType ?? FALLBACK_MIMETYPE,
-              encInfo
-            )
-          : await downloadEncryptedMedia(mediaUrl, (encBuf) =>
-              decryptFile(encBuf, thumbInfo.mimetype ?? FALLBACK_MIMETYPE, encInfo)
-            );
         return URL.createObjectURL(fileContent);
-      }
-
-      const desktopMediaUrl = await primeDesktopMediaAssetUrl(
-        mediaUrl,
-        'visible',
-        thumbInfo.mimetype
-      );
-      if (desktopMediaUrl) {
-        return desktopMediaUrl;
       }
 
       const preparedMediaUrl = await primeCachedMediaObjectUrl(mediaUrl, 'visible');

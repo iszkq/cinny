@@ -37,10 +37,6 @@ import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { ModalWide } from '../../../styles/Modal.css';
 import { validBlurHash } from '../../../utils/blurHash';
 import { primeCachedMediaObjectUrl } from '../../../utils/mediaUrlCache';
-import {
-  loadDesktopMediaAssetBytes,
-  primeDesktopMediaAssetUrl,
-} from '../../../utils/desktopMediaAssetCache';
 
 type RenderViewerProps = {
   src: string;
@@ -124,30 +120,10 @@ export const ImageContent = as<'div', ImageContentProps>(
         const mediaUrl = mxcUrlToHttp(mx, url, useAuthentication);
         if (!mediaUrl) throw new Error('Invalid media URL');
         if (encInfo) {
-          const desktopMediaAsset = await loadDesktopMediaAssetBytes(
-            mediaUrl,
-            'visible',
-            mimeType ?? FALLBACK_MIMETYPE
+          const fileContent = await downloadEncryptedMedia(mediaUrl, (encBuf) =>
+            decryptFile(encBuf, mimeType ?? FALLBACK_MIMETYPE, encInfo)
           );
-          const fileContent = desktopMediaAsset
-            ? await decryptFile(
-                desktopMediaAsset.bytes.slice().buffer,
-                mimeType ?? desktopMediaAsset.mimeType ?? FALLBACK_MIMETYPE,
-                encInfo
-              )
-            : await downloadEncryptedMedia(mediaUrl, (encBuf) =>
-                decryptFile(encBuf, mimeType ?? FALLBACK_MIMETYPE, encInfo)
-              );
           return URL.createObjectURL(fileContent);
-        }
-
-        const desktopMediaUrl = await primeDesktopMediaAssetUrl(
-          mediaUrl,
-          'visible',
-          mimeType ?? info?.mimetype
-        );
-        if (desktopMediaUrl) {
-          return desktopMediaUrl;
         }
 
         const preparedMediaUrl = await primeCachedMediaObjectUrl(mediaUrl, 'visible');
