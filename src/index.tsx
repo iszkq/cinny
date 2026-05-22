@@ -25,6 +25,7 @@ document.body.classList.add(configClass, varsClass);
 const fallbackSession = getFallbackSession();
 
 if (isDesktopUpdaterSupported()) {
+  document.documentElement.dataset.cinnyDesktopApp = 'true';
   applyDesktopStartupPinLock(fallbackSession?.baseUrl, fallbackSession?.userId);
 }
 
