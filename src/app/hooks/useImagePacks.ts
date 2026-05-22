@@ -28,12 +28,16 @@ import {
 } from '../components/emoji-board/components/media';
 import { useSyncState } from './useSyncState';
 
-const GLOBAL_IMAGE_PACK_WARM_DELAY_MS = 45000;
-const GLOBAL_IMAGE_PACK_OBJECT_WARM_DELAY_MS = 48000;
-const WEB_IMAGE_PACK_PERSISTENT_WARM_DELAY_MS = 12000;
-const WEB_IMAGE_PACK_OBJECT_WARM_DELAY_MS = 15000;
+const GLOBAL_IMAGE_PACK_WARM_DELAY_MS = 1500;
+const GLOBAL_IMAGE_PACK_OBJECT_WARM_DELAY_MS = 2400;
+const WEB_IMAGE_PACK_PRIORITY_OBJECT_WARM_DELAY_MS = 0;
+const WEB_IMAGE_PACK_PRIORITY_PERSISTENT_WARM_DELAY_MS = 900;
+const WEB_IMAGE_PACK_SECONDARY_OBJECT_WARM_DELAY_MS = 1800;
+const WEB_IMAGE_PACK_SECONDARY_PERSISTENT_WARM_DELAY_MS = 2800;
 const WEB_IMAGE_PACK_WARM_BATCH_SIZE = 12;
-const WEB_IMAGE_PACK_OBJECT_WARM_LIMIT = 64;
+const WEB_IMAGE_PACK_WARM_BATCH_DELAY_MS = 650;
+const WEB_IMAGE_PACK_PRIORITY_OBJECT_WARM_LIMIT = 96;
+const WEB_IMAGE_PACK_SECONDARY_OBJECT_WARM_LIMIT = 192;
 const IMAGE_PACK_AVATAR_SIZE = 64;
 const IMAGE_PACK_EMOTICON_SIZE = 64;
 const IMAGE_PACK_STICKER_SIZE = 256;
@@ -110,13 +114,20 @@ const scheduleWebImagePackMediaWarm = (
   mx: ReturnType<typeof useMatrixClient>,
   useAuthentication: boolean,
   packs: ImagePack[],
-  usages: ImageUsage[]
+  usages: ImageUsage[],
+  options: {
+    objectWarmDelayMs: number;
+    persistentWarmDelayMs: number;
+    objectWarmLimit: number;
+  }
 ) => {
   let disposed = false;
   const timers: number[] = [];
-  const persistentUrls = Array.from(getImagePackMediaUrls(mx, useAuthentication, packs, usages));
   const objectUrls = Array.from(getImagePackPrimaryMediaUrls(mx, useAuthentication, packs, usages))
-    .slice(0, WEB_IMAGE_PACK_OBJECT_WARM_LIMIT);
+    .slice(0, options.objectWarmLimit);
+  const objectUrlSet = new Set(objectUrls);
+  const persistentUrls = Array.from(getImagePackMediaUrls(mx, useAuthentication, packs, usages))
+    .filter((mediaUrl) => !objectUrlSet.has(mediaUrl));
 
   const scheduleBatch = (
     urls: string[],
@@ -138,15 +149,15 @@ const scheduleWebImagePackMediaWarm = (
           }
 
           batch.forEach(action);
-        }, initialDelay + batchIndex * 900)
+        }, initialDelay + batchIndex * WEB_IMAGE_PACK_WARM_BATCH_DELAY_MS)
       );
     }
   };
 
-  scheduleBatch(objectUrls, 0, (mediaUrl) => {
+  scheduleBatch(objectUrls, options.objectWarmDelayMs, (mediaUrl) => {
     void primeCachedMediaObjectUrl(mediaUrl, 'background');
   });
-  scheduleBatch(persistentUrls, WEB_IMAGE_PACK_OBJECT_WARM_DELAY_MS, (mediaUrl) => {
+  scheduleBatch(persistentUrls, options.persistentWarmDelayMs, (mediaUrl) => {
     void primePersistentMediaUrl(mediaUrl, 'background');
   });
 
@@ -666,34 +677,70 @@ export const useWarmWebImagePackMedia = () => {
   const warmReady = useBackgroundMediaWarmReady();
   const userPack = useUserImagePack();
   const customUserPacks = useCustomUserImagePacks();
+  const globalPacks = useGlobalImagePacks();
+  const rooms = useJoinedRooms();
+  const roomsPacks = useRoomsImagePacks(rooms);
 
-  const relevantPacks = useMemo(
-    () => getPersonalPacks(userPack, customUserPacks),
-    [userPack, customUserPacks]
+  const priorityPacks = useMemo(
+    () => getUniversalPacks(userPack, customUserPacks, globalPacks),
+    [userPack, customUserPacks, globalPacks]
   );
+  const relevantPacks = useMemo(
+    () => getRelevantPacks(userPack, customUserPacks, globalPacks, roomsPacks),
+    [userPack, customUserPacks, globalPacks, roomsPacks]
+  );
+  const secondaryPacks = useMemo(() => {
+    const priorityPackIds = new Set(priorityPacks.map((pack) => pack.id));
+
+    return relevantPacks.filter((pack) => !priorityPackIds.has(pack.id));
+  }, [priorityPacks, relevantPacks]);
+
+  const hasWarmTargets = priorityPacks.length > 0 || secondaryPacks.length > 0;
 
   useEffect(() => {
-    if (!warmReady || relevantPacks.length === 0) {
+    if (!warmReady || !hasWarmTargets) {
       return undefined;
     }
 
-    let disposed = false;
-    let warmCleanup: (() => void) | undefined;
-    const warmDelayTimer = window.setTimeout(() => {
-      if (!disposed) {
-        warmCleanup = scheduleWebImagePackMediaWarm(mx, useAuthentication, relevantPacks, [
-          ImageUsage.Emoticon,
-          ImageUsage.Sticker,
-        ]);
-      }
-    }, WEB_IMAGE_PACK_PERSISTENT_WARM_DELAY_MS);
+    const cleanups: Array<() => void> = [];
+
+    // Warm personal/global packs first so they are reusable across rooms and DMs.
+    if (priorityPacks.length > 0) {
+      cleanups.push(
+        scheduleWebImagePackMediaWarm(
+          mx,
+          useAuthentication,
+          priorityPacks,
+          [ImageUsage.Emoticon, ImageUsage.Sticker],
+          {
+            objectWarmDelayMs: WEB_IMAGE_PACK_PRIORITY_OBJECT_WARM_DELAY_MS,
+            persistentWarmDelayMs: WEB_IMAGE_PACK_PRIORITY_PERSISTENT_WARM_DELAY_MS,
+            objectWarmLimit: WEB_IMAGE_PACK_PRIORITY_OBJECT_WARM_LIMIT,
+          }
+        )
+      );
+    }
+
+    if (secondaryPacks.length > 0) {
+      cleanups.push(
+        scheduleWebImagePackMediaWarm(
+          mx,
+          useAuthentication,
+          secondaryPacks,
+          [ImageUsage.Emoticon, ImageUsage.Sticker],
+          {
+            objectWarmDelayMs: WEB_IMAGE_PACK_SECONDARY_OBJECT_WARM_DELAY_MS,
+            persistentWarmDelayMs: WEB_IMAGE_PACK_SECONDARY_PERSISTENT_WARM_DELAY_MS,
+            objectWarmLimit: WEB_IMAGE_PACK_SECONDARY_OBJECT_WARM_LIMIT,
+          }
+        )
+      );
+    }
 
     return () => {
-      disposed = true;
-      window.clearTimeout(warmDelayTimer);
-      warmCleanup?.();
+      cleanups.forEach((cleanup) => cleanup());
     };
-  }, [mx, relevantPacks, useAuthentication, warmReady]);
+  }, [mx, hasWarmTargets, priorityPacks, secondaryPacks, useAuthentication, warmReady]);
 };
 
 export const useWarmUniversalImagePackMedia = () => {
