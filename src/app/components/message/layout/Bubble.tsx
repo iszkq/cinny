@@ -38,7 +38,7 @@ export const BubbleLayout = as<'div', BubbleLayoutProps>(
       <Box className={css.BubbleBefore} shrink="No">
         {before}
       </Box>
-      <Box grow="Yes" direction="Column">
+      <Box className={css.MessageContent} grow="Yes" direction="Column">
         {header}
         {hideBubble ? (
           children

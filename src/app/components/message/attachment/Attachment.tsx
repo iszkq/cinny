@@ -4,11 +4,11 @@ import classNames from 'classnames';
 import * as css from './Attachment.css';
 
 export const Attachment = as<'div', css.AttachmentVariants>(
-  ({ className, outlined, ...props }, ref) => (
+  ({ className, outlined, mediaContent, ...props }, ref) => (
     <Box
       display="InlineFlex"
       direction="Column"
-      className={classNames(css.Attachment({ outlined }), className)}
+      className={classNames(css.Attachment({ outlined, mediaContent }), className)}
       {...props}
       ref={ref}
     />

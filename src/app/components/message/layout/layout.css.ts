@@ -86,6 +86,15 @@ export const MessageBase = recipe({
       marginTop: SpacingVar,
       padding: `${config.space.S100} ${config.space.S200} ${config.space.S100} ${config.space.S400}`,
       borderRadius: `0 ${config.radii.R400} ${config.radii.R400} 0`,
+      '@media': {
+        'screen and (max-width: 750px)': {
+          selectors: {
+            'html[data-cinny-desktop-app="true"] &': {
+              padding: `${config.space.S100} ${config.space.S100} ${config.space.S100} ${config.space.S200}`,
+            },
+          },
+        },
+      },
     },
   ],
   variants: {
@@ -134,12 +143,18 @@ export const ModernBefore = style({
   minWidth: toRem(36),
 });
 
+export const MessageContent = style({
+  minWidth: 0,
+  maxWidth: '100%',
+});
+
 export const BubbleBefore = style({
   minWidth: toRem(36),
 });
 
 export const BubbleContent = style({
-  maxWidth: toRem(800),
+  boxSizing: 'border-box',
+  maxWidth: `min(${toRem(800)}, 100%)`,
   padding: config.space.S200,
   backgroundColor: color.SurfaceVariant.Container,
   color: color.SurfaceVariant.OnContainer,

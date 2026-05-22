@@ -197,21 +197,16 @@ export function MImage({ content, renderImageContent, outlined }: MImageProps) {
   }
   const imageWidth = typeof imgInfo?.w === 'number' && imgInfo.w > 0 ? imgInfo.w : undefined;
   const imageHeight = typeof imgInfo?.h === 'number' && imgInfo.h > 0 ? imgInfo.h : undefined;
-  const hasAspectRatio =
-    typeof imageWidth === 'number' && typeof imageHeight === 'number';
-  const height = scaleYDimension(imageWidth || 400, 400, imageHeight || 400);
-  const imageBoxStyle: CSSProperties = hasAspectRatio
-    ? {
-        aspectRatio: `${imageWidth} / ${imageHeight}`,
-        height: 'auto',
-        minHeight: toRem(48),
-      }
-    : {
-        height: toRem(height < 48 ? 48 : height),
-      };
+  const hasAspectRatio = typeof imageWidth === 'number' && typeof imageHeight === 'number';
+  const imageBoxStyle: CSSProperties = {
+    aspectRatio: hasAspectRatio ? `${imageWidth} / ${imageHeight}` : '1 / 1',
+    height: 'auto',
+    minHeight: toRem(48),
+    maxHeight: `min(${toRem(600)}, 68vh)`,
+  };
 
   return (
-    <Attachment outlined={outlined}>
+    <Attachment outlined={outlined} mediaContent>
       <AttachmentBox style={imageBoxStyle}>
         {renderImageContent({
           body: content.body || 'Image',
@@ -254,12 +249,13 @@ export function MVideo({ content, renderAsFile, renderVideoContent, outlined }: 
     return <BrokenContent />;
   }
 
-  const height = scaleYDimension(videoInfo.w || 400, 400, videoInfo.h || 400);
+  const videoWidth = typeof videoInfo.w === 'number' && videoInfo.w > 0 ? videoInfo.w : 400;
+  const videoHeight = typeof videoInfo.h === 'number' && videoInfo.h > 0 ? videoInfo.h : 400;
 
   const filename = content.filename ?? content.body ?? 'Video';
 
   return (
-    <Attachment outlined={outlined}>
+    <Attachment outlined={outlined} mediaContent>
       <AttachmentHeader>
         <FileHeader
           body={filename}
@@ -276,7 +272,10 @@ export function MVideo({ content, renderAsFile, renderVideoContent, outlined }: 
       </AttachmentHeader>
       <AttachmentBox
         style={{
-          height: toRem(height < 48 ? 48 : height),
+          aspectRatio: `${videoWidth} / ${videoHeight}`,
+          height: 'auto',
+          minHeight: toRem(48),
+          maxHeight: `min(${toRem(600)}, 68vh)`,
         }}
       >
         {renderVideoContent({
@@ -441,6 +440,7 @@ export function MSticker({ content, renderImageContent }: MStickerProps) {
       style={{
         height: toRem(height < 48 ? 48 : height),
         width: toRem(152),
+        maxWidth: 'min(100%, 45vw)',
       }}
     >
       {renderImageContent({
