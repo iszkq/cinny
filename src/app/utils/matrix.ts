@@ -31,12 +31,69 @@ const AUTH_MEDIA_PATH_TO_FALLBACK_PATH: Record<string, string[]> = {
     '/_matrix/media/r0/thumbnail',
   ],
 };
+const AUTH_MEDIA_PATHS = Object.keys(AUTH_MEDIA_PATH_TO_FALLBACK_PATH);
+
+const removeAllowRedirectParam = (src: string): string => {
+  try {
+    const url = new URL(src, typeof window === 'undefined' ? undefined : window.location.href);
+    url.searchParams.delete('allow_redirect');
+    return url.toString();
+  } catch {
+    return src;
+  }
+};
 
 export const fetchMediaWithAuth = async (
   src: string,
   init?: RequestInit
 ): Promise<Response> => {
-  return fetch(src, init);
+  const session = getFallbackSession();
+  if (!session || !isSessionMediaUrl(src, session.baseUrl)) {
+    return fetch(src, init);
+  }
+
+  const baseHeaders = new Headers(init?.headers);
+  const authHeaders = new Headers(baseHeaders);
+  if (!authHeaders.has('Authorization')) {
+    authHeaders.set('Authorization', `Bearer ${session.accessToken}`);
+  }
+
+  const requestUrls = getMediaRequestUrls(src, session.baseUrl);
+  let lastResponse: Response | undefined;
+  let lastError: unknown;
+
+  for (const requestUrl of requestUrls) {
+    const requestHeadersList = isSessionMediaUrl(requestUrl, session.baseUrl)
+      ? [authHeaders, baseHeaders]
+      : [baseHeaders];
+
+    for (const headers of requestHeadersList) {
+      // eslint-disable-next-line no-await-in-loop
+      const response = await fetch(requestUrl, {
+        ...init,
+        headers,
+      }).catch((error) => {
+        lastError = error;
+        return undefined;
+      });
+
+      if (!response) {
+        continue;
+      }
+
+      if (response.ok) {
+        return response;
+      }
+
+      lastResponse = response;
+    }
+  }
+
+  if (lastResponse) {
+    return lastResponse;
+  }
+
+  throw lastError ?? new Error('Failed to fetch media');
 };
 
 const getAbsoluteUrl = (src: string, baseUrl: string): URL | undefined => {
@@ -54,7 +111,7 @@ const isSessionMediaUrl = (src: string, baseUrl: string): boolean => {
     return false;
   }
 
-  return Object.keys(AUTH_MEDIA_PATH_TO_FALLBACK_PATH).some((path) =>
+  return AUTH_MEDIA_PATHS.some((path) =>
     mediaUrl.href.startsWith(new URL(path, baseUrl).href)
   );
 };
@@ -75,46 +132,30 @@ const getPublicMediaFallbackUrls = (src: string, baseUrl: string): string[] => {
 
   return fallbackPaths.map((fallbackPath) => {
     const fallbackUrl = new URL(mediaUrl.toString());
-    fallbackUrl.pathname = mediaUrl.pathname.replace(
-      /^\/_matrix\/client\/v1\/media\/(download|thumbnail)/,
-      fallbackPath
-    );
+    const matchingPath = AUTH_MEDIA_PATHS.find((path) => mediaUrl.pathname.startsWith(path));
+    if (!matchingPath) {
+      return fallbackUrl.toString();
+    }
+    fallbackUrl.pathname = `${fallbackPath}${mediaUrl.pathname.slice(matchingPath.length)}`;
     return fallbackUrl.toString();
   });
 };
 
-const fetchMediaForDownloadFallback = async (
-  src: string,
-  init?: RequestInit
-): Promise<Response | undefined> => {
-  const session = getFallbackSession();
-  if (!session || !isSessionMediaUrl(src, session.baseUrl)) {
-    return undefined;
-  }
+const getMediaRequestUrls = (src: string, baseUrl: string): string[] => {
+  const strippedSrc = removeAllowRedirectParam(src);
+  const requestUrls = [src, strippedSrc];
 
-  const headers = new Headers(init?.headers);
-  if (!headers.has('Authorization')) {
-    headers.set('Authorization', `Bearer ${session.accessToken}`);
-  }
+  getPublicMediaFallbackUrls(src, baseUrl).forEach((fallbackUrl) => {
+    requestUrls.push(fallbackUrl);
+  });
+  getPublicMediaFallbackUrls(strippedSrc, baseUrl).forEach((fallbackUrl) => {
+    requestUrls.push(fallbackUrl);
+  });
 
-  const authResponse = await fetch(src, {
-    ...init,
-    headers,
-  }).catch(() => undefined);
-  if (authResponse?.ok) {
-    return authResponse;
-  }
-
-  const fallbackUrls = getPublicMediaFallbackUrls(src, session.baseUrl);
-  for (const fallbackUrl of fallbackUrls) {
-    // eslint-disable-next-line no-await-in-loop
-    const fallbackResponse = await fetch(fallbackUrl, init).catch(() => undefined);
-    if (fallbackResponse?.ok) {
-      return fallbackResponse;
-    }
-  }
-
-  return undefined;
+  return requestUrls.filter(
+    (requestUrl, index) =>
+      requestUrl.length > 0 && requestUrls.findIndex((url) => url === requestUrl) === index
+  );
 };
 
 export const isServerName = (serverName: string): boolean => DOMAIN_REGEX.test(serverName);
@@ -408,11 +449,9 @@ export const mxcUrlToHttp = (
 
 export const downloadMedia = async (src: string): Promise<Blob> => {
   const init: RequestInit = { method: 'GET' };
-  const res = await fetchMediaWithAuth(src, init).catch(() => undefined);
-  const downloadResponse =
-    res && res.ok ? res : await fetchMediaForDownloadFallback(src, init);
+  const downloadResponse = await fetchMediaWithAuth(src, init).catch(() => undefined);
 
-  if (!downloadResponse) {
+  if (!downloadResponse?.ok) {
     throw new Error('Failed to download media');
   }
 
