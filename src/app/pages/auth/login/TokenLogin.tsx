@@ -17,7 +17,10 @@ import { APP_WEB_DEVICE_NAME } from '../../../constants/branding';
 import { useAutoDiscoveryInfo } from '../../../hooks/useAutoDiscoveryInfo';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { AccountPinDialog } from '../../../components/pin-lock';
-import { resolveAccountPinLoginRequirement } from '../../../utils/pinLock';
+import {
+  markAccountPinVerified,
+  resolveAccountPinLoginRequirement,
+} from '../../../utils/pinLock';
 import { completeLogin, CustomLoginResponse, LoginError, login } from './loginUtil';
 
 const copy = {
@@ -177,7 +180,13 @@ export function TokenLogin({ token }: TokenLoginProps) {
           description={copy.pinDescription}
           submitLabel={copy.continueLogin}
           onCancel={() => setPinProtectedLogin(undefined)}
-          onSuccess={() => completeLogin(pinProtectedLogin, navigate)}
+          onSuccess={() => {
+            markAccountPinVerified(
+              pinProtectedLogin.baseUrl,
+              pinProtectedLogin.response.user_id
+            );
+            completeLogin(pinProtectedLogin, navigate);
+          }}
         />
       )}
     </>

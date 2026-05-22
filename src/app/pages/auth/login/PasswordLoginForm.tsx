@@ -38,7 +38,10 @@ import { PasswordInput } from '../../../components/password-input';
 import { FieldError } from '../FiledError';
 import { getResetPasswordPath } from '../../pathUtils';
 import { stopPropagation } from '../../../utils/keyboard';
-import { resolveAccountPinLoginRequirement } from '../../../utils/pinLock';
+import {
+  markAccountPinVerified,
+  resolveAccountPinLoginRequirement,
+} from '../../../utils/pinLock';
 import { AccountPinDialog } from '../../../components/pin-lock';
 
 const copy = {
@@ -368,7 +371,13 @@ export function PasswordLoginForm({ defaultUsername, defaultEmail }: PasswordLog
           description={copy.pinDescription}
           submitLabel={copy.continueLogin}
           onCancel={() => setPinProtectedLogin(undefined)}
-          onSuccess={() => completeLogin(pinProtectedLogin, navigate)}
+          onSuccess={() => {
+            markAccountPinVerified(
+              pinProtectedLogin.baseUrl,
+              pinProtectedLogin.response.user_id
+            );
+            completeLogin(pinProtectedLogin, navigate);
+          }}
         />
       )}
     </Box>
