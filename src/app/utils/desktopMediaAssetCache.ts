@@ -16,6 +16,7 @@ const DESKTOP_MEDIA_PRELOAD_CONCURRENCY = 2;
 type FallbackSession = {
   baseUrl: string;
   userId: string;
+  accessToken: string;
 };
 
 const cachedDesktopMediaAssetUrls = new Map<string, string>();
@@ -40,14 +41,16 @@ const getDesktopFallbackSession = (): FallbackSession | undefined => {
 
   const baseUrl = window.localStorage.getItem('cinny_hs_base_url');
   const userId = window.localStorage.getItem('cinny_user_id');
+  const accessToken = window.localStorage.getItem('cinny_access_token');
 
-  if (!baseUrl || !userId) {
+  if (!baseUrl || !userId || !accessToken) {
     return undefined;
   }
 
   return {
     baseUrl,
     userId,
+    accessToken,
   };
 };
 
@@ -101,6 +104,7 @@ const promoteDesktopMediaTask = (cacheKey: string) => {
 const cacheDesktopMediaAssetOnDisk = async (
   accountKey: string,
   sourceUrl: string,
+  accessToken: string,
   mimeType?: string
 ): Promise<string | undefined> => {
   const { convertFileSrc, invoke } = await import('@tauri-apps/api/core');
@@ -108,6 +112,7 @@ const cacheDesktopMediaAssetOnDisk = async (
     request: {
       accountKey,
       sourceUrl,
+      accessToken,
       mimeType,
     },
   });
@@ -128,7 +133,20 @@ const flushDesktopMediaQueue = () => {
     queuedDesktopMediaTasks.delete(task.cacheKey);
     activeDesktopMediaTasks += 1;
 
-    cacheDesktopMediaAssetOnDisk(task.accountKey, task.sourceUrl, task.mimeType)
+    const session = getDesktopFallbackSession();
+    if (!session) {
+      pendingDesktopMediaAssetUrls.delete(task.cacheKey);
+      activeDesktopMediaTasks -= 1;
+      task.resolve(undefined);
+      continue;
+    }
+
+    cacheDesktopMediaAssetOnDisk(
+      task.accountKey,
+      task.sourceUrl,
+      session.accessToken,
+      task.mimeType
+    )
       .catch(() => undefined)
       .then((assetUrl) => {
         if (assetUrl) {
