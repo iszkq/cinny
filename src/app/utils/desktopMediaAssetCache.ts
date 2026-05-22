@@ -8,6 +8,11 @@ type DesktopMediaAssetPayload = {
   mimeType?: string;
 };
 
+type DesktopMediaRuntimeAsset = {
+  filePath: string;
+  mimeType?: string;
+};
+
 export type DesktopMediaAssetBytes = {
   bytes: Uint8Array;
   mimeType?: string;
@@ -37,6 +42,15 @@ type DesktopMediaWarmTask = {
   resolve: (value: boolean) => void;
 };
 
+type DesktopMediaUrlTask = {
+  cacheKey: string;
+  accountKey: string;
+  sourceUrl: string;
+  mimeType?: string;
+  priority: DesktopMediaPriority;
+  resolve: (value: string | undefined) => void;
+};
+
 const DESKTOP_MEDIA_READ_CONCURRENCY = 4;
 const DESKTOP_MEDIA_WARM_CONCURRENCY = 2;
 
@@ -55,12 +69,16 @@ const pendingDesktopMediaAssetUrls = new Map<string, Promise<string | undefined>
 const pendingDesktopMediaWarmTasks = new Map<string, Promise<boolean>>();
 const queuedDesktopMediaTasks = new Map<string, DesktopMediaTask>();
 const queuedDesktopMediaWarmTasks = new Map<string, DesktopMediaWarmTask>();
+const queuedDesktopMediaUrlTasks = new Map<string, DesktopMediaUrlTask>();
 const visibleDesktopMediaQueue: DesktopMediaTask[] = [];
 const backgroundDesktopMediaQueue: DesktopMediaTask[] = [];
 const visibleDesktopMediaWarmQueue: DesktopMediaWarmTask[] = [];
 const backgroundDesktopMediaWarmQueue: DesktopMediaWarmTask[] = [];
+const visibleDesktopMediaUrlQueue: DesktopMediaUrlTask[] = [];
+const backgroundDesktopMediaUrlQueue: DesktopMediaUrlTask[] = [];
 let activeDesktopMediaTasks = 0;
 let activeDesktopMediaWarmTasks = 0;
+let activeDesktopMediaUrlTasks = 0;
 let desktopMediaCleanupBound = false;
 let currentDesktopMediaAccountKey: string | undefined;
 
@@ -143,10 +161,14 @@ const bindDesktopMediaCleanup = () => {
       pendingDesktopMediaWarmTasks.clear();
       queuedDesktopMediaTasks.clear();
       queuedDesktopMediaWarmTasks.clear();
+      queuedDesktopMediaUrlTasks.clear();
       visibleDesktopMediaQueue.length = 0;
       backgroundDesktopMediaQueue.length = 0;
       visibleDesktopMediaWarmQueue.length = 0;
       backgroundDesktopMediaWarmQueue.length = 0;
+      visibleDesktopMediaUrlQueue.length = 0;
+      backgroundDesktopMediaUrlQueue.length = 0;
+      void clearDesktopMediaRuntimeCache();
     },
     { once: true }
   );
@@ -204,6 +226,24 @@ const promoteDesktopMediaWarmTask = (cacheKey: string) => {
   visibleDesktopMediaWarmQueue.push(queuedTask);
 };
 
+const removeQueuedDesktopMediaUrlTask = (queue: DesktopMediaUrlTask[], cacheKey: string) => {
+  const queueIndex = queue.findIndex((task) => task.cacheKey === cacheKey);
+  if (queueIndex >= 0) {
+    queue.splice(queueIndex, 1);
+  }
+};
+
+const promoteDesktopMediaUrlTask = (cacheKey: string) => {
+  const queuedTask = queuedDesktopMediaUrlTasks.get(cacheKey);
+  if (!queuedTask || queuedTask.priority === 'visible') {
+    return;
+  }
+
+  removeQueuedDesktopMediaUrlTask(backgroundDesktopMediaUrlQueue, cacheKey);
+  queuedTask.priority = 'visible';
+  visibleDesktopMediaUrlQueue.push(queuedTask);
+};
+
 const decodeDesktopMediaBase64 = (dataBase64: string): Uint8Array => {
   const binary = window.atob(dataBase64);
   const bytes = new Uint8Array(binary.length);
@@ -213,15 +253,6 @@ const decodeDesktopMediaBase64 = (dataBase64: string): Uint8Array => {
   }
 
   return bytes;
-};
-
-const payloadToObjectUrl = (payload: DesktopMediaAssetPayload): string => {
-  const bytes = decodeDesktopMediaBase64(payload.dataBase64);
-  const mediaBlob = payload.mimeType
-    ? new Blob([bytes], { type: payload.mimeType })
-    : new Blob([bytes]);
-
-  return URL.createObjectURL(mediaBlob);
 };
 
 const storeDesktopMediaAssetUrl = (cacheKey: string, assetUrl: string) => {
@@ -267,6 +298,41 @@ const readDesktopMediaAssetPayload = async (
       mimeType,
     },
   });
+};
+
+const prepareDesktopMediaAssetRuntimeUrl = async (
+  accountKey: string,
+  sourceUrl: string,
+  accessToken: string,
+  mimeType?: string
+): Promise<string | undefined> => {
+  const tauriCore = await import('@tauri-apps/api/core');
+  const runtimeAsset = await tauriCore.invoke<DesktopMediaRuntimeAsset>(
+    'prepare_desktop_media_asset_runtime_file',
+    {
+      request: {
+        accountKey,
+        sourceUrl,
+        accessToken,
+        mimeType,
+      },
+    }
+  );
+
+  if (!runtimeAsset.filePath) {
+    return undefined;
+  }
+
+  return tauriCore.convertFileSrc(runtimeAsset.filePath);
+};
+
+export const clearDesktopMediaRuntimeCache = async (): Promise<void> => {
+  if (!isDesktopUpdaterSupported()) {
+    return;
+  }
+
+  const { invoke } = await import('@tauri-apps/api/core');
+  await invoke('clear_desktop_media_runtime_cache').catch(() => undefined);
 };
 
 const flushDesktopMediaQueue = () => {
@@ -354,6 +420,61 @@ const flushDesktopMediaWarmQueue = () => {
         pendingDesktopMediaWarmTasks.delete(task.cacheKey);
         activeDesktopMediaWarmTasks -= 1;
         flushDesktopMediaWarmQueue();
+      });
+  }
+};
+
+const resolveDesktopMediaUrlTask = async (
+  task: DesktopMediaUrlTask
+): Promise<string | undefined> => {
+  const pendingWarmTask = pendingDesktopMediaWarmTasks.get(task.cacheKey);
+  if (pendingWarmTask) {
+    if (task.priority === 'visible') {
+      promoteDesktopMediaWarmTask(task.cacheKey);
+    }
+    await pendingWarmTask.catch(() => false);
+  }
+
+  const identity = getDesktopMediaIdentity(task.sourceUrl);
+  if (!identity || identity.accountKey !== task.accountKey) {
+    return undefined;
+  }
+
+  return prepareDesktopMediaAssetRuntimeUrl(
+    task.accountKey,
+    task.sourceUrl,
+    identity.accessToken,
+    task.mimeType
+  ).catch(() => undefined);
+};
+
+const flushDesktopMediaUrlQueue = () => {
+  while (
+    activeDesktopMediaUrlTasks < DESKTOP_MEDIA_READ_CONCURRENCY &&
+    (visibleDesktopMediaUrlQueue.length > 0 || backgroundDesktopMediaUrlQueue.length > 0)
+  ) {
+    const task = visibleDesktopMediaUrlQueue.shift() ?? backgroundDesktopMediaUrlQueue.shift();
+    if (!task) {
+      return;
+    }
+
+    queuedDesktopMediaUrlTasks.delete(task.cacheKey);
+    activeDesktopMediaUrlTasks += 1;
+
+    resolveDesktopMediaUrlTask(task)
+      .then((assetUrl) => {
+        if (assetUrl && currentDesktopMediaAccountKey === task.accountKey) {
+          storeDesktopMediaAssetUrl(task.cacheKey, assetUrl);
+          task.resolve(assetUrl);
+          return;
+        }
+
+        task.resolve(undefined);
+      })
+      .finally(() => {
+        pendingDesktopMediaAssetUrls.delete(task.cacheKey);
+        activeDesktopMediaUrlTasks -= 1;
+        flushDesktopMediaUrlQueue();
       });
   }
 };
@@ -470,6 +591,15 @@ export const warmDesktopMediaAssetCache = (
     return Promise.resolve(true);
   }
 
+  const pendingAssetUrl = pendingDesktopMediaAssetUrls.get(identity.cacheKey);
+  if (pendingAssetUrl) {
+    if (priority === 'visible') {
+      promoteDesktopMediaUrlTask(identity.cacheKey);
+    }
+
+    return pendingAssetUrl.then((assetUrl) => Boolean(assetUrl));
+  }
+
   const pendingPayloadTask = pendingDesktopMediaAssetPayloads.get(identity.cacheKey);
   if (pendingPayloadTask) {
     if (priority === 'visible') {
@@ -561,33 +691,31 @@ export const primeDesktopMediaAssetUrl = (
   const pendingAssetUrl = pendingDesktopMediaAssetUrls.get(identity.cacheKey);
   if (pendingAssetUrl) {
     if (priority === 'visible') {
-      promoteDesktopMediaTask(identity.cacheKey);
+      promoteDesktopMediaUrlTask(identity.cacheKey);
     }
     return pendingAssetUrl;
   }
 
-  const payloadPromise = primeDesktopMediaAssetPayload(sourceUrl, priority, mimeType);
-  if (!payloadPromise) {
-    return undefined;
-  }
+  const assetUrlPromise = new Promise<string | undefined>((resolve) => {
+    const task: DesktopMediaUrlTask = {
+      cacheKey: identity.cacheKey,
+      accountKey: identity.accountKey,
+      sourceUrl,
+      mimeType,
+      priority,
+      resolve,
+    };
 
-  const assetUrlPromise = payloadPromise.then((payload) => {
-    if (!payload || currentDesktopMediaAccountKey !== identity.accountKey) {
-      return undefined;
+    queuedDesktopMediaUrlTasks.set(identity.cacheKey, task);
+    if (priority === 'visible') {
+      visibleDesktopMediaUrlQueue.push(task);
+    } else {
+      backgroundDesktopMediaUrlQueue.push(task);
     }
-
-    const existingAssetUrl = cachedDesktopMediaAssetUrls.get(identity.cacheKey);
-    if (existingAssetUrl) {
-      return existingAssetUrl;
-    }
-
-    const assetUrl = payloadToObjectUrl(payload);
-    storeDesktopMediaAssetUrl(identity.cacheKey, assetUrl);
-    return assetUrl;
   });
 
   pendingDesktopMediaAssetUrls.set(identity.cacheKey, assetUrlPromise);
-  return assetUrlPromise.finally(() => {
-    pendingDesktopMediaAssetUrls.delete(identity.cacheKey);
-  });
+  window.setTimeout(flushDesktopMediaUrlQueue, 0);
+
+  return assetUrlPromise;
 };
