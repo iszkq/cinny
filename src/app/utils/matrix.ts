@@ -32,6 +32,8 @@ const AUTH_MEDIA_PATH_TO_FALLBACK_PATH: Record<string, string[]> = {
   ],
 };
 const AUTH_MEDIA_PATHS = Object.keys(AUTH_MEDIA_PATH_TO_FALLBACK_PATH);
+const MATRIX_MEDIA_PATH_MATCHER =
+  /^\/_matrix\/(?:client\/[^/]+\/media|media\/[^/]+)\/(?:download|thumbnail)\//i;
 
 const removeAllowRedirectParam = (src: string): string => {
   try {
@@ -199,6 +201,22 @@ export const isMxcUrl = (url: string | undefined | null): url is string =>
 
 export const isHttpUrl = (url: string | undefined | null): url is string =>
   typeof url === 'string' && /^(https?):\/\//i.test(url);
+
+export const shouldUseObjectUrlForMediaDisplay = (src: string | undefined): boolean => {
+  if (!src || typeof window === 'undefined' || !isHttpUrl(src)) {
+    return false;
+  }
+
+  try {
+    const mediaUrl = new URL(src, window.location.href);
+    return (
+      mediaUrl.origin !== window.location.origin &&
+      MATRIX_MEDIA_PATH_MATCHER.test(mediaUrl.pathname)
+    );
+  } catch {
+    return false;
+  }
+};
 
 export const getImageInfo = (img: HTMLImageElement, fileOrBlob: File | Blob): IImageInfo => {
   const info: IImageInfo = {};
