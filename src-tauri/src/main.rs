@@ -177,6 +177,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             desktop_media_cache::cache_desktop_media_asset,
             desktop_media_cache::read_desktop_media_asset,
+            desktop_media_cache::prepare_desktop_media_asset_runtime_file,
+            desktop_media_cache::clear_desktop_media_runtime_cache,
             open_external_url,
             save_downloaded_file,
             desktop_notification_permission_state,

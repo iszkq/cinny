@@ -15,6 +15,7 @@ use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Manager};
 
 const MEDIA_CACHE_ROOT_DIR: &str = "desktop-media-cache-v2";
+const MEDIA_RUNTIME_ROOT_DIR: &str = "desktop-media-runtime-v1";
 const MEDIA_FILE_NAME: &str = "media.enc";
 const MEDIA_FILE_TEMP_NAME: &str = "media.enc.download";
 const MEDIA_METADATA_FILE_NAME: &str = "metadata.json";
@@ -22,6 +23,7 @@ const MEDIA_METADATA_TEMP_FILE_NAME: &str = "metadata.json.download";
 const MEDIA_CACHE_KEY_CONTEXT: &str = "cinny-desktop-media-cache-v1";
 const MEDIA_CACHE_NONCE_SIZE: usize = 12;
 static MEDIA_HTTP_CLIENT: OnceLock<Client> = OnceLock::new();
+static MEDIA_RUNTIME_CACHE_RESET: OnceLock<()> = OnceLock::new();
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -36,6 +38,13 @@ pub struct DesktopMediaCacheRequest {
 #[serde(rename_all = "camelCase")]
 pub struct DesktopMediaAssetPayload {
     pub data_base64: String,
+    pub mime_type: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopMediaRuntimeAsset {
+    pub file_path: String,
     pub mime_type: Option<String>,
 }
 
@@ -145,6 +154,17 @@ fn get_cache_root(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(app_local_data_dir.join(MEDIA_CACHE_ROOT_DIR))
 }
 
+fn get_runtime_cache_root(app: &AppHandle) -> Result<PathBuf, String> {
+    let app_local_data_dir = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| {
+            format!("failed to resolve desktop media runtime cache directory: {error}")
+        })?;
+
+    Ok(app_local_data_dir.join(MEDIA_RUNTIME_ROOT_DIR))
+}
+
 fn get_media_http_client() -> &'static Client {
     MEDIA_HTTP_CLIENT.get_or_init(Client::new)
 }
@@ -153,6 +173,18 @@ fn get_asset_dir(root: &Path, account_key: &str, source_url: &str) -> PathBuf {
     let normalized_source_url = normalize_source_url(source_url);
     root.join(build_account_dir_name(account_key))
         .join(hash_string(&normalized_source_url))
+}
+
+fn reset_runtime_cache_root_once(root: &Path) {
+    if MEDIA_RUNTIME_CACHE_RESET.get().is_some() {
+        return;
+    }
+
+    if root.exists() {
+        let _ = fs::remove_dir_all(root);
+    }
+
+    let _ = MEDIA_RUNTIME_CACHE_RESET.set(());
 }
 
 fn get_media_file_path(asset_dir: &Path) -> PathBuf {
@@ -171,9 +203,19 @@ fn get_metadata_temp_file_path(asset_dir: &Path) -> PathBuf {
     asset_dir.join(MEDIA_METADATA_TEMP_FILE_NAME)
 }
 
+fn get_runtime_media_file_path(asset_dir: &Path, mime_type: Option<&str>) -> PathBuf {
+    asset_dir.join(format!("media.{}", extension_for_mime_type(mime_type)))
+}
+
 fn clear_cached_asset_dir(asset_dir: &Path) {
     if asset_dir.exists() {
         let _ = fs::remove_dir_all(asset_dir);
+    }
+}
+
+fn clear_runtime_cache_root(root: &Path) {
+    if root.exists() {
+        let _ = fs::remove_dir_all(root);
     }
 }
 
@@ -193,6 +235,27 @@ fn mime_type_from_url(source_url: &str) -> Option<String> {
     Url::parse(source_url)
         .ok()
         .and_then(|parsed| from_path(parsed.path()).first_raw().map(str::to_owned))
+}
+
+fn extension_for_mime_type(mime_type: Option<&str>) -> &'static str {
+    match normalize_cached_mime_type(mime_type).as_deref() {
+        Some("image/png") => "png",
+        Some("image/jpeg") => "jpg",
+        Some("image/gif") => "gif",
+        Some("image/webp") => "webp",
+        Some("image/avif") => "avif",
+        Some("image/svg+xml") => "svg",
+        Some("image/bmp") => "bmp",
+        Some("image/x-icon") | Some("image/vnd.microsoft.icon") => "ico",
+        Some("video/mp4") => "mp4",
+        Some("video/webm") => "webm",
+        Some("audio/mpeg") => "mp3",
+        Some("audio/ogg") => "ogg",
+        Some("audio/webm") => "webm",
+        Some("audio/wav") => "wav",
+        Some("application/pdf") => "pdf",
+        _ => "bin",
+    }
 }
 
 fn resolve_media_mime_type(
@@ -349,6 +412,45 @@ fn write_cached_media_asset(
     })?;
 
     Ok(())
+}
+
+fn ensure_runtime_media_asset(
+    app: &AppHandle,
+    request: &DesktopMediaCacheRequest,
+    asset: &CachedMediaAsset,
+) -> Result<DesktopMediaRuntimeAsset, String> {
+    let runtime_root = get_runtime_cache_root(app)?;
+    reset_runtime_cache_root_once(&runtime_root);
+
+    let asset_dir = get_asset_dir(&runtime_root, &request.account_key, &request.source_url);
+    let runtime_file = get_runtime_media_file_path(&asset_dir, asset.mime_type.as_deref());
+
+    if runtime_file.exists() {
+        return Ok(DesktopMediaRuntimeAsset {
+            file_path: runtime_file.to_string_lossy().to_string(),
+            mime_type: asset.mime_type.clone(),
+        });
+    }
+
+    clear_cached_asset_dir(&asset_dir);
+    fs::create_dir_all(&asset_dir).map_err(|error| {
+        format!("failed to create desktop media runtime cache directory: {error}")
+    })?;
+
+    let runtime_extension = extension_for_mime_type(asset.mime_type.as_deref());
+    let temp_runtime_file = asset_dir.join(format!("media.{runtime_extension}.download"));
+
+    fs::write(&temp_runtime_file, &asset.bytes)
+        .map_err(|error| format!("failed to write desktop media runtime file: {error}"))?;
+    fs::rename(&temp_runtime_file, &runtime_file).map_err(|error| {
+        let _ = fs::remove_file(&temp_runtime_file);
+        format!("failed to finalize desktop media runtime file: {error}")
+    })?;
+
+    Ok(DesktopMediaRuntimeAsset {
+        file_path: runtime_file.to_string_lossy().to_string(),
+        mime_type: asset.mime_type.clone(),
+    })
 }
 
 fn build_media_fallback_urls(source_url: &str) -> Vec<String> {
@@ -543,4 +645,20 @@ pub async fn read_desktop_media_asset(
         data_base64: BASE64_STANDARD.encode(&asset.bytes),
         mime_type: asset.mime_type,
     })
+}
+
+#[tauri::command]
+pub async fn prepare_desktop_media_asset_runtime_file(
+    app: AppHandle,
+    request: DesktopMediaCacheRequest,
+) -> Result<DesktopMediaRuntimeAsset, String> {
+    let asset = ensure_cached_media_asset(&app, &request).await?;
+    ensure_runtime_media_asset(&app, &request, &asset)
+}
+
+#[tauri::command]
+pub fn clear_desktop_media_runtime_cache(app: AppHandle) -> Result<(), String> {
+    let runtime_root = get_runtime_cache_root(&app)?;
+    clear_runtime_cache_root(&runtime_root);
+    Ok(())
 }

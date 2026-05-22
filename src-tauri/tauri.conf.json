@@ -25,7 +25,8 @@
       "assetProtocol": {
         "enable": true,
         "scope": [
-          "$APPLOCALDATA/emoji-media-cache/**/*"
+          "$APPLOCALDATA/emoji-media-cache/**/*",
+          "$APPLOCALDATA/desktop-media-runtime-v1/**/*"
         ]
       }
     }
