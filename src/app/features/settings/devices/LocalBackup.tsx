@@ -1,6 +1,5 @@
 import React, { FormEventHandler, useCallback, useEffect, useState } from 'react';
 import { Box, Button, color, Icon, Icons, Spinner, Text, toRem } from 'folds';
-import FileSaver from 'file-saver';
 import { SequenceCard } from '../../../components/sequence-card';
 import { SettingTile } from '../../../components/setting-tile';
 import { SequenceCardStyle } from '../styles.css';
@@ -11,6 +10,7 @@ import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { decryptMegolmKeyFile, encryptMegolmKeyFile } from '../../../../util/cryptE2ERoomKeys';
 import { useAlive } from '../../../hooks/useAlive';
 import { useFilePicker } from '../../../hooks/useFilePicker';
+import { saveDownloadedFile } from '../../../utils/saveDownloadedFile';
 
 function ExportKeys() {
   const mx = useMatrixClient();
@@ -28,7 +28,7 @@ function ExportKeys() {
         const blob = new Blob([encKeys], {
           type: 'text/plain;charset=us-ascii',
         });
-        FileSaver.saveAs(blob, 'cinny-keys.txt');
+        await saveDownloadedFile(blob, 'cinny-keys.txt');
       },
       [mx]
     )
