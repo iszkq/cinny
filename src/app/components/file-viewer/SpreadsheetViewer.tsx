@@ -8,7 +8,6 @@ import React, {
   useState,
 } from 'react';
 import classNames from 'classnames';
-import FileSaver from 'file-saver';
 import { Box, Button, Chip, Header, Icon, IconButton, Icons, Scroll, Spinner, Text, as } from 'folds';
 import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
 import {
@@ -25,6 +24,7 @@ import { PasswordInput } from '../password-input';
 import { getFileNameExt } from '../../utils/mimeTypes';
 import { useZoom } from '../../hooks/useZoom';
 import * as css from './SpreadsheetViewer.css';
+import { saveDownloadedFile } from '../../utils/saveDownloadedFile';
 
 const MODERN_ENCRYPTED_EXTS = new Set(['xlsx', 'xlsm', 'xltx', 'xltm', 'xlam']);
 const ZOOM_STEP = 0.2;
@@ -836,8 +836,8 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
       }
     };
 
-    const handleDownload = () => {
-      FileSaver.saveAs(new Blob([data], { type: mimeType }), name);
+    const handleDownload = async () => {
+      await saveDownloadedFile(new Blob([data], { type: mimeType }), name);
     };
 
     const summaryText =

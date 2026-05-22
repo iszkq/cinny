@@ -29,13 +29,13 @@ import {
   config,
 } from 'folds';
 import FocusTrap from 'focus-trap-react';
-import FileSaver from 'file-saver';
 import * as css from './PdfViewer.css';
 import { AsyncStatus } from '../../hooks/useAsyncCallback';
 import { useDragScroll } from '../../hooks/useDragScroll';
 import { useZoom } from '../../hooks/useZoom';
 import { createPage, usePdfDocumentLoader, usePdfJSLoader } from '../../plugins/pdfjs-dist';
 import { stopPropagation } from '../../utils/keyboard';
+import { saveDownloadedFile } from '../../utils/saveDownloadedFile';
 
 export type PdfViewerProps = {
   name: string;
@@ -178,8 +178,10 @@ export const PdfViewer = as<'div', PdfViewerProps>(
       };
     }, [docState, pageNo, updatePanAvailability, zoom]);
 
-    const handleDownload = () => {
-      FileSaver.saveAs(src, name);
+    const handleDownload = async () => {
+      const response = await fetch(src);
+      const fileContent = await response.blob();
+      await saveDownloadedFile(fileContent, name);
     };
 
     const handleRetry = () => {

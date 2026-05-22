@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import classNames from 'classnames';
-import FileSaver from 'file-saver';
 import { Box, Button, Chip, Header, Icon, IconButton, Icons, Scroll, Spinner, Text, as } from 'folds';
 import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
 import { useDocxPreviewLoader } from '../../plugins/docx-preview';
@@ -8,6 +7,7 @@ import { useMammothLoader } from '../../plugins/mammoth';
 import { useZoom } from '../../hooks/useZoom';
 import { getFileNameExt } from '../../utils/mimeTypes';
 import * as css from './DocxViewer.css';
+import { saveDownloadedFile } from '../../utils/saveDownloadedFile';
 
 export type DocxViewerProps = {
   name: string;
@@ -263,8 +263,8 @@ export const DocxViewer = as<'div', DocxViewerProps>(
       renderDocument().catch(() => undefined);
     };
 
-    const handleDownload = () => {
-      FileSaver.saveAs(new Blob([data], { type: mimeType }), name);
+    const handleDownload = async () => {
+      await saveDownloadedFile(new Blob([data], { type: mimeType }), name);
     };
 
     const handleWheel: React.WheelEventHandler<HTMLDivElement> = (evt) => {

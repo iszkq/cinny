@@ -1,6 +1,5 @@
 /* eslint-disable jsx-a11y/no-noninteractive-element-interactions */
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import FileSaver from 'file-saver';
 import classNames from 'classnames';
 import { Box, Chip, Header, Icon, IconButton, Icons, Text, as } from 'folds';
 import * as css from './ImageViewer.css';
@@ -8,6 +7,7 @@ import { usePan } from '../../hooks/usePan';
 import { useZoom } from '../../hooks/useZoom';
 import { fetchMediaWithAuth } from '../../utils/matrix';
 import { ScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
+import { saveDownloadedFile } from '../../utils/saveDownloadedFile';
 
 export type ImageViewerItem = {
   id: string;
@@ -141,7 +141,7 @@ export const ImageViewer = as<'div', ImageViewerProps>(
     const handleDownload = async () => {
       const response = await fetchMediaWithAuth(src);
       const fileContent = await response.blob();
-      FileSaver.saveAs(fileContent, alt);
+      await saveDownloadedFile(fileContent, alt);
     };
 
     const rotateLeft = () => setRotation((angle) => angle - 90);
