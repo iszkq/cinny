@@ -69,6 +69,8 @@ export const useStableMediaUrl = (
     shouldUseObjectUrlForMediaDisplay(fallbackSrc);
   const desktopSupported = isDesktopUpdaterSupported();
   const browserObjectUrlCacheEnabled = !desktopSupported && !disableObjectUrlCache;
+  const desktopObjectUrlFallbackEnabled = desktopSupported && !disableObjectUrlCache;
+  const objectUrlCacheEnabled = browserObjectUrlCacheEnabled || desktopObjectUrlFallbackEnabled;
   const shouldWaitForPreparedMedia =
     preferObjectUrl &&
     Boolean(src || fallbackSrc) &&
@@ -83,25 +85,25 @@ export const useStableMediaUrl = (
   const candidates = useMemo(
     () =>
       buildMediaCandidates(
-        { allowBrowserObjectUrlCache: browserObjectUrlCacheEnabled },
+        { allowBrowserObjectUrlCache: objectUrlCacheEnabled },
         desktopSrc,
         src,
         desktopFallbackSrc,
         fallbackSrc
       ),
     [
-      browserObjectUrlCacheEnabled,
       cacheVersion,
       desktopFallbackSrc,
       desktopSrc,
       fallbackSrc,
+      objectUrlCacheEnabled,
       src,
     ]
   );
 
-  const hasPreparedCandidate = desktopSupported
-    ? Boolean(desktopSrc || desktopFallbackSrc)
-    : candidates.some((candidate) => candidate.displayUrl !== candidate.source);
+  const hasPreparedCandidate =
+    Boolean(desktopSrc || desktopFallbackSrc) ||
+    candidates.some((candidate) => candidate.displayUrl !== candidate.source);
   const waitingForPreparedMedia =
     shouldWaitForPreparedMedia && !hasPreparedCandidate && !preparedMediaReady;
   const activeCandidates = waitingForPreparedMedia ? [] : candidates;
@@ -161,7 +163,7 @@ export const useStableMediaUrl = (
   }, [desktopFallbackSrc, desktopSrc, desktopSupported]);
 
   useEffect(() => {
-    if (!browserObjectUrlCacheEnabled) {
+    if (!objectUrlCacheEnabled) {
       return undefined;
     }
 
@@ -191,7 +193,7 @@ export const useStableMediaUrl = (
     return () => {
       unsubscribeList.forEach((unsubscribe) => unsubscribe());
     };
-  }, [browserObjectUrlCacheEnabled, src, fallbackSrc]);
+  }, [fallbackSrc, objectUrlCacheEnabled, src]);
 
   useEffect(() => {
     if (!shouldWaitForPreparedMedia) {
