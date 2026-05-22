@@ -2,8 +2,9 @@
 
 mod desktop_media_cache;
 
+use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine};
 use serde::Deserialize;
-use std::process::Command;
+use std::{fs, process::Command};
 use tauri::{plugin::PermissionState, AppHandle};
 use tauri_plugin_notification::NotificationExt;
 
@@ -17,11 +18,39 @@ struct DesktopNotificationPayload {
     silent: Option<bool>,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SaveDownloadedFileRequest {
+    file_name: String,
+    data_base64: String,
+}
+
 fn map_notification_permission(state: PermissionState) -> &'static str {
     match state {
         PermissionState::Granted => "granted",
         PermissionState::Denied => "denied",
         PermissionState::Prompt | PermissionState::PromptWithRationale => "prompt",
+    }
+}
+
+fn sanitize_download_file_name(file_name: &str) -> String {
+    let sanitized = file_name
+        .trim()
+        .chars()
+        .map(|ch| {
+            if ch.is_control() || matches!(ch, '\\' | '/' | ':' | '*' | '?' | '"' | '<' | '>' | '|')
+            {
+                '_'
+            } else {
+                ch
+            }
+        })
+        .collect::<String>();
+
+    if sanitized.trim().is_empty() {
+        "download.bin".to_owned()
+    } else {
+        sanitized
     }
 }
 
@@ -84,6 +113,24 @@ fn open_external_url(url: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn save_downloaded_file(request: SaveDownloadedFileRequest) -> Result<bool, String> {
+    let file_name = sanitize_download_file_name(&request.file_name);
+    let file_bytes = BASE64_STANDARD
+        .decode(request.data_base64.trim())
+        .map_err(|error| format!("failed to decode file data: {error}"))?;
+
+    let save_path = rfd::FileDialog::new().set_file_name(&file_name).save_file();
+    let Some(save_path) = save_path else {
+        return Ok(false);
+    };
+
+    fs::write(&save_path, file_bytes)
+        .map_err(|error| format!("failed to save file: {error}"))?;
+
+    Ok(true)
+}
+
+#[tauri::command]
 fn desktop_notification_permission_state(app: AppHandle) -> Result<String, String> {
     app.notification()
         .permission_state()
@@ -130,6 +177,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             desktop_media_cache::cache_desktop_media_asset,
             open_external_url,
+            save_downloaded_file,
             desktop_notification_permission_state,
             request_desktop_notification_permission,
             send_desktop_notification
