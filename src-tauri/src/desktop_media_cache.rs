@@ -54,6 +54,30 @@ fn normalize_source_url(source_url: &str) -> String {
     }
 }
 
+fn remove_allow_redirect_param(source_url: &str) -> String {
+    match reqwest::Url::parse(source_url) {
+        Ok(mut parsed) => {
+            let mut query_pairs: Vec<(String, String)> = parsed
+                .query_pairs()
+                .filter(|(key, _)| key != "allow_redirect")
+                .map(|(key, value)| (key.into_owned(), value.into_owned()))
+                .collect();
+            query_pairs.sort();
+
+            parsed.set_query(None);
+            if !query_pairs.is_empty() {
+                let mut serializer = parsed.query_pairs_mut();
+                for (key, value) in query_pairs {
+                    serializer.append_pair(&key, &value);
+                }
+            }
+
+            parsed.to_string()
+        }
+        Err(_) => source_url.to_owned(),
+    }
+}
+
 fn sanitize_path_segment(value: &str) -> String {
     let sanitized = value
         .chars()
@@ -184,6 +208,27 @@ fn build_media_fallback_urls(source_url: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
+fn build_media_request_urls(source_url: &str) -> Vec<String> {
+    let stripped_source_url = remove_allow_redirect_param(source_url);
+    let mut request_urls = vec![source_url.to_owned()];
+
+    if stripped_source_url != source_url {
+        request_urls.push(stripped_source_url.clone());
+    }
+
+    request_urls.extend(build_media_fallback_urls(source_url));
+    request_urls.extend(build_media_fallback_urls(&stripped_source_url));
+
+    let mut unique_urls = Vec::new();
+    for request_url in request_urls {
+        if !unique_urls.contains(&request_url) {
+            unique_urls.push(request_url);
+        }
+    }
+
+    unique_urls
+}
+
 async fn send_media_request(
     client: &Client,
     source_url: &str,
@@ -208,39 +253,33 @@ async fn fetch_media_response(
     source_url: &str,
     access_token: Option<&str>,
 ) -> Result<Response, String> {
-    let primary_response = send_media_request(client, source_url, access_token).await?;
-    if primary_response.status().is_success() {
-        return Ok(primary_response);
-    }
-
-    let fallback_urls = build_media_fallback_urls(source_url);
-    let mut last_status = Some(primary_response.status());
+    let request_urls = build_media_request_urls(source_url);
+    let stripped_source_url = remove_allow_redirect_param(source_url);
+    let mut last_status = None;
     let mut last_error: Option<String> = None;
 
-    for fallback_url in fallback_urls {
-        match send_media_request(client, &fallback_url, None).await {
-            Ok(fallback_response) => {
-                if fallback_response.status().is_success() {
-                    return Ok(fallback_response);
-                }
-                last_status = Some(fallback_response.status());
+    for request_url in request_urls {
+        let request_tokens = if request_url == source_url || request_url == stripped_source_url {
+            if access_token.is_some() {
+                vec![access_token, None]
+            } else {
+                vec![None]
             }
-            Err(error) => {
-                last_error = Some(error);
-            }
-        }
-    }
+        } else {
+            vec![None]
+        };
 
-    if access_token.is_some() {
-        match send_media_request(client, source_url, None).await {
-            Ok(plain_response) => {
-                if plain_response.status().is_success() {
-                    return Ok(plain_response);
+        for request_token in request_tokens {
+            match send_media_request(client, &request_url, request_token).await {
+                Ok(response) => {
+                    if response.status().is_success() {
+                        return Ok(response);
+                    }
+                    last_status = Some(response.status());
                 }
-                last_status = Some(plain_response.status());
-            }
-            Err(error) => {
-                last_error = Some(error);
+                Err(error) => {
+                    last_error = Some(error);
+                }
             }
         }
     }
