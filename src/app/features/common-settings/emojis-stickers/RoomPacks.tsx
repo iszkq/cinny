@@ -40,6 +40,23 @@ import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { useAlive } from '../../../hooks/useAlive';
 import { useRoomCreators } from '../../../hooks/useRoomCreators';
 import { useRoomPermissions } from '../../../hooks/useRoomPermissions';
+import { useDisplayMediaUrl } from '../../../hooks/useDisplayMediaUrl';
+
+function PackAvatar({ src }: { src?: string }) {
+  const displaySrc = useDisplayMediaUrl(src);
+
+  return (
+    <Avatar size="300" radii="300">
+      {displaySrc ? (
+        <AvatarImage style={{ objectFit: 'contain' }} src={displaySrc} />
+      ) : (
+        <AvatarFallback>
+          <Icon size="400" src={Icons.Sticker} filled />
+        </AvatarFallback>
+      )}
+    </Avatar>
+  );
+}
 
 type CreatePackTileProps = {
   packs: ImagePack[];
@@ -234,15 +251,7 @@ export function RoomPacks({ onViewPack }: RoomPacksProps) {
                     <Icon src={Icons.Cross} size="100" />
                   </IconButton>
                 ))}
-              <Avatar size="300" radii="300">
-                {avatarUrl ? (
-                  <AvatarImage style={{ objectFit: 'contain' }} src={avatarUrl} />
-                ) : (
-                  <AvatarFallback>
-                    <Icon size="400" src={Icons.Sticker} filled />
-                  </AvatarFallback>
-                )}
-              </Avatar>
+              <PackAvatar src={avatarUrl} />
             </Box>
           }
           after={
