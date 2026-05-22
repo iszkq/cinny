@@ -1,6 +1,6 @@
 [package]
 name = "cinny-desktop"
-version = "1.0.7"
+version = "1.0.8"
 description = "星火桌面客户端"
 authors = ["Cinny contributors"]
 license = "AGPL-3.0-only"
@@ -10,10 +10,8 @@ edition = "2021"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-aes-gcm = "0.10"
 base64 = "0.22"
 rfd = "0.15"
-rand = "0.8"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 mime_guess = "2"
 serde = { version = "1", features = ["derive"] }

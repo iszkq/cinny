@@ -26,6 +26,7 @@
         "enable": true,
         "scope": [
           "$APPLOCALDATA/emoji-media-cache/**/*",
+          "$APPLOCALDATA/desktop-media-cache-plain-v1/**/*",
           "$APPLOCALDATA/desktop-media-runtime-v1/**/*"
         ]
       }
