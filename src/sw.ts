@@ -115,6 +115,15 @@ const AUTH_MEDIA_PATH_TO_FALLBACK_PATH: Record<string, string[]> = {
     '/_matrix/media/r0/thumbnail',
   ],
 };
+const removeAllowRedirectParam = (url: string): string => {
+  try {
+    const parsed = new URL(url);
+    parsed.searchParams.delete('allow_redirect');
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+};
 
 function mediaPath(url: string): boolean {
   try {
@@ -144,25 +153,41 @@ function fetchConfig(token: string): RequestInit {
 function getPublicMediaFallbackUrls(url: string): string[] {
   try {
     const mediaUrl = new URL(url);
-    const fallbackPaths = Object.entries(AUTH_MEDIA_PATH_TO_FALLBACK_PATH).find(([path]) =>
+    const matchingEntry = Object.entries(AUTH_MEDIA_PATH_TO_FALLBACK_PATH).find(([path]) =>
       mediaUrl.pathname.startsWith(path)
-    )?.[1];
+    );
+    const fallbackPaths = matchingEntry?.[1];
+    const matchingPath = matchingEntry?.[0];
 
-    if (!fallbackPaths) {
+    if (!fallbackPaths || !matchingPath) {
       return [];
     }
 
     return fallbackPaths.map((fallbackPath) => {
       const fallbackUrl = new URL(mediaUrl.toString());
-      fallbackUrl.pathname = mediaUrl.pathname.replace(
-        /^\/_matrix\/client\/v1\/media\/(download|thumbnail)/,
-        fallbackPath
-      );
+      fallbackUrl.pathname = `${fallbackPath}${mediaUrl.pathname.slice(matchingPath.length)}`;
       return fallbackUrl.toString();
     });
   } catch {
     return [];
   }
+}
+
+function getMediaRequestUrls(url: string): string[] {
+  const strippedUrl = removeAllowRedirectParam(url);
+  const requestUrls = [url, strippedUrl];
+
+  getPublicMediaFallbackUrls(url).forEach((fallbackUrl) => {
+    requestUrls.push(fallbackUrl);
+  });
+  getPublicMediaFallbackUrls(strippedUrl).forEach((fallbackUrl) => {
+    requestUrls.push(fallbackUrl);
+  });
+
+  return requestUrls.filter(
+    (requestUrl, index) =>
+      requestUrl.length > 0 && requestUrls.findIndex((value) => value === requestUrl) === index
+  );
 }
 
 async function toSafeMediaResponse(response: Response): Promise<Response | undefined> {
@@ -187,41 +212,38 @@ async function fetchMediaWithFallback(
   request: Request,
   session: SessionInfo | undefined
 ): Promise<Response> {
-  if (session && validMediaRequest(request.url, session.baseUrl)) {
-    const authedResponse = await fetch(request.url, fetchConfig(session.accessToken)).catch(
-      () => undefined
-    );
-    if (authedResponse?.ok) {
-      const safeAuthedResponse = await toSafeMediaResponse(authedResponse);
-      if (safeAuthedResponse) {
-        return safeAuthedResponse;
-      }
-    }
-  }
+  const requestUrls = getMediaRequestUrls(request.url);
+  let lastResponse: Response | undefined;
 
-  const originalResponse = await fetch(request).catch(() => undefined);
-  if (originalResponse?.ok) {
-    const safeOriginalResponse = await toSafeMediaResponse(originalResponse);
-    if (safeOriginalResponse) {
-      return safeOriginalResponse;
-    }
-  }
+  for (const requestUrl of requestUrls) {
+    const shouldTryAuth = !!session && validMediaRequest(requestUrl, session.baseUrl);
+    const requestAttempts = shouldTryAuth ? [true, false] : [false];
 
-  const fallbackUrls = getPublicMediaFallbackUrls(request.url);
-  for (const fallbackUrl of fallbackUrls) {
-    // eslint-disable-next-line no-await-in-loop
-    const fallbackResponse = await fetch(fallbackUrl).catch(() => undefined);
-    if (fallbackResponse?.ok) {
+    for (const useAuth of requestAttempts) {
       // eslint-disable-next-line no-await-in-loop
-      const safeFallbackResponse = await toSafeMediaResponse(fallbackResponse);
-      if (safeFallbackResponse) {
-        return safeFallbackResponse;
+      const response = await fetch(
+        useAuth ? requestUrl : new Request(requestUrl, request),
+        useAuth && session ? fetchConfig(session.accessToken) : undefined
+      ).catch(() => undefined);
+
+      if (!response) {
+        continue;
       }
+
+      if (response.ok) {
+        // eslint-disable-next-line no-await-in-loop
+        const safeResponse = await toSafeMediaResponse(response);
+        if (safeResponse) {
+          return safeResponse;
+        }
+      }
+
+      lastResponse = response;
     }
   }
 
-  if (originalResponse && !originalResponse.ok) {
-    return originalResponse;
+  if (lastResponse && !lastResponse.ok) {
+    return lastResponse;
   }
 
   return new Response(null, {
