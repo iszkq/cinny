@@ -21,6 +21,7 @@ import { mxcUrlToHttp } from '../../utils/matrix';
 import * as css from './style.css';
 import { ImageUsage, imageUsageEqual, PackImageReader } from '../../plugins/custom-emoji';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { useDisplayMediaUrl } from '../../hooks/useDisplayMediaUrl';
 import { SettingTile } from '../setting-tile';
 import { useObjectURL } from '../../hooks/useObjectURL';
 import { createUploadAtom, TUploadAtom } from '../../state/upload';
@@ -59,18 +60,22 @@ export function ImageTile({
   const mx = useMatrixClient();
   const getUsageStr = useUsageStr();
   const [menuCords, setMenuCords] = useState<RectCords>();
+  const imageUrl = mxcUrlToHttp(mx, image.url, useAuthentication) ?? undefined;
+  const displayImageUrl = useDisplayMediaUrl(imageUrl);
 
   const canShowMove = !!moveTargets && moveTargets.length > 0;
 
   return (
     <SettingTile
       before={
-        <img
-          className={css.ImagePackImage}
-          src={mxcUrlToHttp(mx, image.url, useAuthentication) ?? ''}
-          alt={image.shortcode}
-          loading="lazy"
-        />
+        displayImageUrl ? (
+          <img
+            className={css.ImagePackImage}
+            src={displayImageUrl}
+            alt={image.shortcode}
+            loading="lazy"
+          />
+        ) : undefined
       }
       title={
         deleted ? (
@@ -216,6 +221,8 @@ export function ImageTileEdit({
 }: ImageTileEditProps) {
   const mx = useMatrixClient();
   const defaultUsage = image.usage ?? packUsage;
+  const imageUrl = mxcUrlToHttp(mx, image.url, useAuthentication) ?? undefined;
+  const displayImageUrl = useDisplayMediaUrl(imageUrl);
 
   const [unsavedUsage, setUnsavedUsages] = useState(defaultUsage);
 
@@ -254,12 +261,14 @@ export function ImageTileEdit({
   return (
     <SettingTile
       before={
-        <img
-          className={css.ImagePackImage}
-          src={mxcUrlToHttp(mx, image.url, useAuthentication) ?? ''}
-          alt={image.shortcode}
-          loading="lazy"
-        />
+        displayImageUrl ? (
+          <img
+            className={css.ImagePackImage}
+            src={displayImageUrl}
+            alt={image.shortcode}
+            loading="lazy"
+          />
+        ) : undefined
       }
     >
       <Box as="form" onSubmit={handleSubmit} direction="Column" gap="200">
