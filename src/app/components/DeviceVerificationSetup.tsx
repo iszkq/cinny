@@ -13,7 +13,6 @@ import {
   color,
   Spinner,
 } from 'folds';
-import FileSaver from 'file-saver';
 import to from 'await-to-js';
 import { AuthDict, IAuthData, MatrixError, UIAuthCallback } from 'matrix-js-sdk';
 import { PasswordInput } from './password-input';
@@ -25,6 +24,7 @@ import { ActionUIA, ActionUIAFlowsLoader } from './ActionUIA';
 import { useMatrixClient } from '../hooks/useMatrixClient';
 import { useAlive } from '../hooks/useAlive';
 import { UseStateProvider } from './UseStateProvider';
+import { saveDownloadedFile } from '../utils/saveDownloadedFile';
 
 type UIACallback<T> = (
   authDict: AuthDict | null
@@ -234,11 +234,11 @@ function RecoveryKeyDisplay({ recoveryKey }: RecoveryKeyDisplayProps) {
     copyToClipboard(recoveryKey);
   };
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     const blob = new Blob([recoveryKey], {
       type: 'text/plain;charset=us-ascii',
     });
-    FileSaver.saveAs(blob, 'recovery-key.txt');
+    await saveDownloadedFile(blob, 'recovery-key.txt');
   };
 
   const safeToDisplayKey = show ? recoveryKey : recoveryKey.replace(/[^\s]/g, '*');
