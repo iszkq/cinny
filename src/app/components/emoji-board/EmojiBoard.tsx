@@ -41,7 +41,10 @@ import {
   setPersonalPackOrder,
 } from '../../plugins/custom-emoji';
 import { getEmoticonSearchStr } from '../../plugins/utils';
-import { primeDesktopMediaAssetUrl } from '../../utils/desktopMediaAssetCache';
+import {
+  primeDesktopMediaAssetUrl,
+  warmDesktopMediaAssetCache,
+} from '../../utils/desktopMediaAssetCache';
 import { primeCachedMediaObjectUrl, primePersistentMediaUrl } from '../../utils/mediaUrlCache';
 import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
 import {
@@ -853,9 +856,12 @@ export function EmojiBoard({
         getPackMediaUrls(pack).forEach((mediaUrl, mediaIndex) => {
           const priority =
             packIndex === 0 && mediaIndex < priorityPackVisibleUrlLimit ? 'visible' : 'background';
-          void primePersistentMediaUrl(mediaUrl);
-          void primeCachedMediaObjectUrl(mediaUrl, priority);
-          void primeDesktopMediaAssetUrl(mediaUrl, priority);
+
+          if (priority === 'visible') {
+            void primeDesktopMediaAssetUrl(mediaUrl, priority);
+          } else {
+            void warmDesktopMediaAssetCache(mediaUrl);
+          }
         });
       });
     }, 0);
