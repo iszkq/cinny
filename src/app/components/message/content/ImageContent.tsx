@@ -27,10 +27,16 @@ import * as css from './style.css';
 import { bytesToSize } from '../../../utils/common';
 import { FALLBACK_MIMETYPE } from '../../../utils/mimeTypes';
 import { stopPropagation } from '../../../utils/keyboard';
-import { decryptFile, downloadEncryptedMedia, mxcUrlToHttp } from '../../../utils/matrix';
+import {
+  decryptFile,
+  downloadEncryptedMedia,
+  mxcUrlToHttp,
+  shouldUseObjectUrlForMediaDisplay,
+} from '../../../utils/matrix';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { ModalWide } from '../../../styles/Modal.css';
 import { validBlurHash } from '../../../utils/blurHash';
+import { primeCachedMediaObjectUrl } from '../../../utils/mediaUrlCache';
 
 type RenderViewerProps = {
   src: string;
@@ -119,6 +125,16 @@ export const ImageContent = as<'div', ImageContentProps>(
           );
           return URL.createObjectURL(fileContent);
         }
+
+        const preparedMediaUrl = await primeCachedMediaObjectUrl(mediaUrl, 'visible');
+        if (preparedMediaUrl) {
+          return preparedMediaUrl;
+        }
+
+        if (shouldUseObjectUrlForMediaDisplay(mediaUrl)) {
+          throw new Error('Failed to prepare image media');
+        }
+
         return mediaUrl;
       }, [mx, url, useAuthentication, mimeType, encInfo])
     );

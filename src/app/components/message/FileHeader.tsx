@@ -1,7 +1,6 @@
 import { Badge, Box, Icon, IconButton, Icons, Spinner, Text, as, toRem } from 'folds';
 import React, { ReactNode, useCallback } from 'react';
 import { EncryptedAttachmentInfo } from 'browser-encrypt-attachment';
-import FileSaver from 'file-saver';
 import { getFileNameExt, mimeTypeToExt } from '../../utils/mimeTypes';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
@@ -12,6 +11,7 @@ import {
   downloadMedia,
   mxcUrlToHttp,
 } from '../../utils/matrix';
+import { saveDownloadedFile } from '../../utils/saveDownloadedFile';
 
 const badgeStyles = { maxWidth: toRem(100) };
 
@@ -33,9 +33,8 @@ export function FileDownloadButton({ filename, url, mimeType, encInfo }: FileDow
         ? await downloadEncryptedMedia(mediaUrl, (encBuf) => decryptFile(encBuf, mimeType, encInfo))
         : await downloadMedia(mediaUrl);
 
-      const fileURL = URL.createObjectURL(fileContent);
-      FileSaver.saveAs(fileURL, filename);
-      return fileURL;
+      await saveDownloadedFile(fileContent, filename);
+      return fileContent;
     }, [mx, url, useAuthentication, mimeType, encInfo, filename])
   );
 
@@ -44,7 +43,14 @@ export function FileDownloadButton({ filename, url, mimeType, encInfo }: FileDow
   return (
     <IconButton
       disabled={downloading}
-      onClick={download}
+      onClick={() => {
+        if (downloadState.status === AsyncStatus.Success) {
+          void saveDownloadedFile(downloadState.data, filename);
+          return;
+        }
+
+        download();
+      }}
       variant={hasError ? 'Critical' : 'SurfaceVariant'}
       size="300"
       radii="300"

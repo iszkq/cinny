@@ -2,9 +2,15 @@ import { ReactNode, useCallback, useEffect } from 'react';
 import { IThumbnailContent } from '../../../../types/matrix/common';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
-import { decryptFile, downloadEncryptedMedia, mxcUrlToHttp } from '../../../utils/matrix';
+import {
+  decryptFile,
+  downloadEncryptedMedia,
+  mxcUrlToHttp,
+  shouldUseObjectUrlForMediaDisplay,
+} from '../../../utils/matrix';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { FALLBACK_MIMETYPE } from '../../../utils/mimeTypes';
+import { primeCachedMediaObjectUrl } from '../../../utils/mediaUrlCache';
 
 export type ThumbnailContentProps = {
   info: IThumbnailContent;
@@ -30,6 +36,15 @@ export function ThumbnailContent({ info, renderImage }: ThumbnailContentProps) {
           decryptFile(encBuf, thumbInfo.mimetype ?? FALLBACK_MIMETYPE, encInfo)
         );
         return URL.createObjectURL(fileContent);
+      }
+
+      const preparedMediaUrl = await primeCachedMediaObjectUrl(mediaUrl, 'visible');
+      if (preparedMediaUrl) {
+        return preparedMediaUrl;
+      }
+
+      if (shouldUseObjectUrlForMediaDisplay(mediaUrl)) {
+        throw new Error('Failed to prepare thumbnail media');
       }
 
       return mediaUrl;
