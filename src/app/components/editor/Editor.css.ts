@@ -16,6 +16,7 @@ export const EditorOptions = style([
   DefaultReset,
   {
     padding: config.space.S200,
+    minWidth: 0,
     '@media': {
       'screen and (max-width: 750px)': {
         padding: config.space.S100,
@@ -24,7 +25,41 @@ export const EditorOptions = style([
   },
 ]);
 
-export const EditorTextareaScroll = style({});
+export const EditorMain = style([
+  DefaultReset,
+  {
+    minWidth: 0,
+    '@media': {
+      'screen and (max-width: 750px)': {
+        selectors: {
+          'html[data-cinny-desktop-app="true"] &': {
+            flexWrap: 'wrap',
+          },
+        },
+      },
+    },
+  },
+]);
+
+export const EditorBeforeOptions = style({});
+
+export const EditorAfterOptions = style({
+  '@media': {
+    'screen and (max-width: 750px)': {
+      selectors: {
+        'html[data-cinny-desktop-app="true"] &': {
+          marginLeft: 'auto',
+          justifyContent: 'flex-end',
+        },
+      },
+    },
+  },
+});
+
+export const EditorTextareaScroll = style({
+  minWidth: 0,
+  flexGrow: 1,
+});
 
 export const EditorTextarea = style([
   DefaultReset,
