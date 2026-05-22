@@ -8,6 +8,7 @@ import {
 import { cryptoCallbacks } from './secretStorageKeys';
 import { clearNavToActivePathStore } from '../app/state/navToActivePath';
 import { restorePinLockStorage, snapshotPinLockStorage } from '../app/utils/pinLock';
+import { clearDesktopMediaRuntimeCache } from '../app/utils/desktopMediaAssetCache';
 import { pushSessionToSW } from '../sw-session';
 
 type Session = {
@@ -84,6 +85,7 @@ const clearAllIndexedDbDatabases = async () => {
 };
 
 export const clearResourceCaches = async () => {
+  await clearDesktopMediaRuntimeCache();
   await clearAllServiceWorkerCaches();
 };
 
@@ -98,6 +100,7 @@ export const clearAllLocalData = async (mx?: MatrixClient) => {
   }
 
   await clearAllServiceWorkerCaches();
+  await clearDesktopMediaRuntimeCache();
   await clearAllIndexedDbDatabases();
   window.localStorage.clear();
   window.sessionStorage.clear();
@@ -121,6 +124,7 @@ export const clearLocalSessionAfterLogout = async (mx?: MatrixClient) => {
   }
 
   const preservedPinLockEntries = snapshotPinLockStorage();
+  await clearDesktopMediaRuntimeCache();
   window.localStorage.clear();
   restorePinLockStorage(preservedPinLockEntries);
 };
