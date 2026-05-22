@@ -20,7 +20,8 @@ import { useMediaAuthentication } from './useMediaAuthentication';
 import { useMatrixClient } from './useMatrixClient';
 import { useAccountDataCallback } from './useAccountDataCallback';
 import { useStateEventCallback } from './useStateEventCallback';
-import { primeDesktopMediaAssetUrl } from '../utils/desktopMediaAssetCache';
+import { warmDesktopMediaAssetCache } from '../utils/desktopMediaAssetCache';
+import { isDesktopUpdaterSupported } from '../utils/desktopUpdater';
 import { primeCachedMediaObjectUrl, primePersistentMediaUrl } from '../utils/mediaUrlCache';
 import {
   getEmojiBoardMediaCandidates,
@@ -89,11 +90,16 @@ const warmImagePackMedia = (
   packs: ImagePack[],
   usages: ImageUsage[]
 ) => {
+  const desktopSupported = isDesktopUpdaterSupported();
   const mediaUrls = getImagePackMediaUrls(mx, useAuthentication, packs, usages);
 
   mediaUrls.forEach((mediaUrl) => {
+    if (desktopSupported) {
+      void warmDesktopMediaAssetCache(mediaUrl);
+      return;
+    }
+
     void primePersistentMediaUrl(mediaUrl);
-    void primeDesktopMediaAssetUrl(mediaUrl, 'background');
   });
 };
 
@@ -103,6 +109,10 @@ const warmImagePackObjectUrls = (
   packs: ImagePack[],
   usages: ImageUsage[]
 ) => {
+  if (isDesktopUpdaterSupported()) {
+    return;
+  }
+
   const mediaUrls = getImagePackMediaUrls(mx, useAuthentication, packs, usages);
 
   mediaUrls.forEach((mediaUrl) => {
