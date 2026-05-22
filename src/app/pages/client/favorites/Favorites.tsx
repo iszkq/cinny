@@ -1,7 +1,15 @@
 import React, { ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import FocusTrap from 'focus-trap-react';
 import { HTMLReactParserOptions } from 'html-react-parser';
-import { MatrixEvent, MsgType, Room, RoomEvent } from 'matrix-js-sdk';
+import {
+  Direction,
+  MatrixClient,
+  MatrixEvent,
+  MatrixEventEvent,
+  MsgType,
+  Room,
+  RoomEvent,
+} from 'matrix-js-sdk';
 import { Opts as LinkifyOpts } from 'linkifyjs';
 import {
   Avatar,
@@ -74,7 +82,7 @@ import {
 } from '../../../../types/matrix/common';
 import { GetContentCallback, MessageEvent } from '../../../../types/matrix/room';
 import { mxcUrlToHttp } from '../../../utils/matrix';
-import { trimReplyFromBody } from '../../../utils/room';
+import { decryptAllTimelineEvent, trimReplyFromBody } from '../../../utils/room';
 import { ModalWide } from '../../../styles/Modal.css';
 import { stopPropagation } from '../../../utils/keyboard';
 import type { ViewerImageItem } from '../../../components/message/content/ImageContent';
@@ -94,6 +102,7 @@ import {
 } from '../../../features/favorites';
 import * as css from './Favorites.css';
 import { CompactClientNavButton } from '../CompactClientNavButton';
+import { getLinkedTimelines, getLiveTimeline } from '../../../features/room/RoomTimeline';
 
 type FavoriteDateFilter = 'all' | 'today' | '7d' | '30d' | '90d';
 
@@ -114,6 +123,8 @@ type FavoriteOpenSourceHandler = (sourceRoomId: string, sourceEventId?: string) 
 type FavoriteSaveNoteHandler = (item: FavoriteItem, note: string) => Promise<void>;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const FAVORITES_HISTORY_PAGINATION_LIMIT = 100;
+const MAX_FAVORITES_HISTORY_PAGES = 250;
 
 const DATE_FILTER_OPTIONS: Array<{ id: FavoriteDateFilter; label: string }> = [
   { id: 'all', label: '\u5168\u90e8\u65f6\u95f4' },
@@ -169,6 +180,57 @@ const getFavoriteItemBody = (event: MatrixEvent): string => {
   return body.replace(/\s+/g, ' ').trim();
 };
 
+const getFavoriteTimelineEvents = (room?: Room): MatrixEvent[] => {
+  if (!room) return [];
+
+  const seenEventIds = new Set<string>();
+  const events: MatrixEvent[] = [];
+
+  getLinkedTimelines(getLiveTimeline(room)).forEach((timeline) => {
+    timeline.getEvents().forEach((event) => {
+      const eventId = event.getId();
+      if (eventId && seenEventIds.has(eventId)) return;
+
+      if (eventId) {
+        seenEventIds.add(eventId);
+      }
+      events.push(event);
+    });
+  });
+
+  return events;
+};
+
+const loadFavoriteRoomHistory = async (mx: MatrixClient, room: Room) => {
+  let timeline = getLiveTimeline(room);
+  let pageCount = 0;
+
+  if (room.hasEncryptionStateEvent()) {
+    await decryptAllTimelineEvent(mx, timeline);
+  }
+
+  while (
+    timeline.getPaginationToken(Direction.Backward) &&
+    pageCount < MAX_FAVORITES_HISTORY_PAGES
+  ) {
+    const paginated = await mx.paginateEventTimeline(timeline, {
+      backwards: true,
+      limit: FAVORITES_HISTORY_PAGINATION_LIMIT,
+    });
+    if (!paginated) break;
+
+    const previousTimeline = timeline.getNeighbouringTimeline(Direction.Backward);
+    if (!previousTimeline || previousTimeline === timeline) break;
+
+    timeline = previousTimeline;
+    pageCount += 1;
+
+    if (room.hasEncryptionStateEvent()) {
+      await decryptAllTimelineEvent(mx, timeline);
+    }
+  }
+};
+
 const matchesDateFilter = (timestamp: number, dateFilter: FavoriteDateFilter): boolean => {
   if (dateFilter === 'all') return true;
 
@@ -183,9 +245,7 @@ const matchesDateFilter = (timestamp: number, dateFilter: FavoriteDateFilter): b
 const getFavoriteEvents = (room?: Room): FavoriteItem[] => {
   if (!room) return [];
 
-  return room
-    .getLiveTimeline()
-    .getEvents()
+  return getFavoriteTimelineEvents(room)
     .reduce<FavoriteItem[]>((items, event) => {
       if (event.isRedacted()) return items;
 
@@ -1184,18 +1244,48 @@ export function Favorites() {
     const refresh = () => {
       setFavoriteItems(getFavoriteEvents(favoritesRoom));
     };
+    const handleDecrypted = (event: MatrixEvent) => {
+      if (event.getRoomId() !== favoritesRoom.roomId) return;
+      refresh();
+    };
 
     refresh();
     favoritesRoom.on(RoomEvent.Timeline, refresh);
     favoritesRoom.on(RoomEvent.TimelineRefresh, refresh);
     favoritesRoom.on(RoomEvent.Redaction, refresh);
+    mx.on(MatrixEventEvent.Decrypted, handleDecrypted);
 
     return () => {
       favoritesRoom.removeListener(RoomEvent.Timeline, refresh);
       favoritesRoom.removeListener(RoomEvent.TimelineRefresh, refresh);
       favoritesRoom.removeListener(RoomEvent.Redaction, refresh);
+      mx.off(MatrixEventEvent.Decrypted, handleDecrypted);
     };
-  }, [favoritesRoom]);
+  }, [favoritesRoom, mx]);
+
+  useEffect(() => {
+    if (!favoritesRoom) return undefined;
+
+    let cancelled = false;
+
+    const hydrateHistory = async () => {
+      try {
+        await loadFavoriteRoomHistory(mx, favoritesRoom);
+      } catch (error) {
+        console.error(error);
+      }
+
+      if (!cancelled) {
+        setFavoriteItems(getFavoriteEvents(favoritesRoom));
+      }
+    };
+
+    void hydrateHistory();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [favoritesRoom, mx]);
 
   useEffect(() => {
     const availableIds = new Set(favoriteItems.map(getFavoriteItemId));
