@@ -32,8 +32,8 @@ type DesktopMediaUrlTask = {
   resolve: (value: string | undefined) => void;
 };
 
-const DESKTOP_MEDIA_URL_CONCURRENCY = 10;
-const DESKTOP_MEDIA_WARM_CONCURRENCY = 3;
+const DESKTOP_MEDIA_URL_CONCURRENCY = 16;
+const DESKTOP_MEDIA_WARM_CONCURRENCY = 6;
 
 type FallbackSession = {
   baseUrl: string;
