@@ -4,12 +4,16 @@ import {
   primeCachedMediaObjectUrl,
   subscribeCachedMediaObjectUrl,
 } from '../utils/mediaUrlCache';
+import { primeDesktopMediaAssetUrl } from '../utils/desktopMediaAssetCache';
+import { isDesktopUpdaterSupported } from '../utils/desktopUpdater';
 import { releaseObjectUrl, retainObjectUrl } from '../utils/objectUrlRetainer';
 
 type CachedMediaState = {
   src: string | undefined;
   url: string | undefined;
 };
+
+const DESKTOP_MEDIA_RETRY_DELAY_MS = 250;
 
 const getCachedMediaState = (src: string | undefined): CachedMediaState => ({
   src,
@@ -18,11 +22,13 @@ const getCachedMediaState = (src: string | undefined): CachedMediaState => ({
 
 export const useCachedMediaUrl = (src: string | undefined): string | undefined => {
   const [cachedState, setCachedState] = useState<CachedMediaState>(() => getCachedMediaState(src));
+  const [desktopUrl, setDesktopUrl] = useState<string | undefined>();
+  const desktopSupported = isDesktopUpdaterSupported();
 
   useEffect(() => {
     setCachedState(getCachedMediaState(src));
 
-    if (!src) {
+    if (!src || desktopSupported) {
       return undefined;
     }
 
@@ -46,7 +52,54 @@ export const useCachedMediaUrl = (src: string | undefined): string | undefined =
     void primeCachedMediaObjectUrl(src);
 
     return unsubscribe;
-  }, [src]);
+  }, [desktopSupported, src]);
+
+  useEffect(() => {
+    setDesktopUrl(undefined);
+
+    if (!src || !desktopSupported) {
+      return undefined;
+    }
+
+    let disposed = false;
+    let retried = false;
+    let retryTimer: number | undefined;
+
+    const loadDesktopUrl = () => {
+      const desktopAssetPromise = primeDesktopMediaAssetUrl(src, 'visible');
+      if (!desktopAssetPromise) {
+        return;
+      }
+
+      void desktopAssetPromise.then((assetUrl) => {
+        if (disposed) {
+          return;
+        }
+
+        if (assetUrl || retried) {
+          setDesktopUrl(assetUrl);
+          return;
+        }
+
+        retried = true;
+        retryTimer = window.setTimeout(() => {
+          retryTimer = undefined;
+          if (!disposed) {
+            loadDesktopUrl();
+          }
+        }, DESKTOP_MEDIA_RETRY_DELAY_MS);
+      });
+    };
+
+    loadDesktopUrl();
+
+    return () => {
+      disposed = true;
+      if (typeof retryTimer === 'number') {
+        window.clearTimeout(retryTimer);
+      }
+    };
+  }, [desktopSupported, src]);
 
   useEffect(() => {
     const retainedUrl = cachedState.src === src ? cachedState.url : undefined;
@@ -57,5 +110,13 @@ export const useCachedMediaUrl = (src: string | undefined): string | undefined =
     };
   }, [cachedState.src, cachedState.url, src]);
 
-  return cachedState.src === src ? cachedState.url : undefined;
+  useEffect(() => {
+    retainObjectUrl(desktopUrl);
+
+    return () => {
+      releaseObjectUrl(desktopUrl);
+    };
+  }, [desktopUrl]);
+
+  return desktopUrl ?? (cachedState.src === src ? cachedState.url : undefined);
 };
