@@ -4,7 +4,10 @@ import {
   primeCachedMediaObjectUrl,
   subscribeCachedMediaObjectUrl,
 } from '../utils/mediaUrlCache';
-import { primeDesktopMediaAssetUrl } from '../utils/desktopMediaAssetCache';
+import {
+  getCachedDesktopMediaAssetUrl,
+  primeDesktopMediaAssetUrl,
+} from '../utils/desktopMediaAssetCache';
 import { isDesktopUpdaterSupported } from '../utils/desktopUpdater';
 import { releaseObjectUrl, retainObjectUrl } from '../utils/objectUrlRetainer';
 
@@ -14,21 +17,28 @@ type CachedMediaState = {
 };
 
 const DESKTOP_MEDIA_RETRY_DELAY_MS = 250;
+const DESKTOP_OBJECT_URL_FALLBACK_DELAY_MS = 350;
 
 const getCachedMediaState = (src: string | undefined): CachedMediaState => ({
   src,
   url: getCachedMediaObjectUrl(src),
 });
 
-export const useCachedMediaUrl = (src: string | undefined): string | undefined => {
-  const [cachedState, setCachedState] = useState<CachedMediaState>(() => getCachedMediaState(src));
-  const [desktopUrl, setDesktopUrl] = useState<string | undefined>();
+export const useCachedMediaUrls = (
+  src: string | undefined
+): { desktopUrl: string | undefined; objectUrl: string | undefined } => {
   const desktopSupported = isDesktopUpdaterSupported();
+  const [cachedState, setCachedState] = useState<CachedMediaState>(() =>
+    getCachedMediaState(src)
+  );
+  const [desktopUrl, setDesktopUrl] = useState<string | undefined>(() =>
+    desktopSupported ? getCachedDesktopMediaAssetUrl(src) : undefined
+  );
 
   useEffect(() => {
     setCachedState(getCachedMediaState(src));
 
-    if (!src || desktopSupported) {
+    if (!src) {
       return undefined;
     }
 
@@ -49,13 +59,27 @@ export const useCachedMediaUrl = (src: string | undefined): string | undefined =
       });
     });
 
-    void primeCachedMediaObjectUrl(src);
+    let fallbackTimer: number | undefined;
+    const primeObjectUrl = () => {
+      void primeCachedMediaObjectUrl(src, desktopSupported ? 'background' : 'visible');
+    };
 
-    return unsubscribe;
+    if (desktopSupported) {
+      fallbackTimer = window.setTimeout(primeObjectUrl, DESKTOP_OBJECT_URL_FALLBACK_DELAY_MS);
+    } else {
+      primeObjectUrl();
+    }
+
+    return () => {
+      if (typeof fallbackTimer === 'number') {
+        window.clearTimeout(fallbackTimer);
+      }
+      unsubscribe();
+    };
   }, [desktopSupported, src]);
 
   useEffect(() => {
-    setDesktopUrl(undefined);
+    setDesktopUrl(desktopSupported ? getCachedDesktopMediaAssetUrl(src) : undefined);
 
     if (!src || !desktopSupported) {
       return undefined;
@@ -118,5 +142,13 @@ export const useCachedMediaUrl = (src: string | undefined): string | undefined =
     };
   }, [desktopUrl]);
 
-  return desktopUrl ?? (cachedState.src === src ? cachedState.url : undefined);
+  return {
+    desktopUrl,
+    objectUrl: cachedState.src === src ? cachedState.url : undefined,
+  };
+};
+
+export const useCachedMediaUrl = (src: string | undefined): string | undefined => {
+  const { desktopUrl, objectUrl } = useCachedMediaUrls(src);
+  return desktopUrl ?? objectUrl;
 };

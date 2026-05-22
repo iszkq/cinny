@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useCachedMediaUrl } from './useCachedMediaUrl';
+import { useCachedMediaUrls } from './useCachedMediaUrl';
+import { isDesktopUpdaterSupported } from '../utils/desktopUpdater';
+import { shouldUseObjectUrlForMediaDisplay } from '../utils/matrix';
 
 const AVATAR_RETRY_DELAY_MS = 250;
 
@@ -11,26 +13,45 @@ const clearTimer = (timerRef: { current: number | undefined }) => {
 };
 
 export const useResilientAvatarMedia = (src?: string) => {
-  const cachedSrc = useCachedMediaUrl(src);
+  const desktopSupported = isDesktopUpdaterSupported();
+  const { desktopUrl, objectUrl } = useCachedMediaUrls(src);
+  const directUrl = shouldUseObjectUrlForMediaDisplay(src) ? undefined : src;
   const candidates = useMemo(
-    () => Array.from(new Set([cachedSrc, src].filter(Boolean) as string[])),
-    [cachedSrc, src]
+    () => Array.from(new Set([desktopUrl, objectUrl, directUrl].filter(Boolean) as string[])),
+    [desktopUrl, directUrl, objectUrl]
   );
+  const candidateKey = useMemo(() => candidates.join('\n'), [candidates]);
   const [candidateIndex, setCandidateIndex] = useState(0);
   const [retryNonce, setRetryNonce] = useState(0);
   const [showFallback, setShowFallback] = useState(false);
+  const [webError, setWebError] = useState(false);
   const retriedSrcRef = useRef<string>();
   const retryTimerRef = useRef<number>();
 
-  const displaySrc = candidates[candidateIndex];
+  const desktopDisplaySrc = candidates[candidateIndex];
+  const webDisplaySrc = objectUrl ?? directUrl;
+  const displaySrc = desktopSupported ? desktopDisplaySrc : webDisplaySrc;
 
   useEffect(() => {
+    if (!desktopSupported) {
+      return;
+    }
+
     clearTimer(retryTimerRef);
     setCandidateIndex(0);
     setRetryNonce(0);
     setShowFallback(false);
     retriedSrcRef.current = undefined;
-  }, [cachedSrc, src]);
+  }, [candidateKey, desktopSupported]);
+
+  useEffect(() => {
+    if (desktopSupported) {
+      return;
+    }
+
+    clearTimer(retryTimerRef);
+    setWebError(false);
+  }, [desktopSupported, webDisplaySrc]);
 
   useEffect(
     () => () => {
@@ -41,6 +62,7 @@ export const useResilientAvatarMedia = (src?: string) => {
 
   const handleLoad = useCallback(() => {
     clearTimer(retryTimerRef);
+    setWebError(false);
     setShowFallback(false);
     if (displaySrc) {
       retriedSrcRef.current = undefined;
@@ -49,6 +71,11 @@ export const useResilientAvatarMedia = (src?: string) => {
 
   const handleError = useCallback(() => {
     clearTimer(retryTimerRef);
+
+    if (!desktopSupported) {
+      setWebError(true);
+      return;
+    }
 
     if (candidateIndex + 1 < candidates.length) {
       setShowFallback(false);
@@ -66,12 +93,12 @@ export const useResilientAvatarMedia = (src?: string) => {
     }
 
     setShowFallback(true);
-  }, [candidateIndex, candidates.length, displaySrc]);
+  }, [candidateIndex, candidates.length, desktopSupported, displaySrc]);
 
   return {
     displaySrc,
-    showFallback: !displaySrc || showFallback,
-    imageKey: `${displaySrc ?? 'empty'}-${retryNonce}`,
+    showFallback: desktopSupported ? !displaySrc || showFallback : !displaySrc || webError,
+    imageKey: desktopSupported ? `${displaySrc ?? 'empty'}-${retryNonce}` : undefined,
     handleLoad,
     handleError,
   };

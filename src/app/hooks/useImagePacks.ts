@@ -20,7 +20,10 @@ import { useMediaAuthentication } from './useMediaAuthentication';
 import { useMatrixClient } from './useMatrixClient';
 import { useAccountDataCallback } from './useAccountDataCallback';
 import { useStateEventCallback } from './useStateEventCallback';
-import { warmDesktopMediaAssetCache } from '../utils/desktopMediaAssetCache';
+import {
+  primeDesktopMediaAssetUrl,
+  warmDesktopMediaAssetCache,
+} from '../utils/desktopMediaAssetCache';
 import { isDesktopUpdaterSupported } from '../utils/desktopUpdater';
 import { primeCachedMediaObjectUrl, primePersistentMediaUrl } from '../utils/mediaUrlCache';
 import {
@@ -31,6 +34,9 @@ import { useSyncState } from './useSyncState';
 
 const GLOBAL_IMAGE_PACK_WARM_DELAY_MS = 1500;
 const GLOBAL_IMAGE_PACK_OBJECT_WARM_DELAY_MS = 2400;
+const DESKTOP_IMAGE_PACK_WARM_DELAY_MS = 100;
+const DESKTOP_IMAGE_PACK_OBJECT_WARM_DELAY_MS = 300;
+const DESKTOP_IMAGE_PACK_RUNTIME_WARM_LIMIT = 192;
 const WEB_IMAGE_PACK_PRIORITY_OBJECT_WARM_DELAY_MS = 0;
 const WEB_IMAGE_PACK_PRIORITY_PERSISTENT_WARM_DELAY_MS = 900;
 const WEB_IMAGE_PACK_SECONDARY_OBJECT_WARM_DELAY_MS = 1800;
@@ -109,7 +115,14 @@ const warmImagePackObjectUrls = (
   packs: ImagePack[],
   usages: ImageUsage[]
 ) => {
-  if (isDesktopUpdaterSupported()) {
+  const desktopSupported = isDesktopUpdaterSupported();
+
+  if (desktopSupported) {
+    Array.from(getImagePackPrimaryMediaUrls(mx, useAuthentication, packs, usages))
+      .slice(0, DESKTOP_IMAGE_PACK_RUNTIME_WARM_LIMIT)
+      .forEach((mediaUrl) => {
+        void primeDesktopMediaAssetUrl(mediaUrl, 'background');
+      });
     return;
   }
 
@@ -651,6 +664,14 @@ export const useWarmAllImagePackMedia = () => {
     let disposed = false;
     let persistentDelayTimer: number | undefined;
     let objectDelayTimer: number | undefined;
+    const desktopSupported = isDesktopUpdaterSupported();
+    const persistentWarmDelay = desktopSupported
+      ? DESKTOP_IMAGE_PACK_WARM_DELAY_MS
+      : GLOBAL_IMAGE_PACK_WARM_DELAY_MS;
+    const objectWarmDelay = desktopSupported
+      ? DESKTOP_IMAGE_PACK_OBJECT_WARM_DELAY_MS
+      : GLOBAL_IMAGE_PACK_OBJECT_WARM_DELAY_MS;
+
     persistentDelayTimer = window.setTimeout(() => {
       if (!disposed) {
         warmImagePackMedia(mx, useAuthentication, relevantPacks, [
@@ -658,7 +679,7 @@ export const useWarmAllImagePackMedia = () => {
           ImageUsage.Sticker,
         ]);
       }
-    }, GLOBAL_IMAGE_PACK_WARM_DELAY_MS);
+    }, persistentWarmDelay);
 
     objectDelayTimer = window.setTimeout(() => {
       if (!disposed) {
@@ -667,7 +688,7 @@ export const useWarmAllImagePackMedia = () => {
           ImageUsage.Sticker,
         ]);
       }
-    }, GLOBAL_IMAGE_PACK_OBJECT_WARM_DELAY_MS);
+    }, objectWarmDelay);
 
     return () => {
       disposed = true;
@@ -774,6 +795,14 @@ export const useWarmUniversalImagePackMedia = () => {
     let disposed = false;
     let persistentDelayTimer: number | undefined;
     let objectDelayTimer: number | undefined;
+    const desktopSupported = isDesktopUpdaterSupported();
+    const persistentWarmDelay = desktopSupported
+      ? DESKTOP_IMAGE_PACK_WARM_DELAY_MS
+      : GLOBAL_IMAGE_PACK_WARM_DELAY_MS;
+    const objectWarmDelay = desktopSupported
+      ? DESKTOP_IMAGE_PACK_OBJECT_WARM_DELAY_MS
+      : GLOBAL_IMAGE_PACK_OBJECT_WARM_DELAY_MS;
+
     persistentDelayTimer = window.setTimeout(() => {
       if (!disposed) {
         warmImagePackMedia(mx, useAuthentication, relevantPacks, [
@@ -781,7 +810,7 @@ export const useWarmUniversalImagePackMedia = () => {
           ImageUsage.Sticker,
         ]);
       }
-    }, GLOBAL_IMAGE_PACK_WARM_DELAY_MS);
+    }, persistentWarmDelay);
 
     objectDelayTimer = window.setTimeout(() => {
       if (!disposed) {
@@ -790,7 +819,7 @@ export const useWarmUniversalImagePackMedia = () => {
           ImageUsage.Sticker,
         ]);
       }
-    }, GLOBAL_IMAGE_PACK_OBJECT_WARM_DELAY_MS);
+    }, objectWarmDelay);
 
     return () => {
       disposed = true;
@@ -824,6 +853,14 @@ export const useWarmPersonalImagePackMedia = () => {
     let disposed = false;
     let persistentDelayTimer: number | undefined;
     let objectDelayTimer: number | undefined;
+    const desktopSupported = isDesktopUpdaterSupported();
+    const persistentWarmDelay = desktopSupported
+      ? DESKTOP_IMAGE_PACK_WARM_DELAY_MS
+      : GLOBAL_IMAGE_PACK_WARM_DELAY_MS;
+    const objectWarmDelay = desktopSupported
+      ? DESKTOP_IMAGE_PACK_OBJECT_WARM_DELAY_MS
+      : GLOBAL_IMAGE_PACK_OBJECT_WARM_DELAY_MS;
+
     persistentDelayTimer = window.setTimeout(() => {
       if (!disposed) {
         warmImagePackMedia(mx, useAuthentication, relevantPacks, [
@@ -831,7 +868,7 @@ export const useWarmPersonalImagePackMedia = () => {
           ImageUsage.Sticker,
         ]);
       }
-    }, GLOBAL_IMAGE_PACK_WARM_DELAY_MS);
+    }, persistentWarmDelay);
 
     objectDelayTimer = window.setTimeout(() => {
       if (!disposed) {
@@ -840,7 +877,7 @@ export const useWarmPersonalImagePackMedia = () => {
           ImageUsage.Sticker,
         ]);
       }
-    }, GLOBAL_IMAGE_PACK_OBJECT_WARM_DELAY_MS);
+    }, objectWarmDelay);
 
     return () => {
       disposed = true;
