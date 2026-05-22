@@ -8,6 +8,7 @@ import {
 import { primeDesktopMediaAssetUrl } from '../../../utils/desktopMediaAssetCache';
 import { isDesktopUpdaterSupported } from '../../../utils/desktopUpdater';
 import { releaseObjectUrl, retainObjectUrl } from '../../../utils/objectUrlRetainer';
+import { shouldUseObjectUrlForMediaDisplay } from '../../../utils/matrix';
 
 type MediaCandidate = {
   source: string;
@@ -61,7 +62,10 @@ export const useStableMediaUrl = (
   options: UseStableMediaUrlOptions = {}
 ) => {
   const disableObjectUrlCache = options.disableObjectUrlCache ?? false;
-  const preferObjectUrl = options.preferObjectUrl ?? false;
+  const preferObjectUrl =
+    options.preferObjectUrl ??
+    shouldUseObjectUrlForMediaDisplay(src) ||
+    shouldUseObjectUrlForMediaDisplay(fallbackSrc);
   const desktopSupported = isDesktopUpdaterSupported();
   const [candidateIndex, setCandidateIndex] = useState(0);
   const [cacheVersion, setCacheVersion] = useState(0);
@@ -190,12 +194,21 @@ export const useStableMediaUrl = (
     let disposed = false;
 
     const preparePreferredUrl = async () => {
-      await Promise.all([
-        getPreparedMediaUrl(src, 'visible', PREFERRED_OBJECT_URL_WAIT_MS),
-        fallbackSrc && fallbackSrc !== src
-          ? getPreparedMediaUrl(fallbackSrc, 'background', PREFERRED_OBJECT_URL_WAIT_MS)
-          : undefined,
-      ]).catch(() => undefined);
+      if (preferObjectUrl) {
+        await Promise.all([
+          primeCachedMediaObjectUrl(src, 'visible'),
+          fallbackSrc && fallbackSrc !== src
+            ? primeCachedMediaObjectUrl(fallbackSrc, 'background')
+            : undefined,
+        ]).catch(() => undefined);
+      } else {
+        await Promise.all([
+          getPreparedMediaUrl(src, 'visible', PREFERRED_OBJECT_URL_WAIT_MS),
+          fallbackSrc && fallbackSrc !== src
+            ? getPreparedMediaUrl(fallbackSrc, 'background', PREFERRED_OBJECT_URL_WAIT_MS)
+            : undefined,
+        ]).catch(() => undefined);
+      }
 
       if (disposed) {
         return;
