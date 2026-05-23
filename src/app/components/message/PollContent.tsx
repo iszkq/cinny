@@ -42,8 +42,8 @@ const CN = {
   voteFailed: '\u6295\u7968\u63d0\u4ea4\u5931\u8d25\u3002',
   parseFailed: '\u8be5\u6295\u7968\u5185\u5bb9\u65e0\u6cd5\u89e3\u6790\u3002',
   maxSelections: '\u6700\u591a\u53ef\u9009',
-  expiredAt: '\u622a\u6b62',
-  longTerm: '\u957f\u671f\u6709\u6548',
+  endedAt: '\u7ed3\u675f\u4e8e',
+  manualEndOnly: '\u4ec5\u53ef\u7531\u53d1\u8d77\u8005\u624b\u52a8\u7ed3\u675f',
   noNamedVoters: '\u6682\u65e0\u8bb0\u540d\u6295\u7968',
   votes: '\u7968',
   selected: '\u5df2\u9009',
@@ -193,19 +193,6 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
 
     previousCommittedAnswersKeyRef.current = committedAnswersKey;
   }, [committedAnswers, committedAnswersKey, draftAnswers]);
-
-  useEffect(() => {
-    if (!poll?.expiresAt || summaryData.endedAt) return undefined;
-
-    const delay = poll.expiresAt - Date.now();
-    if (delay <= 0) return undefined;
-
-    const timerId = window.setTimeout(() => {
-      setRevision((current) => current + 1);
-    }, delay + 50);
-
-    return () => window.clearTimeout(timerId);
-  }, [poll?.expiresAt, summaryData.endedAt]);
 
   const draftDirty = !areAnswersEqual(draftAnswers, committedAnswers);
 
@@ -359,11 +346,9 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
           <Text size="T200">
             {ended
               ? summaryData.endedAt
-                ? `${CN.expiredAt} ${new Date(summaryData.endedAt).toLocaleString()}`
+                ? `${CN.endedAt} ${new Date(summaryData.endedAt).toLocaleString()}`
                 : CN.endedBadge
-              : poll.expiresAt
-                ? `${CN.expiredAt} ${new Date(poll.expiresAt).toLocaleString()}`
-                : CN.longTerm}
+              : CN.manualEndOnly}
           </Text>
         </Badge>
         <Badge size="300" variant="Secondary" fill="Soft" radii="Pill">
