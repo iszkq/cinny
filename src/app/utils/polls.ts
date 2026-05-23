@@ -2,10 +2,29 @@ import { Direction, IContent, MatrixEvent, Room } from 'matrix-js-sdk';
 
 export const POLL_MSGTYPE = 'io.cinny.poll';
 export const POLL_DATA_KEY = 'io.cinny.poll';
-export const POLL_RESPONSE_EVENT_TYPE = 'io.cinny.poll.response';
+export const POLL_START_EVENT_TYPE = 'm.poll.start';
+export const POLL_START_CONTENT_KEY = 'm.poll.start';
+export const POLL_RESPONSE_EVENT_TYPE = 'm.poll.response';
+export const POLL_RESPONSE_CONTENT_KEY = 'm.poll.response';
+export const POLL_END_EVENT_TYPE = 'm.poll.end';
+export const POLL_END_CONTENT_KEY = 'm.poll.end';
+export const POLL_REFERENCE_REL_TYPE = 'm.reference';
+export const POLL_DISCLOSED_KIND = 'm.poll.disclosed';
+export const POLL_UNDISCLOSED_KIND = 'm.poll.undisclosed';
+export const UNSTABLE_POLL_START_EVENT_TYPE = 'org.matrix.msc3381.poll.start';
+export const UNSTABLE_POLL_START_CONTENT_KEY = 'org.matrix.msc3381.poll.start';
+export const UNSTABLE_POLL_RESPONSE_EVENT_TYPE = 'org.matrix.msc3381.poll.response';
+export const UNSTABLE_POLL_RESPONSE_CONTENT_KEY = 'org.matrix.msc3381.poll.response';
+export const UNSTABLE_POLL_END_EVENT_TYPE = 'org.matrix.msc3381.poll.end';
+export const UNSTABLE_POLL_END_CONTENT_KEY = 'org.matrix.msc3381.poll.end';
+export const UNSTABLE_POLL_DISCLOSED_KIND = 'org.matrix.msc3381.poll.disclosed';
+export const UNSTABLE_POLL_UNDISCLOSED_KIND = 'org.matrix.msc3381.poll.undisclosed';
+export const LEGACY_POLL_RESPONSE_EVENT_TYPE = 'io.cinny.poll.response';
 export const POLL_RESPONSE_DATA_KEY = 'io.cinny.poll.response';
 export const POLL_RESPONSE_REL_TYPE = 'io.cinny.poll.response';
 export const POLL_MAX_OPTIONS = 10;
+const MATRIX_TEXT_KEY = 'm.text';
+const UNSTABLE_MATRIX_TEXT_KEY = 'org.matrix.msc1767.text';
 
 export type PollMode = 'single' | 'multiple' | 'pk';
 
@@ -48,6 +67,7 @@ export type PollSummary = {
   myResponseEventIds: string[];
   totalSelections: number;
   totalVoters: number;
+  endedAt?: number;
 };
 
 const sanitizeText = (value: unknown): string | undefined => {
@@ -64,6 +84,46 @@ const sanitizePollOptions = (options: string[]): PollOption[] =>
     }))
     .filter((option) => option.text.length > 0)
     .slice(0, POLL_MAX_OPTIONS);
+
+const getRecord = (value: unknown): Record<string, unknown> | undefined =>
+  value && typeof value === 'object' ? (value as Record<string, unknown>) : undefined;
+
+const getTextFromMatrixText = (value: unknown): string | undefined => {
+  const text = sanitizeText(value);
+  if (text) return text;
+
+  const record = getRecord(value);
+  if (!record) return undefined;
+
+  return sanitizeText(record[MATRIX_TEXT_KEY]) ?? sanitizeText(record[UNSTABLE_MATRIX_TEXT_KEY]);
+};
+
+const getPollStartRecord = (content: IContent): Record<string, unknown> | undefined =>
+  getRecord(content[POLL_START_CONTENT_KEY]) ?? getRecord(content[UNSTABLE_POLL_START_CONTENT_KEY]);
+
+const getLegacyPollRecord = (content: IContent): Record<string, unknown> | undefined =>
+  getRecord(content[POLL_DATA_KEY]);
+
+const getPollResponseRecord = (content: IContent): Record<string, unknown> | undefined =>
+  getRecord(content[POLL_RESPONSE_CONTENT_KEY]) ??
+  getRecord(content[UNSTABLE_POLL_RESPONSE_CONTENT_KEY]) ??
+  getRecord(content[POLL_RESPONSE_DATA_KEY]);
+
+const getRelationEventId = (event: MatrixEvent): string | undefined => {
+  const relation = event.getRelation();
+  if (typeof relation?.event_id === 'string') return relation.event_id;
+
+  const rawRelation = getRecord(event.getContent<IContent>()['m.relates_to']);
+  return typeof rawRelation?.event_id === 'string' ? rawRelation.event_id : undefined;
+};
+
+const getRelationType = (event: MatrixEvent): string | undefined => {
+  const relation = event.getRelation();
+  if (typeof relation?.rel_type === 'string') return relation.rel_type;
+
+  const rawRelation = getRecord(event.getContent<IContent>()['m.relates_to']);
+  return typeof rawRelation?.rel_type === 'string' ? rawRelation.rel_type : undefined;
+};
 
 const getPollMaxSelections = (
   mode: PollMode,
@@ -112,6 +172,27 @@ const buildPollFallbackBody = (data: PollData): string => {
   return lines.join('\n');
 };
 
+const buildMatrixText = (text: string): Record<string, string> => ({
+  [MATRIX_TEXT_KEY]: text,
+  [UNSTABLE_MATRIX_TEXT_KEY]: text,
+});
+
+const buildStandardPollStart = (data: PollData, unstable = false): Record<string, unknown> => ({
+  question: buildMatrixText(data.title),
+  kind: data.showVoters
+    ? unstable
+      ? UNSTABLE_POLL_DISCLOSED_KIND
+      : POLL_DISCLOSED_KIND
+    : unstable
+      ? UNSTABLE_POLL_UNDISCLOSED_KIND
+      : POLL_UNDISCLOSED_KIND,
+  max_selections: data.maxSelections,
+  answers: data.options.map((option) => ({
+    id: option.id,
+    ...buildMatrixText(option.text),
+  })),
+});
+
 export const createPollMessageContent = (input: CreatePollInput): IContent => {
   const mode: PollMode = input.mode === 'multiple' || input.mode === 'pk' ? input.mode : 'single';
   const options = sanitizePollOptions(input.options);
@@ -136,60 +217,119 @@ export const createPollMessageContent = (input: CreatePollInput): IContent => {
   };
 
   return {
-    msgtype: POLL_MSGTYPE,
     body: buildPollFallbackBody(data),
+    [MATRIX_TEXT_KEY]: buildPollFallbackBody(data),
+    [UNSTABLE_MATRIX_TEXT_KEY]: buildPollFallbackBody(data),
+    [POLL_START_CONTENT_KEY]: buildStandardPollStart(data),
+    [UNSTABLE_POLL_START_CONTENT_KEY]: buildStandardPollStart(data, true),
     [POLL_DATA_KEY]: data,
   };
 };
 
 export const parsePollData = (content: IContent): PollData | undefined => {
-  if (content.msgtype !== POLL_MSGTYPE) return undefined;
-  if (!content[POLL_DATA_KEY] || typeof content[POLL_DATA_KEY] !== 'object') return undefined;
+  const rawData = getLegacyPollRecord(content);
+  if (rawData) {
+    const title = sanitizeText(rawData.title);
+    if (!title) return undefined;
 
-  const rawData = content[POLL_DATA_KEY] as Record<string, unknown>;
-  const title = sanitizeText(rawData.title);
+    const rawMode = rawData.mode;
+    const mode: PollMode =
+      rawMode === 'multiple' || rawMode === 'pk' || rawMode === 'single' ? rawMode : 'single';
+
+    const options = Array.isArray(rawData.options)
+      ? rawData.options
+          .map((option, index) => {
+            if (!option || typeof option !== 'object') return undefined;
+            const record = option as Record<string, unknown>;
+            const text = sanitizeText(record.text);
+            if (!text) return undefined;
+            const id = sanitizeText(record.id) ?? `option_${index + 1}`;
+
+            return { id, text } satisfies PollOption;
+          })
+          .filter((option): option is PollOption => !!option)
+          .slice(0, POLL_MAX_OPTIONS)
+      : [];
+
+    if (options.length < 2) return undefined;
+    if (mode === 'pk' && options.length !== 2) return undefined;
+
+    const expiresAt =
+      typeof rawData.expiresAt === 'number' && Number.isFinite(rawData.expiresAt)
+        ? rawData.expiresAt
+        : undefined;
+
+    return {
+      version: 1,
+      title,
+      description: sanitizeText(rawData.description),
+      mode,
+      options,
+      maxSelections: getPollMaxSelections(
+        mode,
+        options.length,
+        typeof rawData.maxSelections === 'number' ? rawData.maxSelections : undefined
+      ),
+      showVoters: Boolean(rawData.showVoters),
+      expiresAt,
+    };
+  }
+
+  const pollStart = getPollStartRecord(content);
+  if (!pollStart) return undefined;
+
+  const title = getTextFromMatrixText(pollStart.question) ?? sanitizeText(content.body);
   if (!title) return undefined;
 
-  const rawMode = rawData.mode;
-  const mode: PollMode =
-    rawMode === 'multiple' || rawMode === 'pk' || rawMode === 'single' ? rawMode : 'single';
-
-  const options = Array.isArray(rawData.options)
-    ? rawData.options
-        .map((option, index) => {
-          if (!option || typeof option !== 'object') return undefined;
-          const record = option as Record<string, unknown>;
-          const text = sanitizeText(record.text);
+  const answers = Array.isArray(pollStart.answers)
+    ? pollStart.answers
+        .map((answer, index) => {
+          const record = getRecord(answer);
+          if (!record) return undefined;
+          const text = getTextFromMatrixText(record);
           if (!text) return undefined;
           const id = sanitizeText(record.id) ?? `option_${index + 1}`;
-
           return { id, text } satisfies PollOption;
         })
         .filter((option): option is PollOption => !!option)
         .slice(0, POLL_MAX_OPTIONS)
     : [];
+  if (answers.length < 2) return undefined;
 
-  if (options.length < 2) return undefined;
-  if (mode === 'pk' && options.length !== 2) return undefined;
-
-  const expiresAt =
-    typeof rawData.expiresAt === 'number' && Number.isFinite(rawData.expiresAt)
-      ? rawData.expiresAt
-      : undefined;
+  const maxSelections = getPollMaxSelections(
+    typeof pollStart.max_selections === 'number' && pollStart.max_selections > 1
+      ? 'multiple'
+      : 'single',
+    answers.length,
+    typeof pollStart.max_selections === 'number' ? pollStart.max_selections : undefined
+  );
+  const legacyData = getLegacyPollRecord(content);
+  const legacyMode = legacyData?.mode;
+  const legacyShowVoters = legacyData?.showVoters;
+  const legacyExpiresAt = legacyData?.expiresAt;
+  const mode: PollMode =
+    legacyMode === 'pk'
+      ? 'pk'
+      : maxSelections > 1
+        ? 'multiple'
+        : 'single';
 
   return {
     version: 1,
     title,
-    description: sanitizeText(rawData.description),
+    description: sanitizeText(legacyData?.description),
     mode,
-    options,
-    maxSelections: getPollMaxSelections(
-      mode,
-      options.length,
-      typeof rawData.maxSelections === 'number' ? rawData.maxSelections : undefined
-    ),
-    showVoters: Boolean(rawData.showVoters),
-    expiresAt,
+    options: answers,
+    maxSelections,
+    showVoters:
+      typeof legacyShowVoters === 'boolean'
+        ? legacyShowVoters
+        : pollStart.kind !== POLL_UNDISCLOSED_KIND &&
+          pollStart.kind !== UNSTABLE_POLL_UNDISCLOSED_KIND,
+    expiresAt:
+      typeof legacyExpiresAt === 'number' && Number.isFinite(legacyExpiresAt)
+        ? legacyExpiresAt
+        : undefined,
   };
 };
 
@@ -200,8 +340,14 @@ export const createPollResponseContent = (pollEventId: string, answers: string[]
 
   return {
     'm.relates_to': {
-      rel_type: POLL_RESPONSE_REL_TYPE,
+      rel_type: POLL_REFERENCE_REL_TYPE,
       event_id: pollEventId,
+    },
+    [POLL_RESPONSE_CONTENT_KEY]: {
+      answers: uniqueAnswers,
+    },
+    [UNSTABLE_POLL_RESPONSE_CONTENT_KEY]: {
+      answers: uniqueAnswers,
     },
     [POLL_RESPONSE_DATA_KEY]: {
       version: 1,
@@ -242,19 +388,31 @@ const getLinkedTimelines = (room: Room, eventId: string): MatrixEvent[] => {
 };
 
 export const isPollResponseEvent = (event: MatrixEvent, pollEventId?: string): boolean => {
-  if (event.getType() !== POLL_RESPONSE_EVENT_TYPE) return false;
+  const eventType = event.getType();
+  if (
+    eventType !== POLL_RESPONSE_EVENT_TYPE &&
+    eventType !== UNSTABLE_POLL_RESPONSE_EVENT_TYPE &&
+    eventType !== LEGACY_POLL_RESPONSE_EVENT_TYPE
+  ) {
+    return false;
+  }
 
-  const relation = event.getRelation();
   const content = event.getContent<IContent>();
-  const rawData =
-    content[POLL_RESPONSE_DATA_KEY] && typeof content[POLL_RESPONSE_DATA_KEY] === 'object'
-      ? (content[POLL_RESPONSE_DATA_KEY] as Record<string, unknown>)
-      : undefined;
+  const rawData = getPollResponseRecord(content);
+  const responsePollEventId = getRelationEventId(event) ?? sanitizeText(rawData?.pollEventId);
 
-  const responsePollEventId =
-    relation?.event_id ??
-    (typeof rawData?.pollEventId === 'string' ? rawData.pollEventId : undefined);
+  if (!responsePollEventId) return false;
+  if (pollEventId) return responsePollEventId === pollEventId;
+  return true;
+};
 
+const isPollEndEvent = (event: MatrixEvent, pollEventId?: string): boolean => {
+  const eventType = event.getType();
+  if (eventType !== POLL_END_EVENT_TYPE && eventType !== UNSTABLE_POLL_END_EVENT_TYPE) {
+    return false;
+  }
+
+  const responsePollEventId = getRelationEventId(event);
   if (!responsePollEventId) return false;
   if (pollEventId) return responsePollEventId === pollEventId;
   return true;
@@ -266,25 +424,16 @@ export const parsePollResponseData = (
 ): PollResponseData | undefined => {
   if (!isPollResponseEvent(event)) return undefined;
 
-  const content = event.getContent<IContent>();
-  const rawData =
-    content[POLL_RESPONSE_DATA_KEY] && typeof content[POLL_RESPONSE_DATA_KEY] === 'object'
-      ? (content[POLL_RESPONSE_DATA_KEY] as Record<string, unknown>)
-      : undefined;
+  const rawData = getPollResponseRecord(event.getContent<IContent>());
 
-  const answers = Array.isArray(rawData?.answers)
-    ? rawData?.answers
-        .filter((answer): answer is string => typeof answer === 'string')
-        .filter((answer, index, array) => array.indexOf(answer) === index)
-        .filter((answer) => poll.options.find((option) => option.id === answer))
-    : [];
+  if (!Array.isArray(rawData?.answers)) return undefined;
 
-  if (answers.length === 0) return undefined;
+  const answers = rawData.answers
+    .filter((answer): answer is string => typeof answer === 'string')
+    .filter((answer, index, array) => array.indexOf(answer) === index)
+    .filter((answer) => poll.options.find((option) => option.id === answer));
 
-  const relation = event.getRelation();
-  const pollEventId =
-    relation?.event_id ??
-    (typeof rawData?.pollEventId === 'string' ? rawData.pollEventId : undefined);
+  const pollEventId = getRelationEventId(event) ?? sanitizeText(rawData?.pollEventId);
   if (!pollEventId) return undefined;
 
   return {
@@ -295,8 +444,8 @@ export const parsePollResponseData = (
   };
 };
 
-export const hasPollEnded = (poll: PollData): boolean =>
-  typeof poll.expiresAt === 'number' ? poll.expiresAt <= Date.now() : false;
+export const hasPollEnded = (poll: PollData, endedAt?: number): boolean =>
+  typeof endedAt === 'number' || (typeof poll.expiresAt === 'number' && poll.expiresAt <= Date.now());
 
 export const summarizePoll = (
   room: Room,
@@ -314,9 +463,19 @@ export const summarizePoll = (
   >();
   const responseEventIdsBySender = new Map<string, string[]>();
 
-  getLinkedTimelines(room, pollEventId).forEach((event) => {
+  const events = getLinkedTimelines(room, pollEventId);
+  const endedAt = events.reduce<number | undefined>((currentEndedAt, event) => {
+    if (event.isRedacted()) return currentEndedAt;
+    if (!isPollEndEvent(event, pollEventId)) return currentEndedAt;
+    if (getRelationType(event) !== POLL_REFERENCE_REL_TYPE) return currentEndedAt;
+
+    return Math.min(currentEndedAt ?? event.getTs(), event.getTs());
+  }, undefined);
+
+  events.forEach((event) => {
     if (event.isRedacted()) return;
     if (!isPollResponseEvent(event, pollEventId)) return;
+    if (endedAt && event.getTs() > endedAt) return;
 
     const senderId = event.getSender();
     const eventId = event.getId();
@@ -356,5 +515,6 @@ export const summarizePoll = (
     myResponseEventIds: currentUserId ? responseEventIdsBySender.get(currentUserId) ?? [] : [],
     totalSelections,
     totalVoters: latestBySender.size,
+    endedAt,
   };
 };
