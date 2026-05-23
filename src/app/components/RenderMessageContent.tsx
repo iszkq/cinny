@@ -35,12 +35,18 @@ import { DocxViewer, SpreadsheetViewer } from './file-viewer';
 import { TextViewer } from './text-viewer';
 import { testMatrixTo } from '../plugins/matrix-to';
 import { IImageContent } from '../../types/matrix/common';
-import { POLL_MSGTYPE } from '../utils/polls';
+import {
+  isPollMessage,
+  POLL_MSGTYPE,
+  POLL_START_EVENT_TYPE,
+  UNSTABLE_POLL_START_EVENT_TYPE,
+} from '../utils/polls';
 import type { ViewerImageItem } from './message/content/ImageContent';
 
 type RenderMessageContentProps = {
   displayName: string;
   msgType: string;
+  eventType?: string;
   ts: number;
   edited?: boolean;
   getContent: <T>() => T;
@@ -57,6 +63,7 @@ type RenderMessageContentProps = {
 export function RenderMessageContent({
   displayName,
   msgType,
+  eventType,
   ts,
   edited,
   getContent,
@@ -304,7 +311,12 @@ export function RenderMessageContent({
     return <MLocation content={getContent()} />;
   }
 
-  if (msgType === POLL_MSGTYPE) {
+  if (
+    eventType === POLL_START_EVENT_TYPE ||
+    eventType === UNSTABLE_POLL_START_EVENT_TYPE ||
+    msgType === POLL_MSGTYPE ||
+    isPollMessage(getContent())
+  ) {
     return <PollContent content={getContent()} room={room} eventId={eventId} />;
   }
 
