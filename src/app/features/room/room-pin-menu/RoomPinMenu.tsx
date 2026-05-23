@@ -86,6 +86,7 @@ import {
   useGetMemberPowerTag,
 } from '../../../hooks/useMemberPowerTag';
 import { useRoomCreatorsTag } from '../../../hooks/useRoomCreatorsTag';
+import { POLL_START_EVENT_TYPE, UNSTABLE_POLL_START_EVENT_TYPE } from '../../../utils/polls';
 
 type PinnedMessageProps = {
   room: Room;
@@ -315,8 +316,37 @@ export const RoomPinMenu = forwardRef<HTMLDivElement, RoomPinMenuProps>(
       [mx, room, linkifyOpts, mentionClickHandler, spoilerClickHandler, useAuthentication]
     );
 
+    const renderPollStartEvent = (
+      event: MatrixEvent,
+      displayName: string,
+      getContent: GetContentCallback
+    ) => {
+      if (event.isRedacted()) {
+        return <RedactedContent reason={event.getUnsigned().redacted_because?.content.reason} />;
+      }
+
+      return (
+        <RenderMessageContent
+          displayName={displayName}
+          msgType={event.getContent().msgtype ?? ''}
+          eventType={event.getType()}
+          ts={event.getTs()}
+          getContent={getContent}
+          mediaAutoLoad={mediaAutoLoad}
+          urlPreview={urlPreview}
+          htmlReactParserOptions={htmlReactParserOptions}
+          linkifyOpts={linkifyOpts}
+          outlineAttachment
+          room={room}
+          eventId={event.getId()}
+        />
+      );
+    };
+
     const renderMatrixEvent = useMatrixEventRenderer<[MatrixEvent, string, GetContentCallback]>(
       {
+        [POLL_START_EVENT_TYPE]: renderPollStartEvent,
+        [UNSTABLE_POLL_START_EVENT_TYPE]: renderPollStartEvent,
         [MessageEvent.RoomMessage]: (event, displayName, getContent) => {
           if (event.isRedacted()) {
             return (
@@ -328,6 +358,7 @@ export const RoomPinMenu = forwardRef<HTMLDivElement, RoomPinMenuProps>(
             <RenderMessageContent
               displayName={displayName}
               msgType={event.getContent().msgtype ?? ''}
+              eventType={event.getType()}
               ts={event.getTs()}
               getContent={getContent}
               edited={!!event.replacingEvent()}
@@ -376,6 +407,26 @@ export const RoomPinMenu = forwardRef<HTMLDivElement, RoomPinMenuProps>(
                       )}
                     />
                   );
+                if (
+                  mEvent.getType() === MessageEvent.PollStart ||
+                  mEvent.getType() === UNSTABLE_POLL_START_EVENT_TYPE
+                ) {
+                  return (
+                    <RenderMessageContent
+                      displayName={displayName}
+                      msgType={mEvent.getContent().msgtype ?? ''}
+                      eventType={mEvent.getType()}
+                      ts={mEvent.getTs()}
+                      getContent={(() => mEvent.getContent()) as GetContentCallback}
+                      mediaAutoLoad={mediaAutoLoad}
+                      urlPreview={urlPreview}
+                      htmlReactParserOptions={htmlReactParserOptions}
+                      linkifyOpts={linkifyOpts}
+                      room={room}
+                      eventId={eventId}
+                    />
+                  );
+                }
                 if (mEvent.getType() === MessageEvent.RoomMessage) {
                   const editedEvent = getEditedEvent(eventId, mEvent, evtTimeline.getTimelineSet());
                   const getContent = (() =>
@@ -386,6 +437,7 @@ export const RoomPinMenu = forwardRef<HTMLDivElement, RoomPinMenuProps>(
                     <RenderMessageContent
                       displayName={displayName}
                       msgType={mEvent.getContent().msgtype ?? ''}
+                      eventType={mEvent.getType()}
                       ts={mEvent.getTs()}
                       edited={!!editedEvent || !!mEvent.replacingEvent()}
                       getContent={getContent}
