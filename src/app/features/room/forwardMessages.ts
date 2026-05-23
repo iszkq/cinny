@@ -1,5 +1,6 @@
 import { EventType, IContent, MatrixClient } from 'matrix-js-sdk';
 import { MessageEvent } from '../../../types/matrix/room';
+import { UNSTABLE_POLL_START_EVENT_TYPE } from '../../utils/polls';
 
 export type ForwardableMessage = {
   eventId: string;
@@ -26,6 +27,10 @@ export const isForwardableMessage = (eventType: string, content: IContent): bool
     return typeof content.url === 'string' || typeof content.file?.url === 'string';
   }
 
+  if (eventType === MessageEvent.PollStart || eventType === UNSTABLE_POLL_START_EVENT_TYPE) {
+    return true;
+  }
+
   if (eventType !== MessageEvent.RoomMessage) return false;
   if (typeof content.msgtype !== 'string') return false;
 
@@ -48,6 +53,15 @@ export const forwardMessagesToRooms = async (
         // Re-sending the same payload lets us forward them across rooms.
         // eslint-disable-next-line no-await-in-loop
         await mx.sendEvent(roomId, EventType.Sticker, forwardedContent);
+        continue;
+      }
+
+      if (
+        message.eventType === MessageEvent.PollStart ||
+        message.eventType === UNSTABLE_POLL_START_EVENT_TYPE
+      ) {
+        // eslint-disable-next-line no-await-in-loop
+        await mx.sendEvent(roomId, MessageEvent.PollStart as any, forwardedContent);
         continue;
       }
 

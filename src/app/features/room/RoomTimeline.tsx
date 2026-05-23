@@ -135,6 +135,7 @@ import { usePowerLevelTags } from '../../hooks/usePowerLevelTags';
 import { ForwardableMessage, isForwardableMessage } from './forwardMessages';
 import { ForwardMessagesModal } from './ForwardMessagesModal';
 import { ScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
+import { POLL_START_EVENT_TYPE, UNSTABLE_POLL_START_EVENT_TYPE } from '../../utils/polls';
 
 const TimelineFloat = as<'div', css.TimelineFloatVariants>(
   ({ position, className, ...props }, ref) => (
@@ -579,6 +580,8 @@ const RECEIPT_MESSAGE_TYPES = new Set<string>([
   MessageEvent.RoomMessage,
   MessageEvent.RoomMessageEncrypted,
   MessageEvent.Sticker,
+  MessageEvent.PollStart,
+  UNSTABLE_POLL_START_EVENT_TYPE,
 ]);
 const UNREAD_SYNC_STATES = new Set<SyncState>([
   SyncState.Prepared,
@@ -1397,11 +1400,122 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
   }, []);
   const selectedForwardCount = Object.keys(forwardMessages).length;
   const { t } = useTranslation();
+  const renderPollStartEvent = (
+    mEventId: string,
+    mEvent: MatrixEvent,
+    item: number,
+    timelineSet: EventTimelineSet,
+    collapse: boolean
+  ) => {
+    const reactionRelations = getEventReactions(timelineSet, mEventId);
+    const reactions = reactionRelations && reactionRelations.getSortedAnnotationsByKey();
+    const hasReactions = reactions && reactions.length > 0;
+    const { replyEventId, threadRootId } = mEvent;
+    const highlighted = focusItem?.index === item && focusItem.highlight;
+    const senderId = mEvent.getSender() ?? '';
+    const senderDisplayName =
+      getMemberDisplayName(room, senderId) ?? getMxIdLocalPart(senderId) ?? senderId;
+    const forwardContent = mEvent.getContent();
+    const forwardSource = isForwardableMessage(POLL_START_EVENT_TYPE, forwardContent)
+      ? {
+          eventId: mEventId,
+          eventType: POLL_START_EVENT_TYPE,
+          content: forwardContent,
+          senderId,
+          senderName: senderDisplayName,
+          timestamp: mEvent.getTs(),
+        }
+      : undefined;
+
+    return (
+      <Message
+        key={mEvent.getId()}
+        data-message-item={item}
+        data-message-id={mEventId}
+        room={room}
+        mEvent={mEvent}
+        forwardSource={forwardSource}
+        forwardSelectionMode={selectedForwardCount > 0}
+        forwardSelected={!!forwardMessages[mEventId]}
+        onToggleForwardSelection={handleToggleForwardSelection}
+        messageSpacing={messageSpacing}
+        messageLayout={messageLayout}
+        collapse={collapse}
+        highlight={highlighted}
+        canDelete={canRedact || (canDeleteOwn && mEvent.getSender() === mx.getUserId())}
+        canSendReaction={canSendReaction}
+        canPinEvent={canPinEvent}
+        imagePackRooms={imagePackRooms}
+        relations={hasReactions ? reactionRelations : undefined}
+        onUserClick={handleUserClick}
+        onUsernameClick={handleUsernameClick}
+        onReplyClick={handleReplyClick}
+        onReactionToggle={handleReactionToggle}
+        onEditId={handleEdit}
+        reply={
+          replyEventId && (
+            <Reply
+              room={room}
+              timelineSet={timelineSet}
+              replyEventId={replyEventId}
+              threadRootId={threadRootId}
+              onClick={handleOpenReply}
+              getMemberPowerTag={getMemberPowerTag}
+              accessibleTagColors={accessiblePowerTagColors}
+              legacyUsernameColor={legacyUsernameColor || direct}
+            />
+          )
+        }
+        reactions={
+          reactionRelations && (
+            <Reactions
+              style={{ marginTop: config.space.S200 }}
+              room={room}
+              relations={reactionRelations}
+              mEventId={mEventId}
+              canSendReaction={canSendReaction}
+              onReactionToggle={handleReactionToggle}
+            />
+          )
+        }
+        hideReadReceipts={false}
+        showDeveloperTools={showDeveloperTools}
+        memberPowerTag={getMemberPowerTag(senderId)}
+        accessibleTagColors={accessiblePowerTagColors}
+        legacyUsernameColor={legacyUsernameColor || direct}
+        hour24Clock={hour24Clock}
+        dateFormatString={dateFormatString}
+        readReceiptUserIds={messageReadReceipts.get(mEventId)}
+      >
+        {mEvent.isRedacted() ? (
+          <RedactedContent reason={mEvent.getUnsigned().redacted_because?.content.reason} />
+        ) : (
+          <RenderMessageContent
+            displayName={senderDisplayName}
+            msgType={mEvent.getContent().msgtype ?? ''}
+            eventType={mEvent.getType()}
+            ts={mEvent.getTs()}
+            getContent={(() => mEvent.getContent()) as GetContentCallback}
+            mediaAutoLoad={mediaAutoLoad}
+            urlPreview={showUrlPreview}
+            htmlReactParserOptions={htmlReactParserOptions}
+            linkifyOpts={linkifyOpts}
+            outlineAttachment={messageLayout === MessageLayout.Bubble}
+            room={room}
+            eventId={mEventId}
+            imageViewerItems={imageViewerItems}
+          />
+        )}
+      </Message>
+    );
+  };
 
   const renderMatrixEvent = useMatrixEventRenderer<
     [string, MatrixEvent, number, EventTimelineSet, boolean]
   >(
     {
+      [POLL_START_EVENT_TYPE]: renderPollStartEvent,
+      [UNSTABLE_POLL_START_EVENT_TYPE]: renderPollStartEvent,
       [MessageEvent.RoomMessage]: (mEventId, mEvent, item, timelineSet, collapse) => {
         const reactionRelations = getEventReactions(timelineSet, mEventId);
         const reactions = reactionRelations && reactionRelations.getSortedAnnotationsByKey();
@@ -1495,6 +1609,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
               <RenderMessageContent
                 displayName={senderDisplayName}
                 msgType={mEvent.getContent().msgtype ?? ''}
+                eventType={mEvent.getType()}
                 ts={mEvent.getTs()}
                 edited={!!editedEvent}
                 getContent={getContent}
@@ -1611,6 +1726,31 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
                       )}
                     />
                   );
+                if (
+                  mEvent.getType() === MessageEvent.PollStart ||
+                  mEvent.getType() === UNSTABLE_POLL_START_EVENT_TYPE
+                ) {
+                  const senderId = mEvent.getSender() ?? '';
+                  const senderDisplayName =
+                    getMemberDisplayName(room, senderId) ?? getMxIdLocalPart(senderId) ?? senderId;
+                  return (
+                    <RenderMessageContent
+                      displayName={senderDisplayName}
+                      msgType={mEvent.getContent().msgtype ?? ''}
+                      eventType={mEvent.getType()}
+                      ts={mEvent.getTs()}
+                      getContent={(() => mEvent.getContent()) as GetContentCallback}
+                      mediaAutoLoad={mediaAutoLoad}
+                      urlPreview={showUrlPreview}
+                      htmlReactParserOptions={htmlReactParserOptions}
+                      linkifyOpts={linkifyOpts}
+                      outlineAttachment={messageLayout === MessageLayout.Bubble}
+                      room={room}
+                      eventId={mEventId}
+                      imageViewerItems={imageViewerItems}
+                    />
+                  );
+                }
                 if (mEvent.getType() === MessageEvent.RoomMessage) {
                   const editedEvent = getEditedEvent(mEventId, mEvent, timelineSet);
                   const getContent = (() =>
@@ -1624,6 +1764,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
                     <RenderMessageContent
                       displayName={senderDisplayName}
                       msgType={mEvent.getContent().msgtype ?? ''}
+                      eventType={mEvent.getType()}
                       ts={mEvent.getTs()}
                       edited={!!editedEvent}
                       getContent={getContent}

@@ -122,7 +122,7 @@ import { useInterval } from '../../hooks/useInterval';
 import { getAudioFileUrl, loadAudioElement } from '../../utils/dom';
 import { getAudioInfo } from '../../utils/matrix';
 import { CreatePollModal } from './CreatePollModal';
-import { createPollMessageContent, CreatePollInput } from '../../utils/polls';
+import { createPollMessageContent, CreatePollInput, POLL_START_EVENT_TYPE } from '../../utils/polls';
 import { ScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
 
 interface RoomInputProps {
@@ -808,7 +808,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         setSendError(undefined);
 
         try {
-          await mx.sendMessage(roomId, content as never);
+          await mx.sendEvent(roomId, POLL_START_EVENT_TYPE, content as never);
           setReplyDraft(undefined);
           sendTypingStatus(false);
           closePollDialog();
