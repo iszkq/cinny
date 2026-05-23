@@ -48,6 +48,9 @@ export enum MessageEvent {
   Sticker = 'm.sticker',
   RoomRedaction = 'm.room.redaction',
   Reaction = 'm.reaction',
+  PollStart = 'm.poll.start',
+  PollResponse = 'm.poll.response',
+  PollEnd = 'm.poll.end',
 }
 
 export enum RoomType {
