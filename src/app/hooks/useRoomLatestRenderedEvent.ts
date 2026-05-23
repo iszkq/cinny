@@ -31,6 +31,8 @@ export const useRoomLatestRenderedEvent = (room: Room) => {
           evt.getType() === MessageEvent.RoomMessage ||
           evt.getType() === MessageEvent.RoomMessageEncrypted ||
           evt.getType() === MessageEvent.Sticker ||
+          evt.getType() === MessageEvent.PollStart ||
+          evt.getType() === 'org.matrix.msc3381.poll.start' ||
           evt.getType() === StateEvent.RoomName ||
           evt.getType() === StateEvent.RoomTopic ||
           evt.getType() === StateEvent.RoomAvatar
