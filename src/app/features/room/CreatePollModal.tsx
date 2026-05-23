@@ -19,7 +19,7 @@ import {
   config,
   toRem,
 } from 'folds';
-import { CreatePollInput, POLL_MAX_OPTIONS, PollMode } from '../../utils/polls';
+import { CreatePollInput, CreatePollMode, POLL_MAX_OPTIONS } from '../../utils/polls';
 
 type CreatePollModalProps = {
   open: boolean;
@@ -30,7 +30,7 @@ type CreatePollModalProps = {
 const CN = {
   createPoll: '\u521b\u5efa\u6295\u7968',
   createHint:
-    '\u652f\u6301\u5355\u9009\u3001\u591a\u9009\u548c PK \u6295\u7968\uff0c\u4f1a\u76f4\u63a5\u53d1\u9001\u5230\u5f53\u524d\u623f\u95f4\u3002',
+    '\u652f\u6301\u5355\u9009\u548c\u591a\u9009\u6295\u7968\uff0c\u4f1a\u76f4\u63a5\u53d1\u9001\u5230\u5f53\u524d\u623f\u95f4\u3002',
   title: '\u6295\u7968\u6807\u9898',
   titlePlaceholder: '\u4f8b\u5982\uff1a\u672c\u5468\u4ea7\u54c1\u8bc4\u5ba1\u65f6\u95f4',
   description: '\u8865\u5145\u8bf4\u660e',
@@ -55,7 +55,6 @@ const CN = {
   sendPoll: '\u53d1\u9001\u6295\u7968',
   needTitle: '\u8bf7\u5148\u586b\u5199\u6295\u7968\u6807\u9898\u3002',
   needOptions: '\u81f3\u5c11\u9700\u8981 2 \u4e2a\u6709\u6548\u9009\u9879\u3002',
-  needPkOptions: 'PK \u6295\u7968\u5fc5\u987b\u4fdd\u7559 2 \u4e2a\u9009\u9879\u3002',
   invalidExpiresAt: '\u622a\u6b62\u65f6\u95f4\u683c\u5f0f\u65e0\u6548\u3002',
   expiresAtPast: '\u622a\u6b62\u65f6\u95f4\u5fc5\u987b\u665a\u4e8e\u5f53\u524d\u65f6\u95f4\u3002',
   createFailed: '\u521b\u5efa\u6295\u7968\u5931\u8d25\u3002',
@@ -76,18 +75,10 @@ const parseLocalDateTimeValue = (value: string): number | undefined => {
   return parsed;
 };
 
-const ensurePkOptions = (options: string[]): string[] => {
-  const nextOptions = options.slice(0, 2);
-  while (nextOptions.length < 2) {
-    nextOptions.push(`${CN.option} ${nextOptions.length + 1}`);
-  }
-  return nextOptions;
-};
-
 export function CreatePollModal({ open, requestClose, onCreate }: CreatePollModalProps) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [mode, setMode] = useState<PollMode>('single');
+  const [mode, setMode] = useState<CreatePollMode>('single');
   const [options, setOptions] = useState<string[]>(DEFAULT_OPTIONS);
   const [maxSelections, setMaxSelections] = useState('2');
   const [showVoters, setShowVoters] = useState(true);
@@ -109,15 +100,9 @@ export function CreatePollModal({ open, requestClose, onCreate }: CreatePollModa
     setSubmitting(false);
   }, [open]);
 
-  const handleModeChange = (nextMode: PollMode) => {
+  const handleModeChange = (nextMode: CreatePollMode) => {
     setMode(nextMode);
     setStatusText(undefined);
-
-    if (nextMode === 'pk') {
-      setOptions((current) => ensurePkOptions(current));
-      setMaxSelections('1');
-      return;
-    }
 
     if (nextMode === 'single') {
       setMaxSelections('1');
@@ -162,11 +147,6 @@ export function CreatePollModal({ open, requestClose, onCreate }: CreatePollModa
 
     if (trimmedOptions.length < 2) {
       setStatusText(CN.needOptions);
-      return;
-    }
-
-    if (mode === 'pk' && trimmedOptions.length !== 2) {
-      setStatusText(CN.needPkOptions);
       return;
     }
 
@@ -297,14 +277,6 @@ export function CreatePollModal({ open, requestClose, onCreate }: CreatePollModa
                     >
                       <Text size="B300">{CN.multiple}</Text>
                     </Chip>
-                    <Chip
-                      variant={mode === 'pk' ? 'Primary' : 'SurfaceVariant'}
-                      radii="Pill"
-                      outlined={mode !== 'pk'}
-                      onClick={() => handleModeChange('pk')}
-                    >
-                      <Text size="B300">PK</Text>
-                    </Chip>
                   </Box>
                 </Box>
 
@@ -416,7 +388,7 @@ export function CreatePollModal({ open, requestClose, onCreate }: CreatePollModa
                             variant="SurfaceVariant"
                             size="300"
                             radii="300"
-                            disabled={options.length <= 2 || mode === 'pk'}
+                            disabled={options.length <= 2}
                             onClick={() => handleRemoveOption(index)}
                           >
                             <Icon src={Icons.Cross} />
@@ -433,7 +405,7 @@ export function CreatePollModal({ open, requestClose, onCreate }: CreatePollModa
                       size="300"
                       radii="300"
                       outlined
-                      disabled={mode === 'pk' || options.length >= POLL_MAX_OPTIONS}
+                      disabled={options.length >= POLL_MAX_OPTIONS}
                       onClick={handleAddOption}
                     >
                       <Text size="B300">{`${CN.addOption} (${options.length}/${POLL_MAX_OPTIONS})`}</Text>

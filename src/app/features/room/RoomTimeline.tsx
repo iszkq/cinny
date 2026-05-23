@@ -19,6 +19,7 @@ import {
   IContent,
   MatrixClient,
   MatrixEvent,
+  MatrixEventEvent,
   MsgType,
   Room,
   RoomEvent,
@@ -881,6 +882,14 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     room,
     useCallback(
       (mEvt: MatrixEvent) => {
+        if (mEvt.isEncrypted() || mEvt.isDecryptionFailure()) {
+          const handleDecrypted = () => {
+            mEvt.removeListener(MatrixEventEvent.Decrypted, handleDecrypted);
+            setTimeline((current) => ({ ...current }));
+          };
+          mEvt.on(MatrixEventEvent.Decrypted, handleDecrypted);
+        }
+
         // if user is at bottom of timeline
         // keep paginating timeline and conditionally mark as read
         // otherwise we update timeline without paginating
@@ -946,6 +955,31 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
       room.removeListener(RoomEvent.AccountData, handleRoomAccountData);
     };
   }, [room, syncUnreadInfo]);
+
+  useEffect(() => {
+    const trackedEvents = new Set<MatrixEvent>();
+    const disposers: Array<() => void> = [];
+
+    timeline.linkedTimelines.forEach((linkedTimeline) => {
+      linkedTimeline.getEvents().forEach((event) => {
+        if (trackedEvents.has(event)) return;
+        trackedEvents.add(event);
+
+        if (!event.isEncrypted() && !event.isDecryptionFailure()) return;
+
+        const handleDecrypted = () => {
+          setTimeline((current) => ({ ...current }));
+        };
+
+        event.on(MatrixEventEvent.Decrypted, handleDecrypted);
+        disposers.push(() => event.removeListener(MatrixEventEvent.Decrypted, handleDecrypted));
+      });
+    });
+
+    return () => {
+      disposers.forEach((dispose) => dispose());
+    };
+  }, [timeline.linkedTimelines]);
 
   const handleOpenEvent = useCallback(
     async (
@@ -1416,10 +1450,10 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     const senderDisplayName =
       getMemberDisplayName(room, senderId) ?? getMxIdLocalPart(senderId) ?? senderId;
     const forwardContent = mEvent.getContent();
-    const forwardSource = isForwardableMessage(POLL_START_EVENT_TYPE, forwardContent)
+    const forwardSource = isForwardableMessage(mEvent.getType(), forwardContent)
       ? {
           eventId: mEventId,
-          eventType: POLL_START_EVENT_TYPE,
+          eventType: mEvent.getType(),
           content: forwardContent,
           senderId,
           senderName: senderDisplayName,
@@ -1710,6 +1744,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             <EncryptedContent mEvent={mEvent}>
               {() => {
                 if (mEvent.isRedacted()) return <RedactedContent />;
+                if (reactionOrEditEvent(mEvent)) return null;
                 if (mEvent.getType() === MessageEvent.Sticker)
                   return (
                     <MSticker

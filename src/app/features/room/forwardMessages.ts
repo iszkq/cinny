@@ -1,6 +1,9 @@
 import { EventType, IContent, MatrixClient } from 'matrix-js-sdk';
 import { MessageEvent } from '../../../types/matrix/room';
-import { UNSTABLE_POLL_START_EVENT_TYPE } from '../../utils/polls';
+import {
+  OUTGOING_POLL_START_EVENT_TYPE,
+  UNSTABLE_POLL_START_EVENT_TYPE,
+} from '../../utils/polls';
 
 export type ForwardableMessage = {
   eventId: string;
@@ -61,7 +64,7 @@ export const forwardMessagesToRooms = async (
         message.eventType === UNSTABLE_POLL_START_EVENT_TYPE
       ) {
         // eslint-disable-next-line no-await-in-loop
-        await mx.sendEvent(roomId, MessageEvent.PollStart as any, forwardedContent);
+        await mx.sendEvent(roomId, OUTGOING_POLL_START_EVENT_TYPE, forwardedContent);
         continue;
       }
 
