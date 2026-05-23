@@ -97,6 +97,7 @@ import {
 } from '../../../hooks/useMemberPowerTag';
 import { useRoomCreatorsTag } from '../../../hooks/useRoomCreatorsTag';
 import { useRoomCreators } from '../../../hooks/useRoomCreators';
+import { POLL_START_EVENT_TYPE, UNSTABLE_POLL_START_EVENT_TYPE } from '../../../utils/polls';
 
 type RoomNotificationsGroup = {
   roomId: string;
@@ -259,8 +260,37 @@ function RoomNotificationsGroupComp({
     [mx, room, linkifyOpts, mentionClickHandler, spoilerClickHandler, useAuthentication]
   );
 
+  const renderPollStartEvent = (
+    event: IRoomEvent,
+    displayName: string,
+    getContent: GetContentCallback
+  ) => {
+    if (event.unsigned?.redacted_because) {
+      return <RedactedContent reason={event.unsigned?.redacted_because.content.reason} />;
+    }
+
+    return (
+      <RenderMessageContent
+        displayName={displayName}
+        msgType={event.content.msgtype ?? ''}
+        eventType={event.type}
+        ts={event.origin_server_ts}
+        getContent={getContent}
+        mediaAutoLoad={mediaAutoLoad}
+        urlPreview={urlPreview}
+        htmlReactParserOptions={htmlReactParserOptions}
+        linkifyOpts={linkifyOpts}
+        outlineAttachment
+        room={room}
+        eventId={event.event_id}
+      />
+    );
+  };
+
   const renderMatrixEvent = useMatrixEventRenderer<[IRoomEvent, string, GetContentCallback]>(
     {
+      [POLL_START_EVENT_TYPE]: renderPollStartEvent,
+      [UNSTABLE_POLL_START_EVENT_TYPE]: renderPollStartEvent,
       [MessageEvent.RoomMessage]: (event, displayName, getContent) => {
         if (event.unsigned?.redacted_because) {
           return <RedactedContent reason={event.unsigned?.redacted_because.content.reason} />;
@@ -270,6 +300,7 @@ function RoomNotificationsGroupComp({
           <RenderMessageContent
             displayName={displayName}
             msgType={event.content.msgtype ?? ''}
+            eventType={event.type}
             ts={event.origin_server_ts}
             getContent={getContent}
             mediaAutoLoad={mediaAutoLoad}
@@ -316,6 +347,26 @@ function RoomNotificationsGroupComp({
                     )}
                   />
                 );
+              if (
+                mEvent.getType() === MessageEvent.PollStart ||
+                mEvent.getType() === UNSTABLE_POLL_START_EVENT_TYPE
+              ) {
+                return (
+                  <RenderMessageContent
+                    displayName={displayName}
+                    msgType={mEvent.getContent().msgtype ?? ''}
+                    eventType={mEvent.getType()}
+                    ts={mEvent.getTs()}
+                    getContent={(() => mEvent.getContent()) as GetContentCallback}
+                    mediaAutoLoad={mediaAutoLoad}
+                    urlPreview={urlPreview}
+                    htmlReactParserOptions={htmlReactParserOptions}
+                    linkifyOpts={linkifyOpts}
+                    room={room}
+                    eventId={evt.event_id}
+                  />
+                );
+              }
               if (mEvent.getType() === MessageEvent.RoomMessage) {
                 const editedEvent = getEditedEvent(
                   evt.event_id,
@@ -330,6 +381,7 @@ function RoomNotificationsGroupComp({
                   <RenderMessageContent
                     displayName={displayName}
                     msgType={mEvent.getContent().msgtype ?? ''}
+                    eventType={mEvent.getType()}
                     ts={mEvent.getTs()}
                     edited={!!editedEvent}
                     getContent={getContent}

@@ -103,6 +103,7 @@ import {
 import * as css from './Favorites.css';
 import { CompactClientNavButton } from '../CompactClientNavButton';
 import { getLinkedTimelines, getLiveTimeline } from '../../../features/room/RoomTimeline';
+import { POLL_START_EVENT_TYPE, UNSTABLE_POLL_START_EVENT_TYPE } from '../../../utils/polls';
 
 type FavoriteDateFilter = 'all' | 'today' | '7d' | '30d' | '90d';
 
@@ -140,6 +141,7 @@ const getFavoriteCategoryText = (category: FavoriteCategory): string => {
   if (category === 'video') return '\u89c6\u9891';
   if (category === 'audio') return '\u97f3\u9891';
   if (category === 'file') return '\u6587\u4ef6';
+  if (category === 'poll') return '\u6295\u7968';
 
   return '\u5176\u4ed6';
 };
@@ -1426,12 +1428,38 @@ export function Favorites() {
   const hasAdvancedFilters = dateFilter !== 'all' || searchQuery.trim().length > 0;
   const hasActiveFilters = hasAdvancedFilters;
 
+  const renderPollStartEvent = (
+    event: MatrixEvent,
+    displayName: string,
+    getContent: GetContentCallback
+  ) => (
+    <RenderMessageContent
+      displayName={displayName}
+      msgType={event.getContent().msgtype ?? ''}
+      eventType={event.getType()}
+      ts={event.getTs()}
+      edited={Boolean(event.replacingEvent())}
+      getContent={getContent}
+      mediaAutoLoad={mediaAutoLoad}
+      urlPreview={urlPreview}
+      htmlReactParserOptions={htmlReactParserOptions}
+      linkifyOpts={linkifyOpts}
+      outlineAttachment
+      room={favoritesRoom}
+      eventId={event.getId() ?? undefined}
+      imageViewerItems={imageViewerItems}
+    />
+  );
+
   const renderMatrixEvent = useMatrixEventRenderer<[MatrixEvent, string, GetContentCallback]>(
     {
+      [POLL_START_EVENT_TYPE]: renderPollStartEvent,
+      [UNSTABLE_POLL_START_EVENT_TYPE]: renderPollStartEvent,
       [MessageEvent.RoomMessage]: (event, displayName, getContent) => (
         <RenderMessageContent
           displayName={displayName}
           msgType={event.getContent().msgtype ?? ''}
+          eventType={event.getType()}
           ts={event.getTs()}
           edited={Boolean(event.replacingEvent())}
           getContent={getContent}
