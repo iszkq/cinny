@@ -13,7 +13,7 @@ type SyncStatusProps = {
   mx: MatrixClient;
 };
 
-const CONNECTION_ISSUE_VISIBLE_DELAY_MS = 10000;
+const CONNECTION_ISSUE_VISIBLE_DELAY_MS = 20000;
 
 const isConnectionIssueState = (state: SyncState | null): boolean =>
   state === SyncState.Reconnecting || state === SyncState.Error;
@@ -82,25 +82,6 @@ export function SyncStatus({ mx }: SyncStatusProps) {
       visibleStateData.current === SyncState.Error)
   ) {
     return null;
-  }
-
-  if (
-    isHealthySyncState(visibleStateData.current) &&
-    visibleStateData.previous !== SyncState.Syncing
-  ) {
-    return (
-      <Box direction="Column" shrink="No">
-        <Box
-          className={ContainerColor({ variant: 'Success' })}
-          style={{ padding: `${config.space.S100} 0` }}
-          alignItems="Center"
-          justifyContent="Center"
-        >
-          <Text size="L400">{'\u6b63\u5728\u8fde\u63a5...'}</Text>
-        </Box>
-        <Line variant="Success" size="300" />
-      </Box>
-    );
   }
 
   if (visibleStateData.current === SyncState.Reconnecting) {
