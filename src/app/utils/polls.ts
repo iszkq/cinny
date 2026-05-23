@@ -40,6 +40,7 @@ export type CreatePollMode = 'single' | 'multiple';
 // Most deployed Matrix rooms and clients still interoperate better with MSC3381 poll events.
 export const OUTGOING_POLL_START_EVENT_TYPE = UNSTABLE_POLL_START_EVENT_TYPE;
 export const OUTGOING_POLL_RESPONSE_EVENT_TYPE = UNSTABLE_POLL_RESPONSE_EVENT_TYPE;
+export const OUTGOING_POLL_END_EVENT_TYPE = UNSTABLE_POLL_END_EVENT_TYPE;
 
 export type PollOption = {
   id: string;
@@ -64,7 +65,6 @@ export type CreatePollInput = {
   options: string[];
   maxSelections?: number;
   showVoters: boolean;
-  expiresAt?: number;
 };
 
 export type PollResponseData = {
@@ -594,12 +594,6 @@ export const createPollMessageContent = (input: CreatePollInput): IContent => {
   const options = sanitizePollOptions(input.options);
   const title = input.title.trim();
   const description = sanitizeText(input.description);
-  const expiresAt =
-    typeof input.expiresAt === 'number' &&
-    Number.isFinite(input.expiresAt) &&
-    input.expiresAt > Date.now()
-      ? input.expiresAt
-      : undefined;
 
   const data: PollData = {
     version: 1,
@@ -609,7 +603,6 @@ export const createPollMessageContent = (input: CreatePollInput): IContent => {
     options,
     maxSelections: getPollMaxSelections(mode, options.length, input.maxSelections),
     showVoters: input.showVoters,
-    expiresAt,
   };
 
   return {
@@ -754,6 +747,15 @@ export const createPollResponseContent = (pollEventId: string, answers: string[]
   };
 };
 
+export const createPollEndContent = (pollEventId: string): IContent => ({
+  'm.relates_to': {
+    rel_type: POLL_REFERENCE_REL_TYPE,
+    event_id: pollEventId,
+  },
+  [POLL_END_CONTENT_KEY]: {},
+  [UNSTABLE_POLL_END_CONTENT_KEY]: {},
+});
+
 export const isPollResponseEvent = (event: MatrixEvent, pollEventId?: string): boolean => {
   const eventType = event.getType();
   if (!isPollResponseEventType(eventType)) {
@@ -807,8 +809,8 @@ export const parsePollResponseData = (
   };
 };
 
-export const hasPollEnded = (poll: PollData, endedAt?: number): boolean =>
-  typeof endedAt === 'number' || (typeof poll.expiresAt === 'number' && poll.expiresAt <= Date.now());
+export const hasPollEnded = (_poll: PollData, endedAt?: number): boolean =>
+  typeof endedAt === 'number';
 
 export const summarizePoll = (
   room: Room,
