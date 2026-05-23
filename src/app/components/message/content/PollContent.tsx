@@ -8,7 +8,7 @@ import {
   RoomEventHandlerMap,
 } from 'matrix-js-sdk';
 import { RelationsEvent } from 'matrix-js-sdk/lib/models/relations';
-import { Avatar, Badge, Box, ProgressBar, Text, color, config } from 'folds';
+import { Avatar, Badge, Box, Button, ProgressBar, Text, color, config } from 'folds';
 import { SequenceCard } from '../../sequence-card';
 import { UserAvatar } from '../../user-avatar';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
@@ -18,6 +18,7 @@ import { getMxIdLocalPart, mxcUrlToHttp } from '../../../utils/matrix';
 import { getMemberAvatarMxc, getMemberDisplayName } from '../../../utils/room';
 import {
   combinePollSummaries,
+  createPollEndContent,
   createPollSummarySnapshot,
   createPollResponseContent,
   getCachedPollRelationEvents,
@@ -27,6 +28,7 @@ import {
   getPersistedPollSummarySnapshot,
   getPollSummarySnapshot,
   hasPollEnded,
+  OUTGOING_POLL_END_EVENT_TYPE,
   OUTGOING_POLL_RESPONSE_EVENT_TYPE,
   parsePollData,
   persistPollSummarySnapshot,
@@ -53,8 +55,8 @@ const CN = {
   voteFailed: '\u6295\u7968\u63d0\u4ea4\u5931\u8d25\u3002',
   parseFailed: '\u8be5\u6295\u7968\u5185\u5bb9\u65e0\u6cd5\u89e3\u6790\u3002',
   maxSelections: '\u6700\u591a\u53ef\u9009',
-  expiredAt: '\u622a\u6b62',
-  longTerm: '\u957f\u671f\u6709\u6548',
+  endedAt: '\u7ed3\u675f\u4e8e',
+  manualEndOnly: '\u4ec5\u53ef\u7531\u53d1\u8d77\u8005\u624b\u52a8\u7ed3\u675f',
   noNamedVoters: '\u6682\u65e0\u8bb0\u540d\u6295\u7968',
   votes: '\u7968',
   selected: '\u5df2\u9009',
@@ -70,6 +72,10 @@ const CN = {
   syncingVote: '\u6295\u7968\u540c\u6b65\u4e2d...',
   syncDelayed: '\u6295\u7968\u540c\u6b65\u8d85\u65f6\uff0c\u53ef\u4ee5\u91cd\u65b0\u53d1\u9001\u3002',
   syncFailed: '\u4e0a\u6b21\u6295\u7968\u53d1\u9001\u5931\u8d25\uff0c\u8bf7\u91cd\u65b0\u53d1\u9001\u3002',
+  endingPoll: '\u6b63\u5728\u7ed3\u675f\u6295\u7968...',
+  pollEnded: '\u6295\u7968\u5df2\u7ed3\u675f\u3002',
+  endPoll: '\u7ed3\u675f\u6295\u7968',
+  endFailed: '\u7ed3\u675f\u6295\u7968\u5931\u8d25\u3002',
   endedBadge: '\u5df2\u622a\u6b62',
   activeBadge: '\u8fdb\u884c\u4e2d',
 } as const;
@@ -121,6 +127,7 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
   const optionIds = useMemo(() => poll?.options.map((option) => option.id) ?? [], [poll]);
   const [revision, setRevision] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  const [endingPoll, setEndingPoll] = useState(false);
   const [statusText, setStatusText] = useState<string>();
   const [statusError, setStatusError] = useState(false);
   const [draftAnswers, setDraftAnswers] = useState<string[]>([]);
@@ -129,6 +136,7 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
   );
   const previousCommittedAnswersKeyRef = useRef('');
   const submitInFlightRef = useRef(false);
+  const endInFlightRef = useRef(false);
   const relationCollections = useMemo(() => {
     if (!room || !eventId) return [];
     return [
@@ -295,7 +303,14 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
   }, [content, eventId, room, summary]);
 
   const summaryData = summary ?? DEFAULT_SUMMARY;
+  const pollEndedByEvent = typeof summaryData.endedAt === 'number';
   const ended = poll ? hasPollEnded(poll, summaryData.endedAt) : false;
+  const pollEvent = useMemo(
+    () => (room && eventId ? room.findEventById(eventId) : undefined),
+    [room, eventId, revision]
+  );
+  const pollCreatorId = pollEvent?.getSender();
+  const canManagePoll = !!pollCreatorId && pollCreatorId === mx.getUserId();
   const committedAnswers = useMemo(
     () => summaryData.myAnswers.slice(0, poll?.maxSelections ?? summaryData.myAnswers.length),
     [poll, summaryData.myAnswers]
@@ -370,19 +385,6 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
   }, [committedAnswers, committedAnswersKey, draftAnswers]);
 
   useEffect(() => {
-    if (!poll?.expiresAt || summaryData.endedAt) return undefined;
-
-    const delay = poll.expiresAt - Date.now();
-    if (delay <= 0) return undefined;
-
-    const timerId = window.setTimeout(() => {
-      setRevision((current) => current + 1);
-    }, delay + 50);
-
-    return () => window.clearTimeout(timerId);
-  }, [poll?.expiresAt, summaryData.endedAt]);
-
-  useEffect(() => {
     const staleTransitionDelay = pendingResponseEvents.reduce<number | undefined>(
       (currentMinDelay, responseEvent) => {
         const status = getPendingPollEventStatus(responseEvent);
@@ -428,9 +430,54 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
     setStatusError(false);
   }, []);
 
+  const handleEndPoll = useCallback(async () => {
+    if (
+      !room ||
+      !eventId ||
+      !poll ||
+      pollEndedByEvent ||
+      endingPoll ||
+      endInFlightRef.current
+    ) {
+      return;
+    }
+    if (!canManagePoll) {
+      return;
+    }
+
+    endInFlightRef.current = true;
+    setEndingPoll(true);
+    setStatus(CN.endingPoll);
+
+    try {
+      await mx.sendEvent(
+        room.roomId,
+        OUTGOING_POLL_END_EVENT_TYPE,
+        createPollEndContent(eventId) as never
+      );
+      setStatus(CN.pollEnded);
+      setRevision((current) => current + 1);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : CN.endFailed, true);
+    } finally {
+      endInFlightRef.current = false;
+      setEndingPoll(false);
+    }
+  }, [canManagePoll, endingPoll, eventId, mx, poll, pollEndedByEvent, room, setStatus]);
+
   const handleSelectOption = useCallback(
     (optionId: string) => {
-      if (!poll || !room || !eventId || submitting || submitInFlightRef.current || ended) return;
+      if (
+        !poll ||
+        !room ||
+        !eventId ||
+        submitting ||
+        endingPoll ||
+        submitInFlightRef.current ||
+        hasPollEnded(poll, summaryData.endedAt)
+      ) {
+        return;
+      }
 
       const selectedAnswers = new Set(draftAnswers);
 
@@ -453,11 +500,30 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
       clearStatus();
       setDraftAnswers(getOrderedAnswers(optionIds, selectedAnswers, poll.maxSelections));
     },
-    [clearStatus, draftAnswers, ended, eventId, optionIds, poll, room, setStatus, submitting]
+    [
+      clearStatus,
+      draftAnswers,
+      endingPoll,
+      eventId,
+      optionIds,
+      poll,
+      room,
+      setStatus,
+      submitting,
+      summaryData.endedAt,
+    ]
   );
 
   const handleSubmitVote = useCallback(async () => {
-    if (!poll || !room || !eventId || submitting || submitInFlightRef.current || !draftDirty) {
+    if (
+      !poll ||
+      !room ||
+      !eventId ||
+      submitting ||
+      endingPoll ||
+      submitInFlightRef.current ||
+      !draftDirty
+    ) {
       return;
     }
     if (hasPollEnded(poll, summaryData.endedAt)) {
@@ -509,13 +575,22 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
     room,
     setStatus,
     submitting,
+    endingPoll,
     activePendingOwnResponse,
     confirmedResponseEventIds,
     summaryData.endedAt,
   ]);
 
   useEffect(() => {
-    if (!poll || !room || !eventId || ended || submitting || submitInFlightRef.current) {
+    if (
+      !poll ||
+      !room ||
+      !eventId ||
+      ended ||
+      submitting ||
+      endingPoll ||
+      submitInFlightRef.current
+    ) {
       return undefined;
     }
     if (!draftDirty || activePendingOwnResponse) {
@@ -527,7 +602,17 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
     }, poll.mode === 'multiple' ? MULTIPLE_AUTO_SUBMIT_DELAY_MS : 0);
 
     return () => window.clearTimeout(timerId);
-  }, [activePendingOwnResponse, draftDirty, ended, eventId, handleSubmitVote, poll, room, submitting]);
+  }, [
+    activePendingOwnResponse,
+    draftDirty,
+    ended,
+    endingPoll,
+    eventId,
+    handleSubmitVote,
+    poll,
+    room,
+    submitting,
+  ]);
 
   if (!poll) {
     return (
@@ -580,11 +665,9 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
           <Text size="T200">
             {ended
               ? summaryData.endedAt
-                ? `${CN.expiredAt} ${new Date(summaryData.endedAt).toLocaleString()}`
+                ? `${CN.endedAt} ${new Date(summaryData.endedAt).toLocaleString()}`
                 : CN.endedBadge
-              : poll.expiresAt
-                ? `${CN.expiredAt} ${new Date(poll.expiresAt).toLocaleString()}`
-                : CN.longTerm}
+              : CN.manualEndOnly}
           </Text>
         </Badge>
         <Badge size="300" variant="Secondary" fill="Soft" radii="Pill">
@@ -636,7 +719,7 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
               gap="100"
               onClick={() => handleSelectOption(option.id)}
               aria-pressed={selected}
-              disabled={!room || !eventId || ended || submitting}
+              disabled={!room || !eventId || ended || submitting || endingPoll}
               style={{
                 width: '100%',
                 border: selected
@@ -645,7 +728,8 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
                 borderRadius: 8,
                 padding: config.space.S300,
                 background: selected ? 'rgba(38, 132, 255, 0.12)' : 'rgba(255, 255, 255, 0.02)',
-                cursor: !room || !eventId || ended || submitting ? 'default' : 'pointer',
+                cursor:
+                  !room || !eventId || ended || submitting || endingPoll ? 'default' : 'pointer',
                 opacity: submitting && selected ? 0.75 : 1,
                 transition: 'border-color 120ms ease, background 120ms ease, opacity 120ms ease',
               }}
@@ -742,6 +826,8 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
             <Text size="T200" priority="300">
               {ended
                 ? CN.endedSummary
+                : endingPoll
+                  ? CN.endingPoll
                 : failedPendingOwnResponse
                   ? CN.syncFailed
                 : stalePendingOwnResponse
@@ -754,6 +840,25 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
                     ? CN.multipleHint
                     : CN.singleHint}
             </Text>
+            {canManagePoll && !pollEndedByEvent && (
+              <Box>
+                <Button
+                  type="button"
+                  variant="Secondary"
+                  fill="Soft"
+                  size="300"
+                  radii="300"
+                  outlined
+                  onClick={() => {
+                    handleEndPoll().catch(() => undefined);
+                  }}
+                  disabled={submitting || endingPoll}
+                  aria-disabled={submitting || endingPoll}
+                >
+                  <Text size="B300">{CN.endPoll}</Text>
+                </Button>
+              </Box>
+            )}
           </>
         )}
         {statusText && (
