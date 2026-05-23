@@ -1,4 +1,4 @@
-import React, { FormEventHandler, useEffect, useState } from 'react';
+import React, { FormEventHandler, MouseEventHandler, useEffect, useState } from 'react';
 import {
   Box,
   Button,
@@ -133,8 +133,20 @@ export function CreatePollModal({ open, requestClose, onCreate }: CreatePollModa
     setExpiresAtInput(toLocalDateTimeValue(Date.now() + delta));
   };
 
+  const preventImplicitSubmit = (callback: () => void): MouseEventHandler =>
+    (evt) => {
+      evt.preventDefault();
+      callback();
+    };
+
   const handleSubmit: FormEventHandler<HTMLFormElement> = async (evt) => {
     evt.preventDefault();
+
+    const nativeSubmitEvent = evt.nativeEvent as SubmitEvent;
+    const submitter = nativeSubmitEvent.submitter as HTMLElement | null;
+    if (submitter?.getAttribute('data-poll-submit') !== 'true') {
+      return;
+    }
 
     const trimmedTitle = title.trim();
     const trimmedOptions = options.map((option) => option.trim()).filter((option) => option.length > 0);
@@ -265,7 +277,7 @@ export function CreatePollModal({ open, requestClose, onCreate }: CreatePollModa
                       variant={mode === 'single' ? 'Primary' : 'SurfaceVariant'}
                       radii="Pill"
                       outlined={mode !== 'single'}
-                      onClick={() => handleModeChange('single')}
+                      onClick={preventImplicitSubmit(() => handleModeChange('single'))}
                     >
                       <Text size="B300">{CN.single}</Text>
                     </Chip>
@@ -273,7 +285,7 @@ export function CreatePollModal({ open, requestClose, onCreate }: CreatePollModa
                       variant={mode === 'multiple' ? 'Primary' : 'SurfaceVariant'}
                       radii="Pill"
                       outlined={mode !== 'multiple'}
-                      onClick={() => handleModeChange('multiple')}
+                      onClick={preventImplicitSubmit(() => handleModeChange('multiple'))}
                     >
                       <Text size="B300">{CN.multiple}</Text>
                     </Chip>
@@ -309,27 +321,31 @@ export function CreatePollModal({ open, requestClose, onCreate }: CreatePollModa
                     style={{ width: '100%', minWidth: 0 }}
                   />
                   <Box gap="100" style={{ flexWrap: 'wrap' }}>
-                    <Chip radii="Pill" variant="SurfaceVariant" onClick={() => setQuickExpiry(DAY_MS)}>
+                    <Chip
+                      radii="Pill"
+                      variant="SurfaceVariant"
+                      onClick={preventImplicitSubmit(() => setQuickExpiry(DAY_MS))}
+                    >
                       <Text size="B300">{'\u0031 \u5929\u540e'}</Text>
                     </Chip>
                     <Chip
                       radii="Pill"
                       variant="SurfaceVariant"
-                      onClick={() => setQuickExpiry(3 * DAY_MS)}
+                      onClick={preventImplicitSubmit(() => setQuickExpiry(3 * DAY_MS))}
                     >
                       <Text size="B300">{'\u0033 \u5929\u540e'}</Text>
                     </Chip>
                     <Chip
                       radii="Pill"
                       variant="SurfaceVariant"
-                      onClick={() => setQuickExpiry(7 * DAY_MS)}
+                      onClick={preventImplicitSubmit(() => setQuickExpiry(7 * DAY_MS))}
                     >
                       <Text size="B300">{'\u0037 \u5929\u540e'}</Text>
                     </Chip>
                     <Chip
                       radii="Pill"
                       variant="SurfaceVariant"
-                      onClick={() => setExpiresAtInput('')}
+                      onClick={preventImplicitSubmit(() => setExpiresAtInput(''))}
                     >
                       <Text size="B300">{CN.noExpiry}</Text>
                     </Chip>
@@ -343,7 +359,7 @@ export function CreatePollModal({ open, requestClose, onCreate }: CreatePollModa
                       variant={showVoters ? 'Primary' : 'SurfaceVariant'}
                       radii="Pill"
                       outlined={!showVoters}
-                      onClick={() => setShowVoters(true)}
+                      onClick={preventImplicitSubmit(() => setShowVoters(true))}
                     >
                       <Text size="B300">{CN.showVoters}</Text>
                     </Chip>
@@ -351,7 +367,7 @@ export function CreatePollModal({ open, requestClose, onCreate }: CreatePollModa
                       variant={!showVoters ? 'Primary' : 'SurfaceVariant'}
                       radii="Pill"
                       outlined={showVoters}
-                      onClick={() => setShowVoters(false)}
+                      onClick={preventImplicitSubmit(() => setShowVoters(false))}
                     >
                       <Text size="B300">{CN.hideVoters}</Text>
                     </Chip>
@@ -432,7 +448,14 @@ export function CreatePollModal({ open, requestClose, onCreate }: CreatePollModa
                   >
                     <Text size="B300">{CN.cancel}</Text>
                   </Button>
-                  <Button type="submit" variant="Primary" size="300" radii="300" disabled={submitting}>
+                  <Button
+                    type="submit"
+                    data-poll-submit="true"
+                    variant="Primary"
+                    size="300"
+                    radii="300"
+                    disabled={submitting}
+                  >
                     <Text size="B300">{submitting ? CN.sending : CN.sendPoll}</Text>
                     {submitting && <Spinner size="100" variant="Primary" fill="Solid" />}
                   </Button>
