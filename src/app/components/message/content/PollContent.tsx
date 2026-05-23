@@ -17,13 +17,21 @@ import { nameInitials } from '../../../utils/common';
 import { getMxIdLocalPart, mxcUrlToHttp } from '../../../utils/matrix';
 import { getMemberAvatarMxc, getMemberDisplayName } from '../../../utils/room';
 import {
+  combinePollSummaries,
+  createPollSummarySnapshot,
   createPollResponseContent,
+  getCachedPollRelationEvents,
   getPollEndRelationCollections,
   getPollModeLabel,
   getPollResponseRelationCollections,
+  getPersistedPollSummarySnapshot,
+  getPollSummarySnapshot,
   hasPollEnded,
   OUTGOING_POLL_RESPONSE_EVENT_TYPE,
   parsePollData,
+  persistPollSummarySnapshot,
+  pollSummaryFromSnapshot,
+  primePollRelationEventsCache,
   summarizePoll,
 } from '../../../utils/polls';
 
@@ -110,11 +118,15 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
   const poll = useMemo(() => parsePollData(content), [content]);
+  const optionIds = useMemo(() => poll?.options.map((option) => option.id) ?? [], [poll]);
   const [revision, setRevision] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [statusText, setStatusText] = useState<string>();
   const [statusError, setStatusError] = useState(false);
   const [draftAnswers, setDraftAnswers] = useState<string[]>([]);
+  const [cachedRelationEvents, setCachedRelationEvents] = useState<MatrixEvent[]>(() =>
+    room && eventId ? getCachedPollRelationEvents(room.roomId, eventId) : []
+  );
   const previousCommittedAnswersKeyRef = useRef('');
   const submitInFlightRef = useRef(false);
   const relationCollections = useMemo(() => {
@@ -213,14 +225,77 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
     };
   }, [room, eventId, mx, relationCollections]);
 
-  const summary = useMemo(() => {
+  useEffect(() => {
+    if (!room || !eventId) {
+      setCachedRelationEvents([]);
+      return;
+    }
+
+    setCachedRelationEvents(primePollRelationEventsCache(room, eventId));
+  }, [room, eventId, revision]);
+
+  const liveSummary = useMemo(() => {
     if (!poll || !room || !eventId) return undefined;
-    return summarizePoll(room, eventId, poll, mx.getUserId() ?? undefined);
-  }, [poll, room, eventId, mx, revision]);
+    return summarizePoll(room, eventId, poll, mx.getUserId() ?? undefined, cachedRelationEvents);
+  }, [cachedRelationEvents, poll, room, eventId, mx, revision]);
+
+  const snapshotSummary = useMemo(() => {
+    if (!poll) return undefined;
+
+    const embeddedSnapshot = getPollSummarySnapshot(content);
+    const persistedSnapshot =
+      room && eventId ? getPersistedPollSummarySnapshot(room.roomId, eventId) : undefined;
+
+    const embeddedSummary =
+      embeddedSnapshot && optionIds.length > 0
+        ? pollSummaryFromSnapshot(embeddedSnapshot, optionIds)
+        : undefined;
+    const persistedSummary =
+      persistedSnapshot && optionIds.length > 0
+        ? pollSummaryFromSnapshot(persistedSnapshot, optionIds)
+        : undefined;
+
+    if (embeddedSummary && persistedSummary) {
+      return combinePollSummaries(embeddedSummary, persistedSummary);
+    }
+
+    return persistedSummary ?? embeddedSummary;
+  }, [content, eventId, optionIds, poll, room]);
+
+  const summary = useMemo(() => {
+    if (liveSummary && snapshotSummary) {
+      if (getPollSummarySnapshot(content)) {
+        return combinePollSummaries(snapshotSummary, liveSummary);
+      }
+      if (cachedRelationEvents.length > 0) {
+        return liveSummary;
+      }
+      return combinePollSummaries(snapshotSummary, liveSummary);
+    }
+
+    return liveSummary ?? snapshotSummary;
+  }, [cachedRelationEvents.length, content, liveSummary, snapshotSummary]);
+
+  useEffect(() => {
+    if (!room || !eventId || !summary) return;
+
+    const existingSnapshot = getPersistedPollSummarySnapshot(room.roomId, eventId);
+    const embeddedSnapshot = getPollSummarySnapshot(content);
+    const shouldPersist =
+      summary.totalVoters > 0 ||
+      summary.totalSelections > 0 ||
+      summary.myAnswers.length > 0 ||
+      typeof summary.endedAt === 'number' ||
+      !!existingSnapshot ||
+      !!embeddedSnapshot;
+
+    if (!shouldPersist) return;
+
+    persistPollSummarySnapshot(room.roomId, eventId, createPollSummarySnapshot(summary));
+  }, [content, eventId, room, summary]);
 
   const summaryData = summary ?? DEFAULT_SUMMARY;
   const ended = poll ? hasPollEnded(poll, summaryData.endedAt) : false;
-  const optionIds = useMemo(() => poll?.options.map((option) => option.id) ?? [], [poll]);
   const committedAnswers = useMemo(
     () => summaryData.myAnswers.slice(0, poll?.maxSelections ?? summaryData.myAnswers.length),
     [poll, summaryData.myAnswers]
