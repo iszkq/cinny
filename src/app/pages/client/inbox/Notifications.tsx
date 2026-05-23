@@ -39,6 +39,7 @@ import {
   getMemberAvatarMxc,
   getMemberDisplayName,
   getRoomAvatarUrl,
+  reactionOrEditEvent,
 } from '../../../utils/room';
 import { ScrollTopContainer } from '../../../components/scroll-top-container';
 import { useInterval } from '../../../hooks/useInterval';
@@ -333,6 +334,7 @@ function RoomNotificationsGroupComp({
           <EncryptedContent mEvent={mEvent}>
             {() => {
               if (mEvent.isRedacted()) return <RedactedContent />;
+              if (reactionOrEditEvent(mEvent)) return null;
               if (mEvent.getType() === MessageEvent.Sticker)
                 return (
                   <MSticker
