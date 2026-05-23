@@ -114,6 +114,11 @@ import {
   removeFavoriteMessage,
   removeFavoriteNote,
 } from '../../favorites';
+import {
+  parsePollData,
+  POLL_START_EVENT_TYPE,
+  UNSTABLE_POLL_START_EVENT_TYPE,
+} from '../../../utils/polls';
 
 export type ReactionHandler = (keyOrMxc: string, shortcode: string) => void;
 const DEFAULT_INLINE_READ_RECEIPTS = 7;
@@ -127,6 +132,14 @@ const getMessageCopyText = (mEvent: MatrixEvent): string | undefined => {
   if (mEvent.getType() === EventType.Sticker) {
     const stickerBody = mEvent.getContent().body;
     return typeof stickerBody === 'string' ? stickerBody : '[贴图]';
+  }
+
+  if (
+    mEvent.getType() === POLL_START_EVENT_TYPE ||
+    mEvent.getType() === UNSTABLE_POLL_START_EVENT_TYPE
+  ) {
+    const poll = parsePollData(mEvent.getContent());
+    return poll ? `[投票] ${poll.title}` : undefined;
   }
 
   if (mEvent.getType() !== EventType.RoomMessage) return undefined;
