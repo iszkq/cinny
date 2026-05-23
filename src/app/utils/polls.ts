@@ -1,4 +1,4 @@
-import { Direction, IContent, MatrixEvent, Room } from 'matrix-js-sdk';
+import { IContent, MatrixEvent, Room } from 'matrix-js-sdk';
 
 export const POLL_MSGTYPE = 'io.cinny.poll';
 export const POLL_DATA_KEY = 'io.cinny.poll';
@@ -25,6 +25,12 @@ export const POLL_RESPONSE_REL_TYPE = 'io.cinny.poll.response';
 export const POLL_MAX_OPTIONS = 10;
 const MATRIX_TEXT_KEY = 'm.text';
 const UNSTABLE_MATRIX_TEXT_KEY = 'org.matrix.msc1767.text';
+const POLL_RESPONSE_EVENT_TYPES = [
+  POLL_RESPONSE_EVENT_TYPE,
+  UNSTABLE_POLL_RESPONSE_EVENT_TYPE,
+  LEGACY_POLL_RESPONSE_EVENT_TYPE,
+] as const;
+const POLL_END_EVENT_TYPES = [POLL_END_EVENT_TYPE, UNSTABLE_POLL_END_EVENT_TYPE] as const;
 
 export type PollMode = 'single' | 'multiple' | 'pk';
 export type CreatePollMode = 'single' | 'multiple';
@@ -93,6 +99,8 @@ const sanitizePollOptions = (options: string[]): PollOption[] =>
 const getRecord = (value: unknown): Record<string, unknown> | undefined =>
   value && typeof value === 'object' ? (value as Record<string, unknown>) : undefined;
 
+const isDefined = <T>(value: T | undefined | null): value is T => value !== undefined && value !== null;
+
 const getTextFromMatrixText = (value: unknown): string | undefined => {
   const text = sanitizeText(value);
   if (text) return text;
@@ -129,6 +137,68 @@ const getRelationType = (event: MatrixEvent): string | undefined => {
   const rawRelation = getRecord(event.getContent<IContent>()['m.relates_to']);
   return typeof rawRelation?.rel_type === 'string' ? rawRelation.rel_type : undefined;
 };
+
+const getPollRelationCollections = (
+  room: Room,
+  pollEventId: string,
+  eventTypes: readonly string[]
+) =>
+  eventTypes
+    .map((eventType) =>
+      room
+        .getUnfilteredTimelineSet()
+        .relations.getChildEventsForEvent(pollEventId, POLL_REFERENCE_REL_TYPE, eventType)
+    )
+    .filter(isDefined);
+
+const collectUniqueEvents = (events: MatrixEvent[]): MatrixEvent[] => {
+  const relatedEvents = new Map<string, MatrixEvent>();
+
+  events.forEach((event) => {
+    const eventId = event.getId();
+    if (!eventId) return;
+    relatedEvents.set(eventId, event);
+  });
+
+  return Array.from(relatedEvents.values());
+};
+
+const collectPollRelationEvents = (
+  room: Room,
+  pollEventId: string,
+  eventTypes: readonly string[]
+): MatrixEvent[] =>
+  collectUniqueEvents(
+    getPollRelationCollections(room, pollEventId, eventTypes).flatMap((relations) =>
+      relations.getRelations()
+    )
+  );
+
+const collectLivePollEvents = (
+  room: Room,
+  pollEventId: string,
+  eventTypes: readonly string[]
+): MatrixEvent[] =>
+  collectUniqueEvents(
+    room
+      .getLiveTimeline()
+      .getEvents()
+      .filter((event) => {
+        const eventType = event.getType();
+        return (
+          typeof eventType === 'string' &&
+          eventTypes.includes(eventType) &&
+          getRelationType(event) === POLL_REFERENCE_REL_TYPE &&
+          getRelationEventId(event) === pollEventId
+        );
+      })
+  );
+
+export const getPollResponseRelationCollections = (room: Room, pollEventId: string) =>
+  getPollRelationCollections(room, pollEventId, POLL_RESPONSE_EVENT_TYPES);
+
+export const getPollEndRelationCollections = (room: Room, pollEventId: string) =>
+  getPollRelationCollections(room, pollEventId, POLL_END_EVENT_TYPES);
 
 export const isPollStartEventType = (eventType?: string): boolean =>
   eventType === POLL_START_EVENT_TYPE || eventType === UNSTABLE_POLL_START_EVENT_TYPE;
@@ -374,35 +444,6 @@ export const createPollResponseContent = (pollEventId: string, answers: string[]
   };
 };
 
-const getLinkedTimelines = (room: Room, eventId: string): MatrixEvent[] => {
-  const baseTimeline = room.getTimelineForEvent(eventId) ?? room.getLiveTimeline();
-  let firstTimeline = baseTimeline;
-  let previousTimeline = firstTimeline.getNeighbouringTimeline(Direction.Backward);
-
-  while (previousTimeline) {
-    firstTimeline = previousTimeline;
-    previousTimeline = firstTimeline.getNeighbouringTimeline(Direction.Backward);
-  }
-
-  const events: MatrixEvent[] = [];
-  const seen = new Set<string>();
-  let currentTimeline: typeof firstTimeline | null = firstTimeline;
-
-  while (currentTimeline) {
-    currentTimeline.getEvents().forEach((event) => {
-      const eventIdValue = event.getId();
-      if (!eventIdValue || seen.has(eventIdValue)) return;
-
-      seen.add(eventIdValue);
-      events.push(event);
-    });
-
-    currentTimeline = currentTimeline.getNeighbouringTimeline(Direction.Forward);
-  }
-
-  return events;
-};
-
 export const isPollResponseEvent = (event: MatrixEvent, pollEventId?: string): boolean => {
   const eventType = event.getType();
   if (!isPollResponseEventType(eventType)) {
@@ -475,7 +516,11 @@ export const summarizePoll = (
   >();
   const responseEventIdsBySender = new Map<string, string[]>();
 
-  const events = getLinkedTimelines(room, pollEventId);
+  const events = collectUniqueEvents([
+    ...collectPollRelationEvents(room, pollEventId, POLL_RESPONSE_EVENT_TYPES),
+    ...collectPollRelationEvents(room, pollEventId, POLL_END_EVENT_TYPES),
+    ...collectLivePollEvents(room, pollEventId, [...POLL_RESPONSE_EVENT_TYPES, ...POLL_END_EVENT_TYPES]),
+  ]);
   const endedAt = events.reduce<number | undefined>((currentEndedAt, event) => {
     if (event.isRedacted()) return currentEndedAt;
     if (!isPollEndEvent(event, pollEventId)) return currentEndedAt;
