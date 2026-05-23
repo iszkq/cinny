@@ -31,6 +31,8 @@ const POLL_RESPONSE_EVENT_TYPES = [
   LEGACY_POLL_RESPONSE_EVENT_TYPE,
 ] as const;
 const POLL_END_EVENT_TYPES = [POLL_END_EVENT_TYPE, UNSTABLE_POLL_END_EVENT_TYPE] as const;
+export const POLL_SUMMARY_SNAPSHOT_KEY = 'io.cinny.poll.summary';
+const POLL_SUMMARY_STORAGE_PREFIX = 'cinny_poll_summary';
 
 export type PollMode = 'single' | 'multiple' | 'pk';
 export type CreatePollMode = 'single' | 'multiple';
@@ -82,6 +84,21 @@ export type PollSummary = {
   endedAt?: number;
 };
 
+type PollRelationCacheEntry = {
+  events: MatrixEvent[];
+};
+
+export type PollSummarySnapshot = {
+  version: 1;
+  updatedAt: number;
+  endedAt?: number;
+  optionToUserIds: Record<string, string[]>;
+  myAnswers: string[];
+  myResponseEventIds: string[];
+  totalSelections: number;
+  totalVoters: number;
+};
+
 const sanitizeText = (value: unknown): string | undefined => {
   if (typeof value !== 'string') return undefined;
   const trimmedValue = value.trim();
@@ -101,6 +118,280 @@ const getRecord = (value: unknown): Record<string, unknown> | undefined =>
   value && typeof value === 'object' ? (value as Record<string, unknown>) : undefined;
 
 const isDefined = <T>(value: T | undefined | null): value is T => value !== undefined && value !== null;
+
+const pollRelationEventsCache = new Map<string, PollRelationCacheEntry>();
+const pollSummarySnapshotCache = new Map<string, PollSummarySnapshot>();
+
+const getPollRelationCacheKey = (roomId: string, pollEventId: string): string =>
+  `${roomId}\u0000${pollEventId}`;
+
+const getOrCreatePollRelationCacheEntry = (
+  roomId: string,
+  pollEventId: string
+): PollRelationCacheEntry => {
+  const cacheKey = getPollRelationCacheKey(roomId, pollEventId);
+  const cachedEntry = pollRelationEventsCache.get(cacheKey);
+  if (cachedEntry) return cachedEntry;
+
+  const nextEntry: PollRelationCacheEntry = {
+    events: [],
+  };
+  pollRelationEventsCache.set(cacheKey, nextEntry);
+  return nextEntry;
+};
+
+const getLocalStorage = (): Storage | undefined => {
+  try {
+    if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+      return undefined;
+    }
+    return window.localStorage;
+  } catch {
+    return undefined;
+  }
+};
+
+const getPollSummaryStorageKey = (roomId: string, pollEventId: string): string => {
+  const storage = getLocalStorage();
+  const baseUrl = storage?.getItem('cinny_hs_base_url') ?? 'unknown_base';
+  const userId = storage?.getItem('cinny_user_id') ?? 'unknown_user';
+
+  return `${POLL_SUMMARY_STORAGE_PREFIX}::${baseUrl}::${userId}::${roomId}::${pollEventId}`;
+};
+
+const mergeRelationEvents = (
+  existingEvents: MatrixEvent[],
+  incomingEvents: MatrixEvent[],
+  preferIncoming: boolean
+): MatrixEvent[] => {
+  const eventMap = new Map<string, MatrixEvent>();
+  const primaryEvents = preferIncoming ? existingEvents : incomingEvents;
+  const secondaryEvents = preferIncoming ? incomingEvents : existingEvents;
+
+  primaryEvents.forEach((event) => {
+    const eventId = event.getId();
+    if (!eventId) return;
+    eventMap.set(eventId, event);
+  });
+
+  secondaryEvents.forEach((event) => {
+    const eventId = event.getId();
+    if (!eventId) return;
+    eventMap.set(eventId, event);
+  });
+
+  return Array.from(eventMap.values());
+};
+
+const updatePollRelationEventsCache = (
+  roomId: string,
+  pollEventId: string,
+  incomingEvents: MatrixEvent[],
+  preferIncoming: boolean
+): MatrixEvent[] => {
+  const cacheEntry = getOrCreatePollRelationCacheEntry(roomId, pollEventId);
+  cacheEntry.events = mergeRelationEvents(cacheEntry.events, incomingEvents, preferIncoming);
+  return cacheEntry.events;
+};
+
+const sanitizeStringArray = (value: unknown): string[] =>
+  Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : [];
+
+const getPollSummarySnapshotRecord = (value: unknown): PollSummarySnapshot | undefined => {
+  const record = getRecord(value);
+  if (!record) return undefined;
+
+  const rawOptionToUserIds = getRecord(record.optionToUserIds);
+  if (!rawOptionToUserIds) return undefined;
+
+  const optionToUserIds = Object.fromEntries(
+    Object.entries(rawOptionToUserIds).map(([optionId, userIds]) => [
+      optionId,
+      Array.from(new Set(sanitizeStringArray(userIds))),
+    ])
+  );
+
+  const totalSelections = Object.values(optionToUserIds).reduce(
+    (count, userIds) => count + userIds.length,
+    0
+  );
+  const totalVoters = Object.values(optionToUserIds).reduce((userIds, optionUserIds) => {
+    optionUserIds.forEach((userId) => userIds.add(userId));
+    return userIds;
+  }, new Set<string>()).size;
+
+  return {
+    version: 1,
+    updatedAt: typeof record.updatedAt === 'number' ? record.updatedAt : 0,
+    endedAt: typeof record.endedAt === 'number' ? record.endedAt : undefined,
+    optionToUserIds,
+    myAnswers: Array.from(new Set(sanitizeStringArray(record.myAnswers))),
+    myResponseEventIds: Array.from(new Set(sanitizeStringArray(record.myResponseEventIds))),
+    totalSelections:
+      typeof record.totalSelections === 'number' ? record.totalSelections : totalSelections,
+    totalVoters: typeof record.totalVoters === 'number' ? record.totalVoters : totalVoters,
+  };
+};
+
+const getSummaryUserAnswers = (summary: PollSummary): Map<string, string[]> => {
+  const userAnswers = new Map<string, string[]>();
+
+  summary.optionToUserIds.forEach((userIds, optionId) => {
+    userIds.forEach((userId) => {
+      const currentAnswers = userAnswers.get(userId) ?? [];
+      if (!currentAnswers.includes(optionId)) {
+        currentAnswers.push(optionId);
+      }
+      userAnswers.set(userId, currentAnswers);
+    });
+  });
+
+  return userAnswers;
+};
+
+export const pollSummaryFromSnapshot = (
+  snapshot: PollSummarySnapshot,
+  optionIds: string[]
+): PollSummary => {
+  const optionToUserIds = new Map<string, string[]>();
+
+  optionIds.forEach((optionId) => {
+    optionToUserIds.set(optionId, []);
+  });
+
+  Object.entries(snapshot.optionToUserIds).forEach(([optionId, userIds]) => {
+    optionToUserIds.set(optionId, Array.from(new Set(userIds)));
+  });
+
+  return {
+    optionToUserIds,
+    myAnswers: snapshot.myAnswers,
+    myResponseEventIds: snapshot.myResponseEventIds,
+    myResponseEvents: [],
+    totalSelections: snapshot.totalSelections,
+    totalVoters: snapshot.totalVoters,
+    endedAt: snapshot.endedAt,
+  };
+};
+
+export const combinePollSummaries = (
+  baseSummary: PollSummary,
+  overlaySummary: PollSummary
+): PollSummary => {
+  const optionIds = Array.from(
+    new Set([...baseSummary.optionToUserIds.keys(), ...overlaySummary.optionToUserIds.keys()])
+  );
+  const userAnswers = getSummaryUserAnswers(baseSummary);
+
+  getSummaryUserAnswers(overlaySummary).forEach((answers, userId) => {
+    userAnswers.set(userId, answers);
+  });
+
+  const optionToUserIds = new Map<string, string[]>();
+  optionIds.forEach((optionId) => optionToUserIds.set(optionId, []));
+
+  let totalSelections = 0;
+  userAnswers.forEach((answers, userId) => {
+    totalSelections += answers.length;
+    answers.forEach((answer) => {
+      optionToUserIds.set(answer, [...(optionToUserIds.get(answer) ?? []), userId]);
+    });
+  });
+
+  const overlayHasOwnState =
+    overlaySummary.myAnswers.length > 0 ||
+    overlaySummary.myResponseEventIds.length > 0 ||
+    overlaySummary.myResponseEvents.length > 0;
+
+  return {
+    optionToUserIds,
+    myAnswers: overlayHasOwnState ? overlaySummary.myAnswers : baseSummary.myAnswers,
+    myResponseEventIds: overlayHasOwnState
+      ? overlaySummary.myResponseEventIds
+      : baseSummary.myResponseEventIds,
+    myResponseEvents: overlayHasOwnState
+      ? overlaySummary.myResponseEvents
+      : baseSummary.myResponseEvents,
+    totalSelections,
+    totalVoters: userAnswers.size,
+    endedAt: overlaySummary.endedAt ?? baseSummary.endedAt,
+  };
+};
+
+export const createPollSummarySnapshot = (
+  summary: PollSummary,
+  includeOwnVoteState = true
+): PollSummarySnapshot => ({
+  version: 1,
+  updatedAt: Date.now(),
+  endedAt: summary.endedAt,
+  optionToUserIds: Object.fromEntries(
+    Array.from(summary.optionToUserIds.entries()).map(([optionId, userIds]) => [
+      optionId,
+      Array.from(new Set(userIds)),
+    ])
+  ),
+  myAnswers: includeOwnVoteState ? Array.from(new Set(summary.myAnswers)) : [],
+  myResponseEventIds: includeOwnVoteState ? Array.from(new Set(summary.myResponseEventIds)) : [],
+  totalSelections: summary.totalSelections,
+  totalVoters: summary.totalVoters,
+});
+
+export const attachPollSummarySnapshot = (
+  content: IContent,
+  snapshot: PollSummarySnapshot
+): IContent => ({
+  ...content,
+  [POLL_SUMMARY_SNAPSHOT_KEY]: snapshot,
+});
+
+export const getPollSummarySnapshot = (content: IContent): PollSummarySnapshot | undefined =>
+  getPollSummarySnapshotRecord(content[POLL_SUMMARY_SNAPSHOT_KEY]);
+
+export const getPersistedPollSummarySnapshot = (
+  roomId: string,
+  pollEventId: string
+): PollSummarySnapshot | undefined => {
+  const storageKey = getPollSummaryStorageKey(roomId, pollEventId);
+  const cachedSnapshot = pollSummarySnapshotCache.get(storageKey);
+  if (cachedSnapshot) return cachedSnapshot;
+
+  const storage = getLocalStorage();
+  if (!storage) return undefined;
+
+  try {
+    const rawSnapshot = storage.getItem(storageKey);
+    if (!rawSnapshot) return undefined;
+
+    const snapshot = getPollSummarySnapshotRecord(JSON.parse(rawSnapshot));
+    if (!snapshot) return undefined;
+
+    pollSummarySnapshotCache.set(storageKey, snapshot);
+    return snapshot;
+  } catch {
+    return undefined;
+  }
+};
+
+export const persistPollSummarySnapshot = (
+  roomId: string,
+  pollEventId: string,
+  snapshot: PollSummarySnapshot
+): void => {
+  const storageKey = getPollSummaryStorageKey(roomId, pollEventId);
+  pollSummarySnapshotCache.set(storageKey, snapshot);
+
+  const storage = getLocalStorage();
+  if (!storage) return;
+
+  try {
+    storage.setItem(storageKey, JSON.stringify(snapshot));
+  } catch {
+    // Ignore quota or storage availability errors; in-memory cache still helps this session.
+  }
+};
 
 const getTextFromMatrixText = (value: unknown): string | undefined => {
   const text = sanitizeText(value);
@@ -193,6 +484,24 @@ const collectLivePollEvents = (
           getRelationEventId(event) === pollEventId
         );
       })
+  );
+
+const collectKnownPollRelationEvents = (room: Room, pollEventId: string): MatrixEvent[] =>
+  collectUniqueEvents([
+    ...collectPollRelationEvents(room, pollEventId, POLL_RESPONSE_EVENT_TYPES),
+    ...collectPollRelationEvents(room, pollEventId, POLL_END_EVENT_TYPES),
+    ...collectLivePollEvents(room, pollEventId, [...POLL_RESPONSE_EVENT_TYPES, ...POLL_END_EVENT_TYPES]),
+  ]);
+
+export const getCachedPollRelationEvents = (roomId: string, pollEventId: string): MatrixEvent[] =>
+  getOrCreatePollRelationCacheEntry(roomId, pollEventId).events;
+
+export const primePollRelationEventsCache = (room: Room, pollEventId: string): MatrixEvent[] =>
+  updatePollRelationEventsCache(
+    room.roomId,
+    pollEventId,
+    collectKnownPollRelationEvents(room, pollEventId),
+    true
   );
 
 export const getPollResponseRelationCollections = (room: Room, pollEventId: string) =>
@@ -505,7 +814,8 @@ export const summarizePoll = (
   room: Room,
   pollEventId: string,
   poll: PollData,
-  currentUserId?: string
+  currentUserId?: string,
+  extraEvents: MatrixEvent[] = []
 ): PollSummary => {
   const latestBySender = new Map<
     string,
@@ -519,9 +829,8 @@ export const summarizePoll = (
   const responseEventsBySender = new Map<string, MatrixEvent[]>();
 
   const events = collectUniqueEvents([
-    ...collectPollRelationEvents(room, pollEventId, POLL_RESPONSE_EVENT_TYPES),
-    ...collectPollRelationEvents(room, pollEventId, POLL_END_EVENT_TYPES),
-    ...collectLivePollEvents(room, pollEventId, [...POLL_RESPONSE_EVENT_TYPES, ...POLL_END_EVENT_TYPES]),
+    ...extraEvents,
+    ...collectKnownPollRelationEvents(room, pollEventId),
   ]);
   const endedAt = events.reduce<number | undefined>((currentEndedAt, event) => {
     if (event.isRedacted()) return currentEndedAt;
