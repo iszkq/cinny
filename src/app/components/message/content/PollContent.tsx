@@ -7,6 +7,7 @@ import {
   RoomEvent,
   RoomEventHandlerMap,
 } from 'matrix-js-sdk';
+import { RelationsEvent } from 'matrix-js-sdk/lib/models/relations';
 import { Avatar, Badge, Box, Button, ProgressBar, Text, color, config } from 'folds';
 import { SequenceCard } from '../../sequence-card';
 import { UserAvatar } from '../../user-avatar';
@@ -17,7 +18,9 @@ import { getMxIdLocalPart, mxcUrlToHttp } from '../../../utils/matrix';
 import { getMemberAvatarMxc, getMemberDisplayName } from '../../../utils/room';
 import {
   createPollResponseContent,
+  getPollEndRelationCollections,
   getPollModeLabel,
+  getPollResponseRelationCollections,
   hasPollEnded,
   OUTGOING_POLL_RESPONSE_EVENT_TYPE,
   parsePollData,
@@ -105,11 +108,17 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
   const [draftAnswers, setDraftAnswers] = useState<string[]>([]);
   const previousCommittedAnswersKeyRef = useRef('');
   const submitInFlightRef = useRef(false);
+  const relationCollections = useMemo(() => {
+    if (!room || !eventId) return [];
+    return [
+      ...getPollResponseRelationCollections(room, eventId),
+      ...getPollEndRelationCollections(room, eventId),
+    ];
+  }, [room, eventId, revision]);
 
   useEffect(() => {
     if (!room || !eventId) return undefined;
 
-    const trackedEvents = new Map<MatrixEvent, () => void>();
     const bumpRevision = () => setRevision((current) => current + 1);
 
     const getRelationEventId = (event: MatrixEvent): string | undefined => {
@@ -136,30 +145,64 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
       }
     };
 
-    const trackEncryptedEvent = (event: MatrixEvent) => {
-      if (trackedEvents.has(event)) return;
-      if (!event.isEncrypted() && !event.isDecryptionFailure()) return;
-
-      const handleDecrypted = () => handleRelatedEvent(event);
-      trackedEvents.set(event, handleDecrypted);
-      event.on(MatrixEventEvent.Decrypted, handleDecrypted);
-    };
-
     const handleTimeline: RoomEventHandlerMap[RoomEvent.Timeline] = (event, eventRoom) => {
       if (eventRoom?.roomId !== room.roomId) return;
-      trackEncryptedEvent(event);
       handleRelatedEvent(event);
     };
 
-    room.getLiveTimeline().getEvents().forEach(trackEncryptedEvent);
+    const handleRedaction: RoomEventHandlerMap[RoomEvent.Redaction] = (_event, eventRoom) => {
+      if (eventRoom?.roomId !== room.roomId) return;
+      bumpRevision();
+    };
+
+    const handleLocalEchoUpdated: RoomEventHandlerMap[RoomEvent.LocalEchoUpdated] = (
+      event,
+      eventRoom
+    ) => {
+      if (eventRoom?.roomId !== room.roomId) return;
+      handleRelatedEvent(event);
+    };
+
+    const handleTimelineRefresh: RoomEventHandlerMap[RoomEvent.TimelineRefresh] = (eventRoom) => {
+      if (eventRoom.roomId !== room.roomId) return;
+      bumpRevision();
+    };
+
+    const handleDecrypted = (event: MatrixEvent) => {
+      if (event.getRoomId() !== room.roomId) return;
+      handleRelatedEvent(event);
+    };
+
+    const relationCleanup = relationCollections.map((relations) => {
+      const handleRelationUpdate = () => {
+        bumpRevision();
+      };
+
+      relations.on(RelationsEvent.Add, handleRelationUpdate);
+      relations.on(RelationsEvent.Redaction, handleRelationUpdate);
+      relations.on(RelationsEvent.Remove, handleRelationUpdate);
+
+      return () => {
+        relations.removeListener(RelationsEvent.Add, handleRelationUpdate);
+        relations.removeListener(RelationsEvent.Redaction, handleRelationUpdate);
+        relations.removeListener(RelationsEvent.Remove, handleRelationUpdate);
+      };
+    });
+
     room.on(RoomEvent.Timeline, handleTimeline);
+    room.on(RoomEvent.Redaction, handleRedaction);
+    room.on(RoomEvent.LocalEchoUpdated, handleLocalEchoUpdated);
+    room.on(RoomEvent.TimelineRefresh, handleTimelineRefresh);
+    mx.on(MatrixEventEvent.Decrypted, handleDecrypted);
     return () => {
       room.removeListener(RoomEvent.Timeline, handleTimeline);
-      trackedEvents.forEach((handler, event) => {
-        event.removeListener(MatrixEventEvent.Decrypted, handler);
-      });
+      room.removeListener(RoomEvent.Redaction, handleRedaction);
+      room.removeListener(RoomEvent.LocalEchoUpdated, handleLocalEchoUpdated);
+      room.removeListener(RoomEvent.TimelineRefresh, handleTimelineRefresh);
+      mx.off(MatrixEventEvent.Decrypted, handleDecrypted);
+      relationCleanup.forEach((dispose) => dispose());
     };
-  }, [room, eventId]);
+  }, [room, eventId, mx, relationCollections]);
 
   const summary = useMemo(() => {
     if (!poll || !room || !eventId) return undefined;
