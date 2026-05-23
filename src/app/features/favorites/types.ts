@@ -1,10 +1,19 @@
 import { IContent, MatrixEvent, MsgType } from 'matrix-js-sdk';
 import { CinnyFavoritesContent } from '../../../types/matrix/accountData';
 import { MessageEvent } from '../../../types/matrix/room';
+import { isPollMessage, UNSTABLE_POLL_START_EVENT_TYPE } from '../../utils/polls';
 
 export const CINNY_FAVORITE_CONTENT_KEY = 'in.cinny.favorite';
 
-export const FAVORITE_CATEGORIES = ['text', 'image', 'video', 'audio', 'file', 'other'] as const;
+export const FAVORITE_CATEGORIES = [
+  'text',
+  'image',
+  'video',
+  'audio',
+  'file',
+  'poll',
+  'other',
+] as const;
 export type FavoriteCategory = (typeof FAVORITE_CATEGORIES)[number];
 
 export type FavoriteVisibleCategory = FavoriteCategory | 'all';
@@ -67,6 +76,13 @@ export const getFavoriteMessageMetadataFromEvent = (
 
 export const getFavoriteCategory = (mEvent: MatrixEvent): FavoriteCategory => {
   if (mEvent.getType() === MessageEvent.Sticker) return 'image';
+  if (
+    mEvent.getType() === MessageEvent.PollStart ||
+    mEvent.getType() === UNSTABLE_POLL_START_EVENT_TYPE ||
+    isPollMessage(mEvent.getContent())
+  ) {
+    return 'poll';
+  }
   if (mEvent.getType() !== MessageEvent.RoomMessage) return 'other';
 
   const msgType = mEvent.getContent().msgtype;
@@ -88,6 +104,7 @@ export const getFavoriteCategoryLabel = (category: FavoriteVisibleCategory): str
   if (category === 'video') return '视频';
   if (category === 'audio') return '音频';
   if (category === 'file') return '文件';
+  if (category === 'poll') return '投票';
 
   return '其他';
 };

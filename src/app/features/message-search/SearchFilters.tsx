@@ -62,6 +62,7 @@ const MESSAGE_TYPE_LABEL: Record<SearchMessageType, string> = {
   audio: '\u97f3\u9891',
   file: '\u6587\u4ef6',
   sticker: '\u8d34\u7eb8',
+  poll: '\u6295\u7968',
 };
 
 type OrderButtonProps = {

@@ -16,8 +16,13 @@ import { useCallback, useRef } from 'react';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { getLinkedTimelines, getLiveTimeline } from '../room/RoomTimeline';
 import { decryptAllTimelineEvent } from '../../utils/room';
+import {
+  parsePollData,
+  POLL_START_EVENT_TYPE,
+  UNSTABLE_POLL_START_EVENT_TYPE,
+} from '../../utils/polls';
 
-export type SearchMessageType = 'text' | 'image' | 'video' | 'audio' | 'file' | 'sticker';
+export type SearchMessageType = 'text' | 'image' | 'video' | 'audio' | 'file' | 'sticker' | 'poll';
 export const SEARCH_MESSAGE_TYPES: SearchMessageType[] = [
   'text',
   'image',
@@ -25,6 +30,7 @@ export const SEARCH_MESSAGE_TYPES: SearchMessageType[] = [
   'audio',
   'file',
   'sticker',
+  'poll',
 ];
 
 export type ResultItem = {
@@ -101,6 +107,12 @@ const bodyContainsUrl = (...values: Array<string | undefined>): boolean =>
 
 const getMatrixEventMessageType = (event: MatrixEvent): SearchMessageType | undefined => {
   if (event.getType() === EventType.Sticker) return 'sticker';
+  if (
+    event.getType() === POLL_START_EVENT_TYPE ||
+    event.getType() === UNSTABLE_POLL_START_EVENT_TYPE
+  ) {
+    return 'poll';
+  }
   if (event.getType() !== EventType.RoomMessage) return undefined;
 
   const msgType = event.getContent().msgtype ?? MsgType.Text;
@@ -168,6 +180,17 @@ const eventToSearchBody = (event: MatrixEvent): string | undefined => {
   if (event.getType() === EventType.Sticker) {
     const stickerBody = event.getContent().body;
     return typeof stickerBody === 'string' ? stickerBody : undefined;
+  }
+
+  if (
+    event.getType() === POLL_START_EVENT_TYPE ||
+    event.getType() === UNSTABLE_POLL_START_EVENT_TYPE
+  ) {
+    const poll = parsePollData(event.getContent());
+    if (!poll) return undefined;
+    return [poll.title, poll.description, ...poll.options.map((option) => option.text)]
+      .filter((value): value is string => !!value)
+      .join(' ');
   }
 
   if (event.getType() !== EventType.RoomMessage) return undefined;

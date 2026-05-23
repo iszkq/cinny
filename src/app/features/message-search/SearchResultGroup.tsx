@@ -38,6 +38,7 @@ import {
 import * as customHtmlCss from '../../styles/CustomHtml.css';
 import { getMemberAvatarMxc, getMemberDisplayName, getRoomAvatarUrl } from '../../utils/room';
 import { getMxIdLocalPart, mxcUrlToHttp } from '../../utils/matrix';
+import { POLL_START_EVENT_TYPE, UNSTABLE_POLL_START_EVENT_TYPE } from '../../utils/polls';
 import { ResultItem } from './useMessageSearch';
 import { GetContentCallback, MessageEvent, StateEvent } from '../../../types/matrix/room';
 import colorMXID from '../../../util/colorMXID';
@@ -111,8 +112,38 @@ export function SearchResultGroup({
     ]
   );
 
+  const renderPollStartEvent = (
+    event: IEventWithRoomId,
+    displayName: string,
+    getContent: GetContentCallback
+  ) => {
+    if (event.unsigned?.redacted_because) {
+      return <RedactedContent reason={event.unsigned?.redacted_because.content.reason} />;
+    }
+
+    return (
+      <RenderMessageContent
+        displayName={displayName}
+        msgType={event.content.msgtype ?? ''}
+        eventType={event.type}
+        ts={event.origin_server_ts}
+        getContent={getContent}
+        mediaAutoLoad={mediaAutoLoad}
+        urlPreview={urlPreview}
+        htmlReactParserOptions={htmlReactParserOptions}
+        linkifyOpts={linkifyOpts}
+        highlightRegex={highlightRegex}
+        outlineAttachment
+        room={room}
+        eventId={event.event_id}
+      />
+    );
+  };
+
   const renderMatrixEvent = useMatrixEventRenderer<[IEventWithRoomId, string, GetContentCallback]>(
     {
+      [POLL_START_EVENT_TYPE]: renderPollStartEvent,
+      [UNSTABLE_POLL_START_EVENT_TYPE]: renderPollStartEvent,
       [MessageEvent.RoomMessage]: (event, displayName, getContent) => {
         if (event.unsigned?.redacted_because) {
           return <RedactedContent reason={event.unsigned?.redacted_because.content.reason} />;
@@ -122,6 +153,7 @@ export function SearchResultGroup({
           <RenderMessageContent
             displayName={displayName}
             msgType={event.content.msgtype ?? ''}
+            eventType={event.type}
             ts={event.origin_server_ts}
             getContent={getContent}
             mediaAutoLoad={mediaAutoLoad}

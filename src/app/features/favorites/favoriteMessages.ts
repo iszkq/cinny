@@ -2,6 +2,7 @@ import { EventType, IContent, MatrixClient, MatrixEvent, Room } from 'matrix-js-
 import { MessageEvent } from '../../../types/matrix/room';
 import { getMemberAvatarMxc, getMemberDisplayName } from '../../utils/room';
 import { getMxIdLocalPart } from '../../utils/matrix';
+import { UNSTABLE_POLL_START_EVENT_TYPE } from '../../utils/polls';
 import { isForwardableMessage } from '../room/forwardMessages';
 import {
   CINNY_FAVORITE_CONTENT_KEY,
@@ -90,6 +91,15 @@ export const favoriteMessageToRoom = async (
 
   if (eventType === MessageEvent.Sticker) {
     const response = await mx.sendEvent(targetRoomId, EventType.Sticker, favoriteContent);
+    return response?.event_id;
+  }
+
+  if (eventType === MessageEvent.PollStart || eventType === UNSTABLE_POLL_START_EVENT_TYPE) {
+    const response = await mx.sendEvent(
+      targetRoomId,
+      MessageEvent.PollStart as any,
+      favoriteContent
+    );
     return response?.event_id;
   }
 
