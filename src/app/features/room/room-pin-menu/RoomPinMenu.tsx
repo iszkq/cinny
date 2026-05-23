@@ -47,6 +47,7 @@ import {
   getEditedEvent,
   getMemberAvatarMxc,
   getMemberDisplayName,
+  reactionOrEditEvent,
   getStateEvent,
 } from '../../../utils/room';
 import { GetContentCallback, MessageEvent, StateEvent } from '../../../../types/matrix/room';
@@ -393,6 +394,7 @@ export const RoomPinMenu = forwardRef<HTMLDivElement, RoomPinMenuProps>(
             <EncryptedContent mEvent={mEvent}>
               {() => {
                 if (mEvent.isRedacted()) return <RedactedContent />;
+                if (reactionOrEditEvent(mEvent)) return null;
                 if (mEvent.getType() === MessageEvent.Sticker)
                   return (
                     <MSticker
