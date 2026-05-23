@@ -29,6 +29,11 @@ import {
   StateEvent,
   UnreadInfo,
 } from '../../types/matrix/room';
+import {
+  LEGACY_POLL_RESPONSE_EVENT_TYPE,
+  UNSTABLE_POLL_END_EVENT_TYPE,
+  UNSTABLE_POLL_RESPONSE_EVENT_TYPE,
+} from './polls';
 
 type FullyReadContent = {
   event_id?: string;
@@ -430,6 +435,8 @@ const NOTIFICATION_EVENT_TYPES = [
   'm.room.create',
   'm.room.message',
   'm.room.encrypted',
+  'm.poll.start',
+  'org.matrix.msc3381.poll.start',
   'm.room.member',
   'm.sticker',
 ];
@@ -733,7 +740,12 @@ export const getLatestEditableEvt = (
 
 export const reactionOrEditEvent = (mEvent: MatrixEvent) =>
   mEvent.getRelation()?.rel_type === RelationType.Annotation ||
-  mEvent.getRelation()?.rel_type === RelationType.Replace;
+  mEvent.getRelation()?.rel_type === RelationType.Replace ||
+  mEvent.getType() === MessageEvent.PollResponse ||
+  mEvent.getType() === MessageEvent.PollEnd ||
+  mEvent.getType() === UNSTABLE_POLL_RESPONSE_EVENT_TYPE ||
+  mEvent.getType() === UNSTABLE_POLL_END_EVENT_TYPE ||
+  mEvent.getType() === LEGACY_POLL_RESPONSE_EVENT_TYPE;
 
 export const getMentionContent = (userIds: string[], room: boolean): IMentions => {
   const mMentions: IMentions = {};
