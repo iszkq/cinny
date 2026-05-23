@@ -69,7 +69,12 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
         return;
       }
 
-      const relationEventId = event.getRelation()?.event_id;
+      const rawRelation = event.getContent<IContent>()['m.relates_to'];
+      const relationEventId =
+        event.getRelation()?.event_id ??
+        (rawRelation && typeof rawRelation === 'object'
+          ? (rawRelation as Record<string, unknown>).event_id
+          : undefined);
       if (relationEventId === eventId || event.getId() === eventId) {
         setRevision((current) => current + 1);
       }
@@ -93,7 +98,7 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
     async (optionId: string) => {
       if (!poll || !room || !eventId) return;
       if (submitting) return;
-      if (hasPollEnded(poll)) {
+      if (hasPollEnded(poll, summary?.endedAt)) {
         setStatus(CN.endedCannotVote, true);
         return;
       }
@@ -125,17 +130,25 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
       setStatus(nextAnswers.length > 0 ? CN.submittingVote : CN.clearingVote);
 
       try {
-        await Promise.all(
-          (summary?.myResponseEventIds ?? []).map((responseEventId) =>
-            mx.redactEvent(room.roomId, responseEventId)
-          )
-        );
+        const previousResponseEventIds = summary?.myResponseEventIds ?? [];
 
         if (nextAnswers.length > 0) {
           await mx.sendEvent(
             room.roomId,
             POLL_RESPONSE_EVENT_TYPE,
             createPollResponseContent(eventId, nextAnswers) as never
+          );
+
+          void Promise.allSettled(
+            previousResponseEventIds.map((responseEventId) =>
+              mx.redactEvent(room.roomId, responseEventId)
+            )
+          );
+        } else {
+          await Promise.all(
+            previousResponseEventIds.map((responseEventId) =>
+              mx.redactEvent(room.roomId, responseEventId)
+            )
           );
         }
 
@@ -158,18 +171,19 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
     );
   }
 
-  const ended = hasPollEnded(poll);
   const summaryData = summary ?? {
     optionToUserIds: new Map<string, string[]>(),
     myAnswers: [],
     myResponseEventIds: [],
     totalSelections: 0,
     totalVoters: 0,
+    endedAt: undefined,
   };
-  const maxVotes = Math.max(
-    1,
-    ...poll.options.map((option) => summaryData.optionToUserIds.get(option.id)?.length ?? 0)
-  );
+  const ended = hasPollEnded(poll, summaryData.endedAt);
+  const totalForPercent =
+    poll.mode === 'multiple' ? summaryData.totalSelections : summaryData.totalVoters;
+  const getOptionPercent = (votes: number): number =>
+    totalForPercent > 0 ? Math.round((votes / totalForPercent) * 100) : 0;
 
   return (
     <SequenceCard
@@ -179,15 +193,21 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
       style={{
         padding: config.space.S300,
         minWidth: 0,
+        maxWidth: '520px',
       }}
     >
-      <Box direction="Column" gap="100">
-        <Text size="B400">{poll.title}</Text>
-        {poll.description && (
-          <Text size="T300" priority="300">
-            {poll.description}
-          </Text>
-        )}
+      <Box justifyContent="SpaceBetween" alignItems="Start" gap="200" style={{ minWidth: 0 }}>
+        <Box direction="Column" gap="100" style={{ minWidth: 0 }}>
+          <Text size="B400">{poll.title}</Text>
+          {poll.description && (
+            <Text size="T300" priority="300">
+              {poll.description}
+            </Text>
+          )}
+        </Box>
+        <Badge size="300" variant={ended ? 'Critical' : 'Success'} fill="Soft" radii="Pill">
+          <Text size="T200">{ended ? '\u5df2\u622a\u6b62' : '\u8fdb\u884c\u4e2d'}</Text>
+        </Badge>
       </Box>
 
       <Box gap="100" style={{ flexWrap: 'wrap' }}>
@@ -202,7 +222,9 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
         <Badge size="300" variant={ended ? 'Critical' : 'Secondary'} fill="Soft" radii="Pill">
           <Text size="T200">
             {ended
-              ? '\u5df2\u622a\u6b62'
+              ? summaryData.endedAt
+                ? `${CN.expiredAt} ${new Date(summaryData.endedAt).toLocaleString()}`
+                : '\u5df2\u622a\u6b62'
               : poll.expiresAt
                 ? `${CN.expiredAt} ${new Date(poll.expiresAt).toLocaleString()}`
                 : CN.longTerm}
@@ -216,16 +238,19 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
       <Box direction="Column" gap="200">
         {poll.options.map((option) => {
           const voterIds = summaryData.optionToUserIds.get(option.id) ?? [];
+          const percent = getOptionPercent(voterIds.length);
           const selected = summaryData.myAnswers.includes(option.id);
           const voterNames =
             poll.showVoters && room
               ? voterIds.map(
-                  (userId) => getMemberDisplayName(room, userId) ?? getMxIdLocalPart(userId) ?? userId
+                  (userId) =>
+                    getMemberDisplayName(room, userId) ?? getMxIdLocalPart(userId) ?? userId
                 )
               : [];
-          const visibleNames = voterNames.slice(0, 4).join('\u3001');
+          const visibleNames = voterNames.slice(0, 8).join('\u3001');
+          const fullNames = voterNames.join('\u3001');
           const namesSuffix =
-            voterNames.length > 4
+            voterNames.length > 8
               ? ` \u7b49 ${voterNames.length} \u4eba`
               : voterNames.length > 0
                 ? ''
@@ -239,15 +264,19 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
               direction="Column"
               gap="100"
               onClick={() => handleVote(option.id)}
+              aria-pressed={selected}
               disabled={!room || !eventId || ended || submitting}
               style={{
                 width: '100%',
-                border: '1px solid rgba(120, 120, 120, 0.22)',
-                borderRadius: 12,
+                border: selected
+                  ? '1px solid rgba(38, 132, 255, 0.58)'
+                  : '1px solid rgba(120, 120, 120, 0.22)',
+                borderRadius: 8,
                 padding: config.space.S300,
-                background: selected ? 'rgba(38, 132, 255, 0.10)' : 'transparent',
+                background: selected ? 'rgba(38, 132, 255, 0.12)' : 'rgba(255, 255, 255, 0.02)',
                 cursor: !room || !eventId || ended || submitting ? 'default' : 'pointer',
                 opacity: submitting && selected ? 0.75 : 1,
+                transition: 'border-color 120ms ease, background 120ms ease, opacity 120ms ease',
               }}
             >
               <Box justifyContent="SpaceBetween" alignItems="Center" gap="200">
@@ -255,19 +284,27 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
                   {option.text}
                 </Text>
                 <Text size="T200" priority="300" align="Right">
-                  {`${voterIds.length} ${CN.votes}${selected ? ` \u00b7 ${CN.selected}` : ''}`}
+                  {`${percent}% \u00b7 ${voterIds.length} ${CN.votes}${
+                    selected ? ` \u00b7 ${CN.selected}` : ''
+                  }`}
                 </Text>
               </Box>
               <ProgressBar
                 variant="Secondary"
                 size="300"
                 min={0}
-                max={maxVotes}
-                value={voterIds.length}
+                max={100}
+                value={percent}
                 radii="300"
               />
               {poll.showVoters && (
-                <Text size="T200" priority="300" align="Left">
+                <Text
+                  size="T200"
+                  priority="300"
+                  align="Left"
+                  title={fullNames || undefined}
+                  style={{ wordBreak: 'break-word' }}
+                >
                   {visibleNames ? `${visibleNames}${namesSuffix}` : namesSuffix}
                 </Text>
               )}
