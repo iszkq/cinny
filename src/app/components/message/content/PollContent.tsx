@@ -8,7 +8,7 @@ import {
   RoomEventHandlerMap,
 } from 'matrix-js-sdk';
 import { RelationsEvent } from 'matrix-js-sdk/lib/models/relations';
-import { Avatar, Badge, Box, Button, ProgressBar, Text, color, config } from 'folds';
+import { Avatar, Badge, Box, ProgressBar, Text, color, config } from 'folds';
 import { SequenceCard } from '../../sequence-card';
 import { UserAvatar } from '../../user-avatar';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
@@ -55,16 +55,13 @@ const CN = {
   openInTimeline:
     '\u8bf7\u5728\u623f\u95f4\u6d88\u606f\u5217\u8868\u4e2d\u6253\u5f00\u8be5\u6295\u7968\uff0c\u4ee5\u4fbf\u76f4\u63a5\u53c2\u4e0e\u6295\u7968\u3002',
   endedSummary: '\u8be5\u6295\u7968\u5df2\u7ecf\u622a\u6b62\uff0c\u53ea\u80fd\u67e5\u770b\u7ed3\u679c\u3002',
-  multipleHint:
-    '\u53ef\u4ee5\u5148\u8c03\u6574\u9009\u9879\uff0c\u786e\u8ba4\u540e\u518d\u70b9\u51fb\u201c\u53d1\u9001\u6295\u7968\u201d\u3002',
-  singleHint:
-    '\u9009\u4e2d\u9009\u9879\u540e\u4e0d\u4f1a\u7acb\u5373\u53d1\u9001\uff0c\u9700\u8981\u4f60\u624b\u52a8\u70b9\u51fb\u201c\u53d1\u9001\u6295\u7968\u201d\u3002',
-  pendingChanges: '\u5f53\u524d\u9009\u62e9\u5c1a\u672a\u53d1\u9001\uff0c\u8bf7\u624b\u52a8\u786e\u8ba4\u3002',
+  multipleHint: '\u591a\u9009\u4f1a\u81ea\u52a8\u5408\u5e76\u63d0\u4ea4\u5f53\u524d\u9009\u62e9\u3002',
+  singleHint: '\u70b9\u51fb\u9009\u9879\u540e\u4f1a\u76f4\u63a5\u53d1\u9001\u6295\u7968\u3002',
+  pendingChanges: '\u6b63\u5728\u51c6\u5907\u63d0\u4ea4\u6295\u7968...',
   pendingSync: '\u4e0a\u4e00\u6b21\u6295\u7968\u4ecd\u5728\u540c\u6b65\u4e2d\uff0c\u8bf7\u7a0d\u540e\u518d\u63d0\u4ea4\u4fee\u6539\u3002',
   syncingVote: '\u6295\u7968\u540c\u6b65\u4e2d...',
-  sendVote: '\u53d1\u9001\u6295\u7968',
-  sendClearVote: '\u6e05\u9664\u6295\u7968',
-  resetDraft: '\u53d6\u6d88\u4fee\u6539',
+  syncDelayed: '\u6295\u7968\u540c\u6b65\u8d85\u65f6\uff0c\u53ef\u4ee5\u91cd\u65b0\u53d1\u9001\u3002',
+  syncFailed: '\u4e0a\u6b21\u6295\u7968\u53d1\u9001\u5931\u8d25\uff0c\u8bf7\u91cd\u65b0\u53d1\u9001\u3002',
   endedBadge: '\u5df2\u622a\u6b62',
   activeBadge: '\u8fdb\u884c\u4e2d',
 } as const;
@@ -72,11 +69,16 @@ const CN = {
 const MAX_VISIBLE_VOTER_AVATARS = 5;
 const MAX_VISIBLE_VOTER_NAMES = 3;
 const ANSWER_KEY_SEPARATOR = '\u0000';
+const MULTIPLE_AUTO_SUBMIT_DELAY_MS = 360;
+const PENDING_POLL_RESPONSE_STALE_MS = 45 * 1000;
+const ACTIVE_PENDING_STATUSES = new Set(['encrypting', 'queued', 'sending']);
+const FAILED_PENDING_STATUSES = new Set(['not_sent', 'cancelled']);
 
 const DEFAULT_SUMMARY = {
   optionToUserIds: new Map<string, string[]>(),
   myAnswers: [] as string[],
   myResponseEventIds: [] as string[],
+  myResponseEvents: [] as MatrixEvent[],
   totalSelections: 0,
   totalVoters: 0,
   endedAt: undefined as number | undefined,
@@ -96,6 +98,13 @@ const getOrderedAnswers = (
   selectedAnswers: Set<string>,
   maxSelections: number
 ): string[] => optionIds.filter((optionId) => selectedAnswers.has(optionId)).slice(0, maxSelections);
+
+type PendingPollEventStatus = 'encrypting' | 'queued' | 'sending' | 'not_sent' | 'cancelled';
+
+const getPendingPollEventStatus = (event: MatrixEvent): PendingPollEventStatus | undefined => {
+  const status = (event as MatrixEvent & { status?: unknown }).status;
+  return typeof status === 'string' ? (status as PendingPollEventStatus) : undefined;
+};
 
 export function PollContent({ content, room, eventId }: PollContentProps) {
   const mx = useMatrixClient();
@@ -217,15 +226,50 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
     [poll, summaryData.myAnswers]
   );
   const committedAnswersKey = answersToKey(committedAnswers);
-  const pendingResponseEventIds = useMemo(
-    () => summaryData.myResponseEventIds.filter((responseEventId) => !isRemoteEventId(responseEventId)),
-    [summaryData.myResponseEventIds]
+  const pendingResponseEvents = useMemo(
+    () =>
+      summaryData.myResponseEvents.filter((responseEvent) => {
+        const responseEventId = responseEvent.getId();
+        return !!responseEventId && !isRemoteEventId(responseEventId);
+      }),
+    [summaryData.myResponseEvents]
   );
   const confirmedResponseEventIds = useMemo(
     () => summaryData.myResponseEventIds.filter((responseEventId) => isRemoteEventId(responseEventId)),
     [summaryData.myResponseEventIds]
   );
-  const hasPendingOwnResponse = pendingResponseEventIds.length > 0;
+  const activePendingOwnResponse = useMemo(
+    () =>
+      pendingResponseEvents.some((responseEvent) => {
+        const status = getPendingPollEventStatus(responseEvent);
+        return (
+          !!status &&
+          ACTIVE_PENDING_STATUSES.has(status) &&
+          Date.now() - responseEvent.getTs() < PENDING_POLL_RESPONSE_STALE_MS
+        );
+      }),
+    [pendingResponseEvents]
+  );
+  const stalePendingOwnResponse = useMemo(
+    () =>
+      pendingResponseEvents.some((responseEvent) => {
+        const status = getPendingPollEventStatus(responseEvent);
+        return (
+          !!status &&
+          ACTIVE_PENDING_STATUSES.has(status) &&
+          Date.now() - responseEvent.getTs() >= PENDING_POLL_RESPONSE_STALE_MS
+        );
+      }),
+    [pendingResponseEvents]
+  );
+  const failedPendingOwnResponse = useMemo(
+    () =>
+      pendingResponseEvents.some((responseEvent) => {
+        const status = getPendingPollEventStatus(responseEvent);
+        return !!status && FAILED_PENDING_STATUSES.has(status);
+      }),
+    [pendingResponseEvents]
+  );
 
   useEffect(() => {
     if (!poll) return;
@@ -262,6 +306,40 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
 
     return () => window.clearTimeout(timerId);
   }, [poll?.expiresAt, summaryData.endedAt]);
+
+  useEffect(() => {
+    const staleTransitionDelay = pendingResponseEvents.reduce<number | undefined>(
+      (currentMinDelay, responseEvent) => {
+        const status = getPendingPollEventStatus(responseEvent);
+        if (!status || !ACTIVE_PENDING_STATUSES.has(status)) {
+          return currentMinDelay;
+        }
+
+        const remainingDelay =
+          responseEvent.getTs() + PENDING_POLL_RESPONSE_STALE_MS - Date.now();
+        if (remainingDelay <= 0) {
+          return 0;
+        }
+
+        if (typeof currentMinDelay !== 'number') {
+          return remainingDelay;
+        }
+
+        return Math.min(currentMinDelay, remainingDelay);
+      },
+      undefined
+    );
+
+    if (typeof staleTransitionDelay !== 'number') {
+      return undefined;
+    }
+
+    const timerId = window.setTimeout(() => {
+      setRevision((current) => current + 1);
+    }, staleTransitionDelay + 50);
+
+    return () => window.clearTimeout(timerId);
+  }, [pendingResponseEvents]);
 
   const draftDirty = !areAnswersEqual(draftAnswers, committedAnswers);
 
@@ -303,11 +381,6 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
     [clearStatus, draftAnswers, ended, eventId, optionIds, poll, room, setStatus, submitting]
   );
 
-  const handleResetDraft = useCallback(() => {
-    clearStatus();
-    setDraftAnswers(committedAnswers);
-  }, [clearStatus, committedAnswers]);
-
   const handleSubmitVote = useCallback(async () => {
     if (!poll || !room || !eventId || submitting || submitInFlightRef.current || !draftDirty) {
       return;
@@ -316,7 +389,7 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
       setStatus(CN.endedCannotVote, true);
       return;
     }
-    if (hasPendingOwnResponse) {
+    if (activePendingOwnResponse) {
       setStatus(CN.pendingSync, true);
       return;
     }
@@ -361,10 +434,25 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
     room,
     setStatus,
     submitting,
-    hasPendingOwnResponse,
+    activePendingOwnResponse,
     confirmedResponseEventIds,
     summaryData.endedAt,
   ]);
+
+  useEffect(() => {
+    if (!poll || !room || !eventId || ended || submitting || submitInFlightRef.current) {
+      return undefined;
+    }
+    if (!draftDirty || activePendingOwnResponse) {
+      return undefined;
+    }
+
+    const timerId = window.setTimeout(() => {
+      handleSubmitVote().catch(() => undefined);
+    }, poll.mode === 'multiple' ? MULTIPLE_AUTO_SUBMIT_DELAY_MS : 0);
+
+    return () => window.clearTimeout(timerId);
+  }, [activePendingOwnResponse, draftDirty, ended, eventId, handleSubmitVote, poll, room, submitting]);
 
   if (!poll) {
     return (
@@ -579,46 +667,18 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
             <Text size="T200" priority="300">
               {ended
                 ? CN.endedSummary
-                : hasPendingOwnResponse
+                : failedPendingOwnResponse
+                  ? CN.syncFailed
+                : stalePendingOwnResponse
+                  ? CN.syncDelayed
+                : activePendingOwnResponse
                   ? CN.syncingVote
                 : draftDirty
                   ? CN.pendingChanges
-                  : poll.mode === 'multiple'
+                : poll.mode === 'multiple'
                     ? CN.multipleHint
                     : CN.singleHint}
             </Text>
-            {!ended && (
-              <Box gap="200" style={{ flexWrap: 'wrap' }}>
-                <Button
-                  type="button"
-                  variant="Primary"
-                  size="300"
-                  radii="300"
-                  onClick={() => {
-                    handleSubmitVote().catch(() => undefined);
-                  }}
-                  disabled={!draftDirty || submitting || hasPendingOwnResponse}
-                  aria-disabled={!draftDirty || submitting || hasPendingOwnResponse}
-                >
-                  <Text size="B300">
-                    {draftAnswers.length > 0 ? CN.sendVote : CN.sendClearVote}
-                  </Text>
-                </Button>
-                <Button
-                  type="button"
-                  variant="Secondary"
-                  fill="Soft"
-                  size="300"
-                  radii="300"
-                  outlined
-                  onClick={handleResetDraft}
-                  disabled={!draftDirty || submitting}
-                  aria-disabled={!draftDirty || submitting}
-                >
-                  <Text size="B300">{CN.resetDraft}</Text>
-                </Button>
-              </Box>
-            )}
           </>
         )}
         {statusText && (
