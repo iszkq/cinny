@@ -890,6 +890,11 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
           mEvt.on(MatrixEventEvent.Decrypted, handleDecrypted);
         }
 
+        if (reactionOrEditEvent(mEvt)) {
+          setTimeline((current) => ({ ...current }));
+          return;
+        }
+
         // if user is at bottom of timeline
         // keep paginating timeline and conditionally mark as read
         // otherwise we update timeline without paginating
