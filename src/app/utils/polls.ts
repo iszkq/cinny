@@ -27,6 +27,11 @@ const MATRIX_TEXT_KEY = 'm.text';
 const UNSTABLE_MATRIX_TEXT_KEY = 'org.matrix.msc1767.text';
 
 export type PollMode = 'single' | 'multiple' | 'pk';
+export type CreatePollMode = 'single' | 'multiple';
+
+// Most deployed Matrix rooms and clients still interoperate better with MSC3381 poll events.
+export const OUTGOING_POLL_START_EVENT_TYPE = UNSTABLE_POLL_START_EVENT_TYPE;
+export const OUTGOING_POLL_RESPONSE_EVENT_TYPE = UNSTABLE_POLL_RESPONSE_EVENT_TYPE;
 
 export type PollOption = {
   id: string;
@@ -47,7 +52,7 @@ export type PollData = {
 export type CreatePollInput = {
   title: string;
   description?: string;
-  mode: PollMode;
+  mode: CreatePollMode;
   options: string[];
   maxSelections?: number;
   showVoters: boolean;
@@ -125,6 +130,17 @@ const getRelationType = (event: MatrixEvent): string | undefined => {
   return typeof rawRelation?.rel_type === 'string' ? rawRelation.rel_type : undefined;
 };
 
+export const isPollStartEventType = (eventType?: string): boolean =>
+  eventType === POLL_START_EVENT_TYPE || eventType === UNSTABLE_POLL_START_EVENT_TYPE;
+
+export const isPollResponseEventType = (eventType?: string): boolean =>
+  eventType === POLL_RESPONSE_EVENT_TYPE ||
+  eventType === UNSTABLE_POLL_RESPONSE_EVENT_TYPE ||
+  eventType === LEGACY_POLL_RESPONSE_EVENT_TYPE;
+
+export const isPollEndEventType = (eventType?: string): boolean =>
+  eventType === POLL_END_EVENT_TYPE || eventType === UNSTABLE_POLL_END_EVENT_TYPE;
+
 const getPollMaxSelections = (
   mode: PollMode,
   optionsLength: number,
@@ -194,7 +210,7 @@ const buildStandardPollStart = (data: PollData, unstable = false): Record<string
 });
 
 export const createPollMessageContent = (input: CreatePollInput): IContent => {
-  const mode: PollMode = input.mode === 'multiple' || input.mode === 'pk' ? input.mode : 'single';
+  const mode: PollMode = input.mode === 'multiple' ? 'multiple' : 'single';
   const options = sanitizePollOptions(input.options);
   const title = input.title.trim();
   const description = sanitizeText(input.description);
@@ -389,11 +405,7 @@ const getLinkedTimelines = (room: Room, eventId: string): MatrixEvent[] => {
 
 export const isPollResponseEvent = (event: MatrixEvent, pollEventId?: string): boolean => {
   const eventType = event.getType();
-  if (
-    eventType !== POLL_RESPONSE_EVENT_TYPE &&
-    eventType !== UNSTABLE_POLL_RESPONSE_EVENT_TYPE &&
-    eventType !== LEGACY_POLL_RESPONSE_EVENT_TYPE
-  ) {
+  if (!isPollResponseEventType(eventType)) {
     return false;
   }
 
@@ -408,7 +420,7 @@ export const isPollResponseEvent = (event: MatrixEvent, pollEventId?: string): b
 
 const isPollEndEvent = (event: MatrixEvent, pollEventId?: string): boolean => {
   const eventType = event.getType();
-  if (eventType !== POLL_END_EVENT_TYPE && eventType !== UNSTABLE_POLL_END_EVENT_TYPE) {
+  if (!isPollEndEventType(eventType)) {
     return false;
   }
 
