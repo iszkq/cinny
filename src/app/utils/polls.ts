@@ -76,6 +76,7 @@ export type PollSummary = {
   optionToUserIds: Map<string, string[]>;
   myAnswers: string[];
   myResponseEventIds: string[];
+  myResponseEvents: MatrixEvent[];
   totalSelections: number;
   totalVoters: number;
   endedAt?: number;
@@ -515,6 +516,7 @@ export const summarizePoll = (
     }
   >();
   const responseEventIdsBySender = new Map<string, string[]>();
+  const responseEventsBySender = new Map<string, MatrixEvent[]>();
 
   const events = collectUniqueEvents([
     ...collectPollRelationEvents(room, pollEventId, POLL_RESPONSE_EVENT_TYPES),
@@ -545,6 +547,10 @@ export const summarizePoll = (
     currentIds.push(eventId);
     responseEventIdsBySender.set(senderId, currentIds);
 
+    const currentEvents = responseEventsBySender.get(senderId) ?? [];
+    currentEvents.push(event);
+    responseEventsBySender.set(senderId, currentEvents);
+
     const previous = latestBySender.get(senderId);
     if (!previous || previous.ts <= event.getTs()) {
       latestBySender.set(senderId, {
@@ -570,6 +576,7 @@ export const summarizePoll = (
     optionToUserIds,
     myAnswers: currentUserId ? latestBySender.get(currentUserId)?.answers ?? [] : [],
     myResponseEventIds: currentUserId ? responseEventIdsBySender.get(currentUserId) ?? [] : [],
+    myResponseEvents: currentUserId ? responseEventsBySender.get(currentUserId) ?? [] : [],
     totalSelections,
     totalVoters: latestBySender.size,
     endedAt,

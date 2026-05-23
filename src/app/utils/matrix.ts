@@ -66,7 +66,7 @@ export const fetchMediaWithAuth = async (
 
   for (const requestUrl of requestUrls) {
     const requestHeadersList = isSessionMediaUrl(requestUrl, session.baseUrl)
-      ? [authHeaders, baseHeaders]
+      ? [authHeaders]
       : [baseHeaders];
 
     for (const headers of requestHeadersList) {
