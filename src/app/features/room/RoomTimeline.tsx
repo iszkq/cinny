@@ -1458,6 +1458,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     const forwardSource = isForwardableMessage(mEvent.getType(), forwardContent)
       ? {
           eventId: mEventId,
+          roomId: room.roomId,
           eventType: mEvent.getType(),
           content: forwardContent,
           senderId,
@@ -1573,6 +1574,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
         const forwardSource = isForwardableMessage(MessageEvent.RoomMessage, forwardContent)
           ? {
               eventId: mEventId,
+              roomId: room.roomId,
               eventType: MessageEvent.RoomMessage,
               content: forwardContent,
               senderId,
@@ -1677,6 +1679,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
         const forwardSource = isForwardableMessage(mEvent.getType(), mEvent.getContent())
           ? {
               eventId: mEventId,
+              roomId: room.roomId,
               eventType: mEvent.getType(),
               content: mEvent.getContent(),
               senderId,
@@ -1846,6 +1849,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
         const forwardSource = isForwardableMessage(MessageEvent.Sticker, mEvent.getContent())
           ? {
               eventId: mEventId,
+              roomId: room.roomId,
               eventType: MessageEvent.Sticker,
               content: mEvent.getContent(),
               senderId,
