@@ -6,6 +6,8 @@ const LEGACY_PERSISTENT_MEDIA_CACHE = 'cinny-auth-media-v2';
 const PERSISTENT_MEDIA_CACHE_PREFIX = 'cinny-auth-media-v3';
 const PERSISTENT_MEDIA_PRELOAD_CONCURRENCY = 2;
 const OBJECT_URL_MEDIA_PRELOAD_CONCURRENCY = 2;
+const FAILED_MEDIA_RETRY_DELAY_MS = 30 * 1000;
+const FAILED_MEDIA_NOT_FOUND_RETRY_DELAY_MS = 5 * 60 * 1000;
 
 type MediaCachePriority = 'visible' | 'background';
 
@@ -104,6 +106,7 @@ const objectUrlMediaListeners = new Map<
   string,
   Set<(objectUrl: string | undefined) => void>
 >();
+const failedMediaRetryAt = new Map<string, number>();
 const visibleObjectUrlMediaQueue: ObjectUrlMediaTask[] = [];
 const backgroundObjectUrlMediaQueue: ObjectUrlMediaTask[] = [];
 let objectUrlMediaCleanupBound = false;
@@ -123,6 +126,32 @@ const clearObjectUrlMediaCache = () => {
     removeObjectUrlMediaEntry(src);
   });
   objectUrlMediaBytes = 0;
+};
+
+const clearFailedMediaEntries = () => {
+  failedMediaRetryAt.clear();
+};
+
+const clearFailedMediaEntry = (src: string) => {
+  failedMediaRetryAt.delete(src);
+};
+
+const markFailedMediaEntry = (src: string, retryDelayMs: number) => {
+  failedMediaRetryAt.set(src, Date.now() + retryDelayMs);
+};
+
+const canRetryFailedMediaEntry = (src: string): boolean => {
+  const retryAt = failedMediaRetryAt.get(src);
+  if (retryAt === undefined) {
+    return true;
+  }
+
+  if (retryAt <= Date.now()) {
+    failedMediaRetryAt.delete(src);
+    return true;
+  }
+
+  return false;
 };
 
 const removeObjectUrlMediaEntry = (src: string) => {
@@ -165,6 +194,7 @@ const trimObjectUrlMediaCache = () => {
 
 const setObjectUrlMediaEntry = (src: string, objectUrl: string, size: number) => {
   removeObjectUrlMediaEntry(src);
+  clearFailedMediaEntry(src);
 
   objectUrlMediaCache.set(src, {
     objectUrl,
@@ -272,6 +302,7 @@ const bindObjectUrlMediaCleanup = () => {
     'pagehide',
     () => {
       clearObjectUrlMediaCache();
+      clearFailedMediaEntries();
       pendingObjectUrlMedia.clear();
     },
     { once: true }
@@ -309,6 +340,7 @@ const resetInMemoryMediaCaches = () => {
   visibleObjectUrlMediaQueue.length = 0;
   backgroundObjectUrlMediaQueue.length = 0;
   clearObjectUrlMediaCache();
+  clearFailedMediaEntries();
 };
 
 const syncPersistentMediaNamespace = () => {
@@ -393,10 +425,25 @@ const matchPersistentMedia = async (src: string): Promise<Response | undefined> 
 };
 
 const fetchAndPersistMedia = async (src: string): Promise<Response | undefined> => {
-  const response = await fetchMediaWithAuth(src, { method: 'GET' });
-  if (!response.ok) {
+  if (!canRetryFailedMediaEntry(src)) {
     return undefined;
   }
+
+  const response = await fetchMediaWithAuth(src, { method: 'GET' }).catch((error) => {
+    markFailedMediaEntry(src, FAILED_MEDIA_RETRY_DELAY_MS);
+    throw error;
+  });
+  if (!response.ok) {
+    markFailedMediaEntry(
+      src,
+      response.status === 404
+        ? FAILED_MEDIA_NOT_FOUND_RETRY_DELAY_MS
+        : FAILED_MEDIA_RETRY_DELAY_MS
+    );
+    return undefined;
+  }
+
+  clearFailedMediaEntry(src);
 
   const mediaCache = await getMediaCache();
   if (mediaCache) {
@@ -557,6 +604,9 @@ export const primeCachedMediaObjectUrl = (
 
   if (!src) {
     return undefined;
+  }
+  if (!canRetryFailedMediaEntry(src)) {
+    return Promise.resolve(undefined);
   }
 
   const cachedObjectUrl = touchObjectUrlMediaEntry(src)?.objectUrl;
