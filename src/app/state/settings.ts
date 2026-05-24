@@ -26,8 +26,11 @@ export interface Settings {
   darkThemeId?: string;
   interfaceStyle: InterfaceStyle;
   accentColorId: string;
+  accentOpacity: number;
   outgoingBubbleColorId: string;
+  outgoingBubbleOpacity: number;
   incomingBubbleColorId: string;
+  incomingBubbleOpacity: number;
   chatBackgroundDataUrl?: string;
   monochromeMode?: boolean;
   isMarkdown: boolean;
@@ -68,8 +71,11 @@ const defaultSettings: Settings = {
   darkThemeId: undefined,
   interfaceStyle: 'default',
   accentColorId: 'violet',
+  accentOpacity: 100,
   outgoingBubbleColorId: 'teal',
+  outgoingBubbleOpacity: 100,
   incomingBubbleColorId: 'slate',
+  incomingBubbleOpacity: 100,
   chatBackgroundDataUrl: undefined,
   monochromeMode: false,
   isMarkdown: true,
@@ -106,15 +112,21 @@ const defaultSettings: Settings = {
 export const defaultAppearanceSettings = {
   interfaceStyle: defaultSettings.interfaceStyle,
   accentColorId: defaultSettings.accentColorId,
+  accentOpacity: defaultSettings.accentOpacity,
   outgoingBubbleColorId: defaultSettings.outgoingBubbleColorId,
+  outgoingBubbleOpacity: defaultSettings.outgoingBubbleOpacity,
   incomingBubbleColorId: defaultSettings.incomingBubbleColorId,
+  incomingBubbleOpacity: defaultSettings.incomingBubbleOpacity,
   chatBackgroundDataUrl: defaultSettings.chatBackgroundDataUrl,
 } satisfies Pick<
   Settings,
   | 'interfaceStyle'
   | 'accentColorId'
+  | 'accentOpacity'
   | 'outgoingBubbleColorId'
+  | 'outgoingBubbleOpacity'
   | 'incomingBubbleColorId'
+  | 'incomingBubbleOpacity'
   | 'chatBackgroundDataUrl'
 >;
 
