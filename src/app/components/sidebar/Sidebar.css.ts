@@ -2,6 +2,7 @@ import { createVar, style } from '@vanilla-extract/css';
 import { recipe, RecipeVariants } from '@vanilla-extract/recipes';
 import { color, config, DefaultReset, Disabled, FocusOutline, toRem } from 'folds';
 import { ContainerColor } from '../../styles/ContainerColor.css';
+import { NAV_RAIL_BG_VAR, NAV_RAIL_BORDER_VAR } from '../../theme/appearance';
 
 export const Sidebar = style([
   DefaultReset,
@@ -9,14 +10,15 @@ export const Sidebar = style([
     width: toRem(76),
     paddingTop: config.space.S200,
     paddingBottom: config.space.S200,
-    background:
-      'linear-gradient(180deg, rgba(223, 233, 225, 0.94) 0%, rgba(211, 224, 214, 0.94) 100%)',
-    borderRight: `${config.borderWidth.B300} solid rgba(115, 133, 121, 0.12)`,
+    background: `var(${NAV_RAIL_BG_VAR}, linear-gradient(180deg, rgba(223, 233, 225, 0.94) 0%, rgba(211, 224, 214, 0.94) 100%))`,
+    borderRight: `${config.borderWidth.B300} solid var(${NAV_RAIL_BORDER_VAR}, rgba(115, 133, 121, 0.12))`,
 
     display: 'flex',
     flexDirection: 'column',
     color: color.Background.OnContainer,
-    backdropFilter: 'blur(12px)',
+    boxShadow: 'inset -1px 0 0 rgba(255, 255, 255, 0.12)',
+    backdropFilter: 'blur(18px) saturate(155%)',
+    WebkitBackdropFilter: 'blur(18px) saturate(155%)',
   },
 ]);
 
@@ -28,7 +30,7 @@ export const SidebarStack = style([
     flexDirection: 'column',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: config.space.S300,
+    gap: config.space.S250,
     padding: `${config.space.S200} 0`,
   },
 ]);
@@ -72,16 +74,16 @@ export const SidebarItem = recipe({
   base: [
     DefaultReset,
     {
-      minWidth: toRem(42),
+      minWidth: toRem(46),
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
       position: 'relative',
-      transition: 'transform 200ms cubic-bezier(0, 0.8, 0.67, 0.97)',
+      transition: 'transform 180ms cubic-bezier(0, 0.8, 0.67, 0.97)',
 
       selectors: {
         '&:hover': {
-          transform: `translateX(${toRem(PUSH_X)})`,
+          transform: `translateX(${toRem(1)})`,
         },
         '&::before': {
           content: '',
@@ -152,9 +154,24 @@ export type SidebarItemBadgeVariants = RecipeVariants<typeof SidebarItemBadge>;
 export const SidebarAvatar = recipe({
   base: [
     {
+      overflow: 'hidden',
+      background: `color-mix(in srgb, ${color.Surface.Container} 62%, transparent)`,
+      border: `${config.borderWidth.B300} solid color-mix(in srgb, ${color.SurfaceVariant.ContainerLine} 44%, transparent)`,
+      boxShadow:
+        '0 8px 18px rgba(15, 23, 42, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.18)',
+      backdropFilter: 'blur(14px) saturate(150%)',
+      WebkitBackdropFilter: 'blur(14px) saturate(150%)',
+      transition:
+        'transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease',
       selectors: {
         'button&': {
           cursor: 'pointer',
+        },
+        'button&:hover, button&:focus-visible': {
+          borderColor: `color-mix(in srgb, ${color.Primary.Main} 24%, ${color.SurfaceVariant.ContainerLine} 76%)`,
+          boxShadow:
+            '0 10px 22px rgba(15, 23, 42, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.22)',
+          transform: 'translateY(-1px)',
         },
       },
     },
@@ -179,8 +196,9 @@ export const SidebarAvatar = recipe({
     },
     outlined: {
       true: {
-        border: `${config.borderWidth.B300} solid rgba(108, 125, 114, 0.18)`,
-        boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.75)',
+        borderColor: `color-mix(in srgb, ${color.Primary.Main} 22%, ${color.SurfaceVariant.ContainerLine} 78%)`,
+        boxShadow:
+          '0 10px 22px rgba(15, 23, 42, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.3)',
       },
     },
   },
@@ -199,12 +217,25 @@ export const SidebarFolder = recipe({
       minHeight: toRem(42),
       display: 'flex',
       flexWrap: 'wrap',
-      outline: `${config.borderWidth.B300} solid ${color.Background.ContainerLine}`,
+      background: `color-mix(in srgb, ${color.Surface.Container} 58%, transparent)`,
+      outline: `${config.borderWidth.B300} solid color-mix(in srgb, ${color.SurfaceVariant.ContainerLine} 44%, transparent)`,
+      boxShadow:
+        '0 8px 18px rgba(15, 23, 42, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.16)',
+      backdropFilter: 'blur(14px) saturate(150%)',
+      WebkitBackdropFilter: 'blur(14px) saturate(150%)',
       position: 'relative',
+      transition:
+        'transform 160ms ease, outline-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease',
 
       selectors: {
         'button&': {
           cursor: 'pointer',
+        },
+        'button&:hover, button&:focus-visible': {
+          outlineColor: `color-mix(in srgb, ${color.Primary.Main} 22%, ${color.SurfaceVariant.ContainerLine} 78%)`,
+          boxShadow:
+            '0 10px 22px rgba(15, 23, 42, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.2)',
+          transform: 'translateY(-1px)',
         },
       },
     },
