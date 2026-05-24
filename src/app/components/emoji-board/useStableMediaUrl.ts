@@ -68,8 +68,7 @@ export const useStableMediaUrl = (
     (shouldUseObjectUrlForMediaDisplay(src) ||
       shouldUseObjectUrlForMediaDisplay(fallbackSrc));
   const desktopSupported = isDesktopUpdaterSupported();
-  const desktopObjectUrlFallbackEnabled = desktopSupported && !disableObjectUrlCache;
-  const objectUrlCacheEnabled = desktopObjectUrlFallbackEnabled;
+  const objectUrlCacheEnabled = preferObjectUrl && !disableObjectUrlCache;
   const shouldWaitForPreparedMedia =
     preferObjectUrl &&
     Boolean(src || fallbackSrc) &&
@@ -182,17 +181,19 @@ export const useStableMediaUrl = (
         : undefined,
     ].filter(Boolean) as Array<() => void>;
 
-    if (src) {
-      void primeCachedMediaObjectUrl(src);
-    }
-    if (fallbackSrc && fallbackSrc !== src) {
-      void primeCachedMediaObjectUrl(fallbackSrc);
+    if (desktopSupported) {
+      if (src) {
+        void primeCachedMediaObjectUrl(src, 'visible');
+      }
+      if (fallbackSrc && fallbackSrc !== src) {
+        void primeCachedMediaObjectUrl(fallbackSrc, 'background');
+      }
     }
 
     return () => {
       unsubscribeList.forEach((unsubscribe) => unsubscribe());
     };
-  }, [fallbackSrc, objectUrlCacheEnabled, src]);
+  }, [desktopSupported, fallbackSrc, objectUrlCacheEnabled, src]);
 
   useEffect(() => {
     if (!shouldWaitForPreparedMedia) {

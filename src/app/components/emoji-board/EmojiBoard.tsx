@@ -47,6 +47,10 @@ import {
 } from '../../utils/desktopMediaAssetCache';
 import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
 import {
+  primeCachedMediaObjectUrl,
+  primePersistentMediaUrl,
+} from '../../utils/mediaUrlCache';
+import {
   SearchInput,
   EmojiBoardTabs,
   SidebarStack,
@@ -76,6 +80,9 @@ const PRIORITY_PACK_PRELOAD_COUNT = 4;
 const PRIORITY_PACK_VISIBLE_URL_LIMIT = 160;
 const WEB_PRIORITY_PACK_PRELOAD_COUNT = 2;
 const WEB_PRIORITY_PACK_VISIBLE_URL_LIMIT = 48;
+const WEB_VISIBLE_WARM_BATCH_SIZE = 8;
+const WEB_VISIBLE_WARM_BATCH_DELAY_MS = 120;
+const WEB_VISIBLE_PERSISTENT_WARM_DELAY_MS = 520;
 
 type ImagePackMode = 'contextual' | 'personal';
 
@@ -634,6 +641,46 @@ export function EmojiBoard({
     [mx, usage, useAuthentication]
   );
 
+  const getPackPrimaryMediaUrls = useCallback(
+    (pack: ImagePack) => {
+      const size = usage === ImageUsage.Sticker ? 256 : 64;
+      const mediaUrls = new Set<string>();
+      const avatarMxc = pack.getAvatarUrl(usage);
+
+      if (avatarMxc) {
+        const { primaryUrl } = getEmojiBoardMediaUrls({
+          mx,
+          mxc: avatarMxc,
+          useAuthentication,
+          width: 64,
+          height: 64,
+        });
+
+        if (primaryUrl) {
+          mediaUrls.add(primaryUrl);
+        }
+      }
+
+      pack.getImages(usage).forEach((image) => {
+        const { primaryUrl } = getEmojiBoardMediaUrls({
+          mx,
+          mxc: image.url,
+          useAuthentication,
+          info: image.info,
+          width: size,
+          height: size,
+        });
+
+        if (primaryUrl) {
+          mediaUrls.add(primaryUrl);
+        }
+      });
+
+      return Array.from(mediaUrls);
+    },
+    [mx, usage, useAuthentication]
+  );
+
   const priorityPacks = useMemo(() => {
     const packs: ImagePack[] = [];
     const pushPack = (pack: ImagePack | undefined) => {
@@ -787,15 +834,12 @@ export function EmojiBoard({
 
     let disposed = false;
     const backgroundTimers: number[] = [];
-      const preloadTimer = window.setTimeout(() => {
-        if (disposed) {
-          return;
-        }
+    const preloadTimer = window.setTimeout(() => {
+      if (disposed) {
+        return;
+      }
 
-        if (!desktopSupported) {
-          return;
-        }
-
+      if (desktopSupported) {
         priorityPacks.forEach((pack, packIndex) => {
           getPackMediaUrls(pack).forEach((mediaUrl, mediaIndex) => {
             const priority =
@@ -810,14 +854,68 @@ export function EmojiBoard({
             }
           });
         });
-      }, 0);
+        return;
+      }
+
+      const priorityPrimaryUrls = Array.from(
+        new Set(priorityPacks.flatMap((pack) => getPackPrimaryMediaUrls(pack)))
+      ).slice(0, priorityPackVisibleUrlLimit);
+      const priorityPrimaryUrlSet = new Set(priorityPrimaryUrls);
+      const persistentUrls = Array.from(
+        new Set(priorityPacks.flatMap((pack) => getPackMediaUrls(pack)))
+      ).filter((mediaUrl) => !priorityPrimaryUrlSet.has(mediaUrl));
+
+      for (
+        let batchStart = 0;
+        batchStart < priorityPrimaryUrls.length;
+        batchStart += WEB_VISIBLE_WARM_BATCH_SIZE
+      ) {
+        const batch = priorityPrimaryUrls.slice(
+          batchStart,
+          batchStart + WEB_VISIBLE_WARM_BATCH_SIZE
+        );
+        const batchIndex = batchStart / WEB_VISIBLE_WARM_BATCH_SIZE;
+
+        backgroundTimers.push(
+          window.setTimeout(() => {
+            if (disposed) {
+              return;
+            }
+
+            batch.forEach((mediaUrl) => {
+              void primeCachedMediaObjectUrl(mediaUrl, 'visible');
+            });
+          }, batchIndex * WEB_VISIBLE_WARM_BATCH_DELAY_MS)
+        );
+      }
+
+      if (persistentUrls.length > 0) {
+        backgroundTimers.push(
+          window.setTimeout(() => {
+            if (disposed) {
+              return;
+            }
+
+            persistentUrls.forEach((mediaUrl) => {
+              void primePersistentMediaUrl(mediaUrl, 'background');
+            });
+          }, WEB_VISIBLE_PERSISTENT_WARM_DELAY_MS)
+        );
+      }
+    }, 0);
 
     return () => {
       disposed = true;
       window.clearTimeout(preloadTimer);
       backgroundTimers.forEach((timer) => window.clearTimeout(timer));
     };
-  }, [desktopSupported, getPackMediaUrls, priorityPackVisibleUrlLimit, priorityPacks]);
+  }, [
+    desktopSupported,
+    getPackMediaUrls,
+    getPackPrimaryMediaUrls,
+    priorityPackVisibleUrlLimit,
+    priorityPacks,
+  ]);
 
   // sync active sidebar tab with scroll
   useEffect(() => {
