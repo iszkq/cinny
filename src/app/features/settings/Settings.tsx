@@ -8,7 +8,6 @@ import {
   IconButton,
   Icons,
   IconSrc,
-  MenuItem,
   Overlay,
   OverlayBackdrop,
   OverlayCenter,
@@ -34,6 +33,7 @@ import { AI } from './ai/AI';
 import { UseStateProvider } from '../../components/UseStateProvider';
 import { stopPropagation } from '../../utils/keyboard';
 import { LogoutDialog } from '../../components/LogoutDialog';
+import { NavButton, NavItem, NavItemContent } from '../../components/nav';
 
 export enum SettingsPages {
   GeneralPage,
@@ -157,26 +157,39 @@ export function Settings({ initialPage, requestClose }: SettingsProps) {
             </PageNavHeader>
             <Box grow="Yes" direction="Column">
               <PageNavContent>
-                <div style={{ flexGrow: 1 }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: config.space.S100,
+                    flexGrow: 1,
+                  }}
+                >
                   {menuItems.map((item) => (
-                    <MenuItem
+                    <NavItem
                       key={item.name}
                       variant="Background"
                       radii="400"
-                      aria-pressed={activePage === item.page}
-                      before={<Icon src={item.icon} size="100" filled={activePage === item.page} />}
-                      onClick={() => setActivePage(item.page)}
+                      aria-selected={activePage === item.page}
+                      highlight={activePage === item.page}
                     >
-                      <Text
-                        style={{
-                          fontWeight: activePage === item.page ? config.fontWeight.W600 : undefined,
-                        }}
-                        size="T300"
-                        truncate
-                      >
-                        {item.name}
-                      </Text>
-                    </MenuItem>
+                      <NavButton type="button" onClick={() => setActivePage(item.page)}>
+                        <NavItemContent>
+                          <Box as="span" grow="Yes" alignItems="Center" gap="200">
+                            <Icon
+                              src={item.icon}
+                              size="100"
+                              filled={activePage === item.page}
+                            />
+                            <Box as="span" grow="Yes">
+                              <Text size="Inherit" as="span" truncate>
+                                {item.name}
+                              </Text>
+                            </Box>
+                          </Box>
+                        </NavItemContent>
+                      </NavButton>
+                    </NavItem>
                   ))}
                 </div>
               </PageNavContent>
