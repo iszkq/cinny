@@ -1,8 +1,10 @@
-import { Box, Button, config, Icon, Icons, Text } from 'folds';
+import { Box, Button, Spinner, config, Icon, Icons, Text, color } from 'folds';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { EventType, IContent, MsgType } from 'matrix-js-sdk';
 import { UserHero, UserHeroName } from './UserHero';
-import { getMxIdServer, mxcUrlToHttp } from '../../utils/matrix';
+import { getMxIdLocalPart, getMxIdServer, mxcUrlToHttp } from '../../utils/matrix';
+import { sanitizeText } from '../../utils/sanitize';
 import { getMemberAvatarMxc, getMemberDisplayName } from '../../utils/room';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
@@ -22,6 +24,8 @@ import { useMemberPowerCompare } from '../../hooks/useMemberPowerCompare';
 import { CreatorChip } from './CreatorChip';
 import { getDirectCreatePath, withSearchParam } from '../../pages/pathUtils';
 import { DirectCreateSearchParams } from '../../pages/paths';
+import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
+import { getMentionContent } from '../../utils/room';
 
 type UserRoomProfileProps = {
   userId: string;
@@ -43,6 +47,7 @@ export function UserRoomProfile({ userId }: UserRoomProfileProps) {
 
   const myUserId = mx.getSafeUserId();
   const creator = creators.has(userId);
+  const canMessage = permissions.event(EventType.RoomMessage, myUserId);
 
   const canKickUser = permissions.action('kick', myUserId) && hasMorePower(myUserId, userId);
   const canBanUser = permissions.action('ban', myUserId) && hasMorePower(myUserId, userId);
@@ -54,6 +59,7 @@ export function UserRoomProfile({ userId }: UserRoomProfileProps) {
 
   const server = getMxIdServer(userId);
   const displayName = getMemberDisplayName(room, userId);
+  const mentionName = displayName ?? getMxIdLocalPart(userId) ?? userId;
   const avatarMxc = getMemberAvatarMxc(room, userId);
   const avatarUrl = (avatarMxc && mxcUrlToHttp(mx, avatarMxc, useAuthentication)) ?? undefined;
 
@@ -67,6 +73,33 @@ export function UserRoomProfile({ userId }: UserRoomProfileProps) {
     navigate(withSearchParam(getDirectCreatePath(), directSearchParam));
   };
 
+  const [mentionState, sendMention] = useAsyncCallback<undefined, Error, []>(async () => {
+    const mentionLabel = `@${mentionName}`;
+    const content: IContent = {
+      msgtype: MsgType.Text,
+      body: mentionLabel,
+      format: 'org.matrix.custom.html',
+      formatted_body: `<a href="https://matrix.to/#/${encodeURIComponent(userId)}">${sanitizeText(
+        mentionLabel
+      )}</a>`,
+      'm.mentions': getMentionContent([userId], false),
+    };
+
+    await mx.sendMessage(room.roomId, content as never);
+  });
+
+  const handleMention = () => {
+    sendMention()
+      .then(() => {
+        closeUserRoomProfile();
+      })
+      .catch(() => undefined);
+  };
+
+  const mentionSending = mentionState.status === AsyncStatus.Loading;
+  const mentionError =
+    mentionState.status === AsyncStatus.Error ? mentionState.error : undefined;
+
   return (
     <Box direction="Column">
       <UserHero
@@ -79,7 +112,26 @@ export function UserRoomProfile({ userId }: UserRoomProfileProps) {
           <Box gap="400" alignItems="Start">
             <UserHeroName displayName={displayName} userId={userId} />
             {userId !== myUserId && (
-              <Box shrink="No">
+              <Box shrink="No" gap="200" wrap="Wrap">
+                {canMessage && (
+                  <Button
+                    size="300"
+                    variant="Secondary"
+                    fill="Soft"
+                    radii="300"
+                    before={
+                      mentionSending ? (
+                        <Spinner size="50" />
+                      ) : (
+                        <Icon size="50" src={Icons.Mention} />
+                      )
+                    }
+                    onClick={handleMention}
+                    disabled={mentionSending}
+                  >
+                    <Text size="B300">{`@${mentionName}`}</Text>
+                  </Button>
+                )}
                 <Button
                   size="300"
                   variant="Primary"
@@ -100,6 +152,11 @@ export function UserRoomProfile({ userId }: UserRoomProfileProps) {
             {userId !== myUserId && <MutualRoomsChip userId={userId} />}
             {userId !== myUserId && <OptionsChip userId={userId} />}
           </Box>
+          {mentionError && (
+            <Text size="T200" style={{ color: color.Critical.Main }}>
+              {mentionError instanceof Error ? mentionError.message : '发送失败，请重试。'}
+            </Text>
+          )}
         </Box>
         {ignored && <IgnoredUserAlert />}
         {member && membership === Membership.Ban && (
