@@ -135,7 +135,7 @@ export function AppearanceCustomizer() {
   );
 
   const accentColor = getAccentColorHex(accentColorId);
-  const previewChrome = getPreviewChromeStyle(interfaceStyle, theme.kind);
+  const previewChrome = getPreviewChromeStyle(interfaceStyle, theme.kind, accentColorId);
   const incomingBubble = getPreviewBubbleStyle({
     interfaceStyle,
     themeKind: theme.kind,
@@ -239,7 +239,10 @@ export function AppearanceCustomizer() {
       >
         <div className={css.PreviewShell} style={previewShellStyle}>
           <div className={css.PreviewRail} style={previewRailStyle}>
-            <div className={css.PreviewRailItem} />
+            <div
+              className={css.PreviewRailItem}
+              style={{ background: accentColor, opacity: 0.9 }}
+            />
             <div className={css.PreviewRailItem} />
             <div className={css.PreviewRailItem} />
           </div>
