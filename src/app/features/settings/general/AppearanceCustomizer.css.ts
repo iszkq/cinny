@@ -118,6 +118,43 @@ export const SwatchGrid = style({
   alignItems: 'center',
 });
 
+export const ThemeDefaultSwatchButton = style({
+  minHeight: toRem(34),
+  borderRadius: config.radii.R300,
+  border: `1px solid ${color.SurfaceVariant.ContainerLine}`,
+  background: color.Surface.Container,
+  padding: `${config.space.S100} ${config.space.S150}`,
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: config.space.S100,
+  cursor: 'pointer',
+  transition: 'transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease',
+  selectors: {
+    '&:hover, &:focus-visible': {
+      borderColor: color.Primary.Main,
+      transform: 'translateY(-1px)',
+    },
+    '&[aria-pressed=true]': {
+      borderColor: color.Primary.Main,
+      boxShadow: `0 0 0 1px ${color.Primary.Main}`,
+    },
+  },
+});
+
+export const ThemeDefaultSwatchFill = style({
+  width: toRem(18),
+  height: toRem(18),
+  borderRadius: toRem(999),
+  boxShadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.18)',
+  flexShrink: 0,
+});
+
+export const ThemeDefaultSwatchLabel = style({
+  fontSize: toRem(12),
+  lineHeight: toRem(16),
+  fontWeight: 600,
+});
+
 export const BackgroundPreview = style({
   minHeight: toRem(112),
   borderRadius: config.radii.R300,

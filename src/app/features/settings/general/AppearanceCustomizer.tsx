@@ -35,6 +35,7 @@ import {
   getPreviewBubbleStyle,
   getPreviewChromeStyle,
 } from '../../../theme/appearance';
+import { THEME_DEFAULT_ACCENT_ID } from '../../../theme/appearanceShared';
 import { SequenceCardStyle } from '../styles.css';
 import * as css from './AppearanceCustomizer.css';
 
@@ -64,13 +65,16 @@ const MAX_OPACITY = 100;
 
 const getSelectedColorMeta = (
   value: string,
-  resolver: (value?: string) => string
+  resolver: (value?: string) => string,
+  themeDefaultLabel?: string
 ): { label: string; hex: string } => {
   const preset = appearanceColorPresets.find((item) => item.id === value);
   const hex = resolver(value).toUpperCase();
 
   return {
-    label: preset?.label ?? '\u81EA\u5B9A\u4E49',
+    label:
+      (themeDefaultLabel && value === THEME_DEFAULT_ACCENT_ID ? themeDefaultLabel : preset?.label) ??
+      '\u81EA\u5B9A\u4E49',
     hex,
   };
 };
@@ -159,10 +163,11 @@ type ColorFieldProps = {
   value: string;
   onChange: (value: string) => void;
   resolver: (value?: string) => string;
+  themeDefaultLabel?: string;
 };
 
-function ColorField({ title, value, onChange, resolver }: ColorFieldProps) {
-  const selected = getSelectedColorMeta(value, resolver);
+function ColorField({ title, value, onChange, resolver, themeDefaultLabel }: ColorFieldProps) {
+  const selected = getSelectedColorMeta(value, resolver, themeDefaultLabel);
 
   return (
     <div className={css.SwatchSection}>
@@ -173,6 +178,20 @@ function ColorField({ title, value, onChange, resolver }: ColorFieldProps) {
         </span>
       </div>
       <div className={css.SwatchGrid}>
+        {themeDefaultLabel && (
+          <button
+            type="button"
+            className={css.ThemeDefaultSwatchButton}
+            aria-pressed={value === THEME_DEFAULT_ACCENT_ID}
+            onClick={() => onChange(THEME_DEFAULT_ACCENT_ID)}
+          >
+            <span
+              className={css.ThemeDefaultSwatchFill}
+              style={{ background: resolver(THEME_DEFAULT_ACCENT_ID) }}
+            />
+            <span className={css.ThemeDefaultSwatchLabel}>{themeDefaultLabel}</span>
+          </button>
+        )}
         {appearanceColorPresets.map((preset) => (
           <button
             key={preset.id}
@@ -281,12 +300,13 @@ export function AppearanceCustomizer() {
   const [backgroundLoading, setBackgroundLoading] = useState(false);
   const [backgroundError, setBackgroundError] = useState<string>();
 
-  const accentColor = getAccentColorHex(accentColorId);
+  const accentColor = getAccentColorHex(accentColorId, theme.classNames);
   const previewChrome = getPreviewChromeStyle(
     interfaceStyle,
     theme.kind,
     accentColorId,
-    accentOpacity
+    accentOpacity,
+    theme.classNames
   );
   const incomingBubble = getPreviewBubbleStyle({
     interfaceStyle,
@@ -432,7 +452,8 @@ export function AppearanceCustomizer() {
           title={'\u4E3B\u9898\u8272'}
           value={accentColorId}
           onChange={setAccentColorId}
-          resolver={getAccentColorHex}
+          resolver={(value) => getAccentColorHex(value, theme.classNames)}
+          themeDefaultLabel={'\u8DDF\u968F\u4E3B\u9898'}
         />
         <OpacityField
           title={'\u4E3B\u9898\u8272\u900F\u660E\u5EA6'}
