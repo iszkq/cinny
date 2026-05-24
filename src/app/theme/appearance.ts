@@ -85,6 +85,9 @@ type BubbleTokens = {
 
 type ChromeTokens = Record<string, string>;
 
+const tint = (base: string, accent: string, amount: number): string =>
+  chroma.mix(base, accent, amount, 'lab').hex();
+
 const PRIMARY_COLOR_VAR_REFS = [
   color.Primary.Main,
   color.Primary.MainHover,
@@ -239,36 +242,43 @@ const createBubbleTokens = (
 
 export const createInterfaceChromeTokens = (
   interfaceStyle: InterfaceStyle,
-  themeKind: ThemeKind
+  themeKind: ThemeKind,
+  accentColorHex: string
 ): ChromeTokens => {
   const dark = themeKind === 'dark';
   const frosted = interfaceStyle === 'frosted';
 
   if (frosted) {
+    const rootTop = dark ? tint('#070A10', accentColorHex, 0.12) : tint('#F0F7F4', accentColorHex, 0.12);
+    const rootBottom = dark ? tint('#0C121A', accentColorHex, 0.14) : tint('#E5EFEA', accentColorHex, 0.16);
+    const shellBase = dark ? tint('#0A0F17', accentColorHex, 0.16) : tint('#FFFFFF', accentColorHex, 0.14);
+    const railBase = dark ? tint('#0D131C', accentColorHex, 0.18) : tint('#ECF4F0', accentColorHex, 0.18);
+    const contentBase = dark ? tint('#0C121B', accentColorHex, 0.1) : tint('#FAFDFC', accentColorHex, 0.1);
+    const navBase = dark ? tint('#0F161F', accentColorHex, 0.14) : tint('#F4F9F7', accentColorHex, 0.16);
+    const cardBase = dark ? tint('#121923', accentColorHex, 0.16) : tint('#FFFFFF', accentColorHex, 0.18);
+
     return {
-      [CLIENT_ROOT_BG_VAR]: dark
-        ? 'linear-gradient(180deg, rgba(7, 10, 16, 0.98) 0%, rgba(12, 18, 26, 0.98) 100%)'
-        : 'linear-gradient(180deg, rgba(240, 247, 244, 0.98) 0%, rgba(229, 239, 234, 0.98) 100%)',
-      [CLIENT_SHELL_BG_VAR]: dark ? 'rgba(10, 15, 23, 0.58)' : 'rgba(255, 255, 255, 0.62)',
+      [CLIENT_ROOT_BG_VAR]: `linear-gradient(180deg, ${withAlpha(rootTop, 0.98)} 0%, ${withAlpha(rootBottom, 0.98)} 100%)`,
+      [CLIENT_SHELL_BG_VAR]: withAlpha(shellBase, dark ? 0.64 : 0.68),
       [CLIENT_SHELL_BORDER_VAR]: dark
-        ? 'rgba(255, 255, 255, 0.08)'
-        : 'rgba(255, 255, 255, 0.42)',
+        ? withAlpha(accentColorHex, 0.18)
+        : withAlpha(accentColorHex, 0.22),
       [CLIENT_SHELL_SHADOW_VAR]: dark
         ? '0 22px 58px rgba(0, 0, 0, 0.45)'
         : '0 22px 58px rgba(125, 145, 132, 0.18)',
       [CLIENT_SHELL_BACKDROP_VAR]: 'blur(24px) saturate(175%)',
-      [NAV_RAIL_BG_VAR]: dark ? 'rgba(13, 19, 28, 0.5)' : 'rgba(236, 244, 240, 0.58)',
+      [NAV_RAIL_BG_VAR]: withAlpha(railBase, dark ? 0.62 : 0.66),
       [NAV_RAIL_BORDER_VAR]: dark
-        ? 'rgba(255, 255, 255, 0.06)'
-        : 'rgba(255, 255, 255, 0.38)',
-      [CONTENT_BG_VAR]: dark ? 'rgba(12, 18, 27, 0.48)' : 'rgba(250, 253, 252, 0.56)',
-      [PAGE_NAV_BG_VAR]: dark ? 'rgba(15, 22, 31, 0.54)' : 'rgba(244, 249, 247, 0.58)',
+        ? withAlpha(accentColorHex, 0.14)
+        : withAlpha(accentColorHex, 0.18),
+      [CONTENT_BG_VAR]: withAlpha(contentBase, dark ? 0.52 : 0.6),
+      [PAGE_NAV_BG_VAR]: withAlpha(navBase, dark ? 0.6 : 0.64),
       [PAGE_NAV_BORDER_VAR]: dark
-        ? 'rgba(255, 255, 255, 0.06)'
-        : 'rgba(255, 255, 255, 0.34)',
-      [PAGE_HEADER_BG_VAR]: dark ? 'rgba(15, 22, 31, 0.5)' : 'rgba(250, 253, 252, 0.58)',
-      [CARD_BG_VAR]: dark ? 'rgba(18, 25, 35, 0.56)' : 'rgba(255, 255, 255, 0.54)',
-      [CARD_BORDER_VAR]: dark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.42)',
+        ? withAlpha(accentColorHex, 0.14)
+        : withAlpha(accentColorHex, 0.18),
+      [PAGE_HEADER_BG_VAR]: withAlpha(navBase, dark ? 0.58 : 0.64),
+      [CARD_BG_VAR]: withAlpha(cardBase, dark ? 0.62 : 0.62),
+      [CARD_BORDER_VAR]: dark ? withAlpha(accentColorHex, 0.18) : withAlpha(accentColorHex, 0.2),
       [CARD_SHADOW_VAR]: dark
         ? '0 14px 36px rgba(0, 0, 0, 0.32)'
         : '0 14px 36px rgba(132, 149, 138, 0.14)',
@@ -276,28 +286,31 @@ export const createInterfaceChromeTokens = (
     };
   }
 
+  const rootTop = dark ? tint('#080B10', accentColorHex, 0.08) : tint('#F4F7F5', accentColorHex, 0.1);
+  const rootBottom = dark ? tint('#0C1218', accentColorHex, 0.1) : tint('#ECF2EE', accentColorHex, 0.14);
+  const shellBase = dark ? tint('#0C1218', accentColorHex, 0.1) : tint('#FFFFFF', accentColorHex, 0.08);
+  const railTop = dark ? tint('#0F161D', accentColorHex, 0.16) : tint('#E2EBE4', accentColorHex, 0.18);
+  const railBottom = dark ? tint('#121B22', accentColorHex, 0.18) : tint('#D6E2D9', accentColorHex, 0.2);
+  const contentBase = dark ? tint('#0B1016', accentColorHex, 0.06) : tint('#FAFCFA', accentColorHex, 0.08);
+  const navBase = dark ? tint('#0F161D', accentColorHex, 0.12) : tint('#F4F7F4', accentColorHex, 0.12);
+  const cardBase = dark ? tint('#262C34', accentColorHex, 0.1) : tint('#FFFFFF', accentColorHex, 0.05);
+
   return {
-    [CLIENT_ROOT_BG_VAR]: dark
-      ? 'linear-gradient(180deg, rgba(8, 11, 16, 0.98) 0%, rgba(12, 18, 24, 0.98) 100%)'
-      : 'linear-gradient(180deg, rgba(244, 247, 245, 0.98) 0%, rgba(236, 242, 238, 0.98) 100%)',
-    [CLIENT_SHELL_BG_VAR]: dark ? 'rgba(12, 18, 24, 0.94)' : 'rgba(255, 255, 255, 0.92)',
-    [CLIENT_SHELL_BORDER_VAR]: dark ? 'rgba(69, 81, 91, 0.38)' : 'rgba(103, 122, 110, 0.12)',
+    [CLIENT_ROOT_BG_VAR]: `linear-gradient(180deg, ${withAlpha(rootTop, 0.98)} 0%, ${withAlpha(rootBottom, 0.98)} 100%)`,
+    [CLIENT_SHELL_BG_VAR]: withAlpha(shellBase, dark ? 0.94 : 0.92),
+    [CLIENT_SHELL_BORDER_VAR]: dark ? withAlpha(accentColorHex, 0.18) : withAlpha(accentColorHex, 0.14),
     [CLIENT_SHELL_SHADOW_VAR]: dark
       ? '0 18px 44px rgba(0, 0, 0, 0.34)'
       : '0 18px 44px rgba(31, 41, 35, 0.12)',
     [CLIENT_SHELL_BACKDROP_VAR]: dark ? 'none' : 'blur(14px)',
-    [NAV_RAIL_BG_VAR]: dark
-      ? 'linear-gradient(180deg, rgba(15, 22, 29, 0.98) 0%, rgba(18, 27, 34, 0.98) 100%)'
-      : 'linear-gradient(180deg, rgba(226, 235, 228, 0.96) 0%, rgba(214, 226, 217, 0.96) 100%)',
-    [NAV_RAIL_BORDER_VAR]: dark ? 'rgba(65, 76, 86, 0.4)' : 'rgba(110, 128, 117, 0.14)',
-    [CONTENT_BG_VAR]: dark ? 'rgba(11, 16, 22, 0.96)' : 'rgba(250, 252, 250, 0.94)',
-    [PAGE_NAV_BG_VAR]: dark ? 'rgba(15, 22, 29, 0.94)' : 'rgba(244, 247, 244, 0.92)',
-    [PAGE_NAV_BORDER_VAR]: dark ? 'rgba(68, 78, 88, 0.36)' : 'rgba(114, 131, 120, 0.10)',
-    [PAGE_HEADER_BG_VAR]: dark ? 'rgba(12, 18, 24, 0.96)' : 'rgba(250, 252, 250, 0.94)',
-    [CARD_BG_VAR]: dark
-      ? 'var(--bg-surface-variant, rgba(38, 44, 52, 0.94))'
-      : 'var(--bg-surface-variant, rgba(255, 255, 255, 1))',
-    [CARD_BORDER_VAR]: 'transparent',
+    [NAV_RAIL_BG_VAR]: `linear-gradient(180deg, ${withAlpha(railTop, dark ? 0.98 : 0.96)} 0%, ${withAlpha(railBottom, dark ? 0.98 : 0.96)} 100%)`,
+    [NAV_RAIL_BORDER_VAR]: dark ? withAlpha(accentColorHex, 0.16) : withAlpha(accentColorHex, 0.14),
+    [CONTENT_BG_VAR]: withAlpha(contentBase, dark ? 0.96 : 0.94),
+    [PAGE_NAV_BG_VAR]: withAlpha(navBase, dark ? 0.94 : 0.92),
+    [PAGE_NAV_BORDER_VAR]: dark ? withAlpha(accentColorHex, 0.14) : withAlpha(accentColorHex, 0.12),
+    [PAGE_HEADER_BG_VAR]: withAlpha(contentBase, dark ? 0.96 : 0.94),
+    [CARD_BG_VAR]: withAlpha(cardBase, dark ? 0.94 : 0.98),
+    [CARD_BORDER_VAR]: dark ? withAlpha(accentColorHex, 0.14) : withAlpha(accentColorHex, 0.1),
     [CARD_SHADOW_VAR]: 'none',
     [CARD_BACKDROP_VAR]: 'none',
   };
@@ -366,7 +379,8 @@ export const createAppearanceVariableMap = ({
   incomingBubbleColorId: string;
   themeKind: ThemeKind;
 }): Record<string, string> => {
-  const chromeTokens = createInterfaceChromeTokens(interfaceStyle, themeKind);
+  const accentColorHex = getAccentColorHex(accentColorId);
+  const chromeTokens = createInterfaceChromeTokens(interfaceStyle, themeKind, accentColorHex);
   const primaryTokens = buildPrimaryVarMap(accentColorId, themeKind);
   const outgoingBubble = createBubbleTokens(
     getOutgoingBubbleColorHex(outgoingBubbleColorId),
@@ -417,5 +431,6 @@ export const getPreviewBubbleStyle = ({
 
 export const getPreviewChromeStyle = (
   interfaceStyle: InterfaceStyle,
-  themeKind: ThemeKind
-): ChromeTokens => createInterfaceChromeTokens(interfaceStyle, themeKind);
+  themeKind: ThemeKind,
+  accentColorId?: string
+): ChromeTokens => createInterfaceChromeTokens(interfaceStyle, themeKind, getAccentColorHex(accentColorId));
