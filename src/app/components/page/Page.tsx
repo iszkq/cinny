@@ -180,7 +180,7 @@ export const Page = as<'div'>(({ className, ...props }, ref) => (
   <Box
     grow="Yes"
     direction="Column"
-    className={classNames(ContainerColor({ variant: 'Surface' }), className)}
+    className={classNames(ContainerColor({ variant: 'Surface' }), css.PageSurface, className)}
     {...props}
     ref={ref}
   />

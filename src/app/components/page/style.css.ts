@@ -1,12 +1,22 @@
 import { style } from '@vanilla-extract/css';
 import { recipe, RecipeVariants } from '@vanilla-extract/recipes';
 import { DefaultReset, color, config, toRem } from 'folds';
+import {
+  CONTENT_BG_VAR,
+  PAGE_HEADER_BG_VAR,
+  PAGE_NAV_BG_VAR,
+  PAGE_NAV_BORDER_VAR,
+} from '../../theme/appearance';
+
+export const PageSurface = style({
+  background: `var(${CONTENT_BG_VAR}, ${color.Surface.Container})`,
+});
 
 export const PageNav = recipe({
   base: {
     minHeight: 0,
-    background: 'rgba(244, 247, 244, 0.92)',
-    borderRight: '1px solid rgba(114, 131, 120, 0.10)',
+    background: `var(${PAGE_NAV_BG_VAR}, rgba(244, 247, 244, 0.92))`,
+    borderRight: `1px solid var(${PAGE_NAV_BORDER_VAR}, rgba(114, 131, 120, 0.10))`,
   },
   variants: {
     size: {
@@ -57,7 +67,8 @@ export const PageNavHeader = recipe({
     padding: `0 ${config.space.S200} 0 ${config.space.S300}`,
     flexShrink: 0,
     minWidth: 0,
-    background: 'rgba(244, 247, 244, 0.92)',
+    background: `var(${PAGE_NAV_BG_VAR}, rgba(244, 247, 244, 0.92))`,
+    borderColor: `var(${PAGE_NAV_BORDER_VAR}, ${color.Background.ContainerLine})`,
     '@media': {
       'screen and (max-width: 1124px)': {
         paddingLeft: `max(${config.space.S200}, env(safe-area-inset-left))`,
@@ -115,7 +126,8 @@ export const PageHeader = recipe({
     paddingLeft: `max(${config.space.S400}, env(safe-area-inset-left))`,
     paddingRight: `max(${config.space.S200}, env(safe-area-inset-right))`,
     minWidth: 0,
-    background: 'rgba(250, 252, 250, 0.94)',
+    background: `var(${PAGE_HEADER_BG_VAR}, rgba(250, 252, 250, 0.94))`,
+    borderColor: `var(${PAGE_NAV_BORDER_VAR}, ${color.Background.ContainerLine})`,
     '@media': {
       'screen and (max-width: 1124px)': {
         paddingLeft: `max(${config.space.S200}, env(safe-area-inset-left))`,
