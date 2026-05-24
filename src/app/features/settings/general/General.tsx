@@ -56,6 +56,7 @@ import { useMessageLayoutItems } from '../../../hooks/useMessageLayout';
 import { useMessageSpacingItems } from '../../../hooks/useMessageSpacing';
 import { useDateFormatItems } from '../../../hooks/useDateFormat';
 import { SequenceCardStyle } from '../styles.css';
+import { AppearanceCustomizer } from './AppearanceCustomizer';
 import { Security } from './Security';
 
 const MIN_READ_RECEIPT_AVATAR_COUNT = 1;
@@ -407,6 +408,8 @@ function Appearance() {
           after={<SelectTheme disabled={systemTheme} />}
         />
       </SequenceCard>
+
+      <AppearanceCustomizer />
 
       <SequenceCard className={SequenceCardStyle} variant="SurfaceVariant" direction="Column">
         <SettingTile
