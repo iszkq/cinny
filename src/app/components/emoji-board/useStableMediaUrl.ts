@@ -68,13 +68,12 @@ export const useStableMediaUrl = (
     (shouldUseObjectUrlForMediaDisplay(src) ||
       shouldUseObjectUrlForMediaDisplay(fallbackSrc));
   const desktopSupported = isDesktopUpdaterSupported();
-  const browserObjectUrlCacheEnabled = !desktopSupported && !disableObjectUrlCache;
   const desktopObjectUrlFallbackEnabled = desktopSupported && !disableObjectUrlCache;
-  const objectUrlCacheEnabled = browserObjectUrlCacheEnabled || desktopObjectUrlFallbackEnabled;
+  const objectUrlCacheEnabled = desktopObjectUrlFallbackEnabled;
   const shouldWaitForPreparedMedia =
     preferObjectUrl &&
     Boolean(src || fallbackSrc) &&
-    (desktopSupported || browserObjectUrlCacheEnabled);
+    desktopSupported;
   const [candidateIndex, setCandidateIndex] = useState(0);
   const [cacheVersion, setCacheVersion] = useState(0);
   const [desktopSrc, setDesktopSrc] = useState<string | undefined>();
@@ -208,25 +207,16 @@ export const useStableMediaUrl = (
     }, PREFERRED_OBJECT_URL_WAIT_MS);
 
     const preparePreferredUrl = async () => {
-      if (desktopSupported) {
-        await Promise.all([
-          src ? primeDesktopMediaAssetUrl(src, 'visible', options.mimeType) : undefined,
-          fallbackSrc && fallbackSrc !== src
-            ? primeDesktopMediaAssetUrl(
-                fallbackSrc,
-                'background',
-                options.fallbackMimeType ?? options.mimeType
-              )
-            : undefined,
-        ]).catch(() => undefined);
-      } else {
-        await Promise.all([
-          primeCachedMediaObjectUrl(src, 'visible'),
-          fallbackSrc && fallbackSrc !== src
-            ? primeCachedMediaObjectUrl(fallbackSrc, 'background')
-            : undefined,
-        ]).catch(() => undefined);
-      }
+      await Promise.all([
+        src ? primeDesktopMediaAssetUrl(src, 'visible', options.mimeType) : undefined,
+        fallbackSrc && fallbackSrc !== src
+          ? primeDesktopMediaAssetUrl(
+              fallbackSrc,
+              'background',
+              options.fallbackMimeType ?? options.mimeType
+            )
+          : undefined,
+      ]).catch(() => undefined);
 
       if (disposed) {
         return;
@@ -270,15 +260,8 @@ export const useStableMediaUrl = (
   }, [displayUrl]);
 
   const handleLoad = useCallback(() => {
-    if (
-      browserObjectUrlCacheEnabled &&
-      activeCandidate?.source &&
-      /^https?:\/\//i.test(activeCandidate.source)
-    ) {
-      void primeCachedMediaObjectUrl(activeCandidate.source);
-    }
     setLoadedDisplayUrl((prev) => prev ?? activeCandidate?.displayUrl);
-  }, [activeCandidate, browserObjectUrlCacheEnabled]);
+  }, [activeCandidate]);
 
   const handleError = useCallback(() => {
     if (loadedDisplayUrl) {

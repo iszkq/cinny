@@ -45,7 +45,6 @@ import {
   primeDesktopMediaAssetUrl,
   warmDesktopMediaAssetCache,
 } from '../../utils/desktopMediaAssetCache';
-import { primeCachedMediaObjectUrl, primePersistentMediaUrl } from '../../utils/mediaUrlCache';
 import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
 import {
   SearchInput,
@@ -77,9 +76,6 @@ const PRIORITY_PACK_PRELOAD_COUNT = 4;
 const PRIORITY_PACK_VISIBLE_URL_LIMIT = 160;
 const WEB_PRIORITY_PACK_PRELOAD_COUNT = 2;
 const WEB_PRIORITY_PACK_VISIBLE_URL_LIMIT = 48;
-const WEB_BACKGROUND_PRELOAD_INITIAL_DELAY_MS = 900;
-const WEB_BACKGROUND_PRELOAD_BATCH_SIZE = 16;
-const WEB_BACKGROUND_PRELOAD_BATCH_DELAY_MS = 650;
 
 type ImagePackMode = 'contextual' | 'personal';
 
@@ -791,80 +787,30 @@ export function EmojiBoard({
 
     let disposed = false;
     const backgroundTimers: number[] = [];
-    const preloadTimer = window.setTimeout(() => {
-      if (disposed) {
-        return;
-      }
-
-      if (!desktopSupported) {
-        const visibleUrls = new Set<string>();
-        const backgroundUrls: string[] = [];
-
-        priorityPacks.forEach((pack, packIndex) => {
-          const mediaUrls = getPackMediaUrls(pack);
-          const visibleLimit =
-            packIndex === 0
-              ? priorityPackVisibleUrlLimit
-              : Math.max(12, Math.floor(priorityPackVisibleUrlLimit / 2));
-
-          mediaUrls.forEach((mediaUrl, mediaIndex) => {
-            if (mediaIndex < visibleLimit) {
-              visibleUrls.add(mediaUrl);
-              return;
-            }
-
-            backgroundUrls.push(mediaUrl);
-          });
-        });
-
-        visibleUrls.forEach((mediaUrl) => {
-          void primeCachedMediaObjectUrl(mediaUrl, 'visible');
-        });
-
-        const backgroundQueue = Array.from(
-          new Set(backgroundUrls.filter((mediaUrl) => !visibleUrls.has(mediaUrl)))
-        );
-
-        for (
-          let batchStart = 0;
-          batchStart < backgroundQueue.length;
-          batchStart += WEB_BACKGROUND_PRELOAD_BATCH_SIZE
-        ) {
-          const batch = backgroundQueue.slice(
-            batchStart,
-            batchStart + WEB_BACKGROUND_PRELOAD_BATCH_SIZE
-          );
-          const batchIndex = batchStart / WEB_BACKGROUND_PRELOAD_BATCH_SIZE;
-
-          backgroundTimers.push(
-            window.setTimeout(() => {
-              if (disposed) {
-                return;
-              }
-
-              batch.forEach((mediaUrl) => {
-                void primePersistentMediaUrl(mediaUrl, 'background');
-              });
-            }, WEB_BACKGROUND_PRELOAD_INITIAL_DELAY_MS + batchIndex * WEB_BACKGROUND_PRELOAD_BATCH_DELAY_MS)
-          );
+      const preloadTimer = window.setTimeout(() => {
+        if (disposed) {
+          return;
         }
 
-        return;
-      }
+        if (!desktopSupported) {
+          return;
+        }
 
-      priorityPacks.forEach((pack, packIndex) => {
-        getPackMediaUrls(pack).forEach((mediaUrl, mediaIndex) => {
-          const priority =
-            packIndex === 0 && mediaIndex < priorityPackVisibleUrlLimit ? 'visible' : 'background';
+        priorityPacks.forEach((pack, packIndex) => {
+          getPackMediaUrls(pack).forEach((mediaUrl, mediaIndex) => {
+            const priority =
+              packIndex === 0 && mediaIndex < priorityPackVisibleUrlLimit
+                ? 'visible'
+                : 'background';
 
-          if (priority === 'visible') {
-            void primeDesktopMediaAssetUrl(mediaUrl, priority);
-          } else {
-            void warmDesktopMediaAssetCache(mediaUrl);
-          }
+            if (priority === 'visible') {
+              void primeDesktopMediaAssetUrl(mediaUrl, priority);
+            } else {
+              void warmDesktopMediaAssetCache(mediaUrl);
+            }
+          });
         });
-      });
-    }, 0);
+      }, 0);
 
     return () => {
       disposed = true;
