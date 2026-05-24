@@ -1,7 +1,7 @@
 import { MatrixClient } from 'matrix-js-sdk';
 import { IImageInfo } from '../../../../types/matrix/common';
-import { getNormalizedMimeType } from '../../../utils/mimeTypes';
-import { isHttpUrl, isMxcUrl, mxcUrlToHttp } from '../../../utils/matrix';
+import { getNormalizedMimeType } from '../../utils/mimeTypes';
+import { isHttpUrl, isMxcUrl, mxcUrlToHttp } from '../../utils/matrix';
 
 const ANIMATED_EMOJI_MEDIA_MIME_TYPES = new Set([
   'image/gif',
