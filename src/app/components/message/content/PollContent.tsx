@@ -8,7 +8,19 @@ import {
   RoomEventHandlerMap,
 } from 'matrix-js-sdk';
 import { RelationsEvent } from 'matrix-js-sdk/lib/models/relations';
-import { Avatar, Badge, Box, Button, ProgressBar, Text, color, config } from 'folds';
+import {
+  Avatar,
+  Badge,
+  Box,
+  Button,
+  ProgressBar,
+  Text,
+  Tooltip,
+  TooltipProvider,
+  color,
+  config,
+  toRem,
+} from 'folds';
 import { SequenceCard } from '../../sequence-card';
 import { UserAvatar } from '../../user-avatar';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
@@ -58,6 +70,8 @@ const CN = {
   endedAt: '\u7ed3\u675f\u4e8e',
   manualEndOnly: '\u4ec5\u53ef\u7531\u53d1\u8d77\u8005\u624b\u52a8\u7ed3\u675f',
   noNamedVoters: '\u6682\u65e0\u8bb0\u540d\u6295\u7968',
+  viewAllVoters: '\u67e5\u770b\u5168\u90e8',
+  collapseVoters: '\u6536\u8d77',
   votes: '\u7968',
   selected: '\u5df2\u9009',
   participants: '\u53c2\u4e0e\u4eba\u6570',
@@ -82,6 +96,8 @@ const CN = {
 
 const MAX_VISIBLE_VOTER_AVATARS = 5;
 const MAX_VISIBLE_VOTER_NAMES = 3;
+const MAX_INLINE_VOTER_NAMES = 6;
+const VOTER_TOOLTIP_MAX_HEIGHT = 240;
 const ANSWER_KEY_SEPARATOR = '\u0000';
 const MULTIPLE_AUTO_SUBMIT_DELAY_MS = 360;
 const PENDING_POLL_RESPONSE_STALE_MS = 45 * 1000;
@@ -115,6 +131,64 @@ const getOrderedAnswers = (
 
 type PendingPollEventStatus = 'encrypting' | 'queued' | 'sending' | 'not_sent' | 'cancelled';
 
+type PollVoterDetail = {
+  userId: string;
+  displayName: string;
+  avatarUrl?: string;
+};
+
+type PollVoterDirectoryProps = {
+  voters: PollVoterDetail[];
+  singleColumn?: boolean;
+  maxHeight?: string;
+};
+
+function PollVoterDirectory({
+  voters,
+  singleColumn = false,
+  maxHeight,
+}: PollVoterDirectoryProps) {
+  return (
+    <Box
+      gap="100"
+      style={{
+        flexWrap: 'wrap',
+        maxHeight,
+        overflowY: maxHeight ? 'auto' : undefined,
+        paddingRight: maxHeight ? config.space.S100 : undefined,
+      }}
+    >
+      {voters.map((voter) => (
+        <Box
+          key={voter.userId}
+          alignItems="Center"
+          gap="100"
+          style={{
+            minWidth: 0,
+            width: singleColumn ? '100%' : 'calc(50% - 4px)',
+            flex: singleColumn ? '0 0 100%' : '1 1 180px',
+            padding: `${config.space.S100} ${config.space.S200}`,
+            borderRadius: 8,
+            background: 'rgba(255, 255, 255, 0.03)',
+          }}
+        >
+          <Avatar size="200">
+            <UserAvatar
+              userId={voter.userId}
+              src={voter.avatarUrl}
+              alt={voter.displayName}
+              renderFallback={() => <Text size="T200">{nameInitials(voter.displayName)}</Text>}
+            />
+          </Avatar>
+          <Text size="T200" style={{ minWidth: 0, wordBreak: 'break-word' }}>
+            {voter.displayName}
+          </Text>
+        </Box>
+      ))}
+    </Box>
+  );
+}
+
 const getPendingPollEventStatus = (event: MatrixEvent): PendingPollEventStatus | undefined => {
   const status = (event as MatrixEvent & { status?: unknown }).status;
   return typeof status === 'string' ? (status as PendingPollEventStatus) : undefined;
@@ -131,6 +205,7 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
   const [statusText, setStatusText] = useState<string>();
   const [statusError, setStatusError] = useState(false);
   const [draftAnswers, setDraftAnswers] = useState<string[]>([]);
+  const [expandedVoterOptionId, setExpandedVoterOptionId] = useState<string>();
   const [cachedRelationEvents, setCachedRelationEvents] = useState<MatrixEvent[]>(() =>
     room && eventId ? getCachedPollRelationEvents(room.roomId, eventId) : []
   );
@@ -369,6 +444,10 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
     setStatusText(undefined);
     setStatusError(false);
   }, [poll, room?.roomId, eventId]);
+
+  useEffect(() => {
+    setExpandedVoterOptionId(undefined);
+  }, [eventId, room?.roomId]);
 
   useEffect(() => {
     const previousCommittedAnswersKey = previousCommittedAnswersKeyRef.current;
@@ -680,7 +759,7 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
           const voterIds = summaryData.optionToUserIds.get(option.id) ?? [];
           const percent = getOptionPercent(voterIds.length);
           const selected = draftAnswers.includes(option.id);
-          const voterDetails =
+          const voterDetails: PollVoterDetail[] =
             poll.showVoters && room
               ? voterIds.map((userId) => {
                   const displayName =
@@ -705,10 +784,11 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
             .map((voter) => voter.displayName)
             .join('\u3001');
           const hiddenCount = Math.max(voterDetails.length - visibleAvatars.length, 0);
-          const namesSuffix =
-            voterDetails.length > MAX_VISIBLE_VOTER_NAMES
-              ? ` \u7b49 ${voterDetails.length} \u4eba`
-              : '';
+          const shouldCollapseVoters = voterDetails.length > MAX_INLINE_VOTER_NAMES;
+          const voterNamesLabel = shouldCollapseVoters
+            ? `${visibleNames} \u7b49 ${voterDetails.length} \u4eba`
+            : fullNames;
+          const isVoterDirectoryExpanded = expandedVoterOptionId === option.id;
 
           return (
             <Box
@@ -755,49 +835,141 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
               {poll.showVoters && (
                 <>
                   {voterDetails.length > 0 ? (
-                    <Box direction="Column" gap="100">
-                      <Box gap="50" alignItems="Center" style={{ flexWrap: 'wrap' }}>
-                        {visibleAvatars.map((voter, index) => (
-                          <Box
-                            key={voter.userId}
-                            shrink="No"
-                            title={voter.displayName}
-                            style={{ marginLeft: index === 0 ? 0 : -6 }}
-                          >
-                            <Avatar size="200">
-                              <UserAvatar
-                                userId={voter.userId}
-                                src={voter.avatarUrl}
-                                alt={voter.displayName}
-                                renderFallback={() => (
-                                  <Text size="T200">{nameInitials(voter.displayName)}</Text>
+                    <>
+                      {shouldCollapseVoters ? (
+                        <TooltipProvider
+                          position="Top"
+                          align="Start"
+                          tooltip={
+                            <Tooltip style={{ maxWidth: toRem(280) }}>
+                              <Box
+                                direction="Column"
+                                gap="100"
+                                style={{ minWidth: toRem(220), maxWidth: toRem(280) }}
+                              >
+                                <Text size="L400">{`${voterDetails.length} \u4eba`}</Text>
+                                <PollVoterDirectory
+                                  voters={voterDetails}
+                                  singleColumn
+                                  maxHeight={toRem(VOTER_TOOLTIP_MAX_HEIGHT)}
+                                />
+                              </Box>
+                            </Tooltip>
+                          }
+                        >
+                          {(triggerRef) => (
+                            <Box ref={triggerRef} direction="Column" gap="100" style={{ minWidth: 0 }}>
+                              <Box gap="50" alignItems="Center" style={{ flexWrap: 'wrap' }}>
+                                {visibleAvatars.map((voter, index) => (
+                                  <Box
+                                    key={voter.userId}
+                                    shrink="No"
+                                    title={voter.displayName}
+                                    style={{ marginLeft: index === 0 ? 0 : -6 }}
+                                  >
+                                    <Avatar size="200">
+                                      <UserAvatar
+                                        userId={voter.userId}
+                                        src={voter.avatarUrl}
+                                        alt={voter.displayName}
+                                        renderFallback={() => (
+                                          <Text size="T200">{nameInitials(voter.displayName)}</Text>
+                                        )}
+                                      />
+                                    </Avatar>
+                                  </Box>
+                                ))}
+                                {hiddenCount > 0 && (
+                                  <Badge size="300" variant="Secondary" fill="Soft" radii="Pill">
+                                    <Text size="T200">{`+${hiddenCount}`}</Text>
+                                  </Badge>
                                 )}
-                              />
-                            </Avatar>
+                              </Box>
+                              <Box direction="Column" gap="50" style={{ minWidth: 0 }}>
+                                <Text
+                                  size="T200"
+                                  priority="300"
+                                  align="Left"
+                                  style={{ wordBreak: 'break-word' }}
+                                >
+                                  {voterNamesLabel}
+                                </Text>
+                                <Text
+                                  as="span"
+                                  size="T200"
+                                  onClick={(evt) => {
+                                    evt.preventDefault();
+                                    evt.stopPropagation();
+                                    setExpandedVoterOptionId((current) =>
+                                      current === option.id ? undefined : option.id
+                                    );
+                                  }}
+                                  style={{
+                                    color: color.Primary.Main,
+                                    cursor: 'pointer',
+                                    width: 'fit-content',
+                                  }}
+                                >
+                                  {isVoterDirectoryExpanded ? CN.collapseVoters : CN.viewAllVoters}
+                                </Text>
+                              </Box>
+                              {isVoterDirectoryExpanded && (
+                                <Box
+                                  direction="Column"
+                                  gap="100"
+                                  onClick={(evt) => evt.stopPropagation()}
+                                  style={{
+                                    marginTop: config.space.S100,
+                                    paddingTop: config.space.S100,
+                                    borderTop: '1px solid rgba(120, 120, 120, 0.18)',
+                                  }}
+                                >
+                                  <PollVoterDirectory voters={voterDetails} />
+                                </Box>
+                              )}
+                            </Box>
+                          )}
+                        </TooltipProvider>
+                      ) : (
+                        <Box direction="Column" gap="100">
+                          <Box gap="50" alignItems="Center" style={{ flexWrap: 'wrap' }}>
+                            {visibleAvatars.map((voter, index) => (
+                              <Box
+                                key={voter.userId}
+                                shrink="No"
+                                title={voter.displayName}
+                                style={{ marginLeft: index === 0 ? 0 : -6 }}
+                              >
+                                <Avatar size="200">
+                                  <UserAvatar
+                                    userId={voter.userId}
+                                    src={voter.avatarUrl}
+                                    alt={voter.displayName}
+                                    renderFallback={() => (
+                                      <Text size="T200">{nameInitials(voter.displayName)}</Text>
+                                    )}
+                                  />
+                                </Avatar>
+                              </Box>
+                            ))}
+                            {hiddenCount > 0 && (
+                              <Badge size="300" variant="Secondary" fill="Soft" radii="Pill">
+                                <Text size="T200">{`+${hiddenCount}`}</Text>
+                              </Badge>
+                            )}
                           </Box>
-                        ))}
-                        {hiddenCount > 0 && (
-                          <Badge
-                            size="300"
-                            variant="Secondary"
-                            fill="Soft"
-                            radii="Pill"
+                          <Text
+                            size="T200"
+                            priority="300"
+                            align="Left"
                             title={fullNames || undefined}
+                            style={{ wordBreak: 'break-word' }}
                           >
-                            <Text size="T200">{`+${hiddenCount}`}</Text>
-                          </Badge>
-                        )}
-                      </Box>
-                      <Text
-                        size="T200"
-                        priority="300"
-                        align="Left"
-                        title={fullNames || undefined}
-                        style={{ wordBreak: 'break-word' }}
-                      >
-                        {`${visibleNames}${namesSuffix}`}
-                      </Text>
-                    </Box>
+                            {fullNames}
+                          </Text>
+                        </Box>
+                      )}
+                    </>
                   ) : (
                     <Text size="T200" priority="300" align="Left">
                       {CN.noNamedVoters}
