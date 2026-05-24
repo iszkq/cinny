@@ -1,7 +1,7 @@
 import chroma from 'chroma-js';
 import { color } from 'folds';
-import { ThemeKind } from '../hooks/useTheme';
-import { InterfaceStyle } from '../state/settings';
+import type { ThemeKind } from '../hooks/useTheme';
+import type { InterfaceStyle } from '../state/settings';
 
 export const CLIENT_ROOT_BG_VAR = '--cinny-client-root-bg';
 export const CLIENT_SHELL_BG_VAR = '--cinny-client-shell-bg';
@@ -134,7 +134,7 @@ export const createAccentColorTokens = (
 ): AccentColorTokens => {
   const base = chroma(accentColorHex);
 
-  if (themeKind === ThemeKind.Dark) {
+  if (themeKind === 'dark') {
     const main = chroma.mix(base, '#FFFFFF', 0.28, 'lab').hex();
     const container = chroma.mix(base, '#0F172A', 0.72, 'lab').hex();
 
@@ -181,10 +181,9 @@ const createBubbleTokens = (
   const frosted = interfaceStyle === 'frosted';
 
   if (tone === 'self') {
-    const solid =
-      themeKind === ThemeKind.Dark ? chroma.mix(base, '#FFFFFF', 0.12, 'lab') : base;
+    const solid = themeKind === 'dark' ? chroma.mix(base, '#FFFFFF', 0.12, 'lab') : base;
     const background = frosted
-      ? withAlpha(solid.hex(), themeKind === ThemeKind.Dark ? 0.68 : 0.8)
+      ? withAlpha(solid.hex(), themeKind === 'dark' ? 0.68 : 0.8)
       : solid.hex();
 
     return {
@@ -192,18 +191,18 @@ const createBubbleTokens = (
       text: clampContrastText(solid.hex()),
       border: frosted
         ? withAlpha(
-            themeKind === ThemeKind.Dark ? '#F8FAFC' : '#FFFFFF',
-            themeKind === ThemeKind.Dark ? 0.14 : 0.38
+            themeKind === 'dark' ? '#F8FAFC' : '#FFFFFF',
+            themeKind === 'dark' ? 0.14 : 0.38
           )
         : withAlpha(
             chroma(solid).darken(0.5).hex(),
-            themeKind === ThemeKind.Dark ? 0.32 : 0.18
+            themeKind === 'dark' ? 0.32 : 0.18
           ),
       shadow: frosted
-        ? themeKind === ThemeKind.Dark
+        ? themeKind === 'dark'
           ? '0 14px 34px rgba(2, 6, 23, 0.32)'
           : '0 14px 34px rgba(110, 128, 117, 0.16)'
-        : themeKind === ThemeKind.Dark
+        : themeKind === 'dark'
           ? '0 8px 22px rgba(2, 6, 23, 0.2)'
           : '0 8px 18px rgba(31, 41, 35, 0.08)',
       backdrop: frosted ? 'blur(18px) saturate(175%)' : 'none',
@@ -211,11 +210,11 @@ const createBubbleTokens = (
   }
 
   const solid =
-    themeKind === ThemeKind.Dark
+    themeKind === 'dark'
       ? chroma.mix(base, '#0F172A', 0.68, 'lab')
       : chroma.mix(base, '#FFFFFF', 0.78, 'lab');
   const background = frosted
-    ? withAlpha(solid.hex(), themeKind === ThemeKind.Dark ? 0.64 : 0.74)
+    ? withAlpha(solid.hex(), themeKind === 'dark' ? 0.64 : 0.74)
     : solid.hex();
 
   return {
@@ -223,15 +222,15 @@ const createBubbleTokens = (
     text: clampContrastText(solid.hex()),
     border: frosted
       ? withAlpha(
-          themeKind === ThemeKind.Dark ? '#F8FAFC' : '#FFFFFF',
-          themeKind === ThemeKind.Dark ? 0.12 : 0.32
+          themeKind === 'dark' ? '#F8FAFC' : '#FFFFFF',
+          themeKind === 'dark' ? 0.12 : 0.32
         )
-      : withAlpha(chroma(solid).darken(0.7).hex(), themeKind === ThemeKind.Dark ? 0.28 : 0.12),
+      : withAlpha(chroma(solid).darken(0.7).hex(), themeKind === 'dark' ? 0.28 : 0.12),
     shadow: frosted
-      ? themeKind === ThemeKind.Dark
+      ? themeKind === 'dark'
         ? '0 12px 28px rgba(2, 6, 23, 0.28)'
         : '0 12px 28px rgba(110, 128, 117, 0.12)'
-      : themeKind === ThemeKind.Dark
+      : themeKind === 'dark'
         ? '0 6px 18px rgba(2, 6, 23, 0.18)'
         : '0 6px 16px rgba(31, 41, 35, 0.06)',
     backdrop: frosted ? 'blur(16px) saturate(165%)' : 'none',
@@ -242,7 +241,7 @@ export const createInterfaceChromeTokens = (
   interfaceStyle: InterfaceStyle,
   themeKind: ThemeKind
 ): ChromeTokens => {
-  const dark = themeKind === ThemeKind.Dark;
+  const dark = themeKind === 'dark';
   const frosted = interfaceStyle === 'frosted';
 
   if (frosted) {
