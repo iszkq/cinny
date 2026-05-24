@@ -28,6 +28,7 @@ export interface Settings {
   accentColorId: string;
   outgoingBubbleColorId: string;
   incomingBubbleColorId: string;
+  chatBackgroundDataUrl?: string;
   monochromeMode?: boolean;
   isMarkdown: boolean;
   editorToolbar: boolean;
@@ -69,6 +70,7 @@ const defaultSettings: Settings = {
   accentColorId: 'violet',
   outgoingBubbleColorId: 'teal',
   incomingBubbleColorId: 'slate',
+  chatBackgroundDataUrl: undefined,
   monochromeMode: false,
   isMarkdown: true,
   editorToolbar: false,
@@ -100,6 +102,21 @@ const defaultSettings: Settings = {
 
   developerTools: false,
 };
+
+export const defaultAppearanceSettings = {
+  interfaceStyle: defaultSettings.interfaceStyle,
+  accentColorId: defaultSettings.accentColorId,
+  outgoingBubbleColorId: defaultSettings.outgoingBubbleColorId,
+  incomingBubbleColorId: defaultSettings.incomingBubbleColorId,
+  chatBackgroundDataUrl: defaultSettings.chatBackgroundDataUrl,
+} satisfies Pick<
+  Settings,
+  | 'interfaceStyle'
+  | 'accentColorId'
+  | 'outgoingBubbleColorId'
+  | 'incomingBubbleColorId'
+  | 'chatBackgroundDataUrl'
+>;
 
 export const getSettings = () => {
   const settings = localStorage.getItem(STORAGE_KEY);
