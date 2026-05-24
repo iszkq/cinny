@@ -60,6 +60,7 @@ export const appearanceColorPresets: AppearanceColorPreset[] = [
 const DEFAULT_ACCENT_COLOR = 'violet';
 const DEFAULT_OUTGOING_BUBBLE_COLOR = 'teal';
 const DEFAULT_INCOMING_BUBBLE_COLOR = 'slate';
+const DEFAULT_OPACITY = 100;
 
 type AccentColorTokens = {
   main: string;
@@ -103,6 +104,15 @@ const PRIMARY_COLOR_VAR_REFS = [
 ] as const;
 
 const withAlpha = (value: string, alpha: number): string => chroma(value).alpha(alpha).css();
+const clampOpacityRatio = (opacity?: number): number => {
+  if (typeof opacity !== 'number' || Number.isNaN(opacity)) {
+    return DEFAULT_OPACITY / 100;
+  }
+
+  return Math.min(1, Math.max(0, opacity / 100));
+};
+const withOptionalAlpha = (value: string, opacityRatio: number): string =>
+  opacityRatio >= 0.999 ? value : withAlpha(value, opacityRatio);
 
 const clampContrastText = (background: string): string =>
   chroma.contrast(background, '#FFFFFF') >= 4.5 ? '#FFFFFF' : '#111827';
@@ -133,26 +143,28 @@ export const getIncomingBubbleColorHex = (presetId?: string): string =>
 
 export const createAccentColorTokens = (
   accentColorHex: string,
-  themeKind: ThemeKind
+  themeKind: ThemeKind,
+  accentOpacity?: number
 ): AccentColorTokens => {
   const base = chroma(accentColorHex);
+  const opacityRatio = clampOpacityRatio(accentOpacity);
 
   if (themeKind === 'dark') {
     const main = chroma.mix(base, '#FFFFFF', 0.28, 'lab').hex();
     const container = chroma.mix(base, '#0F172A', 0.72, 'lab').hex();
 
     return {
-      main,
-      mainHover: chroma(main).brighten(0.16).hex(),
-      mainActive: chroma(main).darken(0.18).hex(),
-      mainLine: chroma(main).darken(0.35).hex(),
+      main: withOptionalAlpha(main, opacityRatio),
+      mainHover: withOptionalAlpha(chroma(main).brighten(0.16).hex(), opacityRatio),
+      mainActive: withOptionalAlpha(chroma(main).darken(0.18).hex(), opacityRatio),
+      mainLine: withOptionalAlpha(chroma(main).darken(0.35).hex(), opacityRatio),
       onMain: chroma.contrast(main, '#111827') >= 4.5 ? '#111827' : '#F8FAFC',
-      container,
-      containerHover: chroma(container).brighten(0.12).hex(),
-      containerActive: chroma(container).brighten(0.22).hex(),
-      containerLine: chroma(container).brighten(0.32).hex(),
+      container: withOptionalAlpha(container, opacityRatio),
+      containerHover: withOptionalAlpha(chroma(container).brighten(0.12).hex(), opacityRatio),
+      containerActive: withOptionalAlpha(chroma(container).brighten(0.22).hex(), opacityRatio),
+      containerLine: withOptionalAlpha(chroma(container).brighten(0.32).hex(), opacityRatio),
       onContainer: chroma.mix(main, '#FFFFFF', 0.68, 'lab').hex(),
-      focusRing: withAlpha(main, 0.42),
+      focusRing: withAlpha(main, 0.42 * opacityRatio),
     };
   }
 
@@ -160,17 +172,20 @@ export const createAccentColorTokens = (
   const container = chroma.mix(base, '#FFFFFF', 0.84, 'lab').hex();
 
   return {
-    main,
-    mainHover: chroma(main).darken(0.08).hex(),
-    mainActive: chroma(main).darken(0.18).hex(),
-    mainLine: chroma(main).darken(0.3).hex(),
+    main: withOptionalAlpha(main, opacityRatio),
+    mainHover: withOptionalAlpha(chroma(main).darken(0.08).hex(), opacityRatio),
+    mainActive: withOptionalAlpha(chroma(main).darken(0.18).hex(), opacityRatio),
+    mainLine: withOptionalAlpha(chroma(main).darken(0.3).hex(), opacityRatio),
     onMain: clampContrastText(main),
-    container,
-    containerHover: chroma.mix(base, '#FFFFFF', 0.8, 'lab').hex(),
-    containerActive: chroma.mix(base, '#FFFFFF', 0.76, 'lab').hex(),
-    containerLine: chroma.mix(base, '#FFFFFF', 0.7, 'lab').hex(),
+    container: withOptionalAlpha(container, opacityRatio),
+    containerHover: withOptionalAlpha(chroma.mix(base, '#FFFFFF', 0.8, 'lab').hex(), opacityRatio),
+    containerActive: withOptionalAlpha(
+      chroma.mix(base, '#FFFFFF', 0.76, 'lab').hex(),
+      opacityRatio
+    ),
+    containerLine: withOptionalAlpha(chroma.mix(base, '#FFFFFF', 0.7, 'lab').hex(), opacityRatio),
     onContainer: chroma(base).darken(1.4).hex(),
-    focusRing: withAlpha(main, 0.35),
+    focusRing: withAlpha(main, 0.35 * opacityRatio),
   };
 };
 
@@ -178,16 +193,18 @@ const createBubbleTokens = (
   baseColorHex: string,
   tone: 'self' | 'other',
   interfaceStyle: InterfaceStyle,
-  themeKind: ThemeKind
+  themeKind: ThemeKind,
+  bubbleOpacity?: number
 ): BubbleTokens => {
   const base = chroma(baseColorHex);
   const frosted = interfaceStyle === 'frosted';
+  const opacityRatio = clampOpacityRatio(bubbleOpacity);
 
   if (tone === 'self') {
     const solid = themeKind === 'dark' ? chroma.mix(base, '#FFFFFF', 0.12, 'lab') : base;
     const background = frosted
-      ? withAlpha(solid.hex(), themeKind === 'dark' ? 0.68 : 0.8)
-      : solid.hex();
+      ? withAlpha(solid.hex(), (themeKind === 'dark' ? 0.68 : 0.8) * opacityRatio)
+      : withOptionalAlpha(solid.hex(), opacityRatio);
 
     return {
       background,
@@ -195,11 +212,11 @@ const createBubbleTokens = (
       border: frosted
         ? withAlpha(
             themeKind === 'dark' ? '#F8FAFC' : '#FFFFFF',
-            themeKind === 'dark' ? 0.14 : 0.38
+            (themeKind === 'dark' ? 0.14 : 0.38) * opacityRatio
           )
         : withAlpha(
             chroma(solid).darken(0.5).hex(),
-            themeKind === 'dark' ? 0.32 : 0.18
+            (themeKind === 'dark' ? 0.32 : 0.18) * opacityRatio
           ),
       shadow: frosted
         ? themeKind === 'dark'
@@ -217,8 +234,8 @@ const createBubbleTokens = (
       ? chroma.mix(base, '#0F172A', 0.68, 'lab')
       : chroma.mix(base, '#FFFFFF', 0.78, 'lab');
   const background = frosted
-    ? withAlpha(solid.hex(), themeKind === 'dark' ? 0.64 : 0.74)
-    : solid.hex();
+    ? withAlpha(solid.hex(), (themeKind === 'dark' ? 0.64 : 0.74) * opacityRatio)
+    : withOptionalAlpha(solid.hex(), opacityRatio);
 
   return {
     background,
@@ -226,9 +243,12 @@ const createBubbleTokens = (
     border: frosted
       ? withAlpha(
           themeKind === 'dark' ? '#F8FAFC' : '#FFFFFF',
-          themeKind === 'dark' ? 0.12 : 0.32
+          (themeKind === 'dark' ? 0.12 : 0.32) * opacityRatio
         )
-      : withAlpha(chroma(solid).darken(0.7).hex(), themeKind === 'dark' ? 0.28 : 0.12),
+      : withAlpha(
+          chroma(solid).darken(0.7).hex(),
+          (themeKind === 'dark' ? 0.28 : 0.12) * opacityRatio
+        ),
     shadow: frosted
       ? themeKind === 'dark'
         ? '0 12px 28px rgba(2, 6, 23, 0.28)'
@@ -243,42 +263,61 @@ const createBubbleTokens = (
 export const createInterfaceChromeTokens = (
   interfaceStyle: InterfaceStyle,
   themeKind: ThemeKind,
-  accentColorHex: string
+  accentColorHex: string,
+  accentOpacity?: number
 ): ChromeTokens => {
   const dark = themeKind === 'dark';
   const frosted = interfaceStyle === 'frosted';
+  const opacityRatio = clampOpacityRatio(accentOpacity);
+  const tintStrength = opacityRatio;
 
   if (frosted) {
-    const rootTop = dark ? tint('#070A10', accentColorHex, 0.12) : tint('#F0F7F4', accentColorHex, 0.12);
-    const rootBottom = dark ? tint('#0C121A', accentColorHex, 0.14) : tint('#E5EFEA', accentColorHex, 0.16);
-    const shellBase = dark ? tint('#0A0F17', accentColorHex, 0.16) : tint('#FFFFFF', accentColorHex, 0.14);
-    const railBase = dark ? tint('#0D131C', accentColorHex, 0.18) : tint('#ECF4F0', accentColorHex, 0.18);
-    const contentBase = dark ? tint('#0C121B', accentColorHex, 0.1) : tint('#FAFDFC', accentColorHex, 0.1);
-    const navBase = dark ? tint('#0F161F', accentColorHex, 0.14) : tint('#F4F9F7', accentColorHex, 0.16);
-    const cardBase = dark ? tint('#121923', accentColorHex, 0.16) : tint('#FFFFFF', accentColorHex, 0.18);
+    const rootTop = dark
+      ? tint('#070A10', accentColorHex, 0.12 * tintStrength)
+      : tint('#F0F7F4', accentColorHex, 0.12 * tintStrength);
+    const rootBottom = dark
+      ? tint('#0C121A', accentColorHex, 0.14 * tintStrength)
+      : tint('#E5EFEA', accentColorHex, 0.16 * tintStrength);
+    const shellBase = dark
+      ? tint('#0A0F17', accentColorHex, 0.16 * tintStrength)
+      : tint('#FFFFFF', accentColorHex, 0.14 * tintStrength);
+    const railBase = dark
+      ? tint('#0D131C', accentColorHex, 0.18 * tintStrength)
+      : tint('#ECF4F0', accentColorHex, 0.18 * tintStrength);
+    const contentBase = dark
+      ? tint('#0C121B', accentColorHex, 0.1 * tintStrength)
+      : tint('#FAFDFC', accentColorHex, 0.1 * tintStrength);
+    const navBase = dark
+      ? tint('#0F161F', accentColorHex, 0.14 * tintStrength)
+      : tint('#F4F9F7', accentColorHex, 0.16 * tintStrength);
+    const cardBase = dark
+      ? tint('#121923', accentColorHex, 0.16 * tintStrength)
+      : tint('#FFFFFF', accentColorHex, 0.18 * tintStrength);
 
     return {
       [CLIENT_ROOT_BG_VAR]: `linear-gradient(180deg, ${withAlpha(rootTop, 0.98)} 0%, ${withAlpha(rootBottom, 0.98)} 100%)`,
       [CLIENT_SHELL_BG_VAR]: withAlpha(shellBase, dark ? 0.64 : 0.68),
       [CLIENT_SHELL_BORDER_VAR]: dark
-        ? withAlpha(accentColorHex, 0.18)
-        : withAlpha(accentColorHex, 0.22),
+        ? withAlpha(accentColorHex, 0.18 * opacityRatio)
+        : withAlpha(accentColorHex, 0.22 * opacityRatio),
       [CLIENT_SHELL_SHADOW_VAR]: dark
         ? '0 22px 58px rgba(0, 0, 0, 0.45)'
         : '0 22px 58px rgba(125, 145, 132, 0.18)',
       [CLIENT_SHELL_BACKDROP_VAR]: 'blur(24px) saturate(175%)',
       [NAV_RAIL_BG_VAR]: withAlpha(railBase, dark ? 0.62 : 0.66),
       [NAV_RAIL_BORDER_VAR]: dark
-        ? withAlpha(accentColorHex, 0.14)
-        : withAlpha(accentColorHex, 0.18),
+        ? withAlpha(accentColorHex, 0.14 * opacityRatio)
+        : withAlpha(accentColorHex, 0.18 * opacityRatio),
       [CONTENT_BG_VAR]: withAlpha(contentBase, dark ? 0.52 : 0.6),
       [PAGE_NAV_BG_VAR]: withAlpha(navBase, dark ? 0.6 : 0.64),
       [PAGE_NAV_BORDER_VAR]: dark
-        ? withAlpha(accentColorHex, 0.14)
-        : withAlpha(accentColorHex, 0.18),
+        ? withAlpha(accentColorHex, 0.14 * opacityRatio)
+        : withAlpha(accentColorHex, 0.18 * opacityRatio),
       [PAGE_HEADER_BG_VAR]: withAlpha(navBase, dark ? 0.58 : 0.64),
       [CARD_BG_VAR]: withAlpha(cardBase, dark ? 0.62 : 0.62),
-      [CARD_BORDER_VAR]: dark ? withAlpha(accentColorHex, 0.18) : withAlpha(accentColorHex, 0.2),
+      [CARD_BORDER_VAR]: dark
+        ? withAlpha(accentColorHex, 0.18 * opacityRatio)
+        : withAlpha(accentColorHex, 0.2 * opacityRatio),
       [CARD_SHADOW_VAR]: dark
         ? '0 14px 36px rgba(0, 0, 0, 0.32)'
         : '0 14px 36px rgba(132, 149, 138, 0.14)',
@@ -286,31 +325,55 @@ export const createInterfaceChromeTokens = (
     };
   }
 
-  const rootTop = dark ? tint('#080B10', accentColorHex, 0.08) : tint('#F4F7F5', accentColorHex, 0.1);
-  const rootBottom = dark ? tint('#0C1218', accentColorHex, 0.1) : tint('#ECF2EE', accentColorHex, 0.14);
-  const shellBase = dark ? tint('#0C1218', accentColorHex, 0.1) : tint('#FFFFFF', accentColorHex, 0.08);
-  const railTop = dark ? tint('#0F161D', accentColorHex, 0.16) : tint('#E2EBE4', accentColorHex, 0.18);
-  const railBottom = dark ? tint('#121B22', accentColorHex, 0.18) : tint('#D6E2D9', accentColorHex, 0.2);
-  const contentBase = dark ? tint('#0B1016', accentColorHex, 0.06) : tint('#FAFCFA', accentColorHex, 0.08);
-  const navBase = dark ? tint('#0F161D', accentColorHex, 0.12) : tint('#F4F7F4', accentColorHex, 0.12);
-  const cardBase = dark ? tint('#262C34', accentColorHex, 0.1) : tint('#FFFFFF', accentColorHex, 0.05);
+  const rootTop = dark
+    ? tint('#080B10', accentColorHex, 0.08 * tintStrength)
+    : tint('#F4F7F5', accentColorHex, 0.1 * tintStrength);
+  const rootBottom = dark
+    ? tint('#0C1218', accentColorHex, 0.1 * tintStrength)
+    : tint('#ECF2EE', accentColorHex, 0.14 * tintStrength);
+  const shellBase = dark
+    ? tint('#0C1218', accentColorHex, 0.1 * tintStrength)
+    : tint('#FFFFFF', accentColorHex, 0.08 * tintStrength);
+  const railTop = dark
+    ? tint('#0F161D', accentColorHex, 0.16 * tintStrength)
+    : tint('#E2EBE4', accentColorHex, 0.18 * tintStrength);
+  const railBottom = dark
+    ? tint('#121B22', accentColorHex, 0.18 * tintStrength)
+    : tint('#D6E2D9', accentColorHex, 0.2 * tintStrength);
+  const contentBase = dark
+    ? tint('#0B1016', accentColorHex, 0.06 * tintStrength)
+    : tint('#FAFCFA', accentColorHex, 0.08 * tintStrength);
+  const navBase = dark
+    ? tint('#0F161D', accentColorHex, 0.12 * tintStrength)
+    : tint('#F4F7F4', accentColorHex, 0.12 * tintStrength);
+  const cardBase = dark
+    ? tint('#262C34', accentColorHex, 0.1 * tintStrength)
+    : tint('#FFFFFF', accentColorHex, 0.05 * tintStrength);
 
   return {
     [CLIENT_ROOT_BG_VAR]: `linear-gradient(180deg, ${withAlpha(rootTop, 0.98)} 0%, ${withAlpha(rootBottom, 0.98)} 100%)`,
     [CLIENT_SHELL_BG_VAR]: withAlpha(shellBase, dark ? 0.94 : 0.92),
-    [CLIENT_SHELL_BORDER_VAR]: dark ? withAlpha(accentColorHex, 0.18) : withAlpha(accentColorHex, 0.14),
+    [CLIENT_SHELL_BORDER_VAR]: dark
+      ? withAlpha(accentColorHex, 0.18 * opacityRatio)
+      : withAlpha(accentColorHex, 0.14 * opacityRatio),
     [CLIENT_SHELL_SHADOW_VAR]: dark
       ? '0 18px 44px rgba(0, 0, 0, 0.34)'
       : '0 18px 44px rgba(31, 41, 35, 0.12)',
     [CLIENT_SHELL_BACKDROP_VAR]: dark ? 'none' : 'blur(14px)',
     [NAV_RAIL_BG_VAR]: `linear-gradient(180deg, ${withAlpha(railTop, dark ? 0.98 : 0.96)} 0%, ${withAlpha(railBottom, dark ? 0.98 : 0.96)} 100%)`,
-    [NAV_RAIL_BORDER_VAR]: dark ? withAlpha(accentColorHex, 0.16) : withAlpha(accentColorHex, 0.14),
+    [NAV_RAIL_BORDER_VAR]: dark
+      ? withAlpha(accentColorHex, 0.16 * opacityRatio)
+      : withAlpha(accentColorHex, 0.14 * opacityRatio),
     [CONTENT_BG_VAR]: withAlpha(contentBase, dark ? 0.96 : 0.94),
     [PAGE_NAV_BG_VAR]: withAlpha(navBase, dark ? 0.94 : 0.92),
-    [PAGE_NAV_BORDER_VAR]: dark ? withAlpha(accentColorHex, 0.14) : withAlpha(accentColorHex, 0.12),
+    [PAGE_NAV_BORDER_VAR]: dark
+      ? withAlpha(accentColorHex, 0.14 * opacityRatio)
+      : withAlpha(accentColorHex, 0.12 * opacityRatio),
     [PAGE_HEADER_BG_VAR]: withAlpha(contentBase, dark ? 0.96 : 0.94),
     [CARD_BG_VAR]: withAlpha(cardBase, dark ? 0.94 : 0.98),
-    [CARD_BORDER_VAR]: dark ? withAlpha(accentColorHex, 0.14) : withAlpha(accentColorHex, 0.1),
+    [CARD_BORDER_VAR]: dark
+      ? withAlpha(accentColorHex, 0.14 * opacityRatio)
+      : withAlpha(accentColorHex, 0.1 * opacityRatio),
     [CARD_SHADOW_VAR]: 'none',
     [CARD_BACKDROP_VAR]: 'none',
   };
@@ -318,9 +381,10 @@ export const createInterfaceChromeTokens = (
 
 const buildPrimaryVarMap = (
   accentColorId: string,
-  themeKind: ThemeKind
+  themeKind: ThemeKind,
+  accentOpacity?: number
 ): Record<string, string> => {
-  const tokens = createAccentColorTokens(getAccentColorHex(accentColorId), themeKind);
+  const tokens = createAccentColorTokens(getAccentColorHex(accentColorId), themeKind, accentOpacity);
 
   return {
     [getCssVariableName(PRIMARY_COLOR_VAR_REFS[0])]: tokens.main,
@@ -369,30 +433,43 @@ export const APPEARANCE_MANAGED_VARS = [
 export const createAppearanceVariableMap = ({
   interfaceStyle,
   accentColorId,
+  accentOpacity,
   outgoingBubbleColorId,
+  outgoingBubbleOpacity,
   incomingBubbleColorId,
+  incomingBubbleOpacity,
   themeKind,
 }: {
   interfaceStyle: InterfaceStyle;
   accentColorId: string;
+  accentOpacity: number;
   outgoingBubbleColorId: string;
+  outgoingBubbleOpacity: number;
   incomingBubbleColorId: string;
+  incomingBubbleOpacity: number;
   themeKind: ThemeKind;
 }): Record<string, string> => {
   const accentColorHex = getAccentColorHex(accentColorId);
-  const chromeTokens = createInterfaceChromeTokens(interfaceStyle, themeKind, accentColorHex);
-  const primaryTokens = buildPrimaryVarMap(accentColorId, themeKind);
+  const chromeTokens = createInterfaceChromeTokens(
+    interfaceStyle,
+    themeKind,
+    accentColorHex,
+    accentOpacity
+  );
+  const primaryTokens = buildPrimaryVarMap(accentColorId, themeKind, accentOpacity);
   const outgoingBubble = createBubbleTokens(
     getOutgoingBubbleColorHex(outgoingBubbleColorId),
     'self',
     interfaceStyle,
-    themeKind
+    themeKind,
+    outgoingBubbleOpacity
   );
   const incomingBubble = createBubbleTokens(
     getIncomingBubbleColorHex(incomingBubbleColorId),
     'other',
     interfaceStyle,
-    themeKind
+    themeKind,
+    incomingBubbleOpacity
   );
 
   return {
@@ -416,21 +493,31 @@ export const getPreviewBubbleStyle = ({
   themeKind,
   tone,
   colorId,
+  opacity,
 }: {
   interfaceStyle: InterfaceStyle;
   themeKind: ThemeKind;
   tone: 'self' | 'other';
   colorId: string;
+  opacity: number;
 }): BubbleTokens =>
   createBubbleTokens(
     tone === 'self' ? getOutgoingBubbleColorHex(colorId) : getIncomingBubbleColorHex(colorId),
     tone,
     interfaceStyle,
-    themeKind
+    themeKind,
+    opacity
   );
 
 export const getPreviewChromeStyle = (
   interfaceStyle: InterfaceStyle,
   themeKind: ThemeKind,
-  accentColorId?: string
-): ChromeTokens => createInterfaceChromeTokens(interfaceStyle, themeKind, getAccentColorHex(accentColorId));
+  accentColorId?: string,
+  accentOpacity?: number
+): ChromeTokens =>
+  createInterfaceChromeTokens(
+    interfaceStyle,
+    themeKind,
+    getAccentColorHex(accentColorId),
+    accentOpacity
+  );
