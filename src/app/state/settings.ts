@@ -32,6 +32,7 @@ export interface Settings {
   incomingBubbleColorId: string;
   incomingBubbleOpacity: number;
   chatBackgroundDataUrl?: string;
+  chatBackgroundMediaMxc?: string;
   monochromeMode?: boolean;
   isMarkdown: boolean;
   editorToolbar: boolean;
@@ -64,7 +65,7 @@ export interface Settings {
   developerTools: boolean;
 }
 
-const defaultSettings: Settings = {
+export const defaultSettings: Settings = {
   themeId: undefined,
   useSystemTheme: true,
   lightThemeId: undefined,
@@ -77,6 +78,7 @@ const defaultSettings: Settings = {
   incomingBubbleColorId: 'slate',
   incomingBubbleOpacity: 100,
   chatBackgroundDataUrl: undefined,
+  chatBackgroundMediaMxc: undefined,
   monochromeMode: false,
   isMarkdown: true,
   editorToolbar: false,
@@ -118,6 +120,7 @@ export const defaultAppearanceSettings = {
   incomingBubbleColorId: defaultSettings.incomingBubbleColorId,
   incomingBubbleOpacity: defaultSettings.incomingBubbleOpacity,
   chatBackgroundDataUrl: defaultSettings.chatBackgroundDataUrl,
+  chatBackgroundMediaMxc: defaultSettings.chatBackgroundMediaMxc,
 } satisfies Pick<
   Settings,
   | 'interfaceStyle'
@@ -128,6 +131,7 @@ export const defaultAppearanceSettings = {
   | 'incomingBubbleColorId'
   | 'incomingBubbleOpacity'
   | 'chatBackgroundDataUrl'
+  | 'chatBackgroundMediaMxc'
 >;
 
 export const getSettings = () => {
