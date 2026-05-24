@@ -59,6 +59,8 @@ const interfaceOptions: Array<{
 const MAX_BACKGROUND_BYTES = 1_600_000;
 const BACKGROUND_EDGE_CANDIDATES = [1600, 1280, 960] as const;
 const BACKGROUND_QUALITY_CANDIDATES = [0.82, 0.74, 0.66] as const;
+const MIN_OPACITY = 20;
+const MAX_OPACITY = 100;
 
 const getSelectedColorMeta = (
   value: string,
@@ -198,6 +200,44 @@ function ColorField({ title, value, onChange, resolver }: ColorFieldProps) {
   );
 }
 
+type OpacityFieldProps = {
+  title: string;
+  description?: string;
+  value: number;
+  onChange: (value: number) => void;
+};
+
+function OpacityField({ title, description, value, onChange }: OpacityFieldProps) {
+  return (
+    <div className={css.OpacitySection}>
+      <div className={css.SwatchHeader}>
+        <div className={css.OpacityTitleBlock}>
+          <Text size="T300">{title}</Text>
+          {description && (
+            <Text size="T200" priority="300">
+              {description}
+            </Text>
+          )}
+        </div>
+        <span className={css.SwatchMeta}>{`${value}%`}</span>
+      </div>
+      <div className={css.OpacityControlRow}>
+        <span className={css.OpacityHint}>{`${MIN_OPACITY}%`}</span>
+        <input
+          className={css.OpacitySlider}
+          type="range"
+          min={MIN_OPACITY}
+          max={MAX_OPACITY}
+          step={1}
+          value={value}
+          onChange={(evt) => onChange(parseInt(evt.currentTarget.value, 10))}
+        />
+        <span className={css.OpacityHint}>{`${MAX_OPACITY}%`}</span>
+      </div>
+    </div>
+  );
+}
+
 const toBubbleStyle = (bubble: {
   background: string;
   text: string;
@@ -217,13 +257,22 @@ export function AppearanceCustomizer() {
   const theme = useTheme();
   const [interfaceStyle, setInterfaceStyle] = useSetting(settingsAtom, 'interfaceStyle');
   const [accentColorId, setAccentColorId] = useSetting(settingsAtom, 'accentColorId');
+  const [accentOpacity, setAccentOpacity] = useSetting(settingsAtom, 'accentOpacity');
   const [outgoingBubbleColorId, setOutgoingBubbleColorId] = useSetting(
     settingsAtom,
     'outgoingBubbleColorId'
   );
+  const [outgoingBubbleOpacity, setOutgoingBubbleOpacity] = useSetting(
+    settingsAtom,
+    'outgoingBubbleOpacity'
+  );
   const [incomingBubbleColorId, setIncomingBubbleColorId] = useSetting(
     settingsAtom,
     'incomingBubbleColorId'
+  );
+  const [incomingBubbleOpacity, setIncomingBubbleOpacity] = useSetting(
+    settingsAtom,
+    'incomingBubbleOpacity'
   );
   const [chatBackgroundDataUrl, setChatBackgroundDataUrl] = useSetting(
     settingsAtom,
@@ -233,18 +282,25 @@ export function AppearanceCustomizer() {
   const [backgroundError, setBackgroundError] = useState<string>();
 
   const accentColor = getAccentColorHex(accentColorId);
-  const previewChrome = getPreviewChromeStyle(interfaceStyle, theme.kind, accentColorId);
+  const previewChrome = getPreviewChromeStyle(
+    interfaceStyle,
+    theme.kind,
+    accentColorId,
+    accentOpacity
+  );
   const incomingBubble = getPreviewBubbleStyle({
     interfaceStyle,
     themeKind: theme.kind,
     tone: 'other',
     colorId: incomingBubbleColorId,
+    opacity: incomingBubbleOpacity,
   });
   const outgoingBubble = getPreviewBubbleStyle({
     interfaceStyle,
     themeKind: theme.kind,
     tone: 'self',
     colorId: outgoingBubbleColorId,
+    opacity: outgoingBubbleOpacity,
   });
   const previewBackgroundStyle = getPreviewBackgroundStyle(chatBackgroundDataUrl);
 
@@ -278,15 +334,21 @@ export function AppearanceCustomizer() {
     setBackgroundError(undefined);
     setInterfaceStyle(defaultAppearanceSettings.interfaceStyle);
     setAccentColorId(defaultAppearanceSettings.accentColorId);
+    setAccentOpacity(defaultAppearanceSettings.accentOpacity);
     setOutgoingBubbleColorId(defaultAppearanceSettings.outgoingBubbleColorId);
+    setOutgoingBubbleOpacity(defaultAppearanceSettings.outgoingBubbleOpacity);
     setIncomingBubbleColorId(defaultAppearanceSettings.incomingBubbleColorId);
+    setIncomingBubbleOpacity(defaultAppearanceSettings.incomingBubbleOpacity);
     setChatBackgroundDataUrl(defaultAppearanceSettings.chatBackgroundDataUrl);
   }, [
     setAccentColorId,
+    setAccentOpacity,
     setChatBackgroundDataUrl,
     setIncomingBubbleColorId,
+    setIncomingBubbleOpacity,
     setInterfaceStyle,
     setOutgoingBubbleColorId,
+    setOutgoingBubbleOpacity,
   ]);
 
   const previewShellStyle: CSSProperties = {
@@ -332,7 +394,7 @@ export function AppearanceCustomizer() {
           <Text size="L400">{'\u98CE\u683C\u81EA\u5B9A\u4E49'}</Text>
           <Text size="T200" priority="300">
             {
-              '\u4E3B\u9898\u8272\u3001\u804A\u5929\u6C14\u6CE1\u548C\u804A\u5929\u80CC\u666F\u4F1A\u7ACB\u5373\u5E94\u7528\uFF0C\u4E0B\u9762\u7684\u9884\u89C8\u4E5F\u4F1A\u5B9E\u65F6\u53D8\u5316\u3002'
+              '\u4E3B\u9898\u8272\u3001\u804A\u5929\u6C14\u6CE1\u548C\u804A\u5929\u80CC\u666F\u4F1A\u7ACB\u5373\u5E94\u7528\uFF0C\u81EA\u5DF1\u7684\u6C14\u6CE1\u9ED8\u8BA4\u4F1A\u6BD4\u4ED6\u4EBA\u66F4\u5F3A\u8C03\u4E00\u70B9\uFF0C\u4E0B\u9762\u7684\u9884\u89C8\u4E5F\u4F1A\u5B9E\u65F6\u53D8\u5316\u3002'
             }
           </Text>
         </div>
@@ -372,17 +434,34 @@ export function AppearanceCustomizer() {
           onChange={setAccentColorId}
           resolver={getAccentColorHex}
         />
+        <OpacityField
+          title={'\u4E3B\u9898\u8272\u900F\u660E\u5EA6'}
+          description={'\u5F71\u54CD\u754C\u9762\u4E2D\u7684\u4E3B\u9898\u8272\u5F3A\u5EA6\u548C\u67D0\u4E9B\u6309\u94AE\u7684\u663E\u793A\u611F\u3002'}
+          value={accentOpacity}
+          onChange={setAccentOpacity}
+        />
         <ColorField
           title={'\u81EA\u5DF1\u7684\u6C14\u6CE1\u989C\u8272'}
           value={outgoingBubbleColorId}
           onChange={setOutgoingBubbleColorId}
           resolver={getOutgoingBubbleColorHex}
         />
+        <OpacityField
+          title={'\u81EA\u5DF1\u6C14\u6CE1\u900F\u660E\u5EA6'}
+          description={'\u540C\u8272\u60C5\u51B5\u4E0B\uFF0C\u81EA\u5DF1\u7684\u6C14\u6CE1\u9ED8\u8BA4\u4F1A\u6BD4\u4ED6\u4EBA\u66F4\u6DF1\u4E00\u4E9B\u3002'}
+          value={outgoingBubbleOpacity}
+          onChange={setOutgoingBubbleOpacity}
+        />
         <ColorField
           title={'\u4ED6\u4EBA\u7684\u6C14\u6CE1\u989C\u8272'}
           value={incomingBubbleColorId}
           onChange={setIncomingBubbleColorId}
           resolver={getIncomingBubbleColorHex}
+        />
+        <OpacityField
+          title={'\u4ED6\u4EBA\u6C14\u6CE1\u900F\u660E\u5EA6'}
+          value={incomingBubbleOpacity}
+          onChange={setIncomingBubbleOpacity}
         />
 
         <div className={css.SwatchSection}>
@@ -463,7 +542,7 @@ export function AppearanceCustomizer() {
           <div className={css.PreviewRail} style={previewRailStyle}>
             <div
               className={css.PreviewRailItem}
-              style={{ background: accentColor, opacity: 0.9 }}
+              style={{ background: accentColor, opacity: accentOpacity / 100 }}
             />
             <div className={css.PreviewRailItem} />
             <div className={css.PreviewRailItem} />
@@ -472,7 +551,10 @@ export function AppearanceCustomizer() {
           <div className={css.PreviewContent} style={previewContentStyle}>
             <div className={css.PreviewHeader} style={previewHeaderStyle}>
               <span className={css.PreviewHeaderTitle}>{'\u5B9E\u65F6\u9884\u89C8'}</span>
-              <span className={css.PreviewHeaderAccent} style={{ background: accentColor }} />
+              <span
+                className={css.PreviewHeaderAccent}
+                style={{ background: accentColor, opacity: accentOpacity / 100 }}
+              />
             </div>
 
             <div className={css.PreviewBody}>

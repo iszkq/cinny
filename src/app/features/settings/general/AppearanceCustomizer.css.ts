@@ -65,6 +65,38 @@ export const SwatchSection = style({
   gap: config.space.S200,
 });
 
+export const OpacitySection = style({
+  display: 'flex',
+  flexDirection: 'column',
+  gap: config.space.S150,
+});
+
+export const OpacityTitleBlock = style({
+  display: 'flex',
+  flexDirection: 'column',
+  gap: config.space.S100,
+});
+
+export const OpacityControlRow = style({
+  display: 'grid',
+  gridTemplateColumns: `${toRem(40)} minmax(0, 1fr) ${toRem(44)}`,
+  alignItems: 'center',
+  gap: config.space.S150,
+});
+
+export const OpacityHint = style({
+  fontSize: toRem(12),
+  lineHeight: toRem(16),
+  color: color.SurfaceVariant.OnContainer,
+});
+
+export const OpacitySlider = style({
+  width: '100%',
+  margin: 0,
+  accentColor: color.Primary.Main,
+  cursor: 'pointer',
+});
+
 export const SwatchHeader = style({
   display: 'flex',
   alignItems: 'center',
