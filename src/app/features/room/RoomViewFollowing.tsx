@@ -56,6 +56,10 @@ export const RoomViewFollowing = as<'div', RoomViewFollowingProps>(
     const visibleReaders = latestEventReaders.slice(0, visibleReaderCount);
     const overflowCount = Math.max(latestEventReaders.length - visibleReaders.length, 0);
 
+    if (latestEventReaders.length === 0) {
+      return null;
+    }
+
     const eventId = latestEvent?.getId();
     const getName = (readerId: string) =>
       getMemberDisplayName(room, readerId) ?? getMxIdLocalPart(readerId) ?? readerId;
@@ -81,10 +85,10 @@ export const RoomViewFollowing = as<'div', RoomViewFollowingProps>(
           </Overlay>
         )}
         <Box
-          as={latestEventReaders.length > 0 ? 'button' : 'div'}
-          onClick={latestEventReaders.length > 0 ? () => setOpen(true) : undefined}
+          as="button"
+          onClick={() => setOpen(true)}
           className={classNames(
-            css.RoomViewFollowing({ clickable: latestEventReaders.length > 0 }),
+            css.RoomViewFollowing({ clickable: true }),
             className
           )}
           alignItems="Center"

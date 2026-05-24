@@ -16,7 +16,7 @@ export const RoomViewFollowing = recipe({
       minHeight: toRem(28),
       padding: `0 ${config.space.S400}`,
       width: '100%',
-      backgroundColor: color.Surface.Container,
+      backgroundColor: 'transparent',
       color: color.Surface.OnContainer,
       outline: 'none',
     },
@@ -68,7 +68,7 @@ export const ReaderAvatar = style([
   DefaultReset,
   {
     marginLeft: toRem(-6),
-    border: `2px solid ${color.Surface.Container}`,
+    border: '2px solid rgba(255, 255, 255, 0.7)',
     borderRadius: '999px',
     boxShadow: '0 0 0 1px rgba(15, 23, 42, 0.04)',
     overflow: 'hidden',
