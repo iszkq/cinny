@@ -1,9 +1,18 @@
-import React, { CSSProperties } from 'react';
-import { Text } from 'folds';
+import React, { CSSProperties, useCallback, useState } from 'react';
+import { Box, Button, Icon, Icons, Spinner, Text, color } from 'folds';
 import { SequenceCard } from '../../../components/sequence-card';
 import { useTheme } from '../../../hooks/useTheme';
 import { useSetting } from '../../../state/hooks/settings';
-import { InterfaceStyle, settingsAtom } from '../../../state/settings';
+import {
+  InterfaceStyle,
+  defaultAppearanceSettings,
+  settingsAtom,
+} from '../../../state/settings';
+import {
+  getImageFileUrl,
+  loadImageElement,
+  selectFile,
+} from '../../../utils/dom';
 import {
   CARD_BACKDROP_VAR,
   CARD_BG_VAR,
@@ -47,6 +56,10 @@ const interfaceOptions: Array<{
   },
 ];
 
+const MAX_BACKGROUND_BYTES = 1_600_000;
+const BACKGROUND_EDGE_CANDIDATES = [1600, 1280, 960] as const;
+const BACKGROUND_QUALITY_CANDIDATES = [0.82, 0.74, 0.66] as const;
+
 const getSelectedColorMeta = (
   value: string,
   resolver: (value?: string) => string
@@ -57,6 +70,85 @@ const getSelectedColorMeta = (
   return {
     label: preset?.label ?? '\u81EA\u5B9A\u4E49',
     hex,
+  };
+};
+
+const getScaledDimensions = (
+  width: number,
+  height: number,
+  maxEdge: number
+): [number, number] => {
+  const largestEdge = Math.max(width, height);
+  if (largestEdge <= maxEdge) {
+    return [width, height];
+  }
+
+  const scale = maxEdge / largestEdge;
+  return [Math.max(1, Math.round(width * scale)), Math.max(1, Math.round(height * scale))];
+};
+
+const encodeCanvas = (canvas: HTMLCanvasElement, quality: number): string => {
+  const webpDataUrl = canvas.toDataURL('image/webp', quality);
+  if (webpDataUrl.startsWith('data:image/webp')) {
+    return webpDataUrl;
+  }
+
+  return canvas.toDataURL('image/jpeg', quality);
+};
+
+const createCompressedBackgroundDataUrl = async (file: File): Promise<string> => {
+  const fileUrl = getImageFileUrl(file);
+
+  try {
+    const image = await loadImageElement(fileUrl);
+    let fallbackDataUrl: string | undefined;
+
+    for (const maxEdge of BACKGROUND_EDGE_CANDIDATES) {
+      const [targetWidth, targetHeight] = getScaledDimensions(
+        image.naturalWidth || image.width,
+        image.naturalHeight || image.height,
+        maxEdge
+      );
+
+      const canvas = document.createElement('canvas');
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
+
+      const context = canvas.getContext('2d');
+      if (!context) {
+        throw new Error('\u65E0\u6CD5\u5904\u7406\u8FD9\u5F20\u56FE\u7247\u3002');
+      }
+
+      context.drawImage(image, 0, 0, targetWidth, targetHeight);
+
+      for (const quality of BACKGROUND_QUALITY_CANDIDATES) {
+        const dataUrl = encodeCanvas(canvas, quality);
+        fallbackDataUrl = dataUrl;
+
+        if (dataUrl.length <= MAX_BACKGROUND_BYTES) {
+          return dataUrl;
+        }
+      }
+    }
+
+    if (fallbackDataUrl) {
+      return fallbackDataUrl;
+    }
+
+    throw new Error('\u56FE\u7247\u5904\u7406\u5931\u8D25\uFF0C\u8BF7\u6362\u4E00\u5F20\u518D\u8BD5\u3002');
+  } finally {
+    URL.revokeObjectURL(fileUrl);
+  }
+};
+
+const getPreviewBackgroundStyle = (backgroundDataUrl?: string): CSSProperties | undefined => {
+  if (!backgroundDataUrl) return undefined;
+
+  return {
+    backgroundImage: `linear-gradient(180deg, rgba(15, 23, 42, 0.18) 0%, rgba(15, 23, 42, 0.34) 100%), url(${backgroundDataUrl})`,
+    backgroundPosition: 'center, center',
+    backgroundRepeat: 'no-repeat, no-repeat',
+    backgroundSize: 'cover, cover',
   };
 };
 
@@ -133,6 +225,12 @@ export function AppearanceCustomizer() {
     settingsAtom,
     'incomingBubbleColorId'
   );
+  const [chatBackgroundDataUrl, setChatBackgroundDataUrl] = useSetting(
+    settingsAtom,
+    'chatBackgroundDataUrl'
+  );
+  const [backgroundLoading, setBackgroundLoading] = useState(false);
+  const [backgroundError, setBackgroundError] = useState<string>();
 
   const accentColor = getAccentColorHex(accentColorId);
   const previewChrome = getPreviewChromeStyle(interfaceStyle, theme.kind, accentColorId);
@@ -148,6 +246,48 @@ export function AppearanceCustomizer() {
     tone: 'self',
     colorId: outgoingBubbleColorId,
   });
+  const previewBackgroundStyle = getPreviewBackgroundStyle(chatBackgroundDataUrl);
+
+  const handlePickBackground = useCallback(async () => {
+    const file = await selectFile({ accept: 'image/*' });
+    if (!(file instanceof File)) return;
+
+    setBackgroundLoading(true);
+    setBackgroundError(undefined);
+
+    try {
+      const dataUrl = await createCompressedBackgroundDataUrl(file);
+      setChatBackgroundDataUrl(dataUrl);
+    } catch (error) {
+      setBackgroundError(
+        error instanceof Error
+          ? error.message
+          : '\u56FE\u7247\u5904\u7406\u5931\u8D25\uFF0C\u8BF7\u6362\u4E00\u5F20\u518D\u8BD5\u3002'
+      );
+    } finally {
+      setBackgroundLoading(false);
+    }
+  }, [setChatBackgroundDataUrl]);
+
+  const handleRemoveBackground = useCallback(() => {
+    setBackgroundError(undefined);
+    setChatBackgroundDataUrl(undefined);
+  }, [setChatBackgroundDataUrl]);
+
+  const handleResetAppearance = useCallback(() => {
+    setBackgroundError(undefined);
+    setInterfaceStyle(defaultAppearanceSettings.interfaceStyle);
+    setAccentColorId(defaultAppearanceSettings.accentColorId);
+    setOutgoingBubbleColorId(defaultAppearanceSettings.outgoingBubbleColorId);
+    setIncomingBubbleColorId(defaultAppearanceSettings.incomingBubbleColorId);
+    setChatBackgroundDataUrl(defaultAppearanceSettings.chatBackgroundDataUrl);
+  }, [
+    setAccentColorId,
+    setChatBackgroundDataUrl,
+    setIncomingBubbleColorId,
+    setInterfaceStyle,
+    setOutgoingBubbleColorId,
+  ]);
 
   const previewShellStyle: CSSProperties = {
     background: previewChrome[CLIENT_SHELL_BG_VAR],
@@ -164,6 +304,7 @@ export function AppearanceCustomizer() {
 
   const previewContentStyle: CSSProperties = {
     background: previewChrome[CONTENT_BG_VAR],
+    ...previewBackgroundStyle,
   };
 
   const previewHeaderStyle: CSSProperties = {
@@ -191,10 +332,24 @@ export function AppearanceCustomizer() {
           <Text size="L400">{'\u98CE\u683C\u81EA\u5B9A\u4E49'}</Text>
           <Text size="T200" priority="300">
             {
-              '\u4E3B\u9898\u8272\u3001\u804A\u5929\u6C14\u6CE1\u548C\u754C\u9762\u98CE\u683C\u4F1A\u7ACB\u5373\u5E94\u7528\uFF0C\u4E0B\u9762\u7684\u9884\u89C8\u4E5F\u4F1A\u5B9E\u65F6\u53D8\u5316\u3002'
+              '\u4E3B\u9898\u8272\u3001\u804A\u5929\u6C14\u6CE1\u548C\u804A\u5929\u80CC\u666F\u4F1A\u7ACB\u5373\u5E94\u7528\uFF0C\u4E0B\u9762\u7684\u9884\u89C8\u4E5F\u4F1A\u5B9E\u65F6\u53D8\u5316\u3002'
             }
           </Text>
         </div>
+
+        <Box wrap="Wrap" gap="200">
+          <Button
+            size="300"
+            variant="Secondary"
+            fill="Soft"
+            radii="300"
+            before={<Icon size="50" src={Icons.ArrowGoLeft} />}
+            onClick={handleResetAppearance}
+            disabled={backgroundLoading}
+          >
+            <Text size="B300">{'\u4E00\u952E\u6062\u590D\u9ED8\u8BA4'}</Text>
+          </Button>
+        </Box>
 
         <div className={css.StyleOptions}>
           {interfaceOptions.map((option) => (
@@ -229,6 +384,73 @@ export function AppearanceCustomizer() {
           onChange={setIncomingBubbleColorId}
           resolver={getIncomingBubbleColorHex}
         />
+
+        <div className={css.SwatchSection}>
+          <div className={css.SwatchHeader}>
+            <Text size="T300">{'\u804A\u5929\u80CC\u666F'}</Text>
+            <span className={css.SwatchMeta}>
+              {chatBackgroundDataUrl ? '\u5DF2\u542F\u7528' : '\u672A\u8BBE\u7F6E'}
+            </span>
+          </div>
+
+          <Box wrap="Wrap" gap="200">
+            <Button
+              size="300"
+              variant="Secondary"
+              fill="Soft"
+              radii="300"
+              before={
+                backgroundLoading ? (
+                  <Spinner size="50" />
+                ) : (
+                  <Icon size="50" src={Icons.Photo} />
+                )
+              }
+              onClick={() => {
+                handlePickBackground().catch(() => undefined);
+              }}
+              disabled={backgroundLoading}
+            >
+              <Text size="B300">{'\u4E0A\u4F20\u80CC\u666F\u56FE'}</Text>
+            </Button>
+            <Button
+              size="300"
+              variant="Secondary"
+              fill="Soft"
+              radii="300"
+              before={<Icon size="50" src={Icons.Cross} />}
+              onClick={handleRemoveBackground}
+              disabled={!chatBackgroundDataUrl || backgroundLoading}
+            >
+              <Text size="B300">{'\u79FB\u9664\u80CC\u666F'}</Text>
+            </Button>
+          </Box>
+
+          <div
+            className={css.BackgroundPreview}
+            style={{
+              background: previewChrome[CONTENT_BG_VAR],
+              ...previewBackgroundStyle,
+            }}
+          >
+            <span className={css.BackgroundPreviewBadge}>
+              {chatBackgroundDataUrl
+                ? '\u804A\u5929\u80CC\u666F\u9884\u89C8'
+                : '\u672A\u8BBE\u7F6E\u804A\u5929\u80CC\u666F'}
+            </span>
+          </div>
+
+          <Text size="T200" priority="300">
+            {
+              '\u80CC\u666F\u56FE\u53EA\u4FDD\u5B58\u5728\u5F53\u524D\u8BBE\u5907\u672C\u5730\uFF0C\u4E0D\u4F1A\u6539\u53D8\u6D88\u606F\u5185\u5BB9\u6216\u5176\u4ED6\u4EBA\u770B\u5230\u7684\u754C\u9762\u3002'
+            }
+          </Text>
+          {backgroundError && (
+            <Text size="T200" style={{ color: color.Critical.Main }}>
+              {backgroundError}
+            </Text>
+          )}
+        </div>
       </div>
 
       <div
@@ -257,9 +479,11 @@ export function AppearanceCustomizer() {
               <div className={css.PreviewCard} style={previewCardStyle}>
                 <span className={css.PreviewCardTitle}>{'\u5F53\u524D\u754C\u9762\u98CE\u683C'}</span>
                 <span className={css.PreviewCardText}>
-                  {interfaceStyle === 'frosted'
-                    ? '\u73BB\u7483\u78E8\u7802\u4F1A\u8BA9\u5BB9\u5668\u66F4\u901A\u900F\uFF0C\u9002\u5408\u66F4\u8F7B\u76C8\u7684\u89C6\u89C9\u611F\u53D7\u3002'
-                    : '\u7ECF\u5178\u98CE\u683C\u66F4\u7A33\uFF0C\u8FB9\u754C\u66F4\u6E05\u6670\uFF0C\u9002\u5408\u957F\u65F6\u95F4\u804A\u5929\u548C\u6D4F\u89C8\u3002'}
+                  {chatBackgroundDataUrl
+                    ? '\u80CC\u666F\u56FE\u5DF2\u542F\u7528\uFF0C\u53EF\u4EE5\u76F4\u63A5\u89C2\u5BDF\u6C14\u6CE1\u3001\u5BB9\u5668\u548C\u80CC\u666F\u7684\u53E0\u52A0\u6548\u679C\u3002'
+                    : interfaceStyle === 'frosted'
+                      ? '\u73BB\u7483\u78E8\u7802\u4F1A\u8BA9\u5BB9\u5668\u66F4\u901A\u900F\uFF0C\u9002\u5408\u66F4\u8F7B\u76C8\u7684\u89C6\u89C9\u611F\u53D7\u3002'
+                      : '\u7ECF\u5178\u98CE\u683C\u66F4\u7A33\uFF0C\u8FB9\u754C\u66F4\u6E05\u6670\uFF0C\u9002\u5408\u957F\u65F6\u95F4\u804A\u5929\u548C\u6D4F\u89C8\u3002'}
                 </span>
               </div>
 
@@ -270,7 +494,7 @@ export function AppearanceCustomizer() {
                     <span className={css.PreviewBubbleMeta}>Alice</span>
                     <span className={css.PreviewBubbleText}>
                       {
-                        '\u5207\u6362\u989C\u8272\u548C\u98CE\u683C\u65F6\uFF0C\u8FD9\u91CC\u4F1A\u9A6C\u4E0A\u770B\u5230\u804A\u5929\u6C14\u6CE1\u7684\u5B9E\u9645\u6548\u679C\u3002'
+                        '\u5207\u6362\u989C\u8272\u3001\u98CE\u683C\u548C\u80CC\u666F\u65F6\uFF0C\u8FD9\u91CC\u4F1A\u9A6C\u4E0A\u770B\u5230\u804A\u5929\u754C\u9762\u7684\u5B9E\u9645\u6548\u679C\u3002'
                       }
                     </span>
                   </div>
@@ -281,7 +505,7 @@ export function AppearanceCustomizer() {
                     <span className={css.PreviewBubbleMeta}>You</span>
                     <span className={css.PreviewBubbleText}>
                       {
-                        '\u4E0D\u53EA\u662F\u9884\u89C8\uFF0C\u6574\u4E2A\u754C\u9762\u548C\u6D88\u606F\u6C14\u6CE1\u4E5F\u4F1A\u540C\u6B65\u5373\u65F6\u66F4\u65B0\u3002'
+                        '\u70B9\u4E00\u4E0B\u6062\u590D\u9ED8\u8BA4\u5C31\u53EF\u4EE5\u56DE\u5230\u521D\u59CB\u5916\u89C2\uFF0C\u4E0D\u4F1A\u5F71\u54CD\u4F60\u7684\u804A\u5929\u6570\u636E\u3002'
                       }
                     </span>
                   </div>

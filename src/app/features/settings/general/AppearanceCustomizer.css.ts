@@ -86,6 +86,35 @@ export const SwatchGrid = style({
   alignItems: 'center',
 });
 
+export const BackgroundPreview = style({
+  minHeight: toRem(112),
+  borderRadius: config.radii.R300,
+  border: `1px solid ${color.SurfaceVariant.ContainerLine}`,
+  overflow: 'hidden',
+  display: 'flex',
+  alignItems: 'flex-end',
+  padding: config.space.S200,
+  backgroundPosition: 'center',
+  backgroundRepeat: 'no-repeat',
+  backgroundSize: 'cover',
+});
+
+export const BackgroundPreviewBadge = style({
+  display: 'inline-flex',
+  alignItems: 'center',
+  minHeight: toRem(28),
+  maxWidth: '100%',
+  padding: `0 ${config.space.S150}`,
+  borderRadius: config.radii.R300,
+  background: 'rgba(15, 23, 42, 0.56)',
+  color: '#FFFFFF',
+  fontSize: toRem(12),
+  lineHeight: toRem(16),
+  fontWeight: 600,
+  backdropFilter: 'blur(12px)',
+  WebkitBackdropFilter: 'blur(12px)',
+});
+
 export const SwatchButton = style({
   width: toRem(34),
   height: toRem(34),
