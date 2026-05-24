@@ -1462,6 +1462,7 @@ export const Message = as<'div', MessageProps>(
     const useAuthentication = useMediaAuthentication();
     const favoritesRoomId = useFavoritesRoomId();
     const senderId = mEvent.getSender() ?? '';
+    const isOwnMessage = senderId === mx.getUserId();
 
     const [hover, setHover] = useState(false);
     const { hoverProps } = useHover({ onHoverChange: setHover });
@@ -1988,6 +1989,7 @@ export const Message = as<'div', MessageProps>(
           <BubbleLayout
             before={avatarJSX}
             header={headerJSX}
+            tone={isOwnMessage ? 'self' : 'other'}
             onContextMenu={handleContextMenu}
             onClick={handleMessageClick}
           >
