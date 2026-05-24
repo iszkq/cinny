@@ -66,6 +66,7 @@ export function AuthRouteThemeManager({ children }: { children: ReactNode }) {
       incomingBubbleColorId,
       incomingBubbleOpacity,
       themeKind: activeTheme.kind,
+      themeClassNames: activeTheme.classNames,
     });
 
     Object.entries(appearanceVariables).forEach(([cssVar, cssValue]) => {
