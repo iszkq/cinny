@@ -2,6 +2,7 @@ import chroma from 'chroma-js';
 import { color } from 'folds';
 import type { ThemeKind } from '../hooks/useTheme';
 import type { InterfaceStyle } from '../state/settings';
+import { THEME_DEFAULT_ACCENT_ID } from './appearanceShared';
 
 export const CLIENT_ROOT_BG_VAR = '--cinny-client-root-bg';
 export const CLIENT_SHELL_BG_VAR = '--cinny-client-shell-bg';
@@ -123,6 +124,34 @@ const getCssVariableName = (value: string): string => {
 };
 
 const HEX_COLOR_RE = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
+const isThemeDefaultAccent = (presetId?: string): boolean => presetId === THEME_DEFAULT_ACCENT_ID;
+
+const getThemePrimaryColorHex = (themeClassNames?: string[]): string | undefined => {
+  if (typeof document === 'undefined' || !document.body || !themeClassNames?.length) {
+    return undefined;
+  }
+
+  const probe = document.createElement('div');
+  probe.style.position = 'absolute';
+  probe.style.width = '0';
+  probe.style.height = '0';
+  probe.style.opacity = '0';
+  probe.style.pointerEvents = 'none';
+  probe.style.overflow = 'hidden';
+  probe.classList.add(...themeClassNames);
+
+  document.body.appendChild(probe);
+  const computedValue = getComputedStyle(probe)
+    .getPropertyValue(getCssVariableName(color.Primary.Main))
+    .trim();
+  probe.remove();
+
+  if (!computedValue || !chroma.valid(computedValue)) {
+    return undefined;
+  }
+
+  return chroma(computedValue).hex();
+};
 
 const getPresetHex = (presetId: string | undefined, fallbackId: string): string =>
   (presetId && HEX_COLOR_RE.test(presetId) && chroma.valid(presetId)
@@ -132,7 +161,8 @@ const getPresetHex = (presetId: string | undefined, fallbackId: string): string 
   appearanceColorPresets.find((preset) => preset.id === fallbackId)?.value ??
   appearanceColorPresets[0].value;
 
-export const getAccentColorHex = (presetId?: string): string =>
+export const getAccentColorHex = (presetId?: string, themeClassNames?: string[]): string =>
+  (isThemeDefaultAccent(presetId) ? getThemePrimaryColorHex(themeClassNames) : undefined) ??
   getPresetHex(presetId, DEFAULT_ACCENT_COLOR);
 
 export const getOutgoingBubbleColorHex = (presetId?: string): string =>
@@ -380,11 +410,11 @@ export const createInterfaceChromeTokens = (
 };
 
 const buildPrimaryVarMap = (
-  accentColorId: string,
+  accentColorHex: string,
   themeKind: ThemeKind,
   accentOpacity?: number
 ): Record<string, string> => {
-  const tokens = createAccentColorTokens(getAccentColorHex(accentColorId), themeKind, accentOpacity);
+  const tokens = createAccentColorTokens(accentColorHex, themeKind, accentOpacity);
 
   return {
     [getCssVariableName(PRIMARY_COLOR_VAR_REFS[0])]: tokens.main,
@@ -439,6 +469,7 @@ export const createAppearanceVariableMap = ({
   incomingBubbleColorId,
   incomingBubbleOpacity,
   themeKind,
+  themeClassNames,
 }: {
   interfaceStyle: InterfaceStyle;
   accentColorId: string;
@@ -448,15 +479,19 @@ export const createAppearanceVariableMap = ({
   incomingBubbleColorId: string;
   incomingBubbleOpacity: number;
   themeKind: ThemeKind;
+  themeClassNames?: string[];
 }): Record<string, string> => {
-  const accentColorHex = getAccentColorHex(accentColorId);
+  const accentColorHex = getAccentColorHex(accentColorId, themeClassNames);
   const chromeTokens = createInterfaceChromeTokens(
     interfaceStyle,
     themeKind,
     accentColorHex,
     accentOpacity
   );
-  const primaryTokens = buildPrimaryVarMap(accentColorId, themeKind, accentOpacity);
+  const primaryTokens =
+    isThemeDefaultAccent(accentColorId) && clampOpacityRatio(accentOpacity) >= 0.999
+      ? {}
+      : buildPrimaryVarMap(accentColorHex, themeKind, accentOpacity);
   const outgoingBubble = createBubbleTokens(
     getOutgoingBubbleColorHex(outgoingBubbleColorId),
     'self',
@@ -513,11 +548,12 @@ export const getPreviewChromeStyle = (
   interfaceStyle: InterfaceStyle,
   themeKind: ThemeKind,
   accentColorId?: string,
-  accentOpacity?: number
+  accentOpacity?: number,
+  themeClassNames?: string[]
 ): ChromeTokens =>
   createInterfaceChromeTokens(
     interfaceStyle,
     themeKind,
-    getAccentColorHex(accentColorId),
+    getAccentColorHex(accentColorId, themeClassNames),
     accentOpacity
   );
