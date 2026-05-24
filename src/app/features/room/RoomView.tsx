@@ -21,6 +21,8 @@ import { useRoomPermissions } from '../../hooks/useRoomPermissions';
 import { useRoomCreators } from '../../hooks/useRoomCreators';
 import { useRoom } from '../../hooks/useRoom';
 import { isCompactScreenSize, ScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
+import { useSetting } from '../../state/hooks/settings';
+import { settingsAtom } from '../../state/settings';
 
 const FN_KEYS_REGEX = /^F\d+$/;
 const shouldFocusMessageField = (evt: KeyboardEvent): boolean => {
@@ -62,6 +64,7 @@ export function RoomView({ eventId }: { eventId?: string }) {
   const editor = useEditor();
   const screenSize = useScreenSizeContext();
   const compact = isCompactScreenSize(screenSize);
+  const [chatBackgroundDataUrl] = useSetting(settingsAtom, 'chatBackgroundDataUrl');
 
   const mx = useMatrixClient();
 
@@ -71,6 +74,15 @@ export function RoomView({ eventId }: { eventId?: string }) {
 
   const permissions = useRoomPermissions(creators, powerLevels);
   const canMessage = permissions.event(EventType.RoomMessage, mx.getSafeUserId());
+
+  const roomBackgroundStyle = chatBackgroundDataUrl
+    ? {
+        backgroundImage: `linear-gradient(180deg, rgba(15, 23, 42, 0.16) 0%, rgba(15, 23, 42, 0.3) 100%), url(${chatBackgroundDataUrl})`,
+        backgroundPosition: 'center, center',
+        backgroundRepeat: 'no-repeat, no-repeat',
+        backgroundSize: 'cover, cover',
+      }
+    : undefined;
 
   useKeyDown(
     window,
@@ -90,7 +102,13 @@ export function RoomView({ eventId }: { eventId?: string }) {
   );
 
   return (
-    <Page ref={roomViewRef} style={{ minHeight: 0 }}>
+    <Page
+      ref={roomViewRef}
+      style={{
+        minHeight: 0,
+        ...roomBackgroundStyle,
+      }}
+    >
       <Box grow="Yes" direction="Column" style={{ minHeight: 0 }}>
         <RoomTimeline
           key={roomId}
