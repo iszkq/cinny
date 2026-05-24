@@ -11,6 +11,8 @@ export const NavCategory = style([
 
 export const NavCategoryHeader = style({
   gap: config.space.S100,
+  background: 'transparent',
+  boxShadow: 'none',
 });
 
 export const NavLink = style({
@@ -46,10 +48,10 @@ const getVariant = (variant: ContainerColor): ComplexStyleRule => ({
     [ContainerActive]: color[variant].ContainerActive,
     [ContainerLine]: color[variant].ContainerLine,
     [OnContainer]: color[variant].OnContainer,
-    [ItemSurface]: `color-mix(in srgb, ${color[variant].Container} 58%, transparent)`,
-    [ItemSurfaceHover]: `color-mix(in srgb, ${color[variant].ContainerHover} 74%, transparent)`,
-    [ItemSurfaceActive]: `color-mix(in srgb, ${color.Primary.Container} 82%, ${color[variant].ContainerHover} 18%)`,
-    [ItemSurfaceLine]: `color-mix(in srgb, ${color.Primary.Main} 26%, ${color[variant].ContainerLine} 74%)`,
+    [ItemSurface]: 'transparent',
+    [ItemSurfaceHover]: `color-mix(in srgb, ${color.Primary.Container} 18%, transparent)`,
+    [ItemSurfaceActive]: `color-mix(in srgb, ${color.Primary.Container} 56%, transparent)`,
+    [ItemSurfaceLine]: `color-mix(in srgb, ${color.Primary.Main} 30%, transparent)`,
     [ItemSurfaceGlow]: `0 10px 24px color-mix(in srgb, ${color.Other.Shadow} 18%, transparent)`,
   },
 });
@@ -67,8 +69,6 @@ const NavItemBase = style({
   minHeight: toRem(40),
   marginBottom: config.space.S100,
   border: `${config.borderWidth.B300} solid transparent`,
-  backdropFilter: 'blur(16px) saturate(150%)',
-  WebkitBackdropFilter: 'blur(16px) saturate(150%)',
   transition:
     'background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease',
 
@@ -88,13 +88,13 @@ const NavItemBase = style({
     },
     '&:hover, &:focus-visible': {
       backgroundColor: ItemSurfaceHover,
-      borderColor: `color-mix(in srgb, ${ContainerLine} 42%, transparent)`,
-      boxShadow: '0 6px 18px rgba(15, 23, 42, 0.06)',
+      borderColor: `color-mix(in srgb, ${color.Primary.Main} 12%, transparent)`,
+      boxShadow: 'none',
     },
     '&[data-hover=true]': {
       backgroundColor: ItemSurfaceHover,
-      borderColor: `color-mix(in srgb, ${ContainerLine} 42%, transparent)`,
-      boxShadow: '0 6px 18px rgba(15, 23, 42, 0.06)',
+      borderColor: `color-mix(in srgb, ${color.Primary.Main} 12%, transparent)`,
+      boxShadow: 'none',
     },
     [`&:has(.${NavLink}:active)`]: {
       backgroundColor: ItemSurfaceActive,
