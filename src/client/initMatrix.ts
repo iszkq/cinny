@@ -7,6 +7,7 @@ import {
 
 import { cryptoCallbacks } from './secretStorageKeys';
 import { clearNavToActivePathStore } from '../app/state/navToActivePath';
+import { SETTINGS_STORAGE_KEY } from '../app/state/settingsStorage';
 import { restorePinLockStorage, snapshotPinLockStorage } from '../app/utils/pinLock';
 import { clearDesktopMediaCache } from '../app/utils/desktopMediaAssetCache';
 import { pushSessionToSW } from '../sw-session';
@@ -89,6 +90,20 @@ export const clearResourceCaches = async () => {
   await clearAllServiceWorkerCaches();
 };
 
+const snapshotLocalStorageEntries = (keys: string[]): [string, string][] =>
+  keys
+    .map((key): [string, string] | undefined => {
+      const value = window.localStorage.getItem(key);
+      return value === null ? undefined : [key, value];
+    })
+    .filter((entry): entry is [string, string] => !!entry);
+
+const restoreLocalStorageEntries = (entries: [string, string][]) => {
+  entries.forEach(([key, value]) => {
+    window.localStorage.setItem(key, value);
+  });
+};
+
 export const clearAllLocalData = async (mx?: MatrixClient) => {
   pushSessionToSW();
   mx?.stopClient();
@@ -102,8 +117,12 @@ export const clearAllLocalData = async (mx?: MatrixClient) => {
   await clearAllServiceWorkerCaches();
   await clearDesktopMediaCache();
   await clearAllIndexedDbDatabases();
+  const preservedSettingsEntries = snapshotLocalStorageEntries([SETTINGS_STORAGE_KEY]);
+  const preservedPinLockEntries = snapshotPinLockStorage();
   window.localStorage.clear();
   window.sessionStorage.clear();
+  restoreLocalStorageEntries(preservedSettingsEntries);
+  restorePinLockStorage(preservedPinLockEntries);
 };
 
 export const clearCacheAndReload = async (mx: MatrixClient) => {
@@ -123,9 +142,11 @@ export const clearLocalSessionAfterLogout = async (mx?: MatrixClient) => {
     // ignore cleanup failures so logout can still continue.
   }
 
+  const preservedSettingsEntries = snapshotLocalStorageEntries([SETTINGS_STORAGE_KEY]);
   const preservedPinLockEntries = snapshotPinLockStorage();
   await clearDesktopMediaCache();
   window.localStorage.clear();
+  restoreLocalStorageEntries(preservedSettingsEntries);
   restorePinLockStorage(preservedPinLockEntries);
 };
 
