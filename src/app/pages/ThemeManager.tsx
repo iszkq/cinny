@@ -45,8 +45,11 @@ export function AuthRouteThemeManager({ children }: { children: ReactNode }) {
   const [monochromeMode] = useSetting(settingsAtom, 'monochromeMode');
   const [interfaceStyle] = useSetting(settingsAtom, 'interfaceStyle');
   const [accentColorId] = useSetting(settingsAtom, 'accentColorId');
+  const [accentOpacity] = useSetting(settingsAtom, 'accentOpacity');
   const [outgoingBubbleColorId] = useSetting(settingsAtom, 'outgoingBubbleColorId');
+  const [outgoingBubbleOpacity] = useSetting(settingsAtom, 'outgoingBubbleOpacity');
   const [incomingBubbleColorId] = useSetting(settingsAtom, 'incomingBubbleColorId');
+  const [incomingBubbleOpacity] = useSetting(settingsAtom, 'incomingBubbleOpacity');
 
   useEffect(() => {
     document.body.className = '';
@@ -57,8 +60,11 @@ export function AuthRouteThemeManager({ children }: { children: ReactNode }) {
     const appearanceVariables = createAppearanceVariableMap({
       interfaceStyle,
       accentColorId,
+      accentOpacity,
       outgoingBubbleColorId,
+      outgoingBubbleOpacity,
       incomingBubbleColorId,
+      incomingBubbleOpacity,
       themeKind: activeTheme.kind,
     });
 
@@ -76,8 +82,11 @@ export function AuthRouteThemeManager({ children }: { children: ReactNode }) {
     monochromeMode,
     interfaceStyle,
     accentColorId,
+    accentOpacity,
     outgoingBubbleColorId,
+    outgoingBubbleOpacity,
     incomingBubbleColorId,
+    incomingBubbleOpacity,
   ]);
 
   return <ThemeContextProvider value={activeTheme}>{children}</ThemeContextProvider>;
