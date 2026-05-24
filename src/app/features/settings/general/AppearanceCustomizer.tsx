@@ -1,4 +1,5 @@
 import React, { CSSProperties, useCallback, useState } from 'react';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { Box, Button, Icon, Icons, Spinner, Text, color } from 'folds';
 import { SequenceCard } from '../../../components/sequence-card';
 import { useTheme } from '../../../hooks/useTheme';
@@ -274,6 +275,8 @@ const toBubbleStyle = (bubble: {
 
 export function AppearanceCustomizer() {
   const theme = useTheme();
+  const settings = useAtomValue(settingsAtom);
+  const setSettings = useSetAtom(settingsAtom);
   const [interfaceStyle, setInterfaceStyle] = useSetting(settingsAtom, 'interfaceStyle');
   const [accentColorId, setAccentColorId] = useSetting(settingsAtom, 'accentColorId');
   const [accentOpacity, setAccentOpacity] = useSetting(settingsAtom, 'accentOpacity');
@@ -352,24 +355,11 @@ export function AppearanceCustomizer() {
 
   const handleResetAppearance = useCallback(() => {
     setBackgroundError(undefined);
-    setInterfaceStyle(defaultAppearanceSettings.interfaceStyle);
-    setAccentColorId(defaultAppearanceSettings.accentColorId);
-    setAccentOpacity(defaultAppearanceSettings.accentOpacity);
-    setOutgoingBubbleColorId(defaultAppearanceSettings.outgoingBubbleColorId);
-    setOutgoingBubbleOpacity(defaultAppearanceSettings.outgoingBubbleOpacity);
-    setIncomingBubbleColorId(defaultAppearanceSettings.incomingBubbleColorId);
-    setIncomingBubbleOpacity(defaultAppearanceSettings.incomingBubbleOpacity);
-    setChatBackgroundDataUrl(defaultAppearanceSettings.chatBackgroundDataUrl);
-  }, [
-    setAccentColorId,
-    setAccentOpacity,
-    setChatBackgroundDataUrl,
-    setIncomingBubbleColorId,
-    setIncomingBubbleOpacity,
-    setInterfaceStyle,
-    setOutgoingBubbleColorId,
-    setOutgoingBubbleOpacity,
-  ]);
+    setSettings({
+      ...settings,
+      ...defaultAppearanceSettings,
+    });
+  }, [setSettings, settings]);
 
   const previewShellStyle: CSSProperties = {
     background: previewChrome[CLIENT_SHELL_BG_VAR],
@@ -401,6 +391,74 @@ export function AppearanceCustomizer() {
     backdropFilter: previewChrome[CARD_BACKDROP_VAR],
     WebkitBackdropFilter: previewChrome[CARD_BACKDROP_VAR],
   };
+
+  const appearancePreview = (
+    <div
+      className={css.PreviewRoot}
+      style={{
+        background: previewChrome[CLIENT_ROOT_BG_VAR],
+      }}
+    >
+      <div className={css.PreviewShell} style={previewShellStyle}>
+        <div className={css.PreviewRail} style={previewRailStyle}>
+          <div
+            className={css.PreviewRailItem}
+            style={{ background: accentColor, opacity: accentOpacity / 100 }}
+          />
+          <div className={css.PreviewRailItem} />
+          <div className={css.PreviewRailItem} />
+        </div>
+
+        <div className={css.PreviewContent} style={previewContentStyle}>
+          <div className={css.PreviewHeader} style={previewHeaderStyle}>
+            <span className={css.PreviewHeaderTitle}>{'\u5B9E\u65F6\u9884\u89C8'}</span>
+            <span
+              className={css.PreviewHeaderAccent}
+              style={{ background: accentColor, opacity: accentOpacity / 100 }}
+            />
+          </div>
+
+          <div className={css.PreviewBody}>
+            <div className={css.PreviewCard} style={previewCardStyle}>
+              <span className={css.PreviewCardTitle}>{'\u5F53\u524D\u754C\u9762\u98CE\u683C'}</span>
+              <span className={css.PreviewCardText}>
+                {chatBackgroundDataUrl
+                  ? '\u80CC\u666F\u56FE\u5DF2\u542F\u7528\uFF0C\u53EF\u4EE5\u76F4\u63A5\u89C2\u5BDF\u6C14\u6CE1\u3001\u5BB9\u5668\u548C\u80CC\u666F\u7684\u53E0\u52A0\u6548\u679C\u3002'
+                  : interfaceStyle === 'frosted'
+                    ? '\u73BB\u7483\u78E8\u7802\u4F1A\u8BA9\u5BB9\u5668\u66F4\u901A\u900F\uFF0C\u9002\u5408\u66F4\u8F7B\u76C8\u7684\u89C6\u89C9\u611F\u53D7\u3002'
+                    : '\u7ECF\u5178\u98CE\u683C\u66F4\u7A33\uFF0C\u8FB9\u754C\u66F4\u6E05\u6670\uFF0C\u9002\u5408\u957F\u65F6\u95F4\u804A\u5929\u548C\u6D4F\u89C8\u3002'}
+              </span>
+            </div>
+
+            <div className={css.PreviewMessages}>
+              <div className={css.PreviewRow}>
+                <div className={css.PreviewAvatar} />
+                <div className={css.PreviewBubble} style={toBubbleStyle(incomingBubble)}>
+                  <span className={css.PreviewBubbleMeta}>Alice</span>
+                  <span className={css.PreviewBubbleText}>
+                    {
+                      '\u5207\u6362\u989C\u8272\u3001\u98CE\u683C\u548C\u80CC\u666F\u65F6\uFF0C\u8FD9\u91CC\u4F1A\u9A6C\u4E0A\u770B\u5230\u804A\u5929\u754C\u9762\u7684\u5B9E\u9645\u6548\u679C\u3002'
+                    }
+                  </span>
+                </div>
+              </div>
+
+              <div className={css.PreviewRowSelf}>
+                <div className={css.PreviewBubble} style={toBubbleStyle(outgoingBubble)}>
+                  <span className={css.PreviewBubbleMeta}>You</span>
+                  <span className={css.PreviewBubbleText}>
+                    {
+                      '\u70B9\u4E00\u4E0B\u6062\u590D\u9ED8\u8BA4\u5C31\u53EF\u4EE5\u56DE\u5230\u521D\u59CB\u5916\u89C2\uFF0C\u4E0D\u4F1A\u5F71\u54CD\u4F60\u7684\u804A\u5929\u6570\u636E\u3002'
+                    }
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <SequenceCard
@@ -447,6 +505,8 @@ export function AppearanceCustomizer() {
             </button>
           ))}
         </div>
+
+        {appearancePreview}
 
         <ColorField
           title={'\u4E3B\u9898\u8272'}
@@ -550,72 +610,6 @@ export function AppearanceCustomizer() {
               {backgroundError}
             </Text>
           )}
-        </div>
-      </div>
-
-      <div
-        className={css.PreviewRoot}
-        style={{
-          background: previewChrome[CLIENT_ROOT_BG_VAR],
-        }}
-      >
-        <div className={css.PreviewShell} style={previewShellStyle}>
-          <div className={css.PreviewRail} style={previewRailStyle}>
-            <div
-              className={css.PreviewRailItem}
-              style={{ background: accentColor, opacity: accentOpacity / 100 }}
-            />
-            <div className={css.PreviewRailItem} />
-            <div className={css.PreviewRailItem} />
-          </div>
-
-          <div className={css.PreviewContent} style={previewContentStyle}>
-            <div className={css.PreviewHeader} style={previewHeaderStyle}>
-              <span className={css.PreviewHeaderTitle}>{'\u5B9E\u65F6\u9884\u89C8'}</span>
-              <span
-                className={css.PreviewHeaderAccent}
-                style={{ background: accentColor, opacity: accentOpacity / 100 }}
-              />
-            </div>
-
-            <div className={css.PreviewBody}>
-              <div className={css.PreviewCard} style={previewCardStyle}>
-                <span className={css.PreviewCardTitle}>{'\u5F53\u524D\u754C\u9762\u98CE\u683C'}</span>
-                <span className={css.PreviewCardText}>
-                  {chatBackgroundDataUrl
-                    ? '\u80CC\u666F\u56FE\u5DF2\u542F\u7528\uFF0C\u53EF\u4EE5\u76F4\u63A5\u89C2\u5BDF\u6C14\u6CE1\u3001\u5BB9\u5668\u548C\u80CC\u666F\u7684\u53E0\u52A0\u6548\u679C\u3002'
-                    : interfaceStyle === 'frosted'
-                      ? '\u73BB\u7483\u78E8\u7802\u4F1A\u8BA9\u5BB9\u5668\u66F4\u901A\u900F\uFF0C\u9002\u5408\u66F4\u8F7B\u76C8\u7684\u89C6\u89C9\u611F\u53D7\u3002'
-                      : '\u7ECF\u5178\u98CE\u683C\u66F4\u7A33\uFF0C\u8FB9\u754C\u66F4\u6E05\u6670\uFF0C\u9002\u5408\u957F\u65F6\u95F4\u804A\u5929\u548C\u6D4F\u89C8\u3002'}
-                </span>
-              </div>
-
-              <div className={css.PreviewMessages}>
-                <div className={css.PreviewRow}>
-                  <div className={css.PreviewAvatar} />
-                  <div className={css.PreviewBubble} style={toBubbleStyle(incomingBubble)}>
-                    <span className={css.PreviewBubbleMeta}>Alice</span>
-                    <span className={css.PreviewBubbleText}>
-                      {
-                        '\u5207\u6362\u989C\u8272\u3001\u98CE\u683C\u548C\u80CC\u666F\u65F6\uFF0C\u8FD9\u91CC\u4F1A\u9A6C\u4E0A\u770B\u5230\u804A\u5929\u754C\u9762\u7684\u5B9E\u9645\u6548\u679C\u3002'
-                      }
-                    </span>
-                  </div>
-                </div>
-
-                <div className={css.PreviewRowSelf}>
-                  <div className={css.PreviewBubble} style={toBubbleStyle(outgoingBubble)}>
-                    <span className={css.PreviewBubbleMeta}>You</span>
-                    <span className={css.PreviewBubbleText}>
-                      {
-                        '\u70B9\u4E00\u4E0B\u6062\u590D\u9ED8\u8BA4\u5C31\u53EF\u4EE5\u56DE\u5230\u521D\u59CB\u5916\u89C2\uFF0C\u4E0D\u4F1A\u5F71\u54CD\u4F60\u7684\u804A\u5929\u6570\u636E\u3002'
-                      }
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
     </SequenceCard>
