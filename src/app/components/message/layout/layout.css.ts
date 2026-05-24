@@ -1,6 +1,18 @@
 import { createVar, keyframes, style, styleVariants } from '@vanilla-extract/css';
 import { recipe, RecipeVariants } from '@vanilla-extract/recipes';
 import { DefaultReset, color, config, toRem } from 'folds';
+import {
+  BUBBLE_OTHER_BACKDROP_VAR,
+  BUBBLE_OTHER_BG_VAR,
+  BUBBLE_OTHER_BORDER_VAR,
+  BUBBLE_OTHER_SHADOW_VAR,
+  BUBBLE_OTHER_TEXT_VAR,
+  BUBBLE_SELF_BACKDROP_VAR,
+  BUBBLE_SELF_BG_VAR,
+  BUBBLE_SELF_BORDER_VAR,
+  BUBBLE_SELF_SHADOW_VAR,
+  BUBBLE_SELF_TEXT_VAR,
+} from '../../../theme/appearance';
 
 export const StickySection = style({
   position: 'sticky',
@@ -152,14 +164,57 @@ export const BubbleBefore = style({
   minWidth: toRem(36),
 });
 
+const BubbleBackgroundVar = createVar();
+const BubbleTextVar = createVar();
+const BubbleBorderVar = createVar();
+const BubbleShadowVar = createVar();
+const BubbleBackdropVar = createVar();
+const BubbleArrowFillVar = createVar();
+
 export const BubbleContent = style({
+  vars: {
+    [BubbleBackgroundVar]: color.SurfaceVariant.Container,
+    [BubbleTextVar]: color.SurfaceVariant.OnContainer,
+    [BubbleBorderVar]: 'transparent',
+    [BubbleShadowVar]: 'none',
+    [BubbleBackdropVar]: 'none',
+    [BubbleArrowFillVar]: color.SurfaceVariant.Container,
+  },
   boxSizing: 'border-box',
   maxWidth: `min(${toRem(800)}, 100%)`,
   padding: config.space.S200,
-  backgroundColor: color.SurfaceVariant.Container,
-  color: color.SurfaceVariant.OnContainer,
+  background: BubbleBackgroundVar,
+  color: BubbleTextVar,
+  border: `1px solid ${BubbleBorderVar}`,
+  boxShadow: BubbleShadowVar,
+  backdropFilter: BubbleBackdropVar,
+  WebkitBackdropFilter: BubbleBackdropVar,
   borderRadius: config.radii.R500,
   position: 'relative',
+});
+
+export const BubbleTone = styleVariants({
+  neutral: {},
+  self: {
+    vars: {
+      [BubbleBackgroundVar]: `var(${BUBBLE_SELF_BG_VAR})`,
+      [BubbleTextVar]: `var(${BUBBLE_SELF_TEXT_VAR})`,
+      [BubbleBorderVar]: `var(${BUBBLE_SELF_BORDER_VAR})`,
+      [BubbleShadowVar]: `var(${BUBBLE_SELF_SHADOW_VAR})`,
+      [BubbleBackdropVar]: `var(${BUBBLE_SELF_BACKDROP_VAR})`,
+      [BubbleArrowFillVar]: `var(${BUBBLE_SELF_BG_VAR})`,
+    },
+  },
+  other: {
+    vars: {
+      [BubbleBackgroundVar]: `var(${BUBBLE_OTHER_BG_VAR})`,
+      [BubbleTextVar]: `var(${BUBBLE_OTHER_TEXT_VAR})`,
+      [BubbleBorderVar]: `var(${BUBBLE_OTHER_BORDER_VAR})`,
+      [BubbleShadowVar]: `var(${BUBBLE_OTHER_SHADOW_VAR})`,
+      [BubbleBackdropVar]: `var(${BUBBLE_OTHER_BACKDROP_VAR})`,
+      [BubbleArrowFillVar]: `var(${BUBBLE_OTHER_BG_VAR})`,
+    },
+  },
 });
 
 export const BubbleContentArrowLeft = style({
@@ -169,6 +224,7 @@ export const BubbleContentArrowLeft = style({
 export const BubbleLeftArrow = style({
   width: toRem(9),
   height: toRem(8),
+  color: BubbleArrowFillVar,
 
   position: 'absolute',
   top: 0,

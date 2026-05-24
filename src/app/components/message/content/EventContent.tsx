@@ -35,7 +35,7 @@ export function EventContent({ messageLayout, time, iconSrc, content }: EventCon
   }
   if (messageLayout === MessageLayout.Bubble) {
     return (
-      <BubbleLayout hideBubble before={beforeJSX}>
+      <BubbleLayout hideBubble before={beforeJSX} tone="neutral">
         {msgContentJSX}
       </BubbleLayout>
     );
