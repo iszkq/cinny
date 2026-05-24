@@ -296,10 +296,7 @@ export function AppearanceCustomizer() {
     settingsAtom,
     'incomingBubbleOpacity'
   );
-  const [chatBackgroundDataUrl, setChatBackgroundDataUrl] = useSetting(
-    settingsAtom,
-    'chatBackgroundDataUrl'
-  );
+  const [chatBackgroundDataUrl] = useSetting(settingsAtom, 'chatBackgroundDataUrl');
   const [backgroundLoading, setBackgroundLoading] = useState(false);
   const [backgroundError, setBackgroundError] = useState<string>();
 
@@ -336,7 +333,11 @@ export function AppearanceCustomizer() {
 
     try {
       const dataUrl = await createCompressedBackgroundDataUrl(file);
-      setChatBackgroundDataUrl(dataUrl);
+      setSettings({
+        ...settings,
+        chatBackgroundDataUrl: dataUrl,
+        chatBackgroundMediaMxc: undefined,
+      });
     } catch (error) {
       setBackgroundError(
         error instanceof Error
@@ -346,12 +347,16 @@ export function AppearanceCustomizer() {
     } finally {
       setBackgroundLoading(false);
     }
-  }, [setChatBackgroundDataUrl]);
+  }, [setSettings, settings]);
 
   const handleRemoveBackground = useCallback(() => {
     setBackgroundError(undefined);
-    setChatBackgroundDataUrl(undefined);
-  }, [setChatBackgroundDataUrl]);
+    setSettings({
+      ...settings,
+      chatBackgroundDataUrl: undefined,
+      chatBackgroundMediaMxc: undefined,
+    });
+  }, [setSettings, settings]);
 
   const handleResetAppearance = useCallback(() => {
     setBackgroundError(undefined);
@@ -602,7 +607,7 @@ export function AppearanceCustomizer() {
 
           <Text size="T200" priority="300">
             {
-              '\u80CC\u666F\u56FE\u53EA\u4FDD\u5B58\u5728\u5F53\u524D\u8BBE\u5907\u672C\u5730\uFF0C\u4E0D\u4F1A\u6539\u53D8\u6D88\u606F\u5185\u5BB9\u6216\u5176\u4ED6\u4EBA\u770B\u5230\u7684\u754C\u9762\u3002'
+              '\u80CC\u666F\u56FE\u4F1A\u5148\u5728\u672C\u5730\u7ACB\u5373\u9884\u89C8\uff0c\u7136\u540E\u540C\u6B65\u5230\u5F53\u524D Matrix \u8D26\u53F7\uff0C\u540C\u4E00\u8D26\u53F7\u7684\u5176\u4ED6\u6D4F\u89C8\u5668\u548C\u684C\u9762\u7AEF\u767B\u5F55\u540E\u4E5F\u4F1A\u8DDF\u968F\u3002'
             }
           </Text>
           {backgroundError && (
