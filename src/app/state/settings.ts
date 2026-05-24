@@ -10,6 +10,7 @@ export type DateFormat =
   | 'YYYY-MM-DD'
   | '';
 export type MessageSpacing = '0' | '100' | '200' | '300' | '400' | '500';
+export type InterfaceStyle = 'default' | 'frosted';
 export enum MessageLayout {
   Modern = 0,
   Compact = 1,
@@ -23,6 +24,10 @@ export interface Settings {
   useSystemTheme: boolean;
   lightThemeId?: string;
   darkThemeId?: string;
+  interfaceStyle: InterfaceStyle;
+  accentColorId: string;
+  outgoingBubbleColorId: string;
+  incomingBubbleColorId: string;
   monochromeMode?: boolean;
   isMarkdown: boolean;
   editorToolbar: boolean;
@@ -60,6 +65,10 @@ const defaultSettings: Settings = {
   useSystemTheme: true,
   lightThemeId: undefined,
   darkThemeId: undefined,
+  interfaceStyle: 'default',
+  accentColorId: 'violet',
+  outgoingBubbleColorId: 'teal',
+  incomingBubbleColorId: 'slate',
   monochromeMode: false,
   isMarkdown: true,
   editorToolbar: false,
