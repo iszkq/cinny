@@ -31,8 +31,17 @@ import {
   isNotificationEvent,
 } from '../../utils/room';
 import { NotificationType, UnreadInfo } from '../../../types/matrix/room';
-import { AccountDataEvent } from '../../../types/matrix/accountData';
-import { getMxIdLocalPart, mxcUrlToHttp } from '../../utils/matrix';
+import {
+  AccountDataEvent,
+  CinnyAISettingsContent,
+  CinnyAppearanceSettingsContent,
+  CinnyAccountPinPolicyContent,
+} from '../../../types/matrix/accountData';
+import {
+  fetchMediaWithAuth,
+  getMxIdLocalPart,
+  mxcUrlToHttp,
+} from '../../utils/matrix';
 import { useSelectedRoom } from '../../hooks/router/useSelectedRoom';
 import { useInboxNotificationsSelected } from '../../hooks/router/useInbox';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
@@ -46,9 +55,11 @@ import {
   getAISettingsAccountDataSignature,
 } from '../../state/ai';
 import {
-  CinnyAISettingsContent,
-  CinnyAccountPinPolicyContent,
-} from '../../../types/matrix/accountData';
+  applyAppearanceAccountData,
+  DEFAULT_APPEARANCE_ACCOUNT_DATA_SIGNATURE,
+  getAppearanceAccountDataContent,
+  getAppearanceAccountDataSignature,
+} from '../../state/appearanceAccountData';
 import {
   applyAccountPinPolicyContent,
   hasAccountPin,
@@ -56,6 +67,7 @@ import {
   lockScreenForAccount,
   syncAccountPinPolicy,
 } from '../../utils/pinLock';
+import { blobToDataUrl, dataUrlToFile, isDataUrl } from '../../utils/dataUrl';
 import { openExternalUrl, shouldOpenHrefExternally } from '../../utils/desktop';
 import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
 import { useDesktopUpdater } from '../../hooks/useDesktopUpdater';
@@ -65,6 +77,8 @@ const EXTERNAL_LINK_SELECTOR = 'a[href]';
 const DESKTOP_UPDATE_AUTO_CHECK_DELAY_MS = 30000;
 const DESKTOP_UPDATE_AUTO_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const DESKTOP_UPDATE_AUTO_CHECK_FOCUS_COOLDOWN_MS = 15 * 60 * 1000;
+const APPEARANCE_ACCOUNT_DATA_SAVE_DEBOUNCE_MS = 450;
+const APPEARANCE_BACKGROUND_FILE_NAME = 'cinny-chat-background.webp';
 
 const createFaviconUrl = async (logoUrl: string, badgeColor?: string): Promise<string> => {
   const img = await loadImageElement(logoUrl);
@@ -325,6 +339,231 @@ function PersonalPackSyncFeature() {
       mx.removeListener(ClientEvent.AccountData, handleAccountData);
     };
   }, [mx]);
+
+  return null;
+}
+
+function AppearanceSettingsAccountDataFeature() {
+  const mx = useMatrixClient();
+  const useAuthentication = useMediaAuthentication();
+  const settings = useAtomValue(settingsAtom);
+  const setSettings = useSetAtom(settingsAtom);
+
+  const settingsRef = useRef(settings);
+  const hydratedRef = useRef(false);
+  const remoteSignatureRef = useRef<string>();
+  const applyingRemoteSignatureRef = useRef<string>();
+  const pendingSaveSignatureRef = useRef<string>();
+  const pendingBackgroundUploadRef = useRef<string>();
+  const backgroundFetchTokenRef = useRef(0);
+
+  useEffect(() => {
+    settingsRef.current = settings;
+
+    if (
+      applyingRemoteSignatureRef.current &&
+      getAppearanceAccountDataSignature(settings) === applyingRemoteSignatureRef.current
+    ) {
+      applyingRemoteSignatureRef.current = undefined;
+      hydratedRef.current = true;
+    }
+  }, [settings]);
+
+  const hydrateBackgroundDataUrl = useCallback(
+    async (backgroundMxc: string) => {
+      const fetchToken = backgroundFetchTokenRef.current + 1;
+      backgroundFetchTokenRef.current = fetchToken;
+
+      const mediaUrl =
+        mxcUrlToHttp(mx, backgroundMxc, useAuthentication) ??
+        mxcUrlToHttp(mx, backgroundMxc, false);
+
+      if (!mediaUrl) {
+        return;
+      }
+
+      const response = await fetchMediaWithAuth(mediaUrl).catch(() => undefined);
+      if (!response?.ok) {
+        return;
+      }
+
+      const dataUrl = await blobToDataUrl(await response.blob());
+
+      if (
+        backgroundFetchTokenRef.current !== fetchToken ||
+        settingsRef.current.chatBackgroundMediaMxc !== backgroundMxc ||
+        settingsRef.current.chatBackgroundDataUrl === dataUrl
+      ) {
+        return;
+      }
+
+      setSettings({
+        ...settingsRef.current,
+        chatBackgroundDataUrl: dataUrl,
+      });
+    },
+    [mx, setSettings, useAuthentication]
+  );
+
+  useEffect(() => {
+    const applyAccountData = (content?: CinnyAppearanceSettingsContent) => {
+      if (!content) {
+        remoteSignatureRef.current = undefined;
+        applyingRemoteSignatureRef.current = undefined;
+        hydratedRef.current = true;
+        return;
+      }
+
+      const remoteSignature = getAppearanceAccountDataSignature(content);
+      remoteSignatureRef.current = remoteSignature;
+
+      const currentSettings = settingsRef.current;
+      const currentSignature = getAppearanceAccountDataSignature(currentSettings);
+      const remoteBackgroundMxc = content.chatBackgroundMediaMxc;
+      const backgroundChanged = currentSettings.chatBackgroundMediaMxc !== remoteBackgroundMxc;
+      let nextSettings = applyAppearanceAccountData(currentSettings, content);
+
+      if (!remoteBackgroundMxc) {
+        nextSettings = {
+          ...nextSettings,
+          chatBackgroundMediaMxc: undefined,
+          chatBackgroundDataUrl: undefined,
+        };
+      } else if (backgroundChanged) {
+        nextSettings = {
+          ...nextSettings,
+          chatBackgroundDataUrl: undefined,
+        };
+      }
+
+      if (currentSignature !== remoteSignature || backgroundChanged) {
+        applyingRemoteSignatureRef.current = remoteSignature;
+        setSettings(nextSettings);
+      } else {
+        applyingRemoteSignatureRef.current = undefined;
+        hydratedRef.current = true;
+      }
+
+      if (
+        remoteBackgroundMxc &&
+        (backgroundChanged || !currentSettings.chatBackgroundDataUrl)
+      ) {
+        void hydrateBackgroundDataUrl(remoteBackgroundMxc).catch(() => undefined);
+      }
+    };
+
+    applyAccountData(
+      mx
+        .getAccountData(AccountDataEvent.CinnyAppearanceSettings)
+        ?.getContent<CinnyAppearanceSettingsContent>()
+    );
+
+    const handleAccountData = (event: MatrixEvent) => {
+      if (event.getType() !== AccountDataEvent.CinnyAppearanceSettings) {
+        return;
+      }
+
+      applyAccountData(event.getContent<CinnyAppearanceSettingsContent>());
+    };
+
+    mx.on(ClientEvent.AccountData, handleAccountData);
+    return () => {
+      mx.removeListener(ClientEvent.AccountData, handleAccountData);
+    };
+  }, [hydrateBackgroundDataUrl, mx, setSettings]);
+
+  useEffect(() => {
+    if (!hydratedRef.current || applyingRemoteSignatureRef.current) {
+      return undefined;
+    }
+
+    const currentSignature = getAppearanceAccountDataSignature(settings);
+    if (
+      currentSignature === remoteSignatureRef.current ||
+      currentSignature === pendingSaveSignatureRef.current
+    ) {
+      return undefined;
+    }
+
+    if (settings.chatBackgroundDataUrl && !settings.chatBackgroundMediaMxc) {
+      if (
+        isDataUrl(settings.chatBackgroundDataUrl) &&
+        pendingBackgroundUploadRef.current !== settings.chatBackgroundDataUrl
+      ) {
+        pendingBackgroundUploadRef.current = settings.chatBackgroundDataUrl;
+
+        void dataUrlToFile(settings.chatBackgroundDataUrl, APPEARANCE_BACKGROUND_FILE_NAME)
+          .then((file) =>
+            mx.uploadContent(file, {
+              includeFilename: true,
+              name: file.name,
+              type: file.type,
+            })
+          )
+          .then((response) => {
+            const backgroundMxc = response.content_uri;
+            if (
+              !backgroundMxc ||
+              settingsRef.current.chatBackgroundDataUrl !== settings.chatBackgroundDataUrl
+            ) {
+              return;
+            }
+
+            setSettings({
+              ...settingsRef.current,
+              chatBackgroundMediaMxc: backgroundMxc,
+            });
+          })
+          .catch(() => undefined)
+          .finally(() => {
+            if (pendingBackgroundUploadRef.current === settings.chatBackgroundDataUrl) {
+              pendingBackgroundUploadRef.current = undefined;
+            }
+          });
+      }
+
+      return undefined;
+    }
+
+    const saveTimer = window.setTimeout(() => {
+      const latestSettings = settingsRef.current;
+      const latestSignature = getAppearanceAccountDataSignature(latestSettings);
+
+      if (
+        !latestSignature ||
+        latestSignature === remoteSignatureRef.current ||
+        latestSignature === pendingSaveSignatureRef.current ||
+        (latestSignature === DEFAULT_APPEARANCE_ACCOUNT_DATA_SIGNATURE &&
+          !remoteSignatureRef.current)
+      ) {
+        return;
+      }
+
+      if (latestSettings.chatBackgroundDataUrl && !latestSettings.chatBackgroundMediaMxc) {
+        return;
+      }
+
+      pendingSaveSignatureRef.current = latestSignature;
+
+      mx.setAccountData(
+        AccountDataEvent.CinnyAppearanceSettings,
+        getAppearanceAccountDataContent(latestSettings)
+      )
+        .then(() => {
+          remoteSignatureRef.current = latestSignature;
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          if (pendingSaveSignatureRef.current === latestSignature) {
+            pendingSaveSignatureRef.current = undefined;
+          }
+        });
+    }, APPEARANCE_ACCOUNT_DATA_SAVE_DEBOUNCE_MS);
+
+    return () => {
+      window.clearTimeout(saveTimer);
+    };
+  }, [mx, settings, setSettings]);
 
   return null;
 }
@@ -731,6 +970,7 @@ export function ClientNonUIFeatures({ children }: ClientNonUIFeaturesProps) {
       <DesktopAutoUpdateFeature />
       <AccountPinPolicyFeature />
       <PersonalPackSyncFeature />
+      <AppearanceSettingsAccountDataFeature />
       <AISettingsAccountDataFeature />
       <ImagePackMediaWarmFeature />
       <FaviconUpdater />
