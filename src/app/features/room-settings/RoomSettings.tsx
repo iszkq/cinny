@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useAtomValue } from 'jotai';
-import { Avatar, Box, config, Icon, IconButton, Icons, IconSrc, MenuItem, Text } from 'folds';
+import { Avatar, Box, config, Icon, IconButton, Icons, IconSrc, Text } from 'folds';
 import { JoinRule } from 'matrix-js-sdk';
 import { PageNav, PageNavContent, PageNavHeader, PageRoot } from '../../components/page';
 import { isCompactScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
@@ -17,6 +17,7 @@ import { Permissions } from './permissions';
 import { RoomSettingsPage } from '../../state/roomSettings';
 import { useRoom } from '../../hooks/useRoom';
 import { DeveloperTools } from '../common-settings/developer-tools';
+import { NavButton, NavItem, NavItemContent } from '../../components/nav';
 
 type RoomSettingsMenuItem = {
   page: RoomSettingsPage;
@@ -126,26 +127,39 @@ export function RoomSettings({ initialPage, requestClose }: RoomSettingsProps) {
             </PageNavHeader>
             <Box grow="Yes" direction="Column">
               <PageNavContent>
-                <div style={{ flexGrow: 1 }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: config.space.S100,
+                    flexGrow: 1,
+                  }}
+                >
                   {menuItems.map((item) => (
-                    <MenuItem
+                    <NavItem
                       key={item.name}
                       variant="Background"
                       radii="400"
-                      aria-pressed={activePage === item.page}
-                      before={<Icon src={item.icon} size="100" filled={activePage === item.page} />}
-                      onClick={() => setActivePage(item.page)}
+                      aria-selected={activePage === item.page}
+                      highlight={activePage === item.page}
                     >
-                      <Text
-                        style={{
-                          fontWeight: activePage === item.page ? config.fontWeight.W600 : undefined,
-                        }}
-                        size="T300"
-                        truncate
-                      >
-                        {item.name}
-                      </Text>
-                    </MenuItem>
+                      <NavButton type="button" onClick={() => setActivePage(item.page)}>
+                        <NavItemContent>
+                          <Box as="span" grow="Yes" alignItems="Center" gap="200">
+                            <Icon
+                              src={item.icon}
+                              size="100"
+                              filled={activePage === item.page}
+                            />
+                            <Box as="span" grow="Yes">
+                              <Text size="Inherit" as="span" truncate>
+                                {item.name}
+                              </Text>
+                            </Box>
+                          </Box>
+                        </NavItemContent>
+                      </NavButton>
+                    </NavItem>
                   ))}
                 </div>
               </PageNavContent>
