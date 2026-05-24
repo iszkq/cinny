@@ -1,5 +1,6 @@
 import { atom } from 'jotai';
 import { SetPresence } from 'matrix-js-sdk';
+import { THEME_DEFAULT_ACCENT_ID } from '../theme/appearanceShared';
 
 const STORAGE_KEY = 'settings';
 export type DateFormat =
@@ -70,7 +71,7 @@ const defaultSettings: Settings = {
   lightThemeId: undefined,
   darkThemeId: undefined,
   interfaceStyle: 'default',
-  accentColorId: 'violet',
+  accentColorId: THEME_DEFAULT_ACCENT_ID,
   accentOpacity: 100,
   outgoingBubbleColorId: 'teal',
   outgoingBubbleOpacity: 100,
