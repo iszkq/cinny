@@ -65,8 +65,8 @@ export const useStableMediaUrl = (
   const disableObjectUrlCache = options.disableObjectUrlCache ?? false;
   const preferObjectUrl =
     options.preferObjectUrl ??
-    shouldUseObjectUrlForMediaDisplay(src) ||
-    shouldUseObjectUrlForMediaDisplay(fallbackSrc);
+    (shouldUseObjectUrlForMediaDisplay(src) ||
+      shouldUseObjectUrlForMediaDisplay(fallbackSrc));
   const desktopSupported = isDesktopUpdaterSupported();
   const browserObjectUrlCacheEnabled = !desktopSupported && !disableObjectUrlCache;
   const desktopObjectUrlFallbackEnabled = desktopSupported && !disableObjectUrlCache;
