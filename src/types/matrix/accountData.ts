@@ -9,6 +9,7 @@ export enum AccountDataEvent {
   CinnyFavoriteNotes = 'in.cinny.favorite_notes',
   CinnyExploreSources = 'in.cinny.explore_sources',
   CinnyAISettings = 'in.cinny.ai_settings',
+  CinnyAppearanceSettings = 'in.cinny.appearance_settings',
   CinnyUserEmojiPacks = 'in.cinny.user_emoji_packs',
 
   ElementRecentEmoji = 'io.element.recent_emoji',
@@ -102,6 +103,24 @@ export type CinnyAISettingsContent = {
   baseUrl?: string;
   modelsApiUrl?: string;
   skills?: CinnyAISettingsSkillContent[];
+};
+
+export type CinnyAppearanceSettingsContent = {
+  version?: number;
+  updatedAt?: number;
+  themeId?: string;
+  useSystemTheme?: boolean;
+  lightThemeId?: string;
+  darkThemeId?: string;
+  interfaceStyle?: 'default' | 'frosted';
+  accentColorId?: string;
+  accentOpacity?: number;
+  outgoingBubbleColorId?: string;
+  outgoingBubbleOpacity?: number;
+  incomingBubbleColorId?: string;
+  incomingBubbleOpacity?: number;
+  chatBackgroundMediaMxc?: string;
+  monochromeMode?: boolean;
 };
 
 export type SecretStorageDefaultKeyContent = {
