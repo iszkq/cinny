@@ -10,6 +10,16 @@ import {
 } from '../hooks/useTheme';
 import { useSetting } from '../state/hooks/settings';
 import { settingsAtom } from '../state/settings';
+import {
+  APPEARANCE_MANAGED_VARS,
+  createAppearanceVariableMap,
+} from '../theme/appearance';
+
+const clearAppearanceVariables = () => {
+  APPEARANCE_MANAGED_VARS.forEach((cssVar) => {
+    document.body.style.removeProperty(cssVar);
+  });
+};
 
 export function UnAuthRouteThemeManager() {
   const systemThemeKind = useSystemThemeKind();
@@ -17,6 +27,8 @@ export function UnAuthRouteThemeManager() {
   useEffect(() => {
     document.body.className = '';
     document.body.classList.add(configClass, varsClass);
+    clearAppearanceVariables();
+    document.body.style.filter = '';
     if (systemThemeKind === ThemeKind.Dark) {
       document.body.classList.add(...DarkTheme.classNames);
     }
@@ -31,19 +43,42 @@ export function UnAuthRouteThemeManager() {
 export function AuthRouteThemeManager({ children }: { children: ReactNode }) {
   const activeTheme = useActiveTheme();
   const [monochromeMode] = useSetting(settingsAtom, 'monochromeMode');
+  const [interfaceStyle] = useSetting(settingsAtom, 'interfaceStyle');
+  const [accentColorId] = useSetting(settingsAtom, 'accentColorId');
+  const [outgoingBubbleColorId] = useSetting(settingsAtom, 'outgoingBubbleColorId');
+  const [incomingBubbleColorId] = useSetting(settingsAtom, 'incomingBubbleColorId');
 
   useEffect(() => {
     document.body.className = '';
     document.body.classList.add(configClass, varsClass);
-
     document.body.classList.add(...activeTheme.classNames);
+    clearAppearanceVariables();
+
+    const appearanceVariables = createAppearanceVariableMap({
+      interfaceStyle,
+      accentColorId,
+      outgoingBubbleColorId,
+      incomingBubbleColorId,
+      themeKind: activeTheme.kind,
+    });
+
+    Object.entries(appearanceVariables).forEach(([cssVar, cssValue]) => {
+      document.body.style.setProperty(cssVar, cssValue);
+    });
 
     if (monochromeMode) {
       document.body.style.filter = 'grayscale(1)';
     } else {
       document.body.style.filter = '';
     }
-  }, [activeTheme, monochromeMode]);
+  }, [
+    activeTheme,
+    monochromeMode,
+    interfaceStyle,
+    accentColorId,
+    outgoingBubbleColorId,
+    incomingBubbleColorId,
+  ]);
 
   return <ThemeContextProvider value={activeTheme}>{children}</ThemeContextProvider>;
 }
