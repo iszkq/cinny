@@ -15,7 +15,7 @@ import {
 import classNames from 'classnames';
 import * as css from './styles.css';
 import { useStableMediaUrl } from './useStableMediaUrl';
-import { isDesktopUpdaterSupported } from '../../../utils/desktopUpdater';
+import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
 
 export function Sidebar({ children }: { children: ReactNode }) {
   return (

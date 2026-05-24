@@ -3,11 +3,11 @@ import {
   getCachedMediaObjectUrl,
   primeCachedMediaObjectUrl,
   subscribeCachedMediaObjectUrl,
-} from '../../../utils/mediaUrlCache';
-import { primeDesktopMediaAssetUrl } from '../../../utils/desktopMediaAssetCache';
-import { isDesktopUpdaterSupported } from '../../../utils/desktopUpdater';
-import { releaseObjectUrl, retainObjectUrl } from '../../../utils/objectUrlRetainer';
-import { shouldUseObjectUrlForMediaDisplay } from '../../../utils/matrix';
+} from '../../utils/mediaUrlCache';
+import { primeDesktopMediaAssetUrl } from '../../utils/desktopMediaAssetCache';
+import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
+import { releaseObjectUrl, retainObjectUrl } from '../../utils/objectUrlRetainer';
+import { shouldUseObjectUrlForMediaDisplay } from '../../utils/matrix';
 
 type MediaCandidate = {
   source: string;

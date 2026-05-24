@@ -3,13 +3,13 @@ import React from 'react';
 import classNames from 'classnames';
 import { Atom, atom, useAtomValue } from 'jotai';
 import * as css from './styles.css';
-import { IImageInfo } from '../../../../types/matrix/common';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
-import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
+import { IImageInfo } from '../../../types/matrix/common';
+import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 import { useStableMediaUrl } from './useStableMediaUrl';
 import { getEmojiBoardMediaUrls } from './media';
-import { isHttpUrl, isMxcUrl } from '../../../utils/matrix';
-import { isDesktopUpdaterSupported } from '../../../utils/desktopUpdater';
+import { isHttpUrl, isMxcUrl } from '../../utils/matrix';
+import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
 
 export type PreviewData = {
   key: string;

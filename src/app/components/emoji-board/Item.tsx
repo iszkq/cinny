@@ -2,14 +2,14 @@ import React from 'react';
 import { Box, Icon, Icons } from 'folds';
 import { MatrixClient } from 'matrix-js-sdk';
 import classNames from 'classnames';
-import { IImageInfo } from '../../../../types/matrix/common';
-import { EmojiItemInfo, EmojiType } from '../types';
+import { IImageInfo } from '../../../types/matrix/common';
+import { EmojiItemInfo, EmojiType } from './types';
 import * as css from './styles.css';
-import { PackImageReader } from '../../../plugins/custom-emoji';
-import { IEmoji } from '../../../plugins/emoji';
+import { PackImageReader } from '../../plugins/custom-emoji';
+import { IEmoji } from '../../plugins/emoji';
 import { useStableMediaUrl } from './useStableMediaUrl';
 import { getEmojiBoardMediaUrls } from './media';
-import { isDesktopUpdaterSupported } from '../../../utils/desktopUpdater';
+import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
 
 export const getEmojiItemInfo = (element: Element): EmojiItemInfo | undefined => {
   const label = element.getAttribute('title');
