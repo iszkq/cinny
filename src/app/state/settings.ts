@@ -1,8 +1,7 @@
 import { atom } from 'jotai';
 import { SetPresence } from 'matrix-js-sdk';
 import { THEME_DEFAULT_ACCENT_ID } from '../theme/appearanceShared';
-
-const STORAGE_KEY = 'settings';
+import { SETTINGS_STORAGE_KEY } from './settingsStorage';
 export type DateFormat =
   | 'D MMM YYYY'
   | 'DD/MM/YYYY'
@@ -132,7 +131,7 @@ export const defaultAppearanceSettings = {
 >;
 
 export const getSettings = () => {
-  const settings = localStorage.getItem(STORAGE_KEY);
+  const settings = localStorage.getItem(SETTINGS_STORAGE_KEY);
   if (settings === null) return defaultSettings;
 
   const {
@@ -162,7 +161,7 @@ export const getSettings = () => {
 };
 
 export const setSettings = (settings: Settings) => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+  localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
 };
 
 const baseSettings = atom<Settings>(getSettings());
