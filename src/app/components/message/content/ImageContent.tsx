@@ -42,6 +42,7 @@ import { ImageViewerBackdrop, ImageViewerModal } from '../../../styles/Modal.css
 import { validBlurHash } from '../../../utils/blurHash';
 import { primeCachedMediaObjectUrl } from '../../../utils/mediaUrlCache';
 import { getImageViewerModalStyle } from '../../../utils/imageViewerModal';
+import { loadImageElement } from '../../../utils/dom';
 
 const IMAGE_PREVIEW_WIDTH = 230;
 const IMAGE_PREVIEW_HEIGHT = 460;
@@ -126,6 +127,10 @@ export const ImageContent = as<'div', ImageContentProps>(
     const [error, setError] = useState(false);
     const [viewer, setViewer] = useState(false);
     const [blurred, setBlurred] = useState(markedAsSpoiler ?? false);
+    const [viewerImageSize, setViewerImageSize] = useState<{
+      width?: number;
+      height?: number;
+    }>({});
 
     const prepareMediaSrc = useCallback(
       async (
@@ -259,14 +264,42 @@ export const ImageContent = as<'div', ImageContentProps>(
     const previewSrc = srcState.status === AsyncStatus.Success ? srcState.data.src : undefined;
     const viewerSrc =
       viewerSrcState.status === AsyncStatus.Success ? viewerSrcState.data : previewSrc;
+
+    useEffect(() => {
+      if (!viewer || !viewerSrc) {
+        setViewerImageSize({});
+        return undefined;
+      }
+
+      let mounted = true;
+      setViewerImageSize({});
+      loadImageElement(viewerSrc)
+        .then((img) => {
+          if (!mounted) return;
+          setViewerImageSize({
+            width: img.naturalWidth || img.width,
+            height: img.naturalHeight || img.height,
+          });
+        })
+        .catch(() => {
+          if (mounted) {
+            setViewerImageSize({});
+          }
+        });
+
+      return () => {
+        mounted = false;
+      };
+    }, [viewer, viewerSrc]);
+
     const viewerLoading =
       viewer &&
       srcState.status === AsyncStatus.Success &&
       srcState.data.kind === 'thumbnail' &&
       viewerSrcState.status !== AsyncStatus.Success;
     const viewerModalStyle = getImageViewerModalStyle(
-      info?.w ?? info?.thumbnail_info?.w,
-      info?.h ?? info?.thumbnail_info?.h
+      viewerImageSize.width ?? info?.w ?? info?.thumbnail_info?.w,
+      viewerImageSize.height ?? info?.h ?? info?.thumbnail_info?.h
     );
 
     return (
