@@ -38,9 +38,10 @@ import {
   shouldUseObjectUrlForMediaDisplay,
 } from '../../../utils/matrix';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
-import { ImageViewerModal } from '../../../styles/Modal.css';
+import { ImageViewerBackdrop, ImageViewerModal } from '../../../styles/Modal.css';
 import { validBlurHash } from '../../../utils/blurHash';
 import { primeCachedMediaObjectUrl } from '../../../utils/mediaUrlCache';
+import { getImageViewerModalStyle } from '../../../utils/imageViewerModal';
 
 const IMAGE_PREVIEW_WIDTH = 230;
 const IMAGE_PREVIEW_HEIGHT = 460;
@@ -263,11 +264,15 @@ export const ImageContent = as<'div', ImageContentProps>(
       srcState.status === AsyncStatus.Success &&
       srcState.data.kind === 'thumbnail' &&
       viewerSrcState.status !== AsyncStatus.Success;
+    const viewerModalStyle = getImageViewerModalStyle(
+      info?.w ?? info?.thumbnail_info?.w,
+      info?.h ?? info?.thumbnail_info?.h
+    );
 
     return (
       <Box className={classNames(css.RelativeBase, className)} {...props} ref={ref}>
         {viewer && viewerSrc && (
-          <Overlay open={viewer} backdrop={<OverlayBackdrop />}>
+          <Overlay open={viewer} backdrop={<OverlayBackdrop className={ImageViewerBackdrop} />}>
             <OverlayCenter>
               <FocusTrap
                 focusTrapOptions={{
@@ -280,6 +285,7 @@ export const ImageContent = as<'div', ImageContentProps>(
                 <Modal
                   className={ImageViewerModal}
                   size="500"
+                  style={viewerModalStyle}
                   onContextMenu={(evt: any) => evt.stopPropagation()}
                 >
                   {renderViewer({
