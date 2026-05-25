@@ -723,7 +723,7 @@ export const ImageViewer = as<'div', ImageViewerProps>(
                   gap="200"
                 >
                   <Text size="T200" priority="300">
-                    {'正在切换图片...'}
+                    {'原图正在加载...'}
                   </Text>
                 </Box>
               )}
