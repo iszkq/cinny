@@ -6,9 +6,10 @@ export const ModalWide = style({
 });
 
 export const ImageViewerBackdrop = style({
-  background: 'rgba(248, 250, 252, 0.2)',
-  backdropFilter: 'blur(8px) saturate(120%)',
-  WebkitBackdropFilter: 'blur(8px) saturate(120%)',
+  background: 'rgba(248, 250, 252, 0.36)',
+  backdropFilter: 'none !important',
+  WebkitBackdropFilter: 'none !important',
+  filter: 'none !important',
 });
 
 export const ImageViewerModal = style({
