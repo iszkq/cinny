@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useState } from 'react';
 import { useElementSizeObserver } from './useElementSizeObserver';
+import { isDesktopUpdaterSupported } from '../utils/desktopUpdater';
 
 export const TABLET_BREAKPOINT = 1124;
 export const MOBILE_BREAKPOINT = 750;
@@ -18,6 +19,9 @@ export const getScreenSize = (width: number): ScreenSize => {
 
 export const isCompactScreenSize = (screenSize: ScreenSize): boolean =>
   screenSize !== ScreenSize.Desktop;
+
+export const isDesktopLikeScreenSize = (screenSize: ScreenSize): boolean =>
+  screenSize === ScreenSize.Desktop || isDesktopUpdaterSupported();
 
 export const useScreenSize = (): ScreenSize => {
   const [size, setSize] = useState<ScreenSize>(getScreenSize(document.body.clientWidth));
