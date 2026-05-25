@@ -198,15 +198,19 @@ export function MImage({ content, renderImageContent, outlined }: MImageProps) {
   const imageWidth = typeof imgInfo?.w === 'number' && imgInfo.w > 0 ? imgInfo.w : undefined;
   const imageHeight = typeof imgInfo?.h === 'number' && imgInfo.h > 0 ? imgInfo.h : undefined;
   const hasAspectRatio = typeof imageWidth === 'number' && typeof imageHeight === 'number';
+  const imageAttachmentStyle: CSSProperties = {
+    width: `min(100%, ${toRem(360)})`,
+  };
   const imageBoxStyle: CSSProperties = {
     aspectRatio: hasAspectRatio ? `${imageWidth} / ${imageHeight}` : '1 / 1',
+    width: `min(100%, ${toRem(360)})`,
     height: 'auto',
     minHeight: toRem(48),
-    maxHeight: `min(${toRem(600)}, 68vh)`,
+    maxHeight: `min(${toRem(560)}, 68vh)`,
   };
 
   return (
-    <Attachment outlined={outlined} mediaContent>
+    <Attachment outlined={outlined} mediaContent style={imageAttachmentStyle}>
       <AttachmentBox style={imageBoxStyle}>
         {renderImageContent({
           body: content.body || 'Image',
