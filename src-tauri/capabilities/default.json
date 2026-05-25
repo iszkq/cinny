@@ -4,6 +4,7 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
+    "core:window:allow-set-overlay-icon",
     "notification:default",
     "process:default",
     "updater:default"
