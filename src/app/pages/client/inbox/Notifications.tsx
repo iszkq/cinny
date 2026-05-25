@@ -110,6 +110,18 @@ type NotificationTimeline = {
 };
 type LoadTimeline = (from?: string) => Promise<void>;
 type SilentReloadTimeline = () => Promise<void>;
+const GLASS_CARD_STYLE = {
+  background: 'rgba(255, 255, 255, 0.58)',
+  border: '1px solid rgba(148, 163, 184, 0.16)',
+  boxShadow: '0 16px 42px rgba(15, 23, 42, 0.06)',
+  backdropFilter: 'blur(18px)',
+  WebkitBackdropFilter: 'blur(18px)',
+} as const;
+const GLASS_PANEL_STYLE = {
+  ...GLASS_CARD_STYLE,
+  padding: config.space.S300,
+  borderRadius: config.radii.R400,
+} as const;
 
 const groupNotifications = (
   notifications: INotification[],
@@ -530,8 +542,8 @@ function RoomNotificationsGroupComp({
           return (
             <SequenceCard
               key={notification.event.event_id}
-              style={{ padding: config.space.S400 }}
-              variant="SurfaceVariant"
+              style={{ ...GLASS_CARD_STYLE, padding: config.space.S400 }}
+              variant="Background"
               direction="Column"
             >
               <ModernLayout
@@ -803,11 +815,7 @@ export function Notifications() {
                 {timelineState.status === AsyncStatus.Success &&
                   notificationTimeline.groups.length === 0 && (
                     <Box
-                      className={ContainerColor({ variant: 'SurfaceVariant' })}
-                      style={{
-                        padding: config.space.S300,
-                        borderRadius: config.radii.R400,
-                      }}
+                      style={GLASS_PANEL_STYLE}
                       direction="Column"
                       gap="200"
                     >
@@ -822,9 +830,9 @@ export function Notifications() {
                   <Box direction="Column" gap="100">
                     {[...Array(8).keys()].map((key) => (
                       <SequenceCard
-                        variant="SurfaceVariant"
+                        variant="Background"
                         key={key}
-                        style={{ minHeight: toRem(80) }}
+                        style={{ ...GLASS_CARD_STYLE, minHeight: toRem(80) }}
                       />
                     ))}
                   </Box>

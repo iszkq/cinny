@@ -45,7 +45,6 @@ import {
   PageContentCenter,
   PageHeader,
   PageHero,
-  PageHeroEmpty,
   PageHeroSection,
 } from '../../../components/page';
 import { Image, Video } from '../../../components/media';
@@ -169,6 +168,20 @@ const FAVORITE_ACTION_BUTTON_STYLE = {
   minWidth: '132px',
   justifyContent: 'center',
 } as const;
+
+function FavoritesEmptyShell({ children }: { children: ReactNode }) {
+  return (
+    <Box
+      className={css.GlassEmptyState}
+      direction="Column"
+      alignItems="Center"
+      justifyContent="Center"
+      gap="200"
+    >
+      {children}
+    </Box>
+  );
+}
 
 const getFavoriteItemBody = (event: MatrixEvent): string => {
   if (event.isRedacted()) return '';
@@ -367,7 +380,7 @@ function FavoritesEmpty({
   onCreate: () => void;
 }) {
   return (
-    <PageHeroEmpty>
+    <FavoritesEmptyShell>
       <PageHeroSection>
         <PageHero
           icon={
@@ -396,7 +409,7 @@ function FavoritesEmpty({
           )}
         </PageHero>
       </PageHeroSection>
-    </PageHeroEmpty>
+    </FavoritesEmptyShell>
   );
 }
 
@@ -1103,7 +1116,8 @@ function FavoriteCard({
 
   return (
     <SequenceCard
-      variant={selectionMode && selected ? 'Secondary' : 'SurfaceVariant'}
+      className={selectionMode && selected ? css.GlassCardSelected : css.GlassCard}
+      variant={selectionMode && selected ? 'Secondary' : 'Background'}
       direction="Column"
       gap="250"
       style={{ padding: config.space.S400 }}
@@ -1693,7 +1707,8 @@ export function Favorites() {
 
   const encryptedRoomNotice = favoritesRoomEncrypted ? (
     <SequenceCard
-      variant="SurfaceVariant"
+      className={css.GlassCard}
+      variant="Background"
       direction="Column"
       gap="200"
       style={{ padding: config.space.S400 }}
@@ -1746,7 +1761,8 @@ export function Favorites() {
       <Box direction="Column" gap="300">
         {encryptedRoomNotice}
         <SequenceCard
-          variant="SurfaceVariant"
+          className={css.GlassCard}
+          variant="Background"
           direction="Column"
           gap="300"
           style={{
@@ -1754,7 +1770,6 @@ export function Favorites() {
             top: config.space.S300,
             zIndex: 3,
             padding: config.space.S400,
-            boxShadow: '0 16px 42px rgba(15, 23, 42, 0.08)',
           }}
         >
           <Box className={css.FilterCardSection} direction="Column">
@@ -1931,7 +1946,7 @@ export function Favorites() {
         )}
 
         {visibleItems.length === 0 ? (
-          <PageHeroEmpty>
+          <FavoritesEmptyShell>
             <PageHeroSection>
               <PageHero
                 icon={<Icon size="600" src={Icons.Search} />}
@@ -1949,7 +1964,7 @@ export function Favorites() {
                 )}
               </PageHero>
             </PageHeroSection>
-          </PageHeroEmpty>
+          </FavoritesEmptyShell>
         ) : (
           favoriteGroups.map((group) => (
             <Box key={group.category} direction="Column" gap="200">

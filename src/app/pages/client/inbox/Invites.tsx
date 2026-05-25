@@ -27,7 +27,6 @@ import {
   PageContentCenter,
   PageHeader,
   PageHero,
-  PageHeroEmpty,
   PageHeroSection,
 } from '../../../components/page';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
@@ -69,6 +68,19 @@ import { useSetting } from '../../../state/hooks/settings';
 import { settingsAtom } from '../../../state/settings';
 
 const COMPACT_CARD_WIDTH = 548;
+const GLASS_CARD_STYLE = {
+  background: 'rgba(255, 255, 255, 0.58)',
+  border: '1px solid rgba(148, 163, 184, 0.16)',
+  boxShadow: '0 16px 42px rgba(15, 23, 42, 0.06)',
+  backdropFilter: 'blur(18px)',
+  WebkitBackdropFilter: 'blur(18px)',
+} as const;
+const GLASS_EMPTY_STYLE = {
+  ...GLASS_CARD_STYLE,
+  padding: config.space.S400,
+  borderRadius: config.radii.R400,
+  minHeight: '320px',
+} as const;
 
 type InviteData = {
   room: Room;
@@ -123,8 +135,8 @@ const makeInviteData = (mx: MatrixClient, room: Room, useAuthentication: boolean
     roomTopic,
     roomAlias: room.getCanonicalAlias() ?? undefined,
 
-    senderId: senderId ?? 'Unknown',
-    senderName: senderName ?? 'Unknown',
+    senderId: senderId ?? '\u672a\u77e5',
+    senderName: senderName ?? '\u672a\u77e5',
     inviteTs,
     reason,
 
@@ -190,31 +202,31 @@ function InviteCard({
 
   return (
     <SequenceCard
-      variant="SurfaceVariant"
+      variant="Background"
       direction="Column"
       gap="300"
-      style={{ padding: config.space.S400 }}
+      style={{ ...GLASS_CARD_STYLE, padding: config.space.S400 }}
     >
       {(invite.isEncrypted || invite.isDirect || invite.isSpace) && (
         <Box gap="200" alignItems="Center">
           {invite.isEncrypted && (
             <Box shrink="No" alignItems="Center" justifyContent="Center">
               <Badge variant="Success" fill="Solid" size="400" radii="300">
-                <Text size="L400">Encrypted</Text>
+                <Text size="L400">{'\u5df2\u52a0\u5bc6'}</Text>
               </Badge>
             </Box>
           )}
           {invite.isDirect && (
             <Box shrink="No" alignItems="Center" justifyContent="Center">
               <Badge variant="Primary" fill="Solid" size="400" radii="300">
-                <Text size="L400">Direct Message</Text>
+                <Text size="L400">{'\u79c1\u804a'}</Text>
               </Badge>
             </Box>
           )}
           {invite.isSpace && (
             <Box shrink="No" alignItems="Center" justifyContent="Center">
               <Badge variant="Secondary" fill="Soft" size="400" radii="300">
-                <Text size="L400">Space</Text>
+                <Text size="L400">{'\u7a7a\u95f4'}</Text>
               </Badge>
             </Box>
           )}
@@ -290,7 +302,7 @@ function InviteCard({
               disabled={joining || leaving}
               before={leaving ? <Spinner variant="Secondary" size="100" /> : undefined}
             >
-              <Text size="B300">Decline</Text>
+              <Text size="B300">{'\u62d2\u7edd'}</Text>
             </Button>
             <Button
               onClick={join}
@@ -302,7 +314,7 @@ function InviteCard({
               disabled={joining || leaving}
               before={joining ? <Spinner variant="Success" fill="Soft" size="100" /> : undefined}
             >
-              <Text size="B300">Accept</Text>
+              <Text size="B300">{'\u63a5\u53d7'}</Text>
             </Button>
           </Box>
         </Box>
@@ -311,7 +323,8 @@ function InviteCard({
         <Box gap="200" alignItems="Baseline">
           <Box grow="Yes">
             <Text size="T200" priority="300">
-              From: <b>{invite.senderId}</b>
+              {'\u6765\u81ea\uff1a'}
+              <b>{invite.senderId}</b>
             </Text>
           </Box>
           {typeof invite.inviteTs === 'number' && invite.inviteTs !== 0 && (
@@ -328,7 +341,8 @@ function InviteCard({
         </Box>
         {invite.reason && (
           <Text size="T200" priority="300">
-            Reason: {invite.reason}
+            {'\u539f\u56e0\uff1a'}
+            {invite.reason}
           </Text>
         )}
       </Box>
@@ -375,7 +389,7 @@ function InviteFilters({
           )
         }
       >
-        <Text size="T200">Primary</Text>
+        <Text size="T200">{'\u719f\u4eba'}</Text>
       </Chip>
       <Chip
         variant={isUnknown ? 'Warning' : 'Surface'}
@@ -391,7 +405,7 @@ function InviteFilters({
           )
         }
       >
-        <Text size="T200">Public</Text>
+        <Text size="T200">{'\u964c\u751f\u4eba'}</Text>
       </Chip>
       <Chip
         variant={isSpam ? 'Critical' : 'Surface'}
@@ -407,7 +421,7 @@ function InviteFilters({
           )
         }
       >
-        <Text size="T200">Spam</Text>
+        <Text size="T200">{'\u5783\u573e'}</Text>
       </Chip>
     </Box>
   );
@@ -429,7 +443,7 @@ function KnownInvites({
 }: KnownInvitesProps) {
   return (
     <Box direction="Column" gap="200">
-      <Text size="H4">Primary</Text>
+      <Text size="H4">{'\u719f\u4eba'}</Text>
       {invites.length > 0 ? (
         <Box direction="Column" gap="100">
           {invites.map((invite) => (
@@ -445,15 +459,23 @@ function KnownInvites({
           ))}
         </Box>
       ) : (
-        <PageHeroEmpty>
+        <Box
+          direction="Column"
+          alignItems="Center"
+          justifyContent="Center"
+          gap="200"
+          style={GLASS_EMPTY_STYLE}
+        >
           <PageHeroSection>
             <PageHero
               icon={<Icon size="600" src={Icons.Mail} />}
-              title="No Invites"
-              subTitle="When someone you share a room with sends you an invite, it’ll show up here."
+              title={'\u6682\u65e0\u9080\u8bf7'}
+              subTitle={
+                '\u5f53\u4f60\u7684\u540c\u623f\u6210\u5458\u5411\u4f60\u53d1\u51fa\u9080\u8bf7\u65f6\uff0c\u4f1a\u663e\u793a\u5728\u8fd9\u91cc\u3002'
+              }
             />
           </PageHeroSection>
-        </PageHeroEmpty>
+        </Box>
       )}
     </Box>
   );
@@ -488,7 +510,7 @@ function UnknownInvites({
   return (
     <Box direction="Column" gap="200">
       <Box gap="200" justifyContent="SpaceBetween" alignItems="Center">
-        <Text size="H4">Public</Text>
+        <Text size="H4">{'\u964c\u751f\u4eba'}</Text>
         <Box>
           {invites.length > 0 && (
             <Chip
@@ -498,7 +520,7 @@ function UnknownInvites({
               disabled={declining}
               radii="Pill"
             >
-              <Text size="T200">Decline All</Text>
+              <Text size="T200">{'\u5168\u90e8\u62d2\u7edd'}</Text>
             </Chip>
           )}
         </Box>
@@ -518,15 +540,21 @@ function UnknownInvites({
           ))}
         </Box>
       ) : (
-        <PageHeroEmpty>
+        <Box
+          direction="Column"
+          alignItems="Center"
+          justifyContent="Center"
+          gap="200"
+          style={GLASS_EMPTY_STYLE}
+        >
           <PageHeroSection>
             <PageHero
               icon={<Icon size="600" src={Icons.Info} />}
-              title="No Invites"
-              subTitle="Invites from people outside your rooms will appear here."
+              title={'\u6682\u65e0\u9080\u8bf7'}
+              subTitle={'\u6765\u81ea\u672a\u540c\u623f\u7528\u6237\u7684\u9080\u8bf7\u4f1a\u663e\u793a\u5728\u8fd9\u91cc\u3002'}
             />
           </PageHeroSection>
-        </PageHeroEmpty>
+        </Box>
       )}
     </Box>
   );
@@ -585,20 +613,20 @@ function SpamInvites({
 
   return (
     <Box direction="Column" gap="200">
-      <Text size="H4">Spam</Text>
+      <Text size="H4">{'\u5783\u573e'}</Text>
       {invites.length > 0 ? (
         <Box direction="Column" gap="100">
           <SequenceCard
-            variant="SurfaceVariant"
+            variant="Background"
             direction="Column"
             gap="300"
-            style={{ padding: `${config.space.S400} ${config.space.S400} 0` }}
+            style={{ ...GLASS_CARD_STYLE, padding: `${config.space.S400} ${config.space.S400} 0` }}
           >
             <PageHeroSection>
               <PageHero
                 icon={<Icon size="600" src={Icons.Warning} />}
-                title={`${invites.length} Spam Invites`}
-                subTitle="Some of the following invites may contain harmful content or have been sent by banned users."
+                title={`${invites.length} \u6761\u5783\u573e\u9080\u8bf7`}
+                subTitle={'\u4e0b\u65b9\u90e8\u5206\u9080\u8bf7\u53ef\u80fd\u5305\u542b\u6076\u610f\u5185\u5bb9\uff0c\u6216\u6765\u81ea\u5df2\u88ab\u5c4f\u853d\u7684\u7528\u6237\u3002'}
               >
                 <Box direction="Row" gap="200" justifyContent="Center" wrap="Wrap">
                   <Button
@@ -611,7 +639,7 @@ function SpamInvites({
                     disabled={loading}
                   >
                     <Text size="B300" truncate>
-                      Decline All
+                      {'\u5168\u90e8\u62d2\u7edd'}
                     </Text>
                   </Button>
                   {reportRoomSupported && reportAllStatus.status !== AsyncStatus.Success && (
@@ -625,7 +653,7 @@ function SpamInvites({
                       disabled={loading}
                     >
                       <Text size="B300" truncate>
-                        Report All
+                        {'\u5168\u90e8\u4e3e\u62a5'}
                       </Text>
                     </Button>
                   )}
@@ -640,7 +668,7 @@ function SpamInvites({
                       before={blocking && <Spinner size="100" variant="Secondary" fill="Solid" />}
                     >
                       <Text size="B300" truncate>
-                        Block All
+                        {'\u5168\u90e8\u62c9\u9ed1'}
                       </Text>
                     </Button>
                   )}
@@ -658,7 +686,9 @@ function SpamInvites({
                   }
                   onClick={() => setShowInvites(!showInvites)}
                 >
-                  <Text size="B300">{showInvites ? 'Hide All' : 'View All'}</Text>
+                  <Text size="B300">
+                    {showInvites ? '\u6536\u8d77\u5168\u90e8' : '\u67e5\u770b\u5168\u90e8'}
+                  </Text>
                 </Button>
               </PageHero>
             </PageHeroSection>
@@ -677,15 +707,21 @@ function SpamInvites({
             ))}
         </Box>
       ) : (
-        <PageHeroEmpty>
+        <Box
+          direction="Column"
+          alignItems="Center"
+          justifyContent="Center"
+          gap="200"
+          style={GLASS_EMPTY_STYLE}
+        >
           <PageHeroSection>
             <PageHero
               icon={<Icon size="600" src={Icons.Warning} />}
-              title="No Spam Invites"
-              subTitle="Invites detected as spam appear here."
+              title={'\u6682\u65e0\u5783\u573e\u9080\u8bf7'}
+              subTitle={'\u88ab\u8bc6\u522b\u4e3a\u5783\u573e\u7684\u9080\u8bf7\u4f1a\u663e\u793a\u5728\u8fd9\u91cc\u3002'}
             />
           </PageHeroSection>
-        </PageHeroEmpty>
+        </Box>
       )}
     </Box>
   );
@@ -764,7 +800,7 @@ export function Invites() {
           <Box alignItems="Center" gap="200">
             {!compactScreen && <Icon size="400" src={Icons.Mail} />}
             <Text size="H3" truncate>
-              Invites
+              {'\u9080\u8bf7'}
             </Text>
           </Box>
           <Box grow="Yes" basis="No" />
@@ -777,7 +813,7 @@ export function Invites() {
               <Box ref={containerRef} direction="Column" gap="600">
                 <Box direction="Column" gap="100">
                   <span data-spacing-node />
-                  <Text size="L400">Filter</Text>
+                  <Text size="L400">{'\u7b5b\u9009'}</Text>
                   <InviteFilters
                     filter={filter}
                     onFilter={setFilter}

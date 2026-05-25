@@ -35,7 +35,7 @@ function InvitesNavItem() {
             </Avatar>
             <Box as="span" grow="Yes">
               <Text as="span" size="Inherit" truncate>
-                Invites
+                {'\u9080\u8bf7'}
               </Text>
             </Box>
             {inviteCount > 0 && <UnreadBadge highlight count={inviteCount} />}
@@ -60,7 +60,7 @@ export function Inbox() {
           <Box shrink="No">
             {desktop ? (
               <IconButton
-                aria-label="Collapse section list"
+                aria-label={'\u6536\u8d77\u4fa7\u8fb9\u680f'}
                 variant="Background"
                 onClick={() => setDesktopPageNavCollapsed(true)}
               >
@@ -72,7 +72,7 @@ export function Inbox() {
           </Box>
           <Box grow="Yes">
             <Text size="H4" truncate>
-              Inbox
+              {'\u6536\u4ef6\u7bb1'}
             </Text>
           </Box>
         </Box>
@@ -90,7 +90,7 @@ export function Inbox() {
                     </Avatar>
                     <Box as="span" grow="Yes">
                       <Text as="span" size="Inherit" truncate>
-                        Notifications
+                        {'\u901a\u77e5'}
                       </Text>
                     </Box>
                   </Box>

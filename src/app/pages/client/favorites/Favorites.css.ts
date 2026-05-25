@@ -26,6 +26,42 @@ export const FilterCardActions = style([
   },
 ]);
 
+export const GlassCard = style([
+  DefaultReset,
+  {
+    background: 'rgba(255, 255, 255, 0.58)',
+    border: '1px solid rgba(148, 163, 184, 0.16)',
+    boxShadow: '0 16px 42px rgba(15, 23, 42, 0.06)',
+    backdropFilter: 'blur(18px)',
+    WebkitBackdropFilter: 'blur(18px)',
+  },
+]);
+
+export const GlassCardSelected = style([
+  DefaultReset,
+  {
+    background: 'rgba(59, 130, 246, 0.12)',
+    border: '1px solid rgba(59, 130, 246, 0.22)',
+    boxShadow: '0 16px 42px rgba(37, 99, 235, 0.08)',
+    backdropFilter: 'blur(18px)',
+    WebkitBackdropFilter: 'blur(18px)',
+  },
+]);
+
+export const GlassEmptyState = style([
+  DefaultReset,
+  {
+    padding: config.space.S400,
+    borderRadius: config.radii.R400,
+    minHeight: '320px',
+    background: 'rgba(255, 255, 255, 0.48)',
+    border: '1px solid rgba(148, 163, 184, 0.14)',
+    boxShadow: '0 14px 36px rgba(15, 23, 42, 0.05)',
+    backdropFilter: 'blur(18px)',
+    WebkitBackdropFilter: 'blur(18px)',
+  },
+]);
+
 export const MediaGrid = style([
   DefaultReset,
   {
