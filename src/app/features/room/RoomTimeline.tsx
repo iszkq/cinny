@@ -597,6 +597,9 @@ const getReceiptTimestamp = (room: Room, userId: string): number | undefined => 
   return undefined;
 };
 
+const isOwnMessageEvent = (mx: MatrixClient, mEvent: MatrixEvent): boolean =>
+  mEvent.getSender() === mx.getUserId() && RECEIPT_MESSAGE_TYPES.has(mEvent.getType());
+
 export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimelineProps) {
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
@@ -895,6 +898,22 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
           return;
         }
 
+        if (isOwnMessageEvent(mx, mEvt) && (!atBottomRef.current || !atLiveEndRef.current)) {
+          if (eventId) {
+            navigateRoom(room.roomId, undefined, { replace: true });
+          }
+
+          if (document.hasFocus()) {
+            requestAnimationFrame(() => markAsRead(mx, mEvt.getRoomId()!, privateReceipt));
+          }
+
+          setUnreadInfo(undefined);
+          scrollToBottomRef.current.count += 1;
+          scrollToBottomRef.current.smooth = true;
+          setTimeline(getInitialTimeline(room));
+          return;
+        }
+
         // if user is at bottom of timeline
         // keep paginating timeline and conditionally mark as read
         // otherwise we update timeline without paginating
@@ -928,7 +947,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
           setUnreadInfo(getRoomUnreadInfo(room));
         }
       },
-      [mx, room, unreadInfo, privateReceipt]
+      [eventId, mx, navigateRoom, room, unreadInfo, privateReceipt]
     )
   );
 
