@@ -194,18 +194,21 @@ export const loadAudioElement = (url: string): Promise<HTMLAudioElement> =>
     audio.load();
   });
 
-export const getThumbnailDimensions = (width: number, height: number): [number, number] => {
-  const MAX_WIDTH = 400;
-  const MAX_HEIGHT = 300;
+export const getThumbnailDimensions = (
+  width: number,
+  height: number,
+  maxWidth = 400,
+  maxHeight = 300
+): [number, number] => {
   let targetWidth = width;
   let targetHeight = height;
-  if (targetHeight > MAX_HEIGHT) {
-    targetWidth = Math.floor(targetWidth * (MAX_HEIGHT / targetHeight));
-    targetHeight = MAX_HEIGHT;
+  if (targetHeight > maxHeight) {
+    targetWidth = Math.floor(targetWidth * (maxHeight / targetHeight));
+    targetHeight = maxHeight;
   }
-  if (targetWidth > MAX_WIDTH) {
-    targetHeight = Math.floor(targetHeight * (MAX_WIDTH / targetWidth));
-    targetWidth = MAX_WIDTH;
+  if (targetWidth > maxWidth) {
+    targetHeight = Math.floor(targetHeight * (maxWidth / targetWidth));
+    targetWidth = maxWidth;
   }
   return [targetWidth, targetHeight];
 };
