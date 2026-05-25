@@ -15,7 +15,7 @@ import {
 } from '../../../components/sidebar';
 import { useHomeSelected } from '../../../hooks/router/useHomeSelected';
 import { UnreadBadge } from '../../../components/unread-badge';
-import { isCompactScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
+import { isDesktopLikeScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
 import { useNavToActivePathAtom } from '../../../state/hooks/navToActivePath';
 import { useHomeRooms } from '../home/useHomeRooms';
 import { markAsRead } from '../../../utils/notifications';
@@ -61,6 +61,7 @@ const HomeMenu = forwardRef<HTMLDivElement, HomeMenuProps>(({ requestClose }, re
 export function HomeTab() {
   const navigate = useNavigate();
   const screenSize = useScreenSizeContext();
+  const desktopLayout = isDesktopLikeScreenSize(screenSize);
   const desktopPageNavCollapsed = useAtomValue(desktopPageNavCollapsedAtom);
   const setDesktopPageNavCollapsed = useSetAtom(desktopPageNavCollapsedAtom);
   const navToActivePath = useAtomValue(useNavToActivePathAtom());
@@ -71,18 +72,17 @@ export function HomeTab() {
   const [menuAnchor, setMenuAnchor] = useState<RectCords>();
 
   const handleHomeClick = () => {
-    if (!isCompactScreenSize(screenSize)) {
+    if (desktopLayout) {
       if (homeSelected) {
         setDesktopPageNavCollapsed(!desktopPageNavCollapsed);
         return;
       }
       setDesktopPageNavCollapsed(false);
-    }
-
-    const activePath = navToActivePath.get('home');
-    if (activePath && !isCompactScreenSize(screenSize)) {
-      navigate(joinPathComponent(activePath));
-      return;
+      const activePath = navToActivePath.get('home');
+      if (activePath) {
+        navigate(joinPathComponent(activePath));
+        return;
+      }
     }
 
     navigate(getHomePath());

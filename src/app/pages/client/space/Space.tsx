@@ -86,7 +86,7 @@ import { BreakWord } from '../../../styles/Text.css';
 import { InviteUserPrompt } from '../../../components/invite-user-prompt';
 import { useCallEmbed } from '../../../hooks/useCallEmbed';
 import { CompactClientNavButton } from '../CompactClientNavButton';
-import { ScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
+import { isDesktopLikeScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
 import { desktopPageNavCollapsedAtom } from '../../../state/desktopPageNav';
 
 type SpaceMenuProps = {
@@ -250,7 +250,7 @@ const SpaceMenu = forwardRef<HTMLDivElement, SpaceMenuProps>(({ room, requestClo
 function SpaceHeader() {
   const space = useSpace();
   const screenSize = useScreenSizeContext();
-  const desktop = screenSize === ScreenSize.Desktop;
+  const desktop = isDesktopLikeScreenSize(screenSize);
   const setDesktopPageNavCollapsed = useSetAtom(desktopPageNavCollapsedAtom);
   const spaceName = useRoomName(space);
   const [menuAnchor, setMenuAnchor] = useState<RectCords>();

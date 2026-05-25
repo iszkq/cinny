@@ -74,7 +74,7 @@ import {
   useSidebarItems,
 } from '../../../hooks/useSidebarItems';
 import { AccountDataEvent } from '../../../../types/matrix/accountData';
-import { isCompactScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
+import { isDesktopLikeScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
 import { useNavToActivePathAtom } from '../../../state/hooks/navToActivePath';
 import { useOpenedSidebarFolderAtom } from '../../../state/hooks/openedSidebarFolder';
 import { usePowerLevels } from '../../../hooks/usePowerLevels';
@@ -615,6 +615,7 @@ export function SpaceTabs({ scrollRef }: SpaceTabsProps) {
   const navigate = useNavigate();
   const mx = useMatrixClient();
   const screenSize = useScreenSizeContext();
+  const desktopLayout = isDesktopLikeScreenSize(screenSize);
   const desktopPageNavCollapsed = useAtomValue(desktopPageNavCollapsedAtom);
   const setDesktopPageNavCollapsed = useSetAtom(desktopPageNavCollapsedAtom);
   const roomToParents = useAtomValue(roomToParentsAtom);
@@ -765,7 +766,7 @@ export function SpaceTabs({ scrollRef }: SpaceTabsProps) {
     if (!targetSpaceId) return;
 
     const spacePath = getSpacePath(getCanonicalAliasOrRoomId(mx, targetSpaceId));
-    if (isCompactScreenSize(screenSize)) {
+    if (!desktopLayout) {
       navigate(spacePath);
       return;
     }

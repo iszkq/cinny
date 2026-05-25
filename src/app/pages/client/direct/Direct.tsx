@@ -56,7 +56,7 @@ import {
   useDirectSearchSelected,
 } from '../../../hooks/router/useDirectSelected';
 import { CompactClientNavButton } from '../CompactClientNavButton';
-import { ScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
+import { isDesktopLikeScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
 import { desktopPageNavCollapsedAtom } from '../../../state/desktopPageNav';
 
 type DirectMenuProps = {
@@ -95,7 +95,7 @@ const DirectMenu = forwardRef<HTMLDivElement, DirectMenuProps>(({ requestClose }
 
 function DirectHeader() {
   const screenSize = useScreenSizeContext();
-  const desktop = screenSize === ScreenSize.Desktop;
+  const desktop = isDesktopLikeScreenSize(screenSize);
   const setDesktopPageNavCollapsed = useSetAtom(desktopPageNavCollapsedAtom);
   const [menuAnchor, setMenuAnchor] = useState<RectCords>();
 

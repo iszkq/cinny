@@ -66,7 +66,7 @@ import { UseStateProvider } from '../../../components/UseStateProvider';
 import { JoinAddressPrompt } from '../../../components/join-address-prompt';
 import { _RoomSearchParams } from '../../paths';
 import { CompactClientNavButton } from '../CompactClientNavButton';
-import { ScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
+import { isDesktopLikeScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
 import { desktopPageNavCollapsedAtom } from '../../../state/desktopPageNav';
 
 type HomeMenuProps = {
@@ -105,7 +105,7 @@ const HomeMenu = forwardRef<HTMLDivElement, HomeMenuProps>(({ requestClose }, re
 
 function HomeHeader() {
   const screenSize = useScreenSizeContext();
-  const desktop = screenSize === ScreenSize.Desktop;
+  const desktop = isDesktopLikeScreenSize(screenSize);
   const setDesktopPageNavCollapsed = useSetAtom(desktopPageNavCollapsedAtom);
   const [menuAnchor, setMenuAnchor] = useState<RectCords>();
 

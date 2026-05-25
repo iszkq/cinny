@@ -15,7 +15,7 @@ import {
 } from '../../../components/sidebar';
 import { useDirectSelected } from '../../../hooks/router/useDirectSelected';
 import { UnreadBadge } from '../../../components/unread-badge';
-import { isCompactScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
+import { isDesktopLikeScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
 import { useNavToActivePathAtom } from '../../../state/hooks/navToActivePath';
 import { useDirectRooms } from '../direct/useDirectRooms';
 import { markAsRead } from '../../../utils/notifications';
@@ -61,6 +61,7 @@ const DirectMenu = forwardRef<HTMLDivElement, DirectMenuProps>(({ requestClose }
 export function DirectTab() {
   const navigate = useNavigate();
   const screenSize = useScreenSizeContext();
+  const desktopLayout = isDesktopLikeScreenSize(screenSize);
   const desktopPageNavCollapsed = useAtomValue(desktopPageNavCollapsedAtom);
   const setDesktopPageNavCollapsed = useSetAtom(desktopPageNavCollapsedAtom);
   const navToActivePath = useAtomValue(useNavToActivePathAtom());
@@ -72,18 +73,17 @@ export function DirectTab() {
   const directSelected = useDirectSelected();
 
   const handleDirectClick = () => {
-    if (!isCompactScreenSize(screenSize)) {
+    if (desktopLayout) {
       if (directSelected) {
         setDesktopPageNavCollapsed(!desktopPageNavCollapsed);
         return;
       }
       setDesktopPageNavCollapsed(false);
-    }
-
-    const activePath = navToActivePath.get('direct');
-    if (activePath && !isCompactScreenSize(screenSize)) {
-      navigate(joinPathComponent(activePath));
-      return;
+      const activePath = navToActivePath.get('direct');
+      if (activePath) {
+        navigate(joinPathComponent(activePath));
+        return;
+      }
     }
 
     navigate(getDirectPath());
