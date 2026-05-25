@@ -220,7 +220,6 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const [recordingMs, setRecordingMs] = useState(0);
     const [recordingError, setRecordingError] = useState<string>();
     const [sendError, setSendError] = useState<string>();
-    const [sendingMessage, setSendingMessage] = useState(false);
     const sendingMessageRef = useRef(false);
     const uploadFamilyObserverAtom = createUploadFamilyObserverAtom(
       roomUploadAtomFamily,
@@ -670,7 +669,6 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       replyDraftRef.current = undefined;
       sendTypingStatus(false);
       sendingMessageRef.current = true;
-      setSendingMessage(true);
 
       try {
         await mx.sendMessage(roomId, content as never);
@@ -687,7 +685,6 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         setSendError(getSendErrorMessage(error));
       } finally {
         sendingMessageRef.current = false;
-        setSendingMessage(false);
       }
     }, [
       commands,
@@ -1253,8 +1250,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                 variant="SurfaceVariant"
                 size="300"
                 radii="300"
-                disabled={recording || sendingMessage}
-                aria-disabled={recording || sendingMessage}
+                disabled={recording}
+                aria-disabled={recording}
               >
                 <Icon src={Icons.Send} />
               </IconButton>
