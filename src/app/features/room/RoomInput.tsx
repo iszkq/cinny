@@ -236,6 +236,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const [emojiBoardTab, setEmojiBoardTab] = useState(EmojiBoardTab.Emoji);
     const [emojiBoardOpen, setEmojiBoardOpen] = useState(false);
     const [mobileAttachmentMenuOpen, setMobileAttachmentMenuOpen] = useState(false);
+    const autocompleteFrameRef = useRef<number>();
+    const suppressEditorRealtimeUpdatesRef = useRef(false);
     const attachmentBtnRef = useRef<HTMLButtonElement>(null);
     const emojiBoardOpenRef = useRef(emojiBoardOpen);
     const emojiBoardTabRef = useRef(emojiBoardTab);
@@ -345,11 +347,58 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     );
 
     useEffect(() => {
+      suppressEditorRealtimeUpdatesRef.current = true;
       Transforms.insertFragment(editor, msgDraft);
+      suppressEditorRealtimeUpdatesRef.current = false;
     }, [editor, msgDraft]);
+
+    const scheduleAutocompleteQueryUpdate = useCallback(() => {
+      if (autocompleteFrameRef.current) {
+        window.cancelAnimationFrame(autocompleteFrameRef.current);
+      }
+
+      autocompleteFrameRef.current = window.requestAnimationFrame(() => {
+        autocompleteFrameRef.current = undefined;
+
+        const prevWordRange = getPrevWorldRange(editor);
+        const query = prevWordRange
+          ? getAutocompleteQuery<AutocompletePrefix>(editor, prevWordRange, AUTOCOMPLETE_PREFIXES)
+          : undefined;
+
+        setAutocompleteQuery(query);
+      });
+    }, [editor]);
+
+    const handleEditorChange = useCallback(() => {
+      if (suppressEditorRealtimeUpdatesRef.current) return;
+
+      const hasContentChange = editor.operations.some((operation) => operation.type !== 'set_selection');
+
+      if (hasContentChange) {
+        if (sendTypingNotifications) {
+          sendTypingStatus(!isEmptyEditor(editor));
+        }
+
+        scheduleAutocompleteQueryUpdate();
+        return;
+      }
+
+      if (autocompleteQuery) {
+        scheduleAutocompleteQueryUpdate();
+      }
+    }, [
+      autocompleteQuery,
+      editor,
+      scheduleAutocompleteQueryUpdate,
+      sendTypingNotifications,
+      sendTypingStatus,
+    ]);
 
     useEffect(
       () => () => {
+        if (autocompleteFrameRef.current) {
+          window.cancelAnimationFrame(autocompleteFrameRef.current);
+        }
         if (emojiBoardFocusTimerRef.current) {
           window.clearTimeout(emojiBoardFocusTimerRef.current);
         }
@@ -673,26 +722,6 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       [submit, setReplyDraft, enterForNewline, autocompleteQuery, isComposing]
     );
 
-    const handleKeyUp: KeyboardEventHandler = useCallback(
-      (evt) => {
-        if (isKeyHotkey('escape', evt)) {
-          evt.preventDefault();
-          return;
-        }
-
-        if (sendTypingNotifications) {
-          sendTypingStatus(!isEmptyEditor(editor));
-        }
-
-        const prevWordRange = getPrevWorldRange(editor);
-        const query = prevWordRange
-          ? getAutocompleteQuery<AutocompletePrefix>(editor, prevWordRange, AUTOCOMPLETE_PREFIXES)
-          : undefined;
-        setAutocompleteQuery(query);
-      },
-      [editor, sendTypingStatus, sendTypingNotifications]
-    );
-
     const handleCloseAutocomplete = useCallback(() => {
       setAutocompleteQuery(undefined);
       ReactEditor.focus(editor);
@@ -926,7 +955,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           editor={editor}
           placeholder="发送消息..."
           onKeyDown={handleKeyDown}
-          onKeyUp={handleKeyUp}
+          onChange={handleEditorChange}
           onPaste={handlePaste}
           top={
             (replyDraft || recording || recordingError || sendError) && (
