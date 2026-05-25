@@ -1330,9 +1330,17 @@ const getPendingMessageStatus = (mEvent: MatrixEvent): PendingMessageStatus | un
   return typeof status === 'string' ? (status as PendingMessageStatus) : undefined;
 };
 
+const isPlainTextPendingMessage = (mEvent: MatrixEvent): boolean => {
+  if (mEvent.getType() !== EventType.RoomMessage) return false;
+
+  const msgType = mEvent.getContent().msgtype ?? MsgType.Text;
+  return msgType === MsgType.Text || msgType === MsgType.Notice || msgType === MsgType.Emote;
+};
+
 function MessageSendStatus({ room, mEvent }: { room: Room; mEvent: MatrixEvent }) {
   const mx = useMatrixClient();
   const status = getPendingMessageStatus(mEvent);
+  const plainTextPendingMessage = isPlainTextPendingMessage(mEvent);
 
   const [retryState, retrySend] = useAsyncCallback<void, Error, []>(
     useCallback(async () => {
@@ -1357,7 +1365,17 @@ function MessageSendStatus({ room, mEvent }: { room: Room; mEvent: MatrixEvent }
   let statusText: string | undefined;
   let statusColor = color.Warning.Main;
 
-  if (retryState.status === AsyncStatus.Loading && status === 'not_sent') {
+  if (plainTextPendingMessage) {
+    if (status !== 'not_sent') {
+      return null;
+    }
+
+    statusText =
+      retryState.status === AsyncStatus.Error
+        ? retryState.error.message || '重新发送失败，这条消息目前可能只有你自己可见。'
+        : '发送失败，这条消息目前可能只有你自己可见。';
+    statusColor = color.Critical.Main;
+  } else if (retryState.status === AsyncStatus.Loading && status === 'not_sent') {
     statusText = '正在重新发送...';
   } else if (retryState.status === AsyncStatus.Error && status === 'not_sent') {
     statusText =
@@ -1404,13 +1422,15 @@ function MessageSendStatus({ room, mEvent }: { room: Room; mEvent: MatrixEvent }
             retrySend().catch(() => undefined);
           }}
           before={
-            retryState.status === AsyncStatus.Loading ? (
+            !plainTextPendingMessage && retryState.status === AsyncStatus.Loading ? (
               <Spinner fill="Solid" variant="Critical" size="100" />
             ) : undefined
           }
         >
           <Text size="B300">
-            {retryState.status === AsyncStatus.Loading ? '重试中...' : '重试'}
+            {!plainTextPendingMessage && retryState.status === AsyncStatus.Loading
+              ? '重试中...'
+              : '重试'}
           </Text>
         </Button>
       )}
