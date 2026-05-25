@@ -31,6 +31,7 @@ export type CinnyFavoritesContent = {
   roomId?: string;
   createdAt?: number;
   version?: number;
+  legacyRoomIds?: string[];
 };
 
 export type CinnyAccountPinPolicyContent = {
