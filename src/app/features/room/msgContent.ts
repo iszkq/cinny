@@ -18,8 +18,8 @@ import { TUploadItem } from '../../state/room/roomInputDrafts';
 import { encodeBlurHash } from '../../utils/blurHash';
 import { scaleYDimension } from '../../utils/common';
 
-const IMAGE_PREVIEW_WIDTH = 380;
-const IMAGE_PREVIEW_HEIGHT = 760;
+const IMAGE_PREVIEW_WIDTH = 230;
+const IMAGE_PREVIEW_HEIGHT = 460;
 
 const generateThumbnailContent = async (
   mx: MatrixClient,
