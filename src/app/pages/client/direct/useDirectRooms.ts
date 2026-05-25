@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
-import { useFavoritesRoomId } from '../../../hooks/useFavoritesRoom';
+import { useFavoritesRoomIds } from '../../../hooks/useFavoritesRoom';
 import { mDirectAtom } from '../../../state/mDirectList';
 import { allRoomsAtom } from '../../../state/room-list/roomList';
 import { useDirects } from '../../../state/hooks/roomList';
@@ -9,11 +9,12 @@ import { useDirects } from '../../../state/hooks/roomList';
 export const useDirectRooms = () => {
   const mx = useMatrixClient();
   const mDirects = useAtomValue(mDirectAtom);
-  const favoritesRoomId = useFavoritesRoomId();
+  const favoritesRoomIds = useFavoritesRoomIds();
   const directs = useDirects(mx, allRoomsAtom, mDirects);
+  const favoritesRoomIdSet = useMemo(() => new Set(favoritesRoomIds), [favoritesRoomIds]);
 
   return useMemo(
-    () => directs.filter((roomId) => roomId !== favoritesRoomId),
-    [directs, favoritesRoomId]
+    () => directs.filter((roomId) => !favoritesRoomIdSet.has(roomId)),
+    [directs, favoritesRoomIdSet]
   );
 };

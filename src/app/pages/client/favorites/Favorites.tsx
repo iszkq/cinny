@@ -95,6 +95,7 @@ import {
   getFavoriteMessageMetadataFromEvent,
   getFavoriteNotes,
   getFavoriteReferenceId,
+  migrateFavoritesRoomToUnencrypted,
   removeFavoriteMessage,
   removeFavoriteNote,
   removeFavoriteNotes,
@@ -1230,6 +1231,9 @@ export function Favorites() {
   const [createFavoritesState, createFavoritesRoom] = useAsyncCallback(
     useCallback(() => ensureFavoritesRoom(mx), [mx])
   );
+  const [migrateFavoritesState, migrateFavoritesRoom] = useAsyncCallback(
+    useCallback(() => migrateFavoritesRoomToUnencrypted(mx), [mx])
+  );
 
   useEffect(() => {
     setFavoriteNotesState(
@@ -1669,6 +1673,11 @@ export function Favorites() {
     void createFavoritesRoom().catch(() => undefined);
   };
 
+  const handleMigrateFavorites = () => {
+    if (migrateFavoritesState.status === AsyncStatus.Loading) return;
+    void migrateFavoritesRoom().catch(() => undefined);
+  };
+
   const normalizedSearchQuery = searchQuery.trim();
   const filterSummary = [
     `${visibleItems.length}条结果`,
@@ -1679,6 +1688,39 @@ export function Favorites() {
   ]
     .filter(Boolean)
     .join(' \xb7 ');
+
+  const favoritesRoomEncrypted = Boolean(favoritesRoom?.hasEncryptionStateEvent());
+
+  const encryptedRoomNotice = favoritesRoomEncrypted ? (
+    <SequenceCard
+      variant="SurfaceVariant"
+      direction="Column"
+      gap="200"
+      style={{ padding: config.space.S400 }}
+    >
+      <Text size="L400">{'\u5f53\u524d\u6536\u85cf\u623f\u95f4\u662f\u52a0\u5bc6\u623f\u95f4'}</Text>
+      <Text size="T300" priority="300">
+        {
+          '\u5207\u6362\u540e\u4f1a\u65b0\u5efa\u4e00\u4e2a\u975e\u52a0\u5bc6\u6536\u85cf\u623f\u95f4\uff0c\u540e\u7eed\u6536\u85cf\u4e0d\u518d\u4f9d\u8d56\u5386\u53f2\u89e3\u5bc6\u5bc6\u94a5\uff1b\u65e7\u6536\u85cf\u623f\u95f4\u4f1a\u81ea\u52a8\u79bb\u5f00\uff0c\u907f\u514d\u7ee7\u7eed\u5e72\u6270\u5217\u8868\u548c\u6536\u85cf\u663e\u793a\u3002'
+        }
+      </Text>
+      <Box>
+        <Button
+          onClick={handleMigrateFavorites}
+          disabled={migrateFavoritesState.status === AsyncStatus.Loading}
+        >
+          {migrateFavoritesState.status === AsyncStatus.Loading && (
+            <Spinner size="200" variant="Secondary" />
+          )}
+          <Text size="B400">
+            {migrateFavoritesState.status === AsyncStatus.Loading
+              ? '\u5207\u6362\u4e2d...'
+              : '\u91cd\u5efa\u4e3a\u975e\u52a0\u5bc6\u6536\u85cf\u623f\u95f4'}
+          </Text>
+        </Button>
+      </Box>
+    </SequenceCard>
+  ) : undefined;
 
   const renderContent = () => {
     if (!favoritesRoom) {
@@ -1692,11 +1734,17 @@ export function Favorites() {
     }
 
     if (favoriteItems.length === 0 && !hasActiveFilters) {
-      return <FavoritesEmpty loading={false} hasRoom onCreate={handleCreateFavorites} />;
+      return (
+        <Box direction="Column" gap="300">
+          {encryptedRoomNotice}
+          <FavoritesEmpty loading={false} hasRoom onCreate={handleCreateFavorites} />
+        </Box>
+      );
     }
 
     return (
       <Box direction="Column" gap="300">
+        {encryptedRoomNotice}
         <SequenceCard
           variant="SurfaceVariant"
           direction="Column"
