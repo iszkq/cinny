@@ -39,11 +39,13 @@ export const getAutocompleteQuery = <TPrefix extends string>(
   queryRange: BaseRange,
   validPrefixes: readonly TPrefix[]
 ): AutocompleteQuery<TPrefix> | undefined => {
-  const prefix = getAutocompletePrefix(editor, queryRange, validPrefixes);
+  const queryText = Editor.string(editor, queryRange);
+  const prefix = validPrefixes.find((p) => queryText.startsWith(p));
   if (!prefix) return undefined;
+
   return {
     range: queryRange,
     prefix,
-    text: getAutocompleteQueryText(editor, queryRange, prefix),
+    text: queryText.slice(prefix.length),
   };
 };
