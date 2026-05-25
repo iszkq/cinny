@@ -7,6 +7,21 @@ type ImageViewerModalStyle = CSSProperties & {
 
 type ImageOrientation = 'landscape' | 'portrait' | 'square';
 
+const LANDSCAPE_MODAL_STYLE: ImageViewerModalStyle = {
+  '--image-viewer-modal-width': 'min(76vw, 1120px)',
+  '--image-viewer-modal-height': 'min(78vh, 780px)',
+};
+
+const PORTRAIT_MODAL_STYLE: ImageViewerModalStyle = {
+  '--image-viewer-modal-width': 'min(48vw, 720px)',
+  '--image-viewer-modal-height': 'min(90vh, 920px)',
+};
+
+const SQUARE_MODAL_STYLE: ImageViewerModalStyle = {
+  '--image-viewer-modal-width': 'min(70vw, 900px)',
+  '--image-viewer-modal-height': 'min(80vh, 820px)',
+};
+
 const getPositiveDimension = (dimension?: number): number | undefined => {
   if (typeof dimension !== 'number' || !Number.isFinite(dimension) || dimension <= 0) {
     return undefined;
@@ -40,21 +55,11 @@ export const getImageViewerModalStyle = (
   const orientation = getImageOrientation(width, height);
 
   if (orientation === 'portrait') {
-    return {
-      '--image-viewer-modal-width': 'min(62vw, 820px)',
-      '--image-viewer-modal-height': 'min(82vh, 840px)',
-    };
+    return PORTRAIT_MODAL_STYLE;
   }
-
   if (orientation === 'square') {
-    return {
-      '--image-viewer-modal-width': 'min(70vw, 900px)',
-      '--image-viewer-modal-height': 'min(80vh, 820px)',
-    };
+    return SQUARE_MODAL_STYLE;
   }
 
-  return {
-    '--image-viewer-modal-width': 'min(76vw, 1120px)',
-    '--image-viewer-modal-height': 'min(78vh, 780px)',
-  };
+  return LANDSCAPE_MODAL_STYLE;
 };
