@@ -11,7 +11,11 @@ import { useAtom } from 'jotai';
 import classNames from 'classnames';
 import { ContainerColor } from '../../styles/ContainerColor.css';
 import * as css from './style.css';
-import { ScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
+import {
+  ScreenSize,
+  isDesktopLikeScreenSize,
+  useScreenSizeContext,
+} from '../../hooks/useScreenSize';
 import { desktopPageNavWidthAtom } from '../../state/desktopPageNav';
 
 type PageRootProps = {
@@ -21,6 +25,7 @@ type PageRootProps = {
 
 export function PageRoot({ nav, children }: PageRootProps) {
   const screenSize = useScreenSizeContext();
+  const desktopLayout = isDesktopLikeScreenSize(screenSize);
 
   return (
     <Box
@@ -29,9 +34,7 @@ export function PageRoot({ nav, children }: PageRootProps) {
       style={{ position: 'relative', minWidth: 0 }}
     >
       {nav}
-      {nav && screenSize === ScreenSize.Desktop && (
-        <Line variant="Background" size="300" direction="Vertical" />
-      )}
+      {nav && desktopLayout && <Line variant="Background" size="300" direction="Vertical" />}
       {children}
     </Box>
   );
@@ -54,8 +57,8 @@ export function PageNav({
   resizable,
 }: ClientDrawerLayoutProps & css.PageNavVariants) {
   const screenSize = useScreenSizeContext();
-  const isMobile = screenSize === ScreenSize.Mobile;
-  const isDesktop = screenSize === ScreenSize.Desktop;
+  const desktopLayout = isDesktopLikeScreenSize(screenSize);
+  const isMobile = screenSize === ScreenSize.Mobile && !desktopLayout;
   const [desktopPageNavWidth, setDesktopPageNavWidth] = useAtom(desktopPageNavWidthAtom);
   const [resizing, setResizing] = useState(false);
   const resizeRef = useRef<
@@ -63,7 +66,7 @@ export function PageNav({
   >(undefined);
 
   const handleResizePointerDown: PointerEventHandler<HTMLDivElement> = (evt) => {
-    if (!resizable || !isDesktop) return;
+    if (!resizable || !desktopLayout) return;
 
     evt.preventDefault();
     evt.stopPropagation();
@@ -97,7 +100,7 @@ export function PageNav({
   };
 
   const desktopWidth =
-    resizable && isDesktop ? clampDesktopPageNavWidth(desktopPageNavWidth) : undefined;
+    resizable && desktopLayout ? clampDesktopPageNavWidth(desktopPageNavWidth) : undefined;
 
   return (
     <Box
@@ -119,7 +122,7 @@ export function PageNav({
       <Box grow="Yes" direction="Column">
         {children}
       </Box>
-      {resizable && isDesktop && (
+      {resizable && desktopLayout && (
         <div
           className={css.PageNavResizeHandle}
           role="separator"
