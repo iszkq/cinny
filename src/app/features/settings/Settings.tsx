@@ -16,7 +16,7 @@ import {
 import FocusTrap from 'focus-trap-react';
 import { General } from './general';
 import { PageNav, PageNavContent, PageNavHeader, PageRoot } from '../../components/page';
-import { isCompactScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
+import { isDesktopLikeScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
 import { Account } from './account';
 import { useUserProfile } from '../../hooks/useUserProfile';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
@@ -114,7 +114,7 @@ export function Settings({ initialPage, requestClose }: SettingsProps) {
     : undefined;
 
   const screenSize = useScreenSizeContext();
-  const compact = isCompactScreenSize(screenSize);
+  const compact = !isDesktopLikeScreenSize(screenSize);
   const [activePage, setActivePage] = useState<SettingsPages | undefined>(() => {
     if (initialPage) return initialPage;
     return compact ? undefined : SettingsPages.GeneralPage;
