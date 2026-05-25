@@ -3,13 +3,15 @@ import { useAtomValue } from 'jotai';
 import { useMatch } from 'react-router-dom';
 import { isCompactScreenSize, ScreenSize, useScreenSizeContext } from '../hooks/useScreenSize';
 import { desktopPageNavCollapsedAtom } from '../state/desktopPageNav';
+import { isDesktopUpdaterSupported } from '../utils/desktopUpdater';
 
 type MobileFriendlyClientNavProps = {
   children: ReactNode;
 };
 export function MobileFriendlyClientNav({ children }: MobileFriendlyClientNavProps) {
   const screenSize = useScreenSizeContext();
-  if (isCompactScreenSize(screenSize)) {
+  const desktopApp = isDesktopUpdaterSupported();
+  if (isCompactScreenSize(screenSize) && !desktopApp) {
     return null;
   }
 
