@@ -220,8 +220,8 @@ export const shouldUseObjectUrlForMediaDisplay = (src: string | undefined): bool
 
 export const getImageInfo = (img: HTMLImageElement, fileOrBlob: File | Blob): IImageInfo => {
   const info: IImageInfo = {};
-  info.w = img.width;
-  info.h = img.height;
+  info.w = img.naturalWidth || img.width;
+  info.h = img.naturalHeight || img.height;
   info.mimetype = fileOrBlob.type;
   info.size = fileOrBlob.size;
   return info;
