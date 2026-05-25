@@ -20,7 +20,11 @@ import classNames from 'classnames';
 import { BlurhashCanvas } from 'react-blurhash';
 import FocusTrap from 'focus-trap-react';
 import { EncryptedAttachmentInfo } from 'browser-encrypt-attachment';
-import { IImageInfo, MATRIX_BLUR_HASH_PROPERTY_NAME } from '../../../../types/matrix/common';
+import {
+  IImageInfo,
+  IThumbnailContent,
+  MATRIX_BLUR_HASH_PROPERTY_NAME,
+} from '../../../../types/matrix/common';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import * as css from './style.css';
@@ -37,6 +41,9 @@ import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { ModalWide } from '../../../styles/Modal.css';
 import { validBlurHash } from '../../../utils/blurHash';
 import { primeCachedMediaObjectUrl } from '../../../utils/mediaUrlCache';
+
+const IMAGE_PREVIEW_WIDTH = 360;
+const IMAGE_PREVIEW_HEIGHT = 560;
 
 type RenderViewerProps = {
   src: string;
@@ -72,11 +79,15 @@ type RenderImageProps = {
   onClick: () => void;
   tabIndex: number;
 };
+type TimelineImageSource = {
+  src: string;
+  kind: 'thumbnail' | 'original';
+};
 export type ImageContentProps = {
   body: string;
   mimeType?: string;
   url: string;
-  info?: IImageInfo;
+  info?: IImageInfo & IThumbnailContent;
   encInfo?: EncryptedAttachmentInfo;
   autoPlay?: boolean;
   markedAsSpoiler?: boolean;
@@ -115,13 +126,28 @@ export const ImageContent = as<'div', ImageContentProps>(
     const [viewer, setViewer] = useState(false);
     const [blurred, setBlurred] = useState(markedAsSpoiler ?? false);
 
-    const [srcState, loadSrc] = useAsyncCallback(
-      useCallback(async () => {
-        const mediaUrl = mxcUrlToHttp(mx, url, useAuthentication);
+    const prepareMediaSrc = useCallback(
+      async (
+        mediaMxcUrl: string,
+        mediaMimeType: string,
+        mediaEncInfo?: EncryptedAttachmentInfo,
+        width?: number,
+        height?: number,
+        resizeMethod?: string
+      ) => {
+        const mediaUrl = mxcUrlToHttp(
+          mx,
+          mediaMxcUrl,
+          useAuthentication,
+          width,
+          height,
+          resizeMethod
+        );
         if (!mediaUrl) throw new Error('Invalid media URL');
-        if (encInfo) {
+
+        if (mediaEncInfo) {
           const fileContent = await downloadEncryptedMedia(mediaUrl, (encBuf) =>
-            decryptFile(encBuf, mimeType ?? FALLBACK_MIMETYPE, encInfo)
+            decryptFile(encBuf, mediaMimeType, mediaEncInfo)
           );
           return URL.createObjectURL(fileContent);
         }
@@ -136,7 +162,64 @@ export const ImageContent = as<'div', ImageContentProps>(
         }
 
         return mediaUrl;
-      }, [mx, url, useAuthentication, mimeType, encInfo, info])
+      },
+      [mx, useAuthentication]
+    );
+
+    const [srcState, loadSrc] = useAsyncCallback(
+      useCallback(async (): Promise<TimelineImageSource> => {
+        const thumbMxcUrl = info?.thumbnail_file?.url ?? info?.thumbnail_url;
+        const thumbMimeType = info?.thumbnail_info?.mimetype ?? mimeType ?? FALLBACK_MIMETYPE;
+        const thumbEncInfo = info?.thumbnail_file;
+
+        if (typeof thumbMxcUrl === 'string') {
+          try {
+            const thumbSrc = await prepareMediaSrc(thumbMxcUrl, thumbMimeType, thumbEncInfo);
+            return {
+              src: thumbSrc,
+              kind: 'thumbnail',
+            };
+          } catch {
+            // Fall back to the original image to preserve current behavior.
+          }
+        }
+
+        if (!encInfo) {
+          try {
+            const thumbnailSrc = await prepareMediaSrc(
+              url,
+              mimeType ?? FALLBACK_MIMETYPE,
+              undefined,
+              IMAGE_PREVIEW_WIDTH,
+              IMAGE_PREVIEW_HEIGHT,
+              'scale'
+            );
+            return {
+              src: thumbnailSrc,
+              kind: 'thumbnail',
+            };
+          } catch {
+            // Fall back to the original image when homeserver thumbnails are unavailable.
+          }
+        }
+
+        const originalSrc = await prepareMediaSrc(
+          url,
+          mimeType ?? FALLBACK_MIMETYPE,
+          encInfo
+        );
+        return {
+          src: originalSrc,
+          kind: 'original',
+        };
+      }, [encInfo, info, mimeType, prepareMediaSrc, url])
+    );
+
+    const [viewerSrcState, loadViewerSrc] = useAsyncCallback(
+      useCallback(
+        async () => prepareMediaSrc(url, mimeType ?? FALLBACK_MIMETYPE, encInfo),
+        [encInfo, mimeType, prepareMediaSrc, url]
+      )
     );
 
     const handleLoad = () => {
@@ -149,18 +232,41 @@ export const ImageContent = as<'div', ImageContentProps>(
 
     const handleRetry = () => {
       setError(false);
-      loadSrc();
+      loadSrc().catch(() => undefined);
+    };
+
+    const handleOpenViewer = () => {
+      setViewer(true);
+      if (srcState.status === AsyncStatus.Success && srcState.data.kind === 'original') {
+        return;
+      }
+      if (
+        viewerSrcState.status === AsyncStatus.Idle ||
+        viewerSrcState.status === AsyncStatus.Error
+      ) {
+        loadViewerSrc().catch(() => undefined);
+      }
     };
 
     useEffect(() => {
-      if (autoPlay) loadSrc();
+      if (autoPlay) {
+        loadSrc().catch(() => undefined);
+      }
     }, [autoPlay, loadSrc]);
 
     const viewerAlt = viewerItems?.find((item) => item.id === viewerItemId)?.body ?? body;
+    const previewSrc = srcState.status === AsyncStatus.Success ? srcState.data.src : undefined;
+    const viewerSrc =
+      viewerSrcState.status === AsyncStatus.Success ? viewerSrcState.data : previewSrc;
+    const viewerLoading =
+      viewer &&
+      srcState.status === AsyncStatus.Success &&
+      srcState.data.kind === 'thumbnail' &&
+      viewerSrcState.status !== AsyncStatus.Success;
 
     return (
       <Box className={classNames(css.RelativeBase, className)} {...props} ref={ref}>
-        {srcState.status === AsyncStatus.Success && (
+        {viewer && viewerSrc && (
           <Overlay open={viewer} backdrop={<OverlayBackdrop />}>
             <OverlayCenter>
               <FocusTrap
@@ -177,8 +283,9 @@ export const ImageContent = as<'div', ImageContentProps>(
                   onContextMenu={(evt: any) => evt.stopPropagation()}
                 >
                   {renderViewer({
-                    src: srcState.data,
+                    src: viewerSrc,
                     alt: viewerAlt,
+                    loading: viewerLoading,
                     requestClose: () => setViewer(false),
                   })}
                 </Modal>
@@ -202,7 +309,9 @@ export const ImageContent = as<'div', ImageContentProps>(
               fill="Solid"
               radii="300"
               size="300"
-              onClick={loadSrc}
+              onClick={() => {
+                loadSrc().catch(() => undefined);
+              }}
               before={<Icon size="Inherit" src={Icons.Photo} filled />}
             >
               <Text size="B300">View</Text>
@@ -214,10 +323,10 @@ export const ImageContent = as<'div', ImageContentProps>(
             {renderImage({
               alt: body,
               title: body,
-              src: srcState.data,
+              src: srcState.data.src,
               onLoad: handleLoad,
               onError: handleError,
-              onClick: () => setViewer(true),
+              onClick: handleOpenViewer,
               tabIndex: 0,
             })}
           </Box>
@@ -245,7 +354,7 @@ export const ImageContent = as<'div', ImageContentProps>(
                   onClick={() => {
                     setBlurred(false);
                     if (srcState.status === AsyncStatus.Idle) {
-                      loadSrc();
+                      loadSrc().catch(() => undefined);
                     }
                   }}
                 >
