@@ -1,15 +1,28 @@
 import { useMemo } from 'react';
 import { Room } from 'matrix-js-sdk';
 import { AccountDataEvent, CinnyFavoritesContent } from '../../types/matrix/accountData';
-import { getFavoritesRoomIdFromAccountData } from '../features/favorites/types';
+import {
+  getAllFavoritesRoomIdsFromAccountData,
+  getFavoritesRoomIdFromAccountData,
+} from '../features/favorites/types';
 import { useAccountData } from './useAccountData';
 import { useMatrixClient } from './useMatrixClient';
 
-export const useFavoritesRoomId = (): string | undefined => {
-  const favoritesEvent = useAccountData(AccountDataEvent.CinnyFavorites);
+const useFavoritesContent = (): CinnyFavoritesContent | undefined =>
+  useAccountData(AccountDataEvent.CinnyFavorites)?.getContent<CinnyFavoritesContent>();
 
-  return getFavoritesRoomIdFromAccountData(
-    favoritesEvent?.getContent<CinnyFavoritesContent>()
+export const useFavoritesRoomId = (): string | undefined => {
+  const favoritesContent = useFavoritesContent();
+
+  return getFavoritesRoomIdFromAccountData(favoritesContent);
+};
+
+export const useFavoritesRoomIds = (): string[] => {
+  const favoritesContent = useFavoritesContent();
+
+  return useMemo(
+    () => getAllFavoritesRoomIdsFromAccountData(favoritesContent),
+    [favoritesContent]
   );
 };
 
