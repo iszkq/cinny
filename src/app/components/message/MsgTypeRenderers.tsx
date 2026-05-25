@@ -30,6 +30,12 @@ import { parseGeoUri, scaleYDimension } from '../../utils/common';
 import { Attachment, AttachmentBox, AttachmentContent, AttachmentHeader } from './attachment';
 import { FileHeader, FileDownloadButton } from './FileHeader';
 
+const IMAGE_TIMELINE_WIDTH = 380;
+const IMAGE_TIMELINE_MAX_HEIGHT = 760;
+
+const getPositiveDimension = (value?: number): number | undefined =>
+  typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined;
+
 export function MBadEncrypted() {
   return (
     <Text>
@@ -195,20 +201,22 @@ export function MImage({ content, renderImageContent, outlined }: MImageProps) {
   if (typeof mxcUrl !== 'string') {
     return <BrokenContent />;
   }
-  const imageWidth = typeof imgInfo?.w === 'number' && imgInfo.w > 0 ? imgInfo.w : undefined;
-  const imageHeight = typeof imgInfo?.h === 'number' && imgInfo.h > 0 ? imgInfo.h : undefined;
+  const imageWidth =
+    getPositiveDimension(imgInfo?.thumbnail_info?.w) ?? getPositiveDimension(imgInfo?.w);
+  const imageHeight =
+    getPositiveDimension(imgInfo?.thumbnail_info?.h) ?? getPositiveDimension(imgInfo?.h);
   const hasAspectRatio = typeof imageWidth === 'number' && typeof imageHeight === 'number';
   const imageAttachmentStyle: CSSProperties = {
-    width: toRem(440),
+    width: toRem(IMAGE_TIMELINE_WIDTH),
     maxWidth: '100%',
   };
   const imageBoxStyle: CSSProperties = {
     aspectRatio: hasAspectRatio ? `${imageWidth} / ${imageHeight}` : '1 / 1',
-    width: toRem(440),
+    width: '100%',
     maxWidth: '100%',
     height: 'auto',
     minHeight: toRem(48),
-    maxHeight: `min(${toRem(880)}, 82vh)`,
+    maxHeight: `min(${toRem(IMAGE_TIMELINE_MAX_HEIGHT)}, 76vh)`,
   };
 
   return (

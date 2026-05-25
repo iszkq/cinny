@@ -42,8 +42,8 @@ import { ModalWide } from '../../../styles/Modal.css';
 import { validBlurHash } from '../../../utils/blurHash';
 import { primeCachedMediaObjectUrl } from '../../../utils/mediaUrlCache';
 
-const IMAGE_PREVIEW_WIDTH = 440;
-const IMAGE_PREVIEW_HEIGHT = 880;
+const IMAGE_PREVIEW_WIDTH = 380;
+const IMAGE_PREVIEW_HEIGHT = 760;
 
 type RenderViewerProps = {
   src: string;
