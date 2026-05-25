@@ -9,9 +9,12 @@ export const ImageViewer = style([
     minHeight: 0,
     borderRadius: config.radii.R500,
     overflow: 'hidden',
-    backgroundColor: 'rgba(7, 10, 16, 0.96)',
-    color: '#fff',
-    boxShadow: '0 28px 80px rgba(7, 10, 16, 0.4)',
+    backgroundColor: 'rgba(248, 250, 252, 0.78)',
+    color: '#111827',
+    border: '1px solid rgba(255, 255, 255, 0.74)',
+    boxShadow: '0 28px 80px rgba(15, 23, 42, 0.22)',
+    backdropFilter: 'blur(22px) saturate(150%)',
+    WebkitBackdropFilter: 'blur(22px) saturate(150%)',
     '@media': {
       'screen and (max-width: 750px)': {
         borderRadius: 0,
@@ -25,8 +28,10 @@ export const ImageViewerHeader = style([
   {
     paddingLeft: config.space.S300,
     paddingRight: config.space.S300,
-    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-    background: 'rgba(255, 255, 255, 0.03)',
+    borderBottom: '1px solid rgba(148, 163, 184, 0.18)',
+    background: 'rgba(255, 255, 255, 0.56)',
+    backdropFilter: 'blur(18px) saturate(150%)',
+    WebkitBackdropFilter: 'blur(18px) saturate(150%)',
     flexShrink: 0,
     position: 'relative',
     zIndex: 4,
@@ -58,7 +63,7 @@ export const ImageViewerContent = style([
     overflow: 'hidden',
     padding: config.space.S300,
     background:
-      'radial-gradient(circle at top, rgba(59, 130, 246, 0.08), transparent 32%), rgba(7, 10, 16, 0.98)',
+      'linear-gradient(180deg, rgba(255, 255, 255, 0.42), rgba(241, 245, 249, 0.38))',
     '@media': {
       'screen and (max-width: 750px)': {
         padding: config.space.S100,
@@ -92,7 +97,9 @@ export const ImageViewerViewport = style([
     minHeight: 0,
     overflow: 'hidden',
     borderRadius: config.radii.R400,
-    background: 'rgba(255, 255, 255, 0.02)',
+    background: 'rgba(255, 255, 255, 0.36)',
+    border: '1px solid rgba(255, 255, 255, 0.48)',
+    boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.54)',
     '@media': {
       'screen and (max-width: 750px)': {
         borderRadius: config.radii.R200,
@@ -146,7 +153,7 @@ export const ImageViewerLoading = style([
     zIndex: 3,
     pointerEvents: 'none',
     background:
-      'linear-gradient(180deg, rgba(7, 10, 16, 0.04), rgba(7, 10, 16, 0.18))',
+      'linear-gradient(180deg, rgba(255, 255, 255, 0.2), rgba(226, 232, 240, 0.42))',
   },
 ]);
 
@@ -157,9 +164,12 @@ export const NavButton = style([
     top: '50%',
     zIndex: 2,
     transform: 'translateY(-50%)',
-    background: 'rgba(15, 23, 42, 0.72)',
-    color: '#fff',
-    boxShadow: '0 18px 40px rgba(15, 23, 42, 0.18)',
+    background: 'rgba(255, 255, 255, 0.72)',
+    color: '#111827',
+    border: '1px solid rgba(148, 163, 184, 0.22)',
+    boxShadow: '0 18px 40px rgba(15, 23, 42, 0.14)',
+    backdropFilter: 'blur(14px) saturate(145%)',
+    WebkitBackdropFilter: 'blur(14px) saturate(145%)',
   },
 ]);
 
@@ -186,7 +196,7 @@ export const ThumbnailRail = style([
   {
     flexShrink: 0,
     paddingTop: config.space.S200,
-    borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+    borderTop: '1px solid rgba(148, 163, 184, 0.16)',
     '@media': {
       'screen and (max-width: 750px)': {
         paddingTop: config.space.S100,
@@ -235,16 +245,16 @@ export const ThumbnailButton = style([
     justifyContent: 'center',
     padding: config.space.S100,
     borderRadius: config.radii.R300,
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    background: 'rgba(255, 255, 255, 0.04)',
+    border: '1px solid rgba(148, 163, 184, 0.18)',
+    background: 'rgba(255, 255, 255, 0.48)',
     cursor: 'pointer',
     overflow: 'hidden',
     transition: 'transform 140ms ease, border-color 140ms ease, background 140ms ease',
     selectors: {
       '&:hover': {
         transform: 'translateY(-1px)',
-        borderColor: 'rgba(255, 255, 255, 0.18)',
-        background: 'rgba(255, 255, 255, 0.07)',
+        borderColor: 'rgba(96, 165, 250, 0.34)',
+        background: 'rgba(255, 255, 255, 0.68)',
       },
     },
     '@media': {
@@ -260,7 +270,7 @@ export const ThumbnailButtonActive = style([
   DefaultReset,
   {
     borderColor: 'rgba(96, 165, 250, 0.86)',
-    background: 'rgba(96, 165, 250, 0.18)',
+    background: 'rgba(219, 234, 254, 0.78)',
     boxShadow: '0 0 0 1px rgba(96, 165, 250, 0.14) inset',
   },
 ]);
@@ -273,7 +283,7 @@ export const ThumbnailImage = style([
     display: 'block',
     objectFit: 'cover',
     borderRadius: config.radii.R200,
-    background: 'rgba(255, 255, 255, 0.04)',
+    background: 'rgba(241, 245, 249, 0.72)',
   },
 ]);
 
@@ -283,6 +293,6 @@ export const ThumbnailPlaceholder = style([
     width: '100%',
     height: '100%',
     borderRadius: config.radii.R200,
-    background: 'rgba(255, 255, 255, 0.05)',
+    background: 'rgba(241, 245, 249, 0.72)',
   },
 ]);
