@@ -24,6 +24,7 @@ type MobileFriendlyPageNavProps = {
 };
 export function MobileFriendlyPageNav({ path, children }: MobileFriendlyPageNavProps) {
   const screenSize = useScreenSizeContext();
+  const desktopApp = isDesktopUpdaterSupported();
   const desktopPageNavCollapsed = useAtomValue(desktopPageNavCollapsedAtom);
   const exactPath = useMatch({
     path,
@@ -35,7 +36,7 @@ export function MobileFriendlyPageNav({ path, children }: MobileFriendlyPageNavP
     return null;
   }
 
-  if (isCompactScreenSize(screenSize) && !exactPath) {
+  if (isCompactScreenSize(screenSize) && !exactPath && !desktopApp) {
     return null;
   }
 
