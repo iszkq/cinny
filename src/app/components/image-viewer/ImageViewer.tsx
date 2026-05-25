@@ -608,14 +608,16 @@ export const ImageViewer = as<'div', ImageViewerProps>(
                   <Text size="B300">{'\u53f3\u8f6c'}</Text>
                 </Chip>
 
-                <Chip
-                  variant="Primary"
-                  onClick={handleDownload}
-                  radii="300"
-                  before={<Icon size="50" src={Icons.Download} />}
-                >
-                  <Text size="B300">{'\u4e0b\u8f7d'}</Text>
-                </Chip>
+                {!loading && (
+                  <Chip
+                    variant="Primary"
+                    onClick={handleDownload}
+                    radii="300"
+                    before={<Icon size="50" src={Icons.Download} />}
+                  >
+                    <Text size="B300">{'\u4e0b\u8f7d'}</Text>
+                  </Chip>
+                )}
               </Box>
             </>
           )}
