@@ -30,7 +30,7 @@ import {
   getUnreadInfo,
   isNotificationEvent,
 } from '../../utils/room';
-import { NotificationType, UnreadInfo } from '../../../types/matrix/room';
+import { NotificationType, RoomToUnread, UnreadInfo } from '../../../types/matrix/room';
 import {
   AccountDataEvent,
   CinnyAISettingsContent,
@@ -79,6 +79,101 @@ const DESKTOP_UPDATE_AUTO_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const DESKTOP_UPDATE_AUTO_CHECK_FOCUS_COOLDOWN_MS = 15 * 60 * 1000;
 const APPEARANCE_ACCOUNT_DATA_SAVE_DEBOUNCE_MS = 450;
 const APPEARANCE_BACKGROUND_FILE_NAME = 'cinny-chat-background.webp';
+const UNREAD_BADGE_COLOR = '#989898';
+const HIGHLIGHT_BADGE_COLOR = '#45B83B';
+const TASKBAR_BADGE_ICON_SIZE = 64;
+
+const taskbarBadgeIconCache = new Map<string, Uint8Array>();
+let activeTaskbarBadgeColor: string | undefined;
+
+const getUnreadBadgeColor = (roomToUnread: RoomToUnread): string | undefined => {
+  let notification = false;
+  let highlight = false;
+  roomToUnread.forEach((unread) => {
+    if (unread.total > 0) {
+      notification = true;
+    }
+    if (unread.highlight > 0) {
+      highlight = true;
+    }
+  });
+
+  if (highlight) {
+    return HIGHLIGHT_BADGE_COLOR;
+  }
+  if (notification) {
+    return UNREAD_BADGE_COLOR;
+  }
+  return undefined;
+};
+
+const blobToUint8Array = async (blob: Blob): Promise<Uint8Array> => {
+  const buffer = await blob.arrayBuffer();
+  return new Uint8Array(buffer);
+};
+
+const createTaskbarBadgeIcon = async (badgeColor: string): Promise<Uint8Array | undefined> => {
+  const cachedIcon = taskbarBadgeIconCache.get(badgeColor);
+  if (cachedIcon) {
+    return cachedIcon;
+  }
+
+  const size = TASKBAR_BADGE_ICON_SIZE;
+  const center = size / 2;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return undefined;
+
+  ctx.clearRect(0, 0, size, size);
+
+  ctx.beginPath();
+  ctx.arc(center, center, 24, 0, Math.PI * 2);
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.arc(center, center, 20, 0, Math.PI * 2);
+  ctx.fillStyle = badgeColor;
+  ctx.fill();
+
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+  if (!blob) {
+    return undefined;
+  }
+
+  const iconBytes = await blobToUint8Array(blob);
+  taskbarBadgeIconCache.set(badgeColor, iconBytes);
+  return iconBytes;
+};
+
+const setDesktopTaskbarBadge = async (badgeColor?: string): Promise<void> => {
+  activeTaskbarBadgeColor = badgeColor;
+
+  if (!isDesktopUpdaterSupported()) {
+    return;
+  }
+
+  try {
+    const { getCurrentWindow } = await import('@tauri-apps/api/window');
+    const currentWindow = getCurrentWindow();
+
+    if (!badgeColor) {
+      if (!activeTaskbarBadgeColor) {
+        await currentWindow.setOverlayIcon();
+      }
+      return;
+    }
+
+    const iconBytes = await createTaskbarBadgeIcon(badgeColor);
+    if (iconBytes && activeTaskbarBadgeColor === badgeColor) {
+      await currentWindow.setOverlayIcon(iconBytes);
+    }
+  } catch {
+    // Taskbar badges are a desktop enhancement; unread state must keep working without them.
+  }
+};
 
 const createFaviconUrl = async (logoUrl: string, badgeColor?: string): Promise<string> => {
   const img = await loadImageElement(logoUrl);
@@ -737,8 +832,8 @@ function FaviconUpdater() {
 
     Promise.all([
       createFaviconUrl(APP_LOGO_URL),
-      createFaviconUrl(APP_LOGO_URL, '#989898'),
-      createFaviconUrl(APP_LOGO_URL, '#45B83B'),
+      createFaviconUrl(APP_LOGO_URL, UNREAD_BADGE_COLOR),
+      createFaviconUrl(APP_LOGO_URL, HIGHLIGHT_BADGE_COLOR),
     ])
       .then(([normal, unread, highlight]) => {
         if (!mounted) return;
@@ -752,27 +847,36 @@ function FaviconUpdater() {
   }, []);
 
   useEffect(() => {
-    let notification = false;
-    let highlight = false;
-    roomToUnread.forEach((unread) => {
-      if (unread.total > 0) {
-        notification = true;
-      }
-      if (unread.highlight > 0) {
-        highlight = true;
-      }
-    });
+    const badgeColor = getUnreadBadgeColor(roomToUnread);
 
-    if (highlight) {
+    if (badgeColor === HIGHLIGHT_BADGE_COLOR) {
       setFavicon(faviconUrls.highlight);
       return;
     }
-    if (notification) {
+    if (badgeColor) {
       setFavicon(faviconUrls.unread);
       return;
     }
     setFavicon(faviconUrls.normal);
   }, [roomToUnread, faviconUrls]);
+
+  return null;
+}
+
+function DesktopTaskbarUnreadBadgeFeature() {
+  const roomToUnread = useAtomValue(roomToUnreadAtom);
+
+  useEffect(() => {
+    if (!isDesktopUpdaterSupported()) {
+      return undefined;
+    }
+
+    void setDesktopTaskbarBadge(getUnreadBadgeColor(roomToUnread));
+
+    return () => {
+      void setDesktopTaskbarBadge();
+    };
+  }, [roomToUnread]);
 
   return null;
 }
@@ -974,6 +1078,7 @@ export function ClientNonUIFeatures({ children }: ClientNonUIFeaturesProps) {
       <AISettingsAccountDataFeature />
       <ImagePackMediaWarmFeature />
       <FaviconUpdater />
+      <DesktopTaskbarUnreadBadgeFeature />
       <InviteNotifications />
       <MessageNotifications />
       {children}
