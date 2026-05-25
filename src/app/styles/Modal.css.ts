@@ -5,13 +5,24 @@ export const ModalWide = style({
   minHeight: '90vh',
 });
 
+export const ImageViewerBackdrop = style({
+  background: 'rgba(248, 250, 252, 0.2)',
+  backdropFilter: 'blur(8px) saturate(120%)',
+  WebkitBackdropFilter: 'blur(8px) saturate(120%)',
+});
+
 export const ImageViewerModal = style({
-  width: 'min(68vw, 1040px)',
-  height: 'min(70vh, 720px)',
-  minWidth: 'min(68vw, 1040px)',
-  minHeight: 'min(70vh, 720px)',
-  maxWidth: 'calc(100vw - 48px)',
-  maxHeight: 'calc(var(--app-height, 100dvh) - 48px)',
+  width: 'var(--image-viewer-modal-width, min(76vw, 1120px))',
+  height: 'var(--image-viewer-modal-height, min(78vh, 780px))',
+  minWidth: 'var(--image-viewer-modal-width, min(76vw, 1120px))',
+  minHeight: 'var(--image-viewer-modal-height, min(78vh, 780px))',
+  maxWidth: 'calc(100vw - 40px)',
+  maxHeight: 'calc(var(--app-height, 100dvh) - 40px)',
+  padding: 0,
+  border: 0,
+  background: 'transparent',
+  boxShadow: 'none',
+  overflow: 'hidden',
   '@media': {
     'screen and (max-width: 750px)': {
       width: '100vw',
