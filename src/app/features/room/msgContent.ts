@@ -18,6 +18,9 @@ import { TUploadItem } from '../../state/room/roomInputDrafts';
 import { encodeBlurHash } from '../../utils/blurHash';
 import { scaleYDimension } from '../../utils/common';
 
+const IMAGE_PREVIEW_WIDTH = 360;
+const IMAGE_PREVIEW_HEIGHT = 560;
+
 const generateThumbnailContent = async (
   mx: MatrixClient,
   img: HTMLImageElement | HTMLVideoElement,
@@ -59,10 +62,21 @@ export const getImageMsgContent = async (
     [MATRIX_SPOILER_PROPERTY_NAME]: metadata.markedAsSpoiler,
   };
   if (imgEl) {
+    const [thumbError, thumbContent] = await to(
+      generateThumbnailContent(
+        mx,
+        imgEl,
+        getThumbnailDimensions(imgEl.width, imgEl.height, IMAGE_PREVIEW_WIDTH, IMAGE_PREVIEW_HEIGHT),
+        !!encInfo
+      )
+    );
+    if (thumbError) console.warn(thumbError);
+
     const blurHash = encodeBlurHash(imgEl, 512, scaleYDimension(imgEl.width, 512, imgEl.height));
 
     content.info = {
       ...getImageInfo(imgEl, file),
+      ...thumbContent,
       [MATRIX_BLUR_HASH_PROPERTY_NAME]: blurHash,
     };
   }
