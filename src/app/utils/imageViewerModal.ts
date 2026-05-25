@@ -13,8 +13,8 @@ const LANDSCAPE_MODAL_STYLE: ImageViewerModalStyle = {
 };
 
 const PORTRAIT_MODAL_STYLE: ImageViewerModalStyle = {
-  '--image-viewer-modal-width': 'min(48vw, 720px)',
-  '--image-viewer-modal-height': 'min(90vh, 920px)',
+  '--image-viewer-modal-width': 'clamp(520px, 42vw, 640px)',
+  '--image-viewer-modal-height': 'min(94vh, 980px)',
 };
 
 const SQUARE_MODAL_STYLE: ImageViewerModalStyle = {
