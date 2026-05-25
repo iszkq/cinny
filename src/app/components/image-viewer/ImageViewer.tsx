@@ -30,6 +30,7 @@ export type ImageViewerProps = {
 };
 
 type ViewMode = 'fit' | 'actual';
+type ImageOrientation = 'landscape' | 'portrait' | 'square';
 type TouchPoint = {
   x: number;
   y: number;
@@ -62,6 +63,27 @@ const MAX_TAP_MOVEMENT_PX = 24;
 const INITIAL_TOUCH_PAN = {
   translateX: 0,
   translateY: 0,
+};
+
+const getImageOrientation = (img: HTMLImageElement): ImageOrientation => {
+  const width = img.naturalWidth || img.width;
+  const height = img.naturalHeight || img.height;
+  if (!width || !height) return 'landscape';
+
+  const aspectRatio = width / height;
+  if (aspectRatio > 1.15) return 'landscape';
+  if (aspectRatio < 0.85) return 'portrait';
+  return 'square';
+};
+
+const getDisplayOrientation = (
+  orientation: ImageOrientation,
+  rotated: boolean
+): ImageOrientation => {
+  if (!rotated) return orientation;
+  if (orientation === 'landscape') return 'portrait';
+  if (orientation === 'portrait') return 'landscape';
+  return orientation;
 };
 
 const clampZoom = (value: number): number =>
@@ -137,6 +159,10 @@ export const ImageViewer = as<'div', ImageViewerProps>(
     const [displaySrc, setDisplaySrc] = useState(src);
     const [transitionSrc, setTransitionSrc] = useState<string>();
     const [transitionVisible, setTransitionVisible] = useState(false);
+    const [displayImageOrientation, setDisplayImageOrientation] =
+      useState<ImageOrientation>('landscape');
+    const [transitionImageOrientation, setTransitionImageOrientation] =
+      useState<ImageOrientation>('landscape');
 
     const handleDownload = async () => {
       const response = await fetchMediaWithAuth(src);
@@ -447,15 +473,58 @@ export const ImageViewer = as<'div', ImageViewerProps>(
       }
     }, [panEnabled]);
 
-    const handleTransitionImageLoad = () => {
+    const getFitImageSizeStyle = (orientation: ImageOrientation) => {
+      if (viewMode !== 'fit') {
+        return {
+          width: 'auto',
+          height: 'auto',
+          maxWidth: 'none',
+          maxHeight: 'none',
+        };
+      }
+
+      if (orientation === 'portrait') {
+        return {
+          width: 'auto',
+          height: '100%',
+          maxWidth: '100%',
+          maxHeight: '100%',
+        };
+      }
+
+      if (orientation === 'landscape') {
+        return {
+          width: '100%',
+          height: 'auto',
+          maxWidth: '100%',
+          maxHeight: '100%',
+        };
+      }
+
+      return {
+        width: '100%',
+        height: '100%',
+        maxWidth: '100%',
+        maxHeight: '100%',
+      };
+    };
+
+    const handleDisplayImageLoad: React.ReactEventHandler<HTMLImageElement> = (evt) => {
+      setDisplayImageOrientation(getImageOrientation(evt.currentTarget));
+    };
+
+    const handleTransitionImageLoad: React.ReactEventHandler<HTMLImageElement> = (evt) => {
       if (!transitionSrc) return;
 
+      const nextOrientation = getImageOrientation(evt.currentTarget);
+      setTransitionImageOrientation(nextOrientation);
       setTransitionVisible(true);
       if (transitionTimerRef.current) {
         window.clearTimeout(transitionTimerRef.current);
       }
       transitionTimerRef.current = window.setTimeout(() => {
         setDisplaySrc(transitionSrc);
+        setDisplayImageOrientation(nextOrientation);
         setTransitionSrc(undefined);
         setTransitionVisible(false);
         transitionTimerRef.current = null;
@@ -474,6 +543,12 @@ export const ImageViewer = as<'div', ImageViewerProps>(
     ) as React.MouseEventHandler<HTMLImageElement> | undefined;
     const translateX = pan.translateX + touchPan.translateX + swipeOffsetX;
     const translateY = pan.translateY + touchPan.translateY + swipeOffsetY;
+    const displayImageSizeStyle = getFitImageSizeStyle(
+      getDisplayOrientation(displayImageOrientation, rotated)
+    );
+    const transitionImageSizeStyle = getFitImageSizeStyle(
+      getDisplayOrientation(transitionImageOrientation, rotated)
+    );
 
     return (
       <Box
@@ -657,10 +732,7 @@ export const ImageViewer = as<'div', ImageViewerProps>(
                 )}
                 style={{
                   cursor: imageCursor,
-                  width: viewMode === 'fit' ? '100%' : 'auto',
-                  height: viewMode === 'fit' ? '100%' : 'auto',
-                  maxWidth: viewMode === 'fit' ? '100%' : 'none',
-                  maxHeight: viewMode === 'fit' ? '100%' : 'none',
+                  ...displayImageSizeStyle,
                   transform: `translate(${translateX}px, ${translateY}px) rotate(${rotation}deg) scale(${zoom})`,
                   transition:
                     swiping || cursor === 'grabbing' || touchInteractionActive
@@ -671,6 +743,7 @@ export const ImageViewer = as<'div', ImageViewerProps>(
                 }}
                 src={displaySrc}
                 alt={alt}
+                onLoad={handleDisplayImageLoad}
                 onMouseDown={handleImageMouseDown}
                 onTouchStart={handleImageTouchStart}
                 onTouchMove={handleImageTouchMove}
@@ -689,10 +762,7 @@ export const ImageViewer = as<'div', ImageViewerProps>(
                   )}
                   style={{
                     cursor: imageCursor,
-                    width: viewMode === 'fit' ? '100%' : 'auto',
-                    height: viewMode === 'fit' ? '100%' : 'auto',
-                    maxWidth: viewMode === 'fit' ? '100%' : 'none',
-                    maxHeight: viewMode === 'fit' ? '100%' : 'none',
+                    ...transitionImageSizeStyle,
                     transform: `translate(${translateX}px, ${translateY}px) rotate(${rotation}deg) scale(${zoom})`,
                     transition:
                       swiping || cursor === 'grabbing' || touchInteractionActive
