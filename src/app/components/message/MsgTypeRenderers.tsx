@@ -30,8 +30,8 @@ import { parseGeoUri, scaleYDimension } from '../../utils/common';
 import { Attachment, AttachmentBox, AttachmentContent, AttachmentHeader } from './attachment';
 import { FileHeader, FileDownloadButton } from './FileHeader';
 
-const IMAGE_TIMELINE_WIDTH = 380;
-const IMAGE_TIMELINE_MAX_HEIGHT = 760;
+const IMAGE_TIMELINE_WIDTH = 230;
+const IMAGE_TIMELINE_MAX_HEIGHT = 460;
 
 const getPositiveDimension = (value?: number): number | undefined =>
   typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined;
