@@ -199,14 +199,14 @@ export function MImage({ content, renderImageContent, outlined }: MImageProps) {
   const imageHeight = typeof imgInfo?.h === 'number' && imgInfo.h > 0 ? imgInfo.h : undefined;
   const hasAspectRatio = typeof imageWidth === 'number' && typeof imageHeight === 'number';
   const imageAttachmentStyle: CSSProperties = {
-    width: `min(100%, ${toRem(360)})`,
+    width: `min(100%, ${toRem(420)})`,
   };
   const imageBoxStyle: CSSProperties = {
     aspectRatio: hasAspectRatio ? `${imageWidth} / ${imageHeight}` : '1 / 1',
-    width: `min(100%, ${toRem(360)})`,
+    width: `min(100%, ${toRem(420)})`,
     height: 'auto',
     minHeight: toRem(48),
-    maxHeight: `min(${toRem(560)}, 68vh)`,
+    maxHeight: `min(${toRem(720)}, 74vh)`,
   };
 
   return (
