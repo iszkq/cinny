@@ -1590,8 +1590,8 @@ export const Message = as<'div', MessageProps>(
         style={
           wideMediaMessage
             ? {
-                width: '100%',
-                maxWidth: 'min(100%, 560px)',
+                width: '560px',
+                maxWidth: '100%',
               }
             : {
                 maxWidth: '100%',
