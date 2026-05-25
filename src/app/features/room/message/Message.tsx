@@ -1502,13 +1502,6 @@ export const Message = as<'div', MessageProps>(
     const tagIconSrc = memberPowerTag?.icon
       ? getPowerTagIconSrc(mx, useAuthentication, memberPowerTag.icon)
       : undefined;
-    const eventType = mEvent.getType();
-    const messageMsgType = mEvent.getContent().msgtype ?? MsgType.Text;
-    const wideMediaMessage =
-      eventType === EventType.Sticker ||
-      (eventType === EventType.RoomMessage &&
-        (messageMsgType === MsgType.Image || messageMsgType === MsgType.Video));
-
     const usernameColor = legacyUsernameColor ? colorMXID(senderId) : tagColor;
 
     const headerJSX = !collapse && (
@@ -1586,17 +1579,10 @@ export const Message = as<'div', MessageProps>(
     const msgContentJSX = (
       <Box
         direction="Column"
-        alignSelf={wideMediaMessage ? undefined : 'Start'}
-        style={
-          wideMediaMessage
-            ? {
-                width: '440px',
-                maxWidth: '100%',
-              }
-            : {
-                maxWidth: '100%',
-              }
-        }
+        alignSelf="Start"
+        style={{
+          maxWidth: '100%',
+        }}
       >
         {reply}
         {edit && onEditId ? (
