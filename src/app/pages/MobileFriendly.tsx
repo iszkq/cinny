@@ -1,7 +1,11 @@
 import { ReactNode } from 'react';
 import { useAtomValue } from 'jotai';
 import { useMatch } from 'react-router-dom';
-import { isCompactScreenSize, ScreenSize, useScreenSizeContext } from '../hooks/useScreenSize';
+import {
+  isCompactScreenSize,
+  isDesktopLikeScreenSize,
+  useScreenSizeContext,
+} from '../hooks/useScreenSize';
 import { desktopPageNavCollapsedAtom } from '../state/desktopPageNav';
 import { isDesktopUpdaterSupported } from '../utils/desktopUpdater';
 
@@ -25,6 +29,7 @@ type MobileFriendlyPageNavProps = {
 export function MobileFriendlyPageNav({ path, children }: MobileFriendlyPageNavProps) {
   const screenSize = useScreenSizeContext();
   const desktopApp = isDesktopUpdaterSupported();
+  const desktopLayout = isDesktopLikeScreenSize(screenSize);
   const desktopPageNavCollapsed = useAtomValue(desktopPageNavCollapsedAtom);
   const exactPath = useMatch({
     path,
@@ -32,7 +37,7 @@ export function MobileFriendlyPageNav({ path, children }: MobileFriendlyPageNavP
     end: true,
   });
 
-  if (screenSize === ScreenSize.Desktop && desktopPageNavCollapsed) {
+  if (desktopLayout && desktopPageNavCollapsed) {
     return null;
   }
 
