@@ -38,7 +38,7 @@ import {
   shouldUseObjectUrlForMediaDisplay,
 } from '../../../utils/matrix';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
-import { ModalWide } from '../../../styles/Modal.css';
+import { ImageViewerModal } from '../../../styles/Modal.css';
 import { validBlurHash } from '../../../utils/blurHash';
 import { primeCachedMediaObjectUrl } from '../../../utils/mediaUrlCache';
 
@@ -278,7 +278,7 @@ export const ImageContent = as<'div', ImageContentProps>(
                 }}
               >
                 <Modal
-                  className={ModalWide}
+                  className={ImageViewerModal}
                   size="500"
                   onContextMenu={(evt: any) => evt.stopPropagation()}
                 >
