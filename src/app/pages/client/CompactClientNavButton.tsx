@@ -10,6 +10,7 @@ import {
   config,
 } from 'folds';
 import { useScreenSizeContext, ScreenSize } from '../../hooks/useScreenSize';
+import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
 import { stopPropagation } from '../../utils/keyboard';
 import { SidebarNav } from './SidebarNav';
 
@@ -18,7 +19,7 @@ export function CompactClientNavButton() {
   const [open, setOpen] = useState(false);
   const closeDrawer = useCallback(() => setOpen(false), []);
 
-  if (screenSize === ScreenSize.Desktop) {
+  if (screenSize === ScreenSize.Desktop || isDesktopUpdaterSupported()) {
     return null;
   }
 
