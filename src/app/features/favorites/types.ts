@@ -48,6 +48,41 @@ export const getFavoritesRoomIdFromAccountData = (
   return roomId.length > 0 ? roomId : undefined;
 };
 
+const normalizeFavoriteRoomIds = (roomIds: unknown): string[] => {
+  if (!Array.isArray(roomIds)) return [];
+
+  const uniqueRoomIds = new Set<string>();
+  roomIds.forEach((roomId) => {
+    if (typeof roomId !== 'string') return;
+
+    const normalizedRoomId = roomId.trim();
+    if (normalizedRoomId.length === 0) return;
+
+    uniqueRoomIds.add(normalizedRoomId);
+  });
+
+  return Array.from(uniqueRoomIds);
+};
+
+export const getHiddenFavoritesRoomIdsFromAccountData = (
+  content?: CinnyFavoritesContent
+): string[] => {
+  const favoritesRoomId = getFavoritesRoomIdFromAccountData(content);
+
+  return normalizeFavoriteRoomIds(content?.legacyRoomIds).filter(
+    (roomId) => roomId !== favoritesRoomId
+  );
+};
+
+export const getAllFavoritesRoomIdsFromAccountData = (
+  content?: CinnyFavoritesContent
+): string[] => {
+  const favoritesRoomId = getFavoritesRoomIdFromAccountData(content);
+  const hiddenRoomIds = getHiddenFavoritesRoomIdsFromAccountData(content);
+
+  return favoritesRoomId ? [favoritesRoomId, ...hiddenRoomIds] : hiddenRoomIds;
+};
+
 export const getFavoriteMessageMetadata = (
   content: IContent | undefined
 ): FavoriteMessageMetadata | undefined => {

@@ -59,7 +59,7 @@ import { useKeyDown } from '../../hooks/useKeyDown';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 import { KeySymbol } from '../../utils/key-symbol';
 import { isMacOS } from '../../utils/user-agent';
-import { useFavoritesRoomId } from '../../hooks/useFavoritesRoom';
+import { useFavoritesRoomIds } from '../../hooks/useFavoritesRoom';
 import { stopPropagation } from '../../utils/keyboard';
 
 enum SearchRoomType {
@@ -151,17 +151,18 @@ export function Search({ requestClose }: SearchProps) {
   const roomToParents = useAtomValue(roomToParentsAtom);
   const orphanSpaces = useOrphanSpaces(mx, allRoomsAtom, roomToParents);
   const mDirects = useAtomValue(mDirectAtom);
-  const favoritesRoomId = useFavoritesRoomId();
+  const favoritesRoomIds = useFavoritesRoomIds();
+  const favoritesRoomIdSet = useMemo(() => new Set(favoritesRoomIds), [favoritesRoomIds]);
   const allRooms = useRooms(mx, allRoomsAtom, mDirects);
   const rooms = useMemo(
-    () => allRooms.filter((roomId) => roomId !== favoritesRoomId),
-    [allRooms, favoritesRoomId]
+    () => allRooms.filter((roomId) => !favoritesRoomIdSet.has(roomId)),
+    [allRooms, favoritesRoomIdSet]
   );
   const spaces = useSpaces(mx, allRoomsAtom);
   const allDirects = useDirects(mx, allRoomsAtom, mDirects);
   const directs = useMemo(
-    () => allDirects.filter((roomId) => roomId !== favoritesRoomId),
-    [allDirects, favoritesRoomId]
+    () => allDirects.filter((roomId) => !favoritesRoomIdSet.has(roomId)),
+    [allDirects, favoritesRoomIdSet]
   );
 
   const parsedSearch = useMemo(() => {
