@@ -32,8 +32,6 @@ import { bytesToSize } from '../../../utils/common';
 import { FALLBACK_MIMETYPE } from '../../../utils/mimeTypes';
 import { stopPropagation } from '../../../utils/keyboard';
 import {
-  decryptFile,
-  downloadEncryptedMedia,
   mxcUrlToHttp,
   shouldUseObjectUrlForMediaDisplay,
 } from '../../../utils/matrix';
@@ -44,6 +42,7 @@ import { primeCachedMediaObjectUrl } from '../../../utils/mediaUrlCache';
 import { getImageViewerModalStyle } from '../../../utils/imageViewerModal';
 import { loadImageElement } from '../../../utils/dom';
 import { useStableMediaUrl } from '../../emoji-board/useStableMediaUrl';
+import { prepareEncryptedMediaObjectUrl } from '../../../utils/encryptedMediaCache';
 
 const IMAGE_PREVIEW_WIDTH = 230;
 const IMAGE_PREVIEW_HEIGHT = 460;
@@ -188,10 +187,7 @@ export const ImageContent = as<'div', ImageContentProps>(
         if (!mediaUrl) throw new Error('Invalid media URL');
 
         if (mediaEncInfo) {
-          const fileContent = await downloadEncryptedMedia(mediaUrl, (encBuf) =>
-            decryptFile(encBuf, mediaMimeType, mediaEncInfo)
-          );
-          return URL.createObjectURL(fileContent);
+          return prepareEncryptedMediaObjectUrl(mediaUrl, mediaMimeType, mediaEncInfo);
         }
 
         const preparedMediaUrl = await primeCachedMediaObjectUrl(mediaUrl, 'visible');
