@@ -403,7 +403,14 @@ export const RoomPinMenu = forwardRef<HTMLDivElement, RoomPinMenuProps>(
                         <ImageContent
                           {...props}
                           autoPlay={mediaAutoLoad}
-                          renderImage={(p) => <Image {...p} loading="lazy" />}
+                          previewMediaStrategy="stable"
+                          renderImage={(p) => (
+                            <Image
+                              {...p}
+                              loading={mediaAutoLoad ? 'eager' : 'lazy'}
+                              decoding="async"
+                            />
+                          )}
                           renderViewer={(p) => <ImageViewer {...p} />}
                         />
                       )}
@@ -480,7 +487,14 @@ export const RoomPinMenu = forwardRef<HTMLDivElement, RoomPinMenuProps>(
                 <ImageContent
                   {...props}
                   autoPlay={mediaAutoLoad}
-                  renderImage={(p) => <Image {...p} loading="lazy" />}
+                  previewMediaStrategy="stable"
+                  renderImage={(p) => (
+                    <Image
+                      {...p}
+                      loading={mediaAutoLoad ? 'eager' : 'lazy'}
+                      decoding="async"
+                    />
+                  )}
                   renderViewer={(p) => <ImageViewer {...p} />}
                 />
               )}

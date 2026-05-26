@@ -1780,9 +1780,16 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
                         <ImageContent
                           {...props}
                           autoPlay={mediaAutoLoad}
+                          previewMediaStrategy="stable"
                           viewerItems={imageViewerItems}
                           viewerItemId={mEventId}
-                          renderImage={(p) => <Image {...p} loading="lazy" />}
+                          renderImage={(p) => (
+                            <Image
+                              {...p}
+                              loading={mediaAutoLoad ? 'eager' : 'lazy'}
+                              decoding="async"
+                            />
+                          )}
                           renderViewer={(p) => <ImageViewer {...p} />}
                         />
                       )}
@@ -1931,9 +1938,16 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
                   <ImageContent
                     {...props}
                     autoPlay={mediaAutoLoad}
+                    previewMediaStrategy="stable"
                     viewerItems={imageViewerItems}
                     viewerItemId={mEventId}
-                    renderImage={(p) => <Image {...p} loading="lazy" />}
+                    renderImage={(p) => (
+                      <Image
+                        {...p}
+                        loading={mediaAutoLoad ? 'eager' : 'lazy'}
+                        decoding="async"
+                      />
+                    )}
                     renderViewer={(p) => <ImageViewer {...p} />}
                   />
                 )}
