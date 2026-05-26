@@ -1498,6 +1498,7 @@ export function Favorites() {
             <ImageContent
               {...props}
               autoPlay={mediaAutoLoad}
+              previewMediaStrategy="stable"
               viewerItems={imageViewerItems}
               viewerItemId={event.getId() ?? undefined}
               renderImage={(renderProps) => (
@@ -1505,7 +1506,8 @@ export function Favorites() {
                   alt={renderProps.alt}
                   title={renderProps.title}
                   src={renderProps.src}
-                  loading="lazy"
+                  loading={mediaAutoLoad ? 'eager' : 'lazy'}
+                  decoding="async"
                   onLoad={renderProps.onLoad}
                   onError={renderProps.onError}
                   onClick={renderProps.onClick}
