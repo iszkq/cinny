@@ -908,6 +908,7 @@ function FavoriteImageCard({
           url={mediaUrl}
           encInfo={content.file}
           autoPlay
+          previewMediaStrategy="stable"
           viewerItems={imageViewerItems}
           viewerItemId={getFavoriteItemId(item)}
           markedAsSpoiler={content[MATRIX_SPOILER_PROPERTY_NAME]}
@@ -933,7 +934,8 @@ function FavoriteImageCard({
                 alt={alt}
                 title={title}
                 src={src}
-                loading="lazy"
+                loading="eager"
+                decoding="async"
                 className={css.MediaPreviewImage}
                 onLoad={onLoad}
                 onError={onError}
