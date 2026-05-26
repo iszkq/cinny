@@ -43,6 +43,7 @@ import { validBlurHash } from '../../../utils/blurHash';
 import { primeCachedMediaObjectUrl } from '../../../utils/mediaUrlCache';
 import { getImageViewerModalStyle } from '../../../utils/imageViewerModal';
 import { loadImageElement } from '../../../utils/dom';
+import { useStableMediaUrl } from '../../emoji-board/useStableMediaUrl';
 
 const IMAGE_PREVIEW_WIDTH = 230;
 const IMAGE_PREVIEW_HEIGHT = 460;
@@ -92,6 +93,7 @@ export type ImageContentProps = {
   info?: IImageInfo & IThumbnailContent;
   encInfo?: EncryptedAttachmentInfo;
   autoPlay?: boolean;
+  previewMediaStrategy?: 'prepared' | 'stable';
   markedAsSpoiler?: boolean;
   spoilerReason?: string;
   viewerItems?: ViewerImageItem[];
@@ -109,6 +111,7 @@ export const ImageContent = as<'div', ImageContentProps>(
       info,
       encInfo,
       autoPlay,
+      previewMediaStrategy = 'prepared',
       markedAsSpoiler,
       spoilerReason,
       viewerItems,
@@ -126,11 +129,44 @@ export const ImageContent = as<'div', ImageContentProps>(
     const [load, setLoad] = useState(false);
     const [error, setError] = useState(false);
     const [viewer, setViewer] = useState(false);
+    const [stableRetryNonce, setStableRetryNonce] = useState(0);
     const [blurred, setBlurred] = useState(markedAsSpoiler ?? false);
     const [viewerImageSize, setViewerImageSize] = useState<{
       width?: number;
       height?: number;
     }>({});
+    const stablePreviewEnabled = autoPlay && previewMediaStrategy === 'stable' && !encInfo;
+    const stableOriginalUrl =
+      typeof url === 'string' && !url.startsWith('mxc://')
+        ? url
+        : (mxcUrlToHttp(mx, url, useAuthentication) ?? undefined);
+    const stableThumbnailUrl =
+      typeof info?.thumbnail_url === 'string'
+        ? mxcUrlToHttp(mx, info.thumbnail_url, useAuthentication) ?? undefined
+        : !encInfo
+          ? (mxcUrlToHttp(
+              mx,
+              url,
+              useAuthentication,
+              IMAGE_PREVIEW_WIDTH,
+              IMAGE_PREVIEW_HEIGHT,
+              'scale'
+            ) ?? undefined)
+          : undefined;
+    const {
+      displayUrl: stablePreviewUrl,
+      hasFailed: stablePreviewFailed,
+      requestKey: stablePreviewRequestKey,
+      handleLoad: handleStablePreviewLoad,
+      handleError: handleStablePreviewError,
+    } = useStableMediaUrl(
+      stablePreviewEnabled ? stableOriginalUrl : undefined,
+      stablePreviewEnabled ? stableThumbnailUrl : undefined,
+      {
+        mimeType,
+        fallbackMimeType: mimeType,
+      }
+    );
 
     const prepareMediaSrc = useCallback(
       async (
@@ -230,14 +266,27 @@ export const ImageContent = as<'div', ImageContentProps>(
 
     const handleLoad = () => {
       setLoad(true);
+      setError(false);
+      if (stablePreviewEnabled) {
+        handleStablePreviewLoad();
+      }
     };
     const handleError = () => {
       setLoad(false);
+      if (stablePreviewEnabled) {
+        handleStablePreviewError();
+        return;
+      }
       setError(true);
     };
 
     const handleRetry = () => {
       setError(false);
+      setLoad(false);
+      if (stablePreviewEnabled) {
+        setStableRetryNonce((current) => current + 1);
+        return;
+      }
       loadSrc().catch(() => undefined);
     };
 
@@ -255,15 +304,29 @@ export const ImageContent = as<'div', ImageContentProps>(
     };
 
     useEffect(() => {
-      if (autoPlay) {
+      if (autoPlay && !stablePreviewEnabled) {
         loadSrc().catch(() => undefined);
       }
-    }, [autoPlay, loadSrc]);
+    }, [autoPlay, loadSrc, stablePreviewEnabled]);
 
     const viewerAlt = viewerItems?.find((item) => item.id === viewerItemId)?.body ?? body;
-    const previewSrc = srcState.status === AsyncStatus.Success ? srcState.data.src : undefined;
+    const previewSrc = stablePreviewEnabled
+      ? stablePreviewUrl
+      : srcState.status === AsyncStatus.Success
+        ? srcState.data.src
+        : undefined;
     const viewerSrc =
       viewerSrcState.status === AsyncStatus.Success ? viewerSrcState.data : previewSrc;
+    const previewRenderKey = stablePreviewEnabled
+      ? `${stablePreviewRequestKey}-${stableRetryNonce}`
+      : previewSrc;
+    const previewError = stablePreviewEnabled
+      ? stablePreviewFailed
+      : error || srcState.status === AsyncStatus.Error;
+    const previewLoading = stablePreviewEnabled
+      ? !stablePreviewFailed && (!previewSrc || !load)
+      : (srcState.status === AsyncStatus.Loading || srcState.status === AsyncStatus.Success) &&
+        !load;
 
     useEffect(() => {
       if (!viewer || !viewerSrc) {
@@ -357,20 +420,22 @@ export const ImageContent = as<'div', ImageContentProps>(
             </Button>
           </Box>
         )}
-        {srcState.status === AsyncStatus.Success && (
+        {previewSrc && (
           <Box className={classNames(css.AbsoluteContainer, blurred && css.Blur)}>
-            {renderImage({
-              alt: body,
-              title: body,
-              src: srcState.data.src,
-              onLoad: handleLoad,
-              onError: handleError,
-              onClick: handleOpenViewer,
-              tabIndex: 0,
-            })}
+            <React.Fragment key={previewRenderKey}>
+              {renderImage({
+                alt: body,
+                title: body,
+                src: previewSrc,
+                onLoad: handleLoad,
+                onError: handleError,
+                onClick: handleOpenViewer,
+                tabIndex: 0,
+              })}
+            </React.Fragment>
           </Box>
         )}
-        {blurred && !error && srcState.status !== AsyncStatus.Error && (
+        {blurred && !previewError && srcState.status !== AsyncStatus.Error && (
           <Box className={css.AbsoluteContainer} alignItems="Center" justifyContent="Center">
             <TooltipProvider
               tooltip={
@@ -403,14 +468,12 @@ export const ImageContent = as<'div', ImageContentProps>(
             </TooltipProvider>
           </Box>
         )}
-        {(srcState.status === AsyncStatus.Loading || srcState.status === AsyncStatus.Success) &&
-          !load &&
-          !blurred && (
-            <Box className={css.AbsoluteContainer} alignItems="Center" justifyContent="Center">
-              <Spinner variant="Secondary" />
-            </Box>
-          )}
-        {(error || srcState.status === AsyncStatus.Error) && (
+        {previewLoading && !blurred && (
+          <Box className={css.AbsoluteContainer} alignItems="Center" justifyContent="Center">
+            <Spinner variant="Secondary" />
+          </Box>
+        )}
+        {previewError && (
           <Box className={css.AbsoluteContainer} alignItems="Center" justifyContent="Center">
             <TooltipProvider
               tooltip={
