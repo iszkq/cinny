@@ -229,10 +229,15 @@ export function RenderMessageContent({
             <ImageContent
               {...props}
               autoPlay={mediaAutoLoad}
+              previewMediaStrategy="stable"
               viewerItems={imageViewerItems}
               viewerItemId={eventId}
               renderImage={(p) => (
-                <Image {...p} loading={mediaAutoLoad ? 'eager' : 'lazy'} decoding="async" />
+                <Image
+                  {...p}
+                  loading={mediaAutoLoad ? 'eager' : 'lazy'}
+                  decoding="async"
+                />
               )}
               renderViewer={(p) => <ImageViewer {...p} />}
             />
