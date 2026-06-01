@@ -16,6 +16,7 @@ import { withSearchParam } from '../../../pages/pathUtils';
 import { useAccountManagementActions } from '../../../hooks/useAccountManagement';
 import { SettingTile } from '../../../components/setting-tile';
 import { openExternalUrl } from '../../../utils/desktop';
+import { isDesktopUpdaterSupported } from '../../../utils/desktopUpdater';
 
 type OtherDevicesProps = {
   devices: IMyDevice[];
@@ -30,30 +31,39 @@ export function OtherDevices({ devices, refreshDeviceList, showVerification }: O
 
   const [deleted, setDeleted] = useState<Set<string>>(new Set());
 
+  const openManagementUrl = useCallback((url: string) => {
+    if (isDesktopUpdaterSupported()) {
+      void openExternalUrl(url);
+      return;
+    }
+
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }, []);
+
   const handleDashboardOIDC = useCallback(() => {
     const authUrl = authMetadata?.account_management_uri ?? authMetadata?.issuer;
     if (!authUrl) return;
 
-    void openExternalUrl(
+    openManagementUrl(
       withSearchParam(authUrl, {
         action: accountManagementActions.sessionsList,
       })
     );
-  }, [authMetadata, accountManagementActions]);
+  }, [authMetadata, accountManagementActions, openManagementUrl]);
 
   const handleDeleteOIDC = useCallback(
     (deviceId: string) => {
       const authUrl = authMetadata?.account_management_uri ?? authMetadata?.issuer;
       if (!authUrl) return;
 
-      void openExternalUrl(
+      openManagementUrl(
         withSearchParam(authUrl, {
           action: accountManagementActions.sessionEnd,
           device_id: deviceId,
         })
       );
     },
-    [authMetadata, accountManagementActions]
+    [authMetadata, accountManagementActions, openManagementUrl]
   );
 
   const handleToggleDelete = useCallback((deviceId: string) => {

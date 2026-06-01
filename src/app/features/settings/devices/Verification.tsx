@@ -36,6 +36,7 @@ import { useAuthMetadata } from '../../../hooks/useAuthMetadata';
 import { withSearchParam } from '../../../pages/pathUtils';
 import { useAccountManagementActions } from '../../../hooks/useAccountManagement';
 import { openExternalUrl } from '../../../utils/desktop';
+import { isDesktopUpdaterSupported } from '../../../utils/desktopUpdater';
 
 type VerificationStatusBadgeProps = {
   verificationStatus: VerificationStatus;
@@ -261,6 +262,15 @@ export function DeviceVerificationOptions() {
 
   const [reset, setReset] = useState(false);
 
+  const openManagementUrl = useCallback((url: string) => {
+    if (isDesktopUpdaterSupported()) {
+      void openExternalUrl(url);
+      return;
+    }
+
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }, []);
+
   const handleCancelReset = useCallback(() => {
     setReset(false);
   }, []);
@@ -274,7 +284,7 @@ export function DeviceVerificationOptions() {
 
     if (authMetadata) {
       const authUrl = authMetadata.account_management_uri ?? authMetadata.issuer;
-      void openExternalUrl(
+      openManagementUrl(
         withSearchParam(authUrl, {
           action: accountManagementActions.crossSigningReset,
         })
