@@ -572,14 +572,6 @@ function AppearanceSettingsAccountDataFeature() {
       return undefined;
     }
 
-    const currentSignature = getAppearanceAccountDataSignature(settings);
-    if (
-      currentSignature === remoteSignatureRef.current ||
-      currentSignature === pendingSaveSignatureRef.current
-    ) {
-      return undefined;
-    }
-
     if (settings.chatBackgroundDataUrl && !settings.chatBackgroundMediaMxc) {
       if (
         isDataUrl(settings.chatBackgroundDataUrl) &&
@@ -617,6 +609,14 @@ function AppearanceSettingsAccountDataFeature() {
           });
       }
 
+      return undefined;
+    }
+
+    const currentSignature = getAppearanceAccountDataSignature(settings);
+    if (
+      currentSignature === remoteSignatureRef.current ||
+      currentSignature === pendingSaveSignatureRef.current
+    ) {
       return undefined;
     }
 

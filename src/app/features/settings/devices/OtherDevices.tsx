@@ -15,6 +15,7 @@ import { useAuthMetadata } from '../../../hooks/useAuthMetadata';
 import { withSearchParam } from '../../../pages/pathUtils';
 import { useAccountManagementActions } from '../../../hooks/useAccountManagement';
 import { SettingTile } from '../../../components/setting-tile';
+import { openExternalUrl } from '../../../utils/desktop';
 
 type OtherDevicesProps = {
   devices: IMyDevice[];
@@ -33,11 +34,10 @@ export function OtherDevices({ devices, refreshDeviceList, showVerification }: O
     const authUrl = authMetadata?.account_management_uri ?? authMetadata?.issuer;
     if (!authUrl) return;
 
-    window.open(
+    void openExternalUrl(
       withSearchParam(authUrl, {
         action: accountManagementActions.sessionsList,
-      }),
-      '_blank'
+      })
     );
   }, [authMetadata, accountManagementActions]);
 
@@ -46,12 +46,11 @@ export function OtherDevices({ devices, refreshDeviceList, showVerification }: O
       const authUrl = authMetadata?.account_management_uri ?? authMetadata?.issuer;
       if (!authUrl) return;
 
-      window.open(
+      void openExternalUrl(
         withSearchParam(authUrl, {
           action: accountManagementActions.sessionEnd,
           device_id: deviceId,
-        }),
-        '_blank'
+        })
       );
     },
     [authMetadata, accountManagementActions]
