@@ -77,7 +77,7 @@ const isEditableEventTarget = (target: EventTarget | null): boolean => {
 };
 
 const isInteractiveDragTarget = (target: EventTarget | null): boolean => {
-  if (!(target instanceof HTMLElement)) return false;
+  if (!(target instanceof Element)) return false;
 
   return Boolean(
     target.closest('button, a, input, textarea, select, [role="button"], [contenteditable="true"]')
