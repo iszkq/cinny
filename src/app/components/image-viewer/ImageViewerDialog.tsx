@@ -27,6 +27,17 @@ import { ScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
 import { stopPropagation } from '../../utils/keyboard';
 import { loadImageElement } from '../../utils/dom';
 import { getImageViewerModalStyle } from '../../utils/imageViewerModal';
+import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
+import {
+  closeNativeImagePreviewWindow,
+  createNativeImagePreviewId,
+  emitNativeImagePreviewPayload,
+  getTransferableImagePreviewItems,
+  getTransferableImagePreviewSrc,
+  listenNativeImagePreviewAction,
+  openNativeImagePreviewWindow,
+  type NativeImagePreviewItem,
+} from '../../utils/nativeImagePreview';
 
 type ImageViewerDialogProps = Omit<
   ImageViewerProps,
@@ -39,6 +50,27 @@ type ImageViewerDialogProps = Omit<
 type WindowOffset = {
   x: number;
   y: number;
+};
+
+type NativePreviewRef = {
+  previewId: string;
+  label: string;
+  unlistenAction: () => void;
+  unlistenReady: () => void;
+};
+
+type LatestNativePreviewInput = {
+  src: string;
+  alt: string;
+  loading?: boolean;
+  canPrev?: boolean;
+  canNext?: boolean;
+  onPrev?: () => void;
+  onNext?: () => void;
+  items?: NativeImagePreviewItem[];
+  activeItemId?: string;
+  onSelectItem?: (itemId: string) => void;
+  requestClose: () => void;
 };
 
 const WINDOW_EDGE_PADDING_PX = 16;
@@ -74,15 +106,45 @@ export function ImageViewerDialog({
 }: ImageViewerDialogProps) {
   const screenSize = useScreenSizeContext();
   const mobile = screenSize === ScreenSize.Mobile;
+  const desktopNativePreview = isDesktopUpdaterSupported();
   const [imageSize, setImageSize] = useState<{ width?: number; height?: number }>({});
   const [maximized, setMaximized] = useState(false);
   const [minimized, setMinimized] = useState(false);
   const [windowOffset, setWindowOffset] = useState<WindowOffset>({ x: 0, y: 0 });
   const dragCleanupRef = useRef<(() => void) | null>(null);
+  const nativePreviewRef = useRef<NativePreviewRef>();
+  const latestNativeInputRef = useRef<LatestNativePreviewInput>({
+    src,
+    alt,
+    loading,
+    canPrev: viewerProps.canPrev,
+    canNext: viewerProps.canNext,
+    onPrev: viewerProps.onPrev,
+    onNext: viewerProps.onNext,
+    items: viewerProps.items,
+    activeItemId: viewerProps.activeItemId,
+    onSelectItem: viewerProps.onSelectItem,
+    requestClose,
+  });
+  const [nativePreviewActive, setNativePreviewActive] = useState(false);
 
   const clearDragListeners = useCallback(() => {
     dragCleanupRef.current?.();
     dragCleanupRef.current = null;
+  }, []);
+
+  const closeNativePreview = useCallback((closeWindow = true) => {
+    const nativePreview = nativePreviewRef.current;
+    if (!nativePreview) return;
+
+    nativePreview.unlistenAction();
+    nativePreview.unlistenReady();
+    nativePreviewRef.current = undefined;
+    setNativePreviewActive(false);
+
+    if (closeWindow) {
+      void closeNativeImagePreviewWindow(nativePreview.label).catch(() => undefined);
+    }
   }, []);
 
   const getClampedWindowOffset = useCallback((nextOffset: WindowOffset): WindowOffset => {
@@ -147,6 +209,53 @@ export function ImageViewerDialog({
     ]
   );
 
+  const buildNativePreviewPayload = useCallback(async (previewId: string) => {
+    const input = latestNativeInputRef.current;
+    const [transferableSrc, transferableItems] = await Promise.all([
+      getTransferableImagePreviewSrc(input.src).catch(() => input.src),
+      getTransferableImagePreviewItems(input.items).catch(() => input.items),
+    ]);
+
+    return {
+      previewId,
+      src: transferableSrc,
+      alt: input.alt,
+      loading: input.loading,
+      canPrev: input.canPrev,
+      canNext: input.canNext,
+      items: transferableItems,
+      activeItemId: input.activeItemId,
+    };
+  }, []);
+
+  useEffect(() => {
+    latestNativeInputRef.current = {
+      src,
+      alt,
+      loading,
+      canPrev: viewerProps.canPrev,
+      canNext: viewerProps.canNext,
+      onPrev: viewerProps.onPrev,
+      onNext: viewerProps.onNext,
+      items: viewerProps.items,
+      activeItemId: viewerProps.activeItemId,
+      onSelectItem: viewerProps.onSelectItem,
+      requestClose,
+    };
+  }, [
+    alt,
+    loading,
+    requestClose,
+    src,
+    viewerProps.activeItemId,
+    viewerProps.canNext,
+    viewerProps.canPrev,
+    viewerProps.items,
+    viewerProps.onNext,
+    viewerProps.onPrev,
+    viewerProps.onSelectItem,
+  ]);
+
   useEffect(() => {
     if (!open) {
       setImageSize({});
@@ -154,6 +263,7 @@ export function ImageViewerDialog({
       setMinimized(false);
       setWindowOffset({ x: 0, y: 0 });
       clearDragListeners();
+      closeNativePreview();
       return undefined;
     }
 
@@ -176,10 +286,104 @@ export function ImageViewerDialog({
     return () => {
       mounted = false;
     };
-  }, [clearDragListeners, open, src]);
+  }, [clearDragListeners, closeNativePreview, open, src]);
 
   useEffect(() => {
-    if (!open || mobile || minimized) return undefined;
+    if (!open || !desktopNativePreview || nativePreviewRef.current) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    const previewId = createNativeImagePreviewId();
+    let unlistenAction: (() => void) | undefined;
+    let unlistenReady: (() => void) | undefined;
+
+    const openNativePreview = async () => {
+      unlistenAction = await listenNativeImagePreviewAction(previewId, (action) => {
+        const input = latestNativeInputRef.current;
+
+        if (action.type === 'close') {
+          input.requestClose();
+          return;
+        }
+        if (action.type === 'prev') {
+          input.onPrev?.();
+          return;
+        }
+        if (action.type === 'next') {
+          input.onNext?.();
+          return;
+        }
+        if (action.type === 'select') {
+          input.onSelectItem?.(action.itemId);
+        }
+      });
+
+      const payload = await buildNativePreviewPayload(previewId);
+      const nativePreview = await openNativeImagePreviewWindow(payload);
+      if (!nativePreview) {
+        unlistenAction?.();
+        return;
+      }
+
+      if (cancelled) {
+        unlistenAction?.();
+        nativePreview.unlistenReady();
+        await closeNativeImagePreviewWindow(nativePreview.label).catch(() => undefined);
+        return;
+      }
+
+      unlistenReady = nativePreview.unlistenReady;
+      nativePreviewRef.current = {
+        previewId,
+        label: nativePreview.label,
+        unlistenAction,
+        unlistenReady,
+      };
+      setNativePreviewActive(true);
+    };
+
+    openNativePreview().catch(() => {
+      unlistenAction?.();
+      unlistenReady?.();
+      nativePreviewRef.current = undefined;
+      setNativePreviewActive(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [buildNativePreviewPayload, desktopNativePreview, open]);
+
+  useEffect(() => {
+    const nativePreview = nativePreviewRef.current;
+    if (!open || !nativePreview) return undefined;
+
+    let cancelled = false;
+    buildNativePreviewPayload(nativePreview.previewId)
+      .then((payload) => {
+        if (cancelled) return;
+        void emitNativeImagePreviewPayload(nativePreview.label, payload).catch(() => undefined);
+      })
+      .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    alt,
+    buildNativePreviewPayload,
+    loading,
+    open,
+    src,
+    viewerProps.activeItemId,
+    viewerProps.canNext,
+    viewerProps.canPrev,
+    viewerProps.items,
+  ]);
+
+  useEffect(() => {
+    if (!open || mobile || minimized || nativePreviewActive) return undefined;
 
     const handleKeyDown = (evt: KeyboardEvent) => {
       if (evt.key !== 'Escape' || isEditableEventTarget(evt.target)) return;
@@ -189,17 +393,18 @@ export function ImageViewerDialog({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [minimized, mobile, open, requestClose]);
+  }, [minimized, mobile, nativePreviewActive, open, requestClose]);
 
   useEffect(
     () => () => {
       clearDragListeners();
+      closeNativePreview();
     },
-    [clearDragListeners]
+    [clearDragListeners, closeNativePreview]
   );
 
   useEffect(() => {
-    if (!open || mobile || maximized || minimized) return undefined;
+    if (!open || mobile || maximized || minimized || nativePreviewActive) return undefined;
 
     const handleResize = () => {
       setWindowOffset((currentOffset) => getClampedWindowOffset(currentOffset));
@@ -207,9 +412,10 @@ export function ImageViewerDialog({
 
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [getClampedWindowOffset, maximized, minimized, mobile, open]);
+  }, [getClampedWindowOffset, maximized, minimized, mobile, nativePreviewActive, open]);
 
   if (!open) return null;
+  if (nativePreviewActive) return null;
 
   const modalStyle = getImageViewerModalStyle(imageSize.width, imageSize.height);
   const windowModalStyle = maximized

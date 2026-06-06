@@ -48,7 +48,7 @@ import {
   PageHeroSection,
 } from '../../../components/page';
 import { Image, Video } from '../../../components/media';
-import { ImageViewer, type ImageViewerProps } from '../../../components/image-viewer';
+import { ImageViewer } from '../../../components/image-viewer';
 import { SequenceCard } from '../../../components/sequence-card';
 import { UserAvatar } from '../../../components/user-avatar';
 import { RenderMessageContent } from '../../../components/RenderMessageContent';
@@ -298,6 +298,7 @@ const getFavoriteImageViewerItems = (items: FavoriteItem[]): ViewerImageItem[] =
       body: getFavoriteDisplayTitle(item),
       mimeType: typeof content.info?.mimetype === 'string' ? content.info.mimetype : undefined,
       url: mediaUrl,
+      info: content.info,
       encInfo: content.file,
     });
 
@@ -645,47 +646,6 @@ function FavoriteMediaDetails({
   );
 }
 
-function FavoriteImageViewerContent({
-  favoriteItemsById,
-  favoriteNotes,
-  onSaveNote,
-  onOpenSource,
-  onRemoveFavorite,
-  ...viewerProps
-}: ImageViewerProps & {
-  favoriteItemsById: Map<string, FavoriteItem>;
-  favoriteNotes: Record<string, string>;
-  onSaveNote: FavoriteSaveNoteHandler;
-  onOpenSource: FavoriteOpenSourceHandler;
-  onRemoveFavorite: (item: FavoriteItem) => Promise<void>;
-}) {
-  const activeFavoriteItem = viewerProps.activeItemId
-    ? favoriteItemsById.get(viewerProps.activeItemId)
-    : undefined;
-
-  return (
-    <Box className={css.ViewerShell}>
-      <Box className={css.ViewerStageCard}>
-        <ImageViewer {...viewerProps} />
-      </Box>
-      {activeFavoriteItem && (
-        <Box className={css.ViewerDetailsCard}>
-          <FavoriteMediaDetails
-            item={activeFavoriteItem}
-            note={favoriteNotes[activeFavoriteItem.referenceId]}
-            onSaveNote={onSaveNote}
-            onOpenSource={onOpenSource}
-            onRemoveFavorite={async (item) => {
-              await onRemoveFavorite(item);
-              viewerProps.requestClose();
-            }}
-          />
-        </Box>
-      )}
-    </Box>
-  );
-}
-
 function FavoriteVideoViewerModal({
   open,
   item,
@@ -861,23 +821,13 @@ function FavoriteImageCard({
   selected,
   selectionMode,
   imageViewerItems,
-  favoriteItemsById,
-  favoriteNotes,
   onToggleSelect,
-  onOpenSource,
-  onRemoveFavorite,
-  onSaveNote,
 }: {
   item: FavoriteItem;
   selected: boolean;
   selectionMode: boolean;
   imageViewerItems: ViewerImageItem[];
-  favoriteItemsById: Map<string, FavoriteItem>;
-  favoriteNotes: Record<string, string>;
   onToggleSelect: () => void;
-  onOpenSource: FavoriteOpenSourceHandler;
-  onRemoveFavorite: (item: FavoriteItem) => Promise<void>;
-  onSaveNote: FavoriteSaveNoteHandler;
 }) {
   const content = getFavoriteImageContent(item);
   const mediaUrl =
@@ -913,16 +863,7 @@ function FavoriteImageCard({
           viewerItemId={getFavoriteItemId(item)}
           markedAsSpoiler={content[MATRIX_SPOILER_PROPERTY_NAME]}
           spoilerReason={content[MATRIX_SPOILER_REASON_PROPERTY_NAME]}
-          renderViewer={(viewerProps) => (
-            <FavoriteImageViewerContent
-              {...viewerProps}
-              favoriteItemsById={favoriteItemsById}
-              favoriteNotes={favoriteNotes}
-              onSaveNote={onSaveNote}
-              onOpenSource={onOpenSource}
-              onRemoveFavorite={onRemoveFavorite}
-            />
-          )}
+          renderViewer={(viewerProps) => <ImageViewer {...viewerProps} />}
           renderImage={({ alt, title, src, onLoad, onError, onClick, tabIndex }) => (
             <button
               type="button"
@@ -1409,11 +1350,6 @@ export function Favorites() {
   const favoriteItemsMap = useMemo(
     () => new Map(favoriteItems.map((item) => [getFavoriteItemId(item), item])),
     [favoriteItems]
-  );
-
-  const favoriteItemsById = useMemo(
-    () => new Map(visibleItems.map((item) => [getFavoriteItemId(item), item])),
-    [visibleItems]
   );
 
   const imageViewerItems = useMemo(
@@ -2009,12 +1945,7 @@ export function Favorites() {
                           selected={selectedFavoriteIds.includes(getFavoriteItemId(item))}
                           selectionMode={filtersOpen}
                           imageViewerItems={imageViewerItems}
-                          favoriteItemsById={favoriteItemsById}
-                          favoriteNotes={favoriteNotes}
                           onToggleSelect={() => handleToggleSelect(item)}
-                          onOpenSource={handleOpenSource}
-                          onRemoveFavorite={handleRemoveFavorite}
-                          onSaveNote={handleSaveNote}
                         />
                       );
                     }

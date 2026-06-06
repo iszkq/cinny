@@ -12,6 +12,7 @@ import './index.css';
 
 import { trimTrailingSlash } from './app/utils/common';
 import App from './app/pages/App';
+import { NativeImagePreviewWindow } from './app/components/image-viewer/NativeImagePreviewWindow';
 
 // import i18n (needs to be bundled ;))
 import './app/i18n';
@@ -19,18 +20,20 @@ import { pushSessionToSW } from './sw-session';
 import { getFallbackSession } from './app/state/sessions';
 import { isDesktopUpdaterSupported } from './app/utils/desktopUpdater';
 import { applyDesktopStartupPinLock } from './app/utils/pinLock';
+import { isNativeImagePreviewWindow } from './app/utils/nativeImagePreview';
 
 document.body.classList.add(configClass, varsClass);
 
-const fallbackSession = getFallbackSession();
+const nativeImagePreviewWindow = isDesktopUpdaterSupported() && isNativeImagePreviewWindow();
+const fallbackSession = nativeImagePreviewWindow ? undefined : getFallbackSession();
 
-if (isDesktopUpdaterSupported()) {
+if (isDesktopUpdaterSupported() && !nativeImagePreviewWindow) {
   document.documentElement.dataset.cinnyDesktopApp = 'true';
   applyDesktopStartupPinLock(fallbackSession?.baseUrl, fallbackSession?.userId);
 }
 
 // Register Service Worker
-if ('serviceWorker' in navigator) {
+if (!nativeImagePreviewWindow && 'serviceWorker' in navigator) {
   const swUrl =
     import.meta.env.MODE === 'production'
       ? `${trimTrailingSlash(import.meta.env.BASE_URL)}/sw.js`
@@ -70,7 +73,7 @@ const mountApp = () => {
   }
 
   const root = createRoot(rootContainer);
-  root.render(<App />);
+  root.render(nativeImagePreviewWindow ? <NativeImagePreviewWindow /> : <App />);
 };
 
 mountApp();
