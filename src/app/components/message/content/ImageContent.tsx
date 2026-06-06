@@ -6,10 +6,6 @@ import {
   Chip,
   Icon,
   Icons,
-  Modal,
-  Overlay,
-  OverlayBackdrop,
-  OverlayCenter,
   Spinner,
   Text,
   Tooltip,
@@ -18,7 +14,6 @@ import {
 } from 'folds';
 import classNames from 'classnames';
 import { BlurhashCanvas } from 'react-blurhash';
-import FocusTrap from 'focus-trap-react';
 import { EncryptedAttachmentInfo } from 'browser-encrypt-attachment';
 import {
   IImageInfo,
@@ -30,19 +25,16 @@ import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import * as css from './style.css';
 import { bytesToSize } from '../../../utils/common';
 import { FALLBACK_MIMETYPE } from '../../../utils/mimeTypes';
-import { stopPropagation } from '../../../utils/keyboard';
 import {
   mxcUrlToHttp,
   shouldUseObjectUrlForMediaDisplay,
 } from '../../../utils/matrix';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
-import { ImageViewerBackdrop, ImageViewerModal } from '../../../styles/Modal.css';
 import { validBlurHash } from '../../../utils/blurHash';
 import { primeCachedMediaObjectUrl } from '../../../utils/mediaUrlCache';
-import { getImageViewerModalStyle } from '../../../utils/imageViewerModal';
-import { loadImageElement } from '../../../utils/dom';
 import { useStableMediaUrl } from '../../emoji-board/useStableMediaUrl';
 import { prepareEncryptedMediaObjectUrl } from '../../../utils/encryptedMediaCache';
+import { ImageViewerDialog } from '../../image-viewer';
 
 const IMAGE_PREVIEW_WIDTH = 230;
 const IMAGE_PREVIEW_HEIGHT = 460;
@@ -130,10 +122,6 @@ export const ImageContent = as<'div', ImageContentProps>(
     const [viewer, setViewer] = useState(false);
     const [stableRetryNonce, setStableRetryNonce] = useState(0);
     const [blurred, setBlurred] = useState(markedAsSpoiler ?? false);
-    const [viewerImageSize, setViewerImageSize] = useState<{
-      width?: number;
-      height?: number;
-    }>({});
     const stablePreviewEnabled = autoPlay && previewMediaStrategy === 'stable' && !encInfo;
     const stableOriginalUrl =
       typeof url === 'string' && !url.startsWith('mxc://')
@@ -324,72 +312,23 @@ export const ImageContent = as<'div', ImageContentProps>(
       : (srcState.status === AsyncStatus.Loading || srcState.status === AsyncStatus.Success) &&
         !load;
 
-    useEffect(() => {
-      if (!viewer || !viewerSrc) {
-        setViewerImageSize({});
-        return undefined;
-      }
-
-      let mounted = true;
-      setViewerImageSize({});
-      loadImageElement(viewerSrc)
-        .then((img) => {
-          if (!mounted) return;
-          setViewerImageSize({
-            width: img.naturalWidth || img.width,
-            height: img.naturalHeight || img.height,
-          });
-        })
-        .catch(() => {
-          if (mounted) {
-            setViewerImageSize({});
-          }
-        });
-
-      return () => {
-        mounted = false;
-      };
-    }, [viewer, viewerSrc]);
-
     const viewerLoading =
       viewer &&
       srcState.status === AsyncStatus.Success &&
       srcState.data.kind === 'thumbnail' &&
       viewerSrcState.status !== AsyncStatus.Success;
-    const viewerModalStyle = getImageViewerModalStyle(
-      viewerImageSize.width ?? info?.w ?? info?.thumbnail_info?.w,
-      viewerImageSize.height ?? info?.h ?? info?.thumbnail_info?.h
-    );
 
     return (
       <Box className={classNames(css.RelativeBase, className)} {...props} ref={ref}>
         {viewer && viewerSrc && (
-          <Overlay open={viewer} backdrop={<OverlayBackdrop className={ImageViewerBackdrop} />}>
-            <OverlayCenter>
-              <FocusTrap
-                focusTrapOptions={{
-                  initialFocus: false,
-                  onDeactivate: () => setViewer(false),
-                  clickOutsideDeactivates: true,
-                  escapeDeactivates: stopPropagation,
-                }}
-              >
-                <Modal
-                  className={ImageViewerModal}
-                  size="500"
-                  style={viewerModalStyle}
-                  onContextMenu={(evt: any) => evt.stopPropagation()}
-                >
-                  {renderViewer({
-                    src: viewerSrc,
-                    alt: viewerAlt,
-                    loading: viewerLoading,
-                    requestClose: () => setViewer(false),
-                  })}
-                </Modal>
-              </FocusTrap>
-            </OverlayCenter>
-          </Overlay>
+          <ImageViewerDialog
+            open={viewer}
+            src={viewerSrc}
+            alt={viewerAlt}
+            loading={viewerLoading}
+            requestClose={() => setViewer(false)}
+            renderViewer={renderViewer}
+          />
         )}
         {typeof blurHash === 'string' && !load && (
           <BlurhashCanvas

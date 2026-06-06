@@ -8,18 +8,18 @@ type ImageViewerModalStyle = CSSProperties & {
 type ImageOrientation = 'landscape' | 'portrait' | 'square';
 
 const LANDSCAPE_MODAL_STYLE: ImageViewerModalStyle = {
-  '--image-viewer-modal-width': 'min(76vw, 1120px)',
-  '--image-viewer-modal-height': 'min(78vh, 780px)',
+  '--image-viewer-modal-width': 'min(88vw, 1240px)',
+  '--image-viewer-modal-height': 'min(86vh, 860px)',
 };
 
 const PORTRAIT_MODAL_STYLE: ImageViewerModalStyle = {
-  '--image-viewer-modal-width': 'clamp(520px, 42vw, 640px)',
-  '--image-viewer-modal-height': 'min(94vh, 980px)',
+  '--image-viewer-modal-width': 'min(86vw, 1040px)',
+  '--image-viewer-modal-height': 'min(92vh, 920px)',
 };
 
 const SQUARE_MODAL_STYLE: ImageViewerModalStyle = {
-  '--image-viewer-modal-width': 'min(70vw, 900px)',
-  '--image-viewer-modal-height': 'min(80vh, 820px)',
+  '--image-viewer-modal-width': 'min(82vw, 980px)',
+  '--image-viewer-modal-height': 'min(86vh, 860px)',
 };
 
 const getPositiveDimension = (dimension?: number): number | undefined => {

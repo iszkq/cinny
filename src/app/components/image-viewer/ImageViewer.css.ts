@@ -157,6 +157,63 @@ export const ImageViewerLoading = style([
   },
 ]);
 
+export const ImageViewerWindowControls = style([
+  DefaultReset,
+  {
+    display: 'flex',
+    alignItems: 'center',
+    gap: config.space.S100,
+    marginLeft: config.space.S100,
+    paddingLeft: config.space.S100,
+    borderLeft: '1px solid rgba(148, 163, 184, 0.22)',
+  },
+]);
+
+export const WindowControlGlyph = style([
+  DefaultReset,
+  {
+    position: 'relative',
+    width: '14px',
+    height: '14px',
+    display: 'inline-block',
+    color: 'currentColor',
+    boxSizing: 'border-box',
+  },
+]);
+
+export const WindowMaximizeGlyph = style({
+  border: '1.8px solid currentColor',
+  borderRadius: '3px',
+});
+
+export const WindowRestoreGlyph = style({
+  selectors: {
+    '&::before': {
+      content: '""',
+      position: 'absolute',
+      top: '1px',
+      right: '1px',
+      width: '9px',
+      height: '9px',
+      border: '1.6px solid currentColor',
+      borderRadius: '3px',
+    },
+    '&::after': {
+      content: '""',
+      position: 'absolute',
+      left: '1px',
+      bottom: '1px',
+      width: '9px',
+      height: '9px',
+      border: '1.6px solid currentColor',
+      borderRadius: '3px',
+      background: 'currentColor',
+      clipPath:
+        'polygon(0 0, 100% 0, 100% 1.6px, 1.6px 1.6px, 1.6px 100%, 0 100%)',
+    },
+  },
+});
+
 export const NavButton = style([
   DefaultReset,
   {

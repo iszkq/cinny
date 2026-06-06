@@ -20,6 +20,9 @@ export type ImageViewerProps = {
   src: string;
   loading?: boolean;
   requestClose: () => void;
+  onMinimize?: () => void;
+  maximized?: boolean;
+  onToggleMaximized?: () => void;
   canPrev?: boolean;
   canNext?: boolean;
   onPrev?: () => void;
@@ -102,6 +105,12 @@ const getTouchDistance = (touches: TouchList): number => {
   return Math.hypot(first.clientX - second.clientX, first.clientY - second.clientY);
 };
 
+const isEditableEventTarget = (target: EventTarget | null): boolean => {
+  if (!(target instanceof HTMLElement)) return false;
+
+  return Boolean(target.closest('input, textarea, [contenteditable="true"]'));
+};
+
 export const ImageViewer = as<'div', ImageViewerProps>(
   (
     {
@@ -110,6 +119,9 @@ export const ImageViewer = as<'div', ImageViewerProps>(
       src,
       loading,
       requestClose,
+      onMinimize,
+      maximized,
+      onToggleMaximized,
       canPrev,
       canNext,
       onPrev,
@@ -234,7 +246,7 @@ export const ImageViewer = as<'div', ImageViewerProps>(
       } else if (x < 0 && canNext && onNext) {
         onNext();
       }
-    }, [canNext, canPrev, clearSwipeListeners, onNext, onPrev]);
+    }, [canNext, canPrev, clearSwipeListeners, onNext, onPrev, requestClose]);
 
     const handleSwipeMouseDown = useCallback<React.MouseEventHandler<HTMLImageElement>>(
       (evt) => {
@@ -416,6 +428,8 @@ export const ImageViewer = as<'div', ImageViewerProps>(
 
     useEffect(() => {
       const handleKeyDown = (evt: KeyboardEvent) => {
+        if (isEditableEventTarget(evt.target)) return;
+
         if (evt.key === 'ArrowLeft' && canPrev && onPrev) {
           evt.preventDefault();
           onPrev();
@@ -692,6 +706,56 @@ export const ImageViewer = as<'div', ImageViewerProps>(
                   >
                     <Text size="B300">{'\u4e0b\u8f7d'}</Text>
                   </Chip>
+                )}
+
+                {(onMinimize || onToggleMaximized) && (
+                  <Box className={css.ImageViewerWindowControls} shrink="No" alignItems="Center">
+                    {onMinimize && (
+                      <IconButton
+                        variant="SurfaceVariant"
+                        size="300"
+                        radii="300"
+                        onClick={onMinimize}
+                        aria-label={'\u6700\u5c0f\u5316\u9884\u89c8'}
+                        title={'\u6700\u5c0f\u5316\u9884\u89c8'}
+                      >
+                        <Icon size="50" src={Icons.Minus} />
+                      </IconButton>
+                    )}
+
+                    {onToggleMaximized && (
+                      <IconButton
+                        variant={maximized ? 'Success' : 'SurfaceVariant'}
+                        size="300"
+                        radii="300"
+                        onClick={onToggleMaximized}
+                        aria-label={
+                          maximized ? '\u8fd8\u539f\u7a97\u53e3' : '\u6700\u5927\u5316\u9884\u89c8'
+                        }
+                        title={
+                          maximized ? '\u8fd8\u539f\u7a97\u53e3' : '\u6700\u5927\u5316\u9884\u89c8'
+                        }
+                      >
+                        <span
+                          className={classNames(
+                            css.WindowControlGlyph,
+                            maximized ? css.WindowRestoreGlyph : css.WindowMaximizeGlyph
+                          )}
+                        />
+                      </IconButton>
+                    )}
+
+                    <IconButton
+                      variant="SurfaceVariant"
+                      size="300"
+                      radii="300"
+                      onClick={requestClose}
+                      aria-label={'\u5173\u95ed\u9884\u89c8'}
+                      title={'\u5173\u95ed\u9884\u89c8'}
+                    >
+                      <Icon size="50" src={Icons.Cross} />
+                    </IconButton>
+                  </Box>
                 )}
               </Box>
             </>
