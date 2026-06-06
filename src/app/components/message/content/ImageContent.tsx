@@ -1,4 +1,4 @@
-import React, { ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { ReactNode, useCallback, useEffect, useState } from 'react';
 import {
   Badge,
   Box,
@@ -48,13 +48,6 @@ type RenderViewerProps = {
   canNext?: boolean;
   onPrev?: () => void;
   onNext?: () => void;
-  items?: Array<{
-    id: string;
-    alt: string;
-    previewSrc?: string;
-  }>;
-  activeItemId?: string;
-  onSelectItem?: (itemId: string) => void;
 };
 export type ViewerImageItem = {
   id: string;
@@ -363,45 +356,6 @@ export const ImageContent = as<'div', ImageContentProps>(
       });
     }, [viewerItemSrcState]);
 
-    const imageViewerItems = useMemo(
-      () =>
-        viewerItems?.map((item) => {
-          const thumbnailMxcUrl = item.info?.thumbnail_file?.url ?? item.info?.thumbnail_url;
-          let itemPreviewSrc = viewerSourceCache[item.id];
-
-          if (item.id === viewerItemId && previewSrc) {
-            itemPreviewSrc = previewSrc;
-          }
-
-          if (
-            !itemPreviewSrc &&
-            typeof thumbnailMxcUrl === 'string' &&
-            !item.info?.thumbnail_file
-          ) {
-            itemPreviewSrc = mxcUrlToHttp(mx, thumbnailMxcUrl, useAuthentication) ?? undefined;
-          }
-
-          if (!itemPreviewSrc && !item.encInfo) {
-            itemPreviewSrc = item.url.startsWith('mxc://')
-              ? (mxcUrlToHttp(
-                  mx,
-                  item.url,
-                  useAuthentication,
-                  IMAGE_PREVIEW_WIDTH,
-                  IMAGE_PREVIEW_HEIGHT,
-                  'scale'
-                ) ?? undefined)
-              : item.url;
-          }
-
-          return {
-            id: item.id,
-            alt: item.body,
-            previewSrc: itemPreviewSrc,
-          };
-        }),
-      [mx, previewSrc, useAuthentication, viewerItemId, viewerItems, viewerSourceCache]
-    );
     const activeViewerId = activeViewerItemId ?? viewerItemId;
     const activeViewerItem =
       viewerItems?.find((item) => item.id === activeViewerId) ??
@@ -410,16 +364,12 @@ export const ImageContent = as<'div', ImageContentProps>(
       activeViewerItem && viewerItems
         ? viewerItems.findIndex((item) => item.id === activeViewerItem.id)
         : -1;
-    const activeViewerPreviewSrc = imageViewerItems?.find(
-      (item) => item.id === activeViewerItem?.id
-    )?.previewSrc;
     const cachedActiveViewerSrc = activeViewerItem
       ? viewerSourceCache[activeViewerItem.id]
       : undefined;
     const activeViewerSrc =
       cachedActiveViewerSrc ??
       (activeViewerItem?.id === viewerItemId ? viewerSrc : undefined) ??
-      activeViewerPreviewSrc ??
       viewerSrc;
     const activeViewerLoading =
       !activeViewerItem || activeViewerItem.id === viewerItemId
@@ -480,9 +430,6 @@ export const ImageContent = as<'div', ImageContentProps>(
             canNext={viewerNavigationEnabled && activeViewerIndex < viewerItemsCount - 1}
             onPrev={viewerNavigationEnabled ? handlePrevViewerItem : undefined}
             onNext={viewerNavigationEnabled ? handleNextViewerItem : undefined}
-            items={viewerNavigationEnabled ? imageViewerItems : undefined}
-            activeItemId={activeViewerItem?.id ?? viewerItemId}
-            onSelectItem={viewerNavigationEnabled ? handleSelectViewerItem : undefined}
             requestClose={handleCloseViewer}
             renderViewer={renderViewer}
           />

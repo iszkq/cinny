@@ -1,11 +1,5 @@
 import { isDesktopUpdaterSupported } from './desktopUpdater';
 
-export type NativeImagePreviewItem = {
-  id: string;
-  alt: string;
-  previewSrc?: string;
-};
-
 export type NativeImagePreviewPayload = {
   previewId: string;
   src: string;
@@ -13,20 +7,12 @@ export type NativeImagePreviewPayload = {
   loading?: boolean;
   canPrev?: boolean;
   canNext?: boolean;
-  items?: NativeImagePreviewItem[];
-  activeItemId?: string;
 };
 
-export type NativeImagePreviewAction =
-  | {
-      previewId: string;
-      type: 'close' | 'prev' | 'next';
-    }
-  | {
-      previewId: string;
-      type: 'select';
-      itemId: string;
-    };
+export type NativeImagePreviewAction = {
+  previewId: string;
+  type: 'close' | 'prev' | 'next';
+};
 
 export type NativeImagePreviewWindowHandle = {
   label: string;
@@ -89,21 +75,6 @@ export const getTransferableImagePreviewSrc = async (src: string): Promise<strin
   const response = await fetch(src);
   const blob = await response.blob();
   return blobToDataUrl(blob);
-};
-
-export const getTransferableImagePreviewItems = async (
-  items?: NativeImagePreviewItem[]
-): Promise<NativeImagePreviewItem[] | undefined> => {
-  if (!items) return undefined;
-
-  return Promise.all(
-    items.map(async (item) => ({
-      ...item,
-      previewSrc: item.previewSrc
-        ? await getTransferableImagePreviewSrc(item.previewSrc).catch(() => item.previewSrc)
-        : undefined,
-    }))
-  );
 };
 
 export const createNativeImagePreviewId = (): string => {

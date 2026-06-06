@@ -32,11 +32,9 @@ import {
   closeNativeImagePreviewWindow,
   createNativeImagePreviewId,
   emitNativeImagePreviewPayload,
-  getTransferableImagePreviewItems,
   getTransferableImagePreviewSrc,
   listenNativeImagePreviewAction,
   openNativeImagePreviewWindow,
-  type NativeImagePreviewItem,
 } from '../../utils/nativeImagePreview';
 
 type ImageViewerDialogProps = Omit<
@@ -67,9 +65,6 @@ type LatestNativePreviewInput = {
   canNext?: boolean;
   onPrev?: () => void;
   onNext?: () => void;
-  items?: NativeImagePreviewItem[];
-  activeItemId?: string;
-  onSelectItem?: (itemId: string) => void;
   requestClose: () => void;
 };
 
@@ -121,9 +116,6 @@ export function ImageViewerDialog({
     canNext: viewerProps.canNext,
     onPrev: viewerProps.onPrev,
     onNext: viewerProps.onNext,
-    items: viewerProps.items,
-    activeItemId: viewerProps.activeItemId,
-    onSelectItem: viewerProps.onSelectItem,
     requestClose,
   });
   const [nativePreviewActive, setNativePreviewActive] = useState(false);
@@ -211,10 +203,7 @@ export function ImageViewerDialog({
 
   const buildNativePreviewPayload = useCallback(async (previewId: string) => {
     const input = latestNativeInputRef.current;
-    const [transferableSrc, transferableItems] = await Promise.all([
-      getTransferableImagePreviewSrc(input.src).catch(() => input.src),
-      getTransferableImagePreviewItems(input.items).catch(() => input.items),
-    ]);
+    const transferableSrc = await getTransferableImagePreviewSrc(input.src).catch(() => input.src);
 
     return {
       previewId,
@@ -223,8 +212,6 @@ export function ImageViewerDialog({
       loading: input.loading,
       canPrev: input.canPrev,
       canNext: input.canNext,
-      items: transferableItems,
-      activeItemId: input.activeItemId,
     };
   }, []);
 
@@ -237,9 +224,6 @@ export function ImageViewerDialog({
       canNext: viewerProps.canNext,
       onPrev: viewerProps.onPrev,
       onNext: viewerProps.onNext,
-      items: viewerProps.items,
-      activeItemId: viewerProps.activeItemId,
-      onSelectItem: viewerProps.onSelectItem,
       requestClose,
     };
   }, [
@@ -247,13 +231,10 @@ export function ImageViewerDialog({
     loading,
     requestClose,
     src,
-    viewerProps.activeItemId,
     viewerProps.canNext,
     viewerProps.canPrev,
-    viewerProps.items,
     viewerProps.onNext,
     viewerProps.onPrev,
-    viewerProps.onSelectItem,
   ]);
 
   useEffect(() => {
@@ -312,10 +293,6 @@ export function ImageViewerDialog({
         }
         if (action.type === 'next') {
           input.onNext?.();
-          return;
-        }
-        if (action.type === 'select') {
-          input.onSelectItem?.(action.itemId);
         }
       });
 
@@ -376,10 +353,8 @@ export function ImageViewerDialog({
     loading,
     open,
     src,
-    viewerProps.activeItemId,
     viewerProps.canNext,
     viewerProps.canPrev,
-    viewerProps.items,
   ]);
 
   useEffect(() => {

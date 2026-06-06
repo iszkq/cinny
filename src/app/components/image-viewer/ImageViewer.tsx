@@ -9,12 +9,6 @@ import { fetchMediaWithAuth } from '../../utils/matrix';
 import { ScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
 import { saveDownloadedFile } from '../../utils/saveDownloadedFile';
 
-export type ImageViewerItem = {
-  id: string;
-  alt: string;
-  previewSrc?: string;
-};
-
 export type ImageViewerProps = {
   alt: string;
   src: string;
@@ -28,9 +22,6 @@ export type ImageViewerProps = {
   canNext?: boolean;
   onPrev?: () => void;
   onNext?: () => void;
-  items?: ImageViewerItem[];
-  activeItemId?: string;
-  onSelectItem?: (itemId: string) => void;
 };
 
 type ViewMode = 'fit' | 'actual';
@@ -128,9 +119,6 @@ export const ImageViewer = as<'div', ImageViewerProps>(
       canNext,
       onPrev,
       onNext,
-      items,
-      activeItemId,
-      onSelectItem,
       ...props
     },
     ref
@@ -149,17 +137,10 @@ export const ImageViewer = as<'div', ImageViewerProps>(
     const [swipeOffsetX, setSwipeOffsetX] = useState(0);
     const [swipeOffsetY, setSwipeOffsetY] = useState(0);
     const displayRotation = ((rotation % 360) + 360) % 360;
-    const resolvedActiveItemId = activeItemId ?? src;
-    const viewerIndex = Math.max(
-      items?.findIndex((item) => item.id === resolvedActiveItemId) ?? 0,
-      0
-    );
-    const thumbnailRefs = useRef<Record<string, HTMLButtonElement | null>>({});
     const swipeDeltaRef = useRef({ x: 0, y: 0 });
     const touchGestureRef = useRef<TouchGesture>();
     const swipeCleanupRef = useRef<(() => void) | null>(null);
     const transitionTimerRef = useRef<number | null>(null);
-    const hasThumbnailRail = !!items && items.length > 1;
     const lastTapRef = useRef<
       | {
           time: number;
@@ -447,14 +428,6 @@ export const ImageViewer = as<'div', ImageViewerProps>(
       return () => window.removeEventListener('keydown', handleKeyDown);
     }, [canNext, canPrev, onNext, onPrev]);
 
-    useEffect(() => {
-      if (!hasThumbnailRail || !resolvedActiveItemId) return;
-      thumbnailRefs.current[resolvedActiveItemId]?.scrollIntoView({
-        block: 'nearest',
-        inline: 'center',
-      });
-    }, [hasThumbnailRail, resolvedActiveItemId]);
-
     useEffect(
       () => () => {
         clearSwipeListeners();
@@ -604,11 +577,6 @@ export const ImageViewer = as<'div', ImageViewerProps>(
                 style={{ width: '100%', minWidth: 0, flexWrap: 'wrap' }}
               >
                 <Box alignItems="Center" gap="200" style={{ minWidth: 0 }}>
-                  {hasThumbnailRail && items && (
-                    <Text size="T200" priority="300">
-                      {`${viewerIndex + 1} / ${items.length}`}
-                    </Text>
-                  )}
                   <Chip
                     variant={displayRotation !== 0 ? 'Success' : 'SurfaceVariant'}
                     radii="Pill"
@@ -886,67 +854,6 @@ export const ImageViewer = as<'div', ImageViewerProps>(
               </IconButton>
             )}
           </Box>
-
-          {hasThumbnailRail && items && (
-            <Box className={css.ThumbnailRail} direction="Column" gap="100">
-            <Box className={css.ThumbnailHeader} alignItems="Center" justifyContent="SpaceBetween">
-                <Text size="T200" priority="300">
-                {mobile
-                  ? '\u53cc\u51fb\u8fd8\u539f\uff0c\u53cc\u6307\u7f29\u653e\uff0c\u4e0a\u6ed1\u5173\u95ed\uff0c\u5de6\u53f3\u6ed1\u52a8\u5207\u56fe'
-                  : '\u53cc\u51fb\u6216\u53cc\u6307\u7f29\u653e\uff0c\u5de6\u53f3\u6ed1\u52a8\u53ef\u5207\u56fe'}
-              </Text>
-                <Text size="T200" priority="300">
-                  {`${items.findIndex((item) => item.id === resolvedActiveItemId) + 1} / ${items.length}`}
-                </Text>
-              </Box>
-
-              <div className={css.ThumbnailList}>
-                {items.map((item) => {
-                  const active = item.id === resolvedActiveItemId;
-
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      ref={(element) => {
-                        thumbnailRefs.current[item.id] = element;
-                      }}
-                      className={classNames(
-                        css.ThumbnailButton,
-                        active && css.ThumbnailButtonActive
-                      )}
-                      onClick={() => onSelectItem?.(item.id)}
-                      aria-pressed={active}
-                      title={item.alt}
-                    >
-                      {item.previewSrc ? (
-                        <img
-                          className={css.ThumbnailImage}
-                          src={item.previewSrc}
-                          alt={item.alt}
-                          loading="eager"
-                          decoding="async"
-                        />
-                      ) : (
-                        <Box
-                          className={css.ThumbnailPlaceholder}
-                          direction="Column"
-                          gap="50"
-                          alignItems="Center"
-                          justifyContent="Center"
-                        >
-                          <Icon size="100" src={Icons.Photo} />
-                          <Text size="T100" align="Center">
-                            {'\u5f85\u8f7d\u5165'}
-                          </Text>
-                        </Box>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </Box>
-          )}
         </Box>
       </Box>
     );

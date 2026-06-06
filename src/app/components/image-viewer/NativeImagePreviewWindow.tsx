@@ -168,11 +168,6 @@ function NativeImagePreviewWindowContent() {
               }
             : undefined
         }
-        items={payload.items}
-        activeItemId={payload.activeItemId}
-        onSelectItem={(itemId) => {
-          void emitNativeImagePreviewAction({ previewId, type: 'select', itemId });
-        }}
         onMinimize={handleMinimize}
         maximized={maximized}
         onToggleMaximized={handleToggleMaximized}
