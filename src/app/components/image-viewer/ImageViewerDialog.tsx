@@ -1,4 +1,4 @@
-import React, { ReactNode, useEffect, useState } from 'react';
+import React, { ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import FocusTrap from 'focus-trap-react';
 import classNames from 'classnames';
@@ -30,17 +30,38 @@ import { getImageViewerModalStyle } from '../../utils/imageViewerModal';
 
 type ImageViewerDialogProps = Omit<
   ImageViewerProps,
-  'maximized' | 'onMinimize' | 'onToggleMaximized'
+  'maximized' | 'onMinimize' | 'onToggleMaximized' | 'onWindowDragStart'
 > & {
   open: boolean;
   renderViewer: (props: ImageViewerProps) => ReactNode;
 };
+
+type WindowOffset = {
+  x: number;
+  y: number;
+};
+
+const WINDOW_EDGE_PADDING_PX = 16;
 
 const isEditableEventTarget = (target: EventTarget | null): boolean => {
   if (!(target instanceof HTMLElement)) return false;
 
   return Boolean(target.closest('input, textarea, [contenteditable="true"]'));
 };
+
+const isInteractiveDragTarget = (target: EventTarget | null): boolean => {
+  if (!(target instanceof HTMLElement)) return false;
+
+  return Boolean(
+    target.closest('button, a, input, textarea, select, [role="button"], [contenteditable="true"]')
+  );
+};
+
+const getWindowElement = (): HTMLElement | null =>
+  document.querySelector('[data-image-viewer-window="true"]');
+
+const clamp = (value: number, min: number, max: number): number =>
+  Math.min(max, Math.max(min, value));
 
 export function ImageViewerDialog({
   open,
@@ -56,12 +77,83 @@ export function ImageViewerDialog({
   const [imageSize, setImageSize] = useState<{ width?: number; height?: number }>({});
   const [maximized, setMaximized] = useState(false);
   const [minimized, setMinimized] = useState(false);
+  const [windowOffset, setWindowOffset] = useState<WindowOffset>({ x: 0, y: 0 });
+  const dragCleanupRef = useRef<(() => void) | null>(null);
+
+  const clearDragListeners = useCallback(() => {
+    dragCleanupRef.current?.();
+    dragCleanupRef.current = null;
+  }, []);
+
+  const getClampedWindowOffset = useCallback((nextOffset: WindowOffset): WindowOffset => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return nextOffset;
+
+    const windowElement = getWindowElement();
+    const rect = windowElement?.getBoundingClientRect();
+    if (!rect) return nextOffset;
+
+    const maxX = Math.max(0, (window.innerWidth - rect.width) / 2 - WINDOW_EDGE_PADDING_PX);
+    const maxY = Math.max(
+      0,
+      (window.innerHeight - rect.height) / 2 - WINDOW_EDGE_PADDING_PX
+    );
+
+    return {
+      x: clamp(nextOffset.x, -maxX, maxX),
+      y: clamp(nextOffset.y, -maxY, maxY),
+    };
+  }, []);
+
+  const handleWindowDragStart = useCallback<React.PointerEventHandler<HTMLElement>>(
+    (evt) => {
+      if (mobile || maximized || isInteractiveDragTarget(evt.target)) return;
+      if (evt.pointerType === 'mouse' && evt.button !== 0) return;
+
+      evt.preventDefault();
+      clearDragListeners();
+
+      const startX = evt.clientX;
+      const startY = evt.clientY;
+      const startOffset = windowOffset;
+
+      const handlePointerMove = (moveEvt: PointerEvent) => {
+        setWindowOffset(
+          getClampedWindowOffset({
+            x: startOffset.x + moveEvt.clientX - startX,
+            y: startOffset.y + moveEvt.clientY - startY,
+          })
+        );
+      };
+
+      const handlePointerUp = () => {
+        clearDragListeners();
+      };
+
+      window.addEventListener('pointermove', handlePointerMove);
+      window.addEventListener('pointerup', handlePointerUp, { once: true });
+      window.addEventListener('pointercancel', handlePointerUp, { once: true });
+      dragCleanupRef.current = () => {
+        window.removeEventListener('pointermove', handlePointerMove);
+        window.removeEventListener('pointerup', handlePointerUp);
+        window.removeEventListener('pointercancel', handlePointerUp);
+      };
+    },
+    [
+      clearDragListeners,
+      getClampedWindowOffset,
+      maximized,
+      mobile,
+      windowOffset,
+    ]
+  );
 
   useEffect(() => {
     if (!open) {
       setImageSize({});
       setMaximized(false);
       setMinimized(false);
+      setWindowOffset({ x: 0, y: 0 });
+      clearDragListeners();
       return undefined;
     }
 
@@ -84,7 +176,7 @@ export function ImageViewerDialog({
     return () => {
       mounted = false;
     };
-  }, [open, src]);
+  }, [clearDragListeners, open, src]);
 
   useEffect(() => {
     if (!open || mobile || minimized) return undefined;
@@ -99,9 +191,33 @@ export function ImageViewerDialog({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [minimized, mobile, open, requestClose]);
 
+  useEffect(
+    () => () => {
+      clearDragListeners();
+    },
+    [clearDragListeners]
+  );
+
+  useEffect(() => {
+    if (!open || mobile || maximized || minimized) return undefined;
+
+    const handleResize = () => {
+      setWindowOffset((currentOffset) => getClampedWindowOffset(currentOffset));
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [getClampedWindowOffset, maximized, minimized, mobile, open]);
+
   if (!open) return null;
 
   const modalStyle = getImageViewerModalStyle(imageSize.width, imageSize.height);
+  const windowModalStyle = maximized
+    ? undefined
+    : {
+        ...modalStyle,
+        transform: `translate3d(${windowOffset.x}px, ${windowOffset.y}px, 0)`,
+      };
   const content = renderViewer({
     ...viewerProps,
     src,
@@ -111,6 +227,7 @@ export function ImageViewerDialog({
     maximized,
     onMinimize: mobile ? undefined : () => setMinimized(true),
     onToggleMaximized: mobile ? undefined : () => setMaximized((current) => !current),
+    onWindowDragStart: mobile || maximized ? undefined : handleWindowDragStart,
   });
 
   if (mobile) {
@@ -177,7 +294,8 @@ export function ImageViewerDialog({
           maximized && ImageViewerWindowMaximized
         )}
         size="500"
-        style={maximized ? undefined : modalStyle}
+        style={windowModalStyle}
+        data-image-viewer-window="true"
         onContextMenu={(evt: any) => evt.stopPropagation()}
       >
         {content}

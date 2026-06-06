@@ -23,6 +23,7 @@ export type ImageViewerProps = {
   onMinimize?: () => void;
   maximized?: boolean;
   onToggleMaximized?: () => void;
+  onWindowDragStart?: React.PointerEventHandler<HTMLElement>;
   canPrev?: boolean;
   canNext?: boolean;
   onPrev?: () => void;
@@ -122,6 +123,7 @@ export const ImageViewer = as<'div', ImageViewerProps>(
       onMinimize,
       maximized,
       onToggleMaximized,
+      onWindowDragStart,
       canPrev,
       canNext,
       onPrev,
@@ -571,7 +573,14 @@ export const ImageViewer = as<'div', ImageViewerProps>(
         {...props}
         ref={ref}
       >
-        <Header className={css.ImageViewerHeader} size="400">
+        <Header
+          className={classNames(
+            css.ImageViewerHeader,
+            !mobile && onWindowDragStart && css.ImageViewerHeaderDraggable
+          )}
+          size="400"
+          onPointerDown={!mobile ? onWindowDragStart : undefined}
+        >
           {mobile ? (
             <Box direction="Column" gap="200" style={{ width: '100%', minWidth: 0 }}>
               <Box alignItems="Center" gap="200" style={{ width: '100%', minWidth: 0 }}>

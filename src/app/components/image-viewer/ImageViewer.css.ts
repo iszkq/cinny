@@ -52,6 +52,17 @@ export const ImageViewerHeader = style([
   },
 ]);
 
+export const ImageViewerHeaderDraggable = style({
+  cursor: 'grab',
+  touchAction: 'none',
+  userSelect: 'none',
+  selectors: {
+    '&:active': {
+      cursor: 'grabbing',
+    },
+  },
+});
+
 export const ImageViewerContent = style([
   DefaultReset,
   {
