@@ -169,7 +169,8 @@ const BubbleTextVar = createVar();
 const BubbleBorderVar = createVar();
 const BubbleShadowVar = createVar();
 const BubbleBackdropVar = createVar();
-const BubbleTailWidth = toRem(9);
+const BubbleTailWidth = toRem(7);
+const BubbleTailOverlap = toRem(3);
 
 export const BubbleContent = style({
   vars: {
@@ -182,28 +183,16 @@ export const BubbleContent = style({
   boxSizing: 'border-box',
   maxWidth: `min(${toRem(600)}, 100%)`,
   padding: config.space.S200,
-  background: 'transparent',
+  background: BubbleBackgroundVar,
   color: BubbleTextVar,
-  border: '1px solid transparent',
+  border: `1px solid ${BubbleBorderVar}`,
+  boxShadow: BubbleShadowVar,
+  backdropFilter: BubbleBackdropVar,
+  WebkitBackdropFilter: BubbleBackdropVar,
   borderRadius: config.radii.R500,
   position: 'relative',
   isolation: 'isolate',
   zIndex: 0,
-  selectors: {
-    '&::before': {
-      content: '""',
-      position: 'absolute',
-      inset: 0,
-      background: BubbleBackgroundVar,
-      border: `1px solid ${BubbleBorderVar}`,
-      borderRadius: 'inherit',
-      boxShadow: BubbleShadowVar,
-      backdropFilter: BubbleBackdropVar,
-      WebkitBackdropFilter: BubbleBackdropVar,
-      pointerEvents: 'none',
-      zIndex: -1,
-    },
-  },
 });
 
 export const BubbleStack = style({
@@ -257,14 +246,19 @@ export const BubbleContentArrowLeft = style({
   borderLeftColor: 'transparent',
   selectors: {
     '&::before': {
+      content: '""',
+      position: 'absolute',
+      top: toRem(7),
       left: `-${BubbleTailWidth}`,
-      clipPath: `polygon(${BubbleTailWidth} 0, 100% 0, 100% 100%, ${BubbleTailWidth} 100%, ${BubbleTailWidth} ${toRem(
-        24
-      )}, ${toRem(6)} ${toRem(23)}, ${toRem(3)} ${toRem(21)}, ${toRem(
-        1
-      )} ${toRem(19)}, 0 ${toRem(17)}, ${toRem(1)} ${toRem(15)}, ${toRem(
-        3
-      )} ${toRem(13)}, ${toRem(6)} ${toRem(11)}, ${BubbleTailWidth} ${toRem(10)})`,
+      width: `calc(${BubbleTailWidth} + ${BubbleTailOverlap})`,
+      height: toRem(13),
+      background: BubbleBackgroundVar,
+      backdropFilter: BubbleBackdropVar,
+      WebkitBackdropFilter: BubbleBackdropVar,
+      clipPath:
+        'polygon(100% 0, 76% 8%, 58% 22%, 43% 36%, 16% 46%, 0 50%, 16% 56%, 43% 66%, 58% 80%, 76% 94%, 100% 100%)',
+      pointerEvents: 'none',
+      zIndex: -1,
     },
   },
 });
