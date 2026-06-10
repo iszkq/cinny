@@ -57,15 +57,20 @@ export const StickyPreviewStack = style({
 
 export const ToneGrid = style({
   display: 'grid',
-  gridTemplateColumns: `repeat(auto-fit, minmax(${toRem(220)}, 1fr))`,
+  gridTemplateColumns: `repeat(3, minmax(${toRem(150)}, 1fr))`,
   gap: config.space.S200,
+  '@media': {
+    'screen and (max-width: 720px)': {
+      gridTemplateColumns: 'minmax(0, 1fr)',
+    },
+  },
 });
 
 export const ToneCard = style({
-  display: 'flex',
-  flexDirection: 'column',
-  gap: config.space.S200,
-  padding: config.space.S200,
+  display: 'grid',
+  gridTemplateColumns: 'minmax(0, 1fr)',
+  gap: config.space.S150,
+  padding: config.space.S150,
   borderRadius: config.radii.R300,
   border: `1px solid ${color.SurfaceVariant.ContainerLine}`,
   background: color.Surface.Container,
@@ -77,9 +82,10 @@ export const StyleOptionButton = style({
   borderRadius: config.radii.R300,
   background: color.Surface.Container,
   color: color.Surface.OnContainer,
-  padding: `${config.space.S200} ${config.space.S300}`,
+  minHeight: toRem(42),
+  padding: `0 ${config.space.S300}`,
   display: 'flex',
-  flexDirection: 'column',
+  alignItems: 'center',
   gap: config.space.S100,
   textAlign: 'left',
   cursor: 'pointer',
@@ -162,6 +168,45 @@ export const SwatchMeta = style({
   fontSize: toRem(12),
   lineHeight: toRem(16),
   color: color.SurfaceVariant.OnContainer,
+});
+
+export const SelectField = style({
+  display: 'flex',
+  flexDirection: 'column',
+  gap: config.space.S100,
+  minWidth: 0,
+});
+
+export const SelectLabel = style({
+  fontSize: toRem(13),
+  lineHeight: toRem(18),
+  fontWeight: 600,
+  color: color.Surface.OnContainer,
+  overflow: 'hidden',
+  whiteSpace: 'nowrap',
+  textOverflow: 'ellipsis',
+});
+
+export const FieldSelect = style({
+  width: '100%',
+  minWidth: 0,
+  height: toRem(38),
+  border: `1px solid ${color.SurfaceVariant.ContainerLine}`,
+  borderRadius: config.radii.R300,
+  background: color.Surface.Container,
+  color: color.Surface.OnContainer,
+  padding: `0 ${config.space.S200}`,
+  font: 'inherit',
+  fontSize: toRem(13),
+  lineHeight: toRem(18),
+  cursor: 'pointer',
+  selectors: {
+    '&:hover, &:focus-visible': {
+      background: color.Surface.ContainerHover,
+      borderColor: color.Primary.Main,
+      outline: 'none',
+    },
+  },
 });
 
 export const ColorField = style({
@@ -372,7 +417,7 @@ export const ColorPickerCustomLabel = style({
 });
 
 export const BackgroundPreview = style({
-  minHeight: toRem(96),
+  minHeight: toRem(148),
   borderRadius: config.radii.R300,
   border: `1px solid ${color.SurfaceVariant.ContainerLine}`,
   overflow: 'hidden',
@@ -413,7 +458,7 @@ export const PreviewShell = style({
   borderWidth: 1,
   display: 'grid',
   gridTemplateColumns: `${toRem(86)} minmax(0, 1fr)`,
-  minHeight: toRem(232),
+  minHeight: toRem(284),
   '@media': {
     'screen and (max-width: 750px)': {
       gridTemplateColumns: `${toRem(66)} minmax(0, 1fr)`,

@@ -181,7 +181,7 @@ export const BubbleContent = style({
     [BubbleArrowFillVar]: color.SurfaceVariant.Container,
   },
   boxSizing: 'border-box',
-  maxWidth: `min(${toRem(800)}, 100%)`,
+  maxWidth: `min(${toRem(600)}, 100%)`,
   padding: config.space.S200,
   background: BubbleBackgroundVar,
   color: BubbleTextVar,

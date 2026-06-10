@@ -15,11 +15,10 @@ import { APP_VERSION } from '../constants/branding';
 import { useDesktopUpdater } from '../hooks/useDesktopUpdater';
 import { openDesktopUpdateDownloadUrl } from '../utils/desktopUpdater';
 import { stopPropagation } from '../utils/keyboard';
-import { ReleaseNotes } from './ReleaseNotes';
 
 const updateDialogStyle = {
   width: 'calc(100vw - 1.5rem)',
-  maxWidth: toRem(560),
+  maxWidth: toRem(544),
   maxHeight: 'calc(100vh - 1.5rem)',
   minWidth: 0,
   boxSizing: 'border-box' as const,
@@ -33,15 +32,6 @@ const updateDialogContentStyle = {
   padding: toRem(20),
   boxSizing: 'border-box' as const,
   overflow: 'hidden' as const,
-};
-
-const updateNotesStyle = {
-  flex: '1 1 auto',
-  minHeight: toRem(96),
-  maxHeight: 'min(36vh, 14rem)',
-  overflowY: 'auto' as const,
-  overflowX: 'hidden' as const,
-  paddingRight: toRem(6),
 };
 
 type DesktopUpdatePromptProps = {
@@ -93,10 +83,6 @@ export function DesktopUpdatePrompt({ open, requestClose }: DesktopUpdatePromptP
               <Text size="T300" truncate>
                 {progressText ?? message}
               </Text>
-
-              <Box direction="Column" style={updateNotesStyle}>
-                <ReleaseNotes compact body={pendingUpdate.body} />
-              </Box>
 
               <Box justifyContent="End" gap="200" wrap="Wrap" shrink="No">
                 <Button

@@ -1,14 +1,10 @@
 import React, { CSSProperties, useCallback, useState } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
-import FocusTrap from 'focus-trap-react';
 import {
   Box,
   Button,
   Icon,
   Icons,
-  Menu,
-  PopOut,
-  RectCords,
   Spinner,
   Text,
   color,
@@ -26,7 +22,6 @@ import {
   loadImageElement,
   selectFile,
 } from '../../../utils/dom';
-import { stopPropagation } from '../../../utils/keyboard';
 import {
   CARD_BACKDROP_VAR,
   CARD_BG_VAR,
@@ -44,8 +39,6 @@ import {
   PAGE_NAV_BORDER_VAR,
   appearanceColorPresets,
   getAccentColorHex,
-  getIncomingBubbleColorHex,
-  getOutgoingBubbleColorHex,
   getPreviewBubbleStyle,
   getPreviewChromeStyle,
 } from '../../../theme/appearance';
@@ -56,42 +49,21 @@ import * as css from './AppearanceCustomizer.css';
 const interfaceOptions: Array<{
   id: InterfaceStyle;
   label: string;
-  description: string;
 }> = [
   {
     id: 'default',
     label: '\u7ECF\u5178',
-    description: '\u66F4\u7A33\u91CD\uFF0C\u8FB9\u754C\u66F4\u6E05\u6670\uFF0C\u9002\u5408\u957F\u65F6\u95F4\u4F7F\u7528\u3002',
   },
   {
     id: 'frosted',
     label: '\u73BB\u7483\u78E8\u7802',
-    description:
-      '\u66F4\u901A\u900F\uFF0C\u5E26\u6709\u6A21\u7CCA\u548C\u5C42\u6B21\u611F\uFF0C\u63A5\u8FD1\u73BB\u7483\u98CE\u683C\u3002',
   },
 ];
 
 const MAX_BACKGROUND_BYTES = 1_600_000;
 const BACKGROUND_EDGE_CANDIDATES = [1600, 1280, 960] as const;
 const BACKGROUND_QUALITY_CANDIDATES = [0.82, 0.74, 0.66] as const;
-const MIN_OPACITY = 20;
-const MAX_OPACITY = 100;
-
-const getSelectedColorMeta = (
-  value: string,
-  resolver: (value?: string) => string,
-  themeDefaultLabel?: string
-): { label: string; hex: string } => {
-  const preset = appearanceColorPresets.find((item) => item.id === value);
-  const hex = resolver(value).toUpperCase();
-
-  return {
-    label:
-      (themeDefaultLabel && value === THEME_DEFAULT_ACCENT_ID ? themeDefaultLabel : preset?.label) ??
-      '\u81EA\u5B9A\u4E49',
-    hex,
-  };
-};
+const OPACITY_OPTIONS = [100, 90, 80, 70, 60, 50, 40, 30, 20] as const;
 
 const getScaledDimensions = (
   width: number,
@@ -176,157 +148,65 @@ type ColorFieldProps = {
   title: string;
   value: string;
   onChange: (value: string) => void;
-  resolver: (value?: string) => string;
   themeDefaultLabel?: string;
 };
 
-function ColorField({ title, value, onChange, resolver, themeDefaultLabel }: ColorFieldProps) {
-  const [pickerAnchor, setPickerAnchor] = useState<RectCords>();
-  const selected = getSelectedColorMeta(value, resolver, themeDefaultLabel);
-  const pickerOpen = !!pickerAnchor;
+const isColorValueInOptions = (value: string, allowThemeDefault: boolean): boolean =>
+  (allowThemeDefault && value === THEME_DEFAULT_ACCENT_ID) ||
+  appearanceColorPresets.some((preset) => preset.id === value);
 
-  const handleOpenPicker: React.MouseEventHandler<HTMLButtonElement> = (evt) => {
-    if (pickerOpen) {
-      setPickerAnchor(undefined);
-      return;
-    }
-
-    setPickerAnchor(evt.currentTarget.getBoundingClientRect());
-  };
-
-  const handleClosePicker = () => {
-    setPickerAnchor(undefined);
-  };
-
-  const handleSelectColor = (nextValue: string) => {
-    onChange(nextValue);
-    handleClosePicker();
-  };
+function ColorField({ title, value, onChange, themeDefaultLabel }: ColorFieldProps) {
+  const allowThemeDefault = Boolean(themeDefaultLabel);
 
   return (
-    <div className={css.ColorField}>
-      <button
-        type="button"
-        className={css.ColorSummaryButton}
-        aria-expanded={pickerOpen}
-        onClick={handleOpenPicker}
+    <label className={css.SelectField}>
+      <span className={css.SelectLabel}>{title}</span>
+      <select
+        className={css.FieldSelect}
+        value={value}
+        onChange={(evt) => onChange(evt.currentTarget.value)}
       >
-        <span className={css.ColorSummarySwatch} style={{ background: selected.hex }} />
-        <span className={css.ColorSummaryText}>
-          <span className={css.ColorSummaryTitle}>{title}</span>
-          <span className={css.ColorSummaryMeta}>
-            {selected.label} {'\u00B7'} {selected.hex}
-          </span>
-        </span>
-        <Icon className={css.ColorSummaryIcon} size="50" src={Icons.ChevronBottom} />
-      </button>
-      <PopOut
-        anchor={pickerAnchor}
-        offset={6}
-        position="Bottom"
-        align="Start"
-        content={
-          <FocusTrap
-            focusTrapOptions={{
-              initialFocus: false,
-              onDeactivate: handleClosePicker,
-              clickOutsideDeactivates: true,
-              escapeDeactivates: stopPropagation,
-            }}
-          >
-            <Menu className={css.ColorPickerMenu}>
-              <div className={css.ColorPickerHeader}>
-                <Text size="T300">{title}</Text>
-                <span className={css.ColorPickerMeta}>{selected.hex}</span>
-              </div>
-              <div className={css.ColorPickerGrid}>
-                {themeDefaultLabel && (
-                  <button
-                    type="button"
-                    className={css.ColorPickerDefaultButton}
-                    aria-pressed={value === THEME_DEFAULT_ACCENT_ID}
-                    onClick={() => handleSelectColor(THEME_DEFAULT_ACCENT_ID)}
-                  >
-                    <span
-                      className={css.ColorPickerDefaultSwatch}
-                      style={{ background: resolver(THEME_DEFAULT_ACCENT_ID) }}
-                    />
-                    <span className={css.ColorPickerDefaultLabel}>{themeDefaultLabel}</span>
-                  </button>
-                )}
-                {appearanceColorPresets.map((preset) => (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    className={css.ColorPickerSwatchButton}
-                    aria-pressed={value === preset.id}
-                    title={preset.label}
-                    onClick={() => handleSelectColor(preset.id)}
-                  >
-                    <span
-                      className={css.ColorPickerSwatchFill}
-                      style={{ background: preset.value }}
-                    />
-                  </button>
-                ))}
-                <label className={css.ColorPickerCustomButton}>
-                  <input
-                    className={css.ColorPickerCustomInput}
-                    type="color"
-                    aria-label={`${title} \u81EA\u5B9A\u4E49\u989C\u8272`}
-                    value={resolver(value).toLowerCase()}
-                    onChange={(evt) => onChange(evt.currentTarget.value.toUpperCase())}
-                  />
-                  <span
-                    className={css.ColorPickerCustomSwatch}
-                    style={{ background: resolver(value) }}
-                  />
-                  <span className={css.ColorPickerCustomLabel}>{'\u81EA\u5B9A\u4E49'}</span>
-                </label>
-              </div>
-            </Menu>
-          </FocusTrap>
-        }
-      />
-    </div>
+        {themeDefaultLabel && (
+          <option value={THEME_DEFAULT_ACCENT_ID}>{themeDefaultLabel}</option>
+        )}
+        {!isColorValueInOptions(value, allowThemeDefault) && (
+          <option value={value}>{'\u81EA\u5B9A\u4E49'}</option>
+        )}
+        {appearanceColorPresets.map((preset) => (
+          <option key={preset.id} value={preset.id}>
+            {preset.label}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 
 type OpacityFieldProps = {
   title: string;
-  description?: string;
   value: number;
   onChange: (value: number) => void;
 };
 
-function OpacityField({ title, description, value, onChange }: OpacityFieldProps) {
+function OpacityField({ title, value, onChange }: OpacityFieldProps) {
   return (
-    <div className={css.OpacitySection}>
-      <div className={css.SwatchHeader}>
-        <div className={css.OpacityTitleBlock}>
-          <Text size="T300">{title}</Text>
-          {description && (
-            <Text size="T200" priority="300">
-              {description}
-            </Text>
-          )}
-        </div>
-        <span className={css.SwatchMeta}>{`${value}%`}</span>
-      </div>
-      <div className={css.OpacityControlRow}>
-        <span className={css.OpacityHint}>{`${MIN_OPACITY}%`}</span>
-        <input
-          className={css.OpacitySlider}
-          type="range"
-          min={MIN_OPACITY}
-          max={MAX_OPACITY}
-          step={1}
-          value={value}
-          onChange={(evt) => onChange(parseInt(evt.currentTarget.value, 10))}
-        />
-        <span className={css.OpacityHint}>{`${MAX_OPACITY}%`}</span>
-      </div>
-    </div>
+    <label className={css.SelectField}>
+      <span className={css.SelectLabel}>{title}</span>
+      <select
+        className={css.FieldSelect}
+        value={value}
+        onChange={(evt) => onChange(parseInt(evt.currentTarget.value, 10))}
+      >
+        {!OPACITY_OPTIONS.includes(value as (typeof OPACITY_OPTIONS)[number]) && (
+          <option value={value}>{`${value}%`}</option>
+        )}
+        {OPACITY_OPTIONS.map((option) => (
+          <option key={option} value={option}>
+            {`${option}%`}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 
@@ -593,11 +473,6 @@ export function AppearanceCustomizer() {
         </span>
       </div>
 
-      <Text size="T200" priority="300">
-        {
-          '\u80cc\u666f\u56fe\u4f1a\u5148\u5728\u672c\u5730\u7acb\u5373\u9884\u89c8\uff0c\u7136\u540e\u540c\u6b65\u5230\u5f53\u524d Matrix \u8d26\u53f7\uff0c\u540c\u4e00\u8d26\u53f7\u7684\u5176\u4ed6\u6d4f\u89c8\u5668\u548c\u684c\u9762\u7aef\u767b\u5f55\u540e\u4e5f\u4f1a\u8ddf\u968f\u3002'
-        }
-      </Text>
       {backgroundError && (
         <Text size="T200" style={{ color: color.Critical.Main }}>
           {backgroundError}
@@ -616,11 +491,6 @@ export function AppearanceCustomizer() {
       <div className={css.ControlSection}>
         <div className={css.SectionHeader}>
           <Text size="L400">{'\u98CE\u683C\u81EA\u5B9A\u4E49'}</Text>
-          <Text size="T200" priority="300">
-            {
-              '\u4E3B\u9898\u8272\u3001\u804A\u5929\u6C14\u6CE1\u548C\u804A\u5929\u80CC\u666F\u4F1A\u7ACB\u5373\u5E94\u7528\uFF0C\u81EA\u5DF1\u7684\u6C14\u6CE1\u9ED8\u8BA4\u4F1A\u6BD4\u4ED6\u4EBA\u66F4\u5F3A\u8C03\u4E00\u70B9\uFF0C\u4E0B\u9762\u7684\u9884\u89C8\u4E5F\u4F1A\u5B9E\u65F6\u53D8\u5316\u3002'
-            }
-          </Text>
         </div>
 
         <Box wrap="Wrap" gap="200">
@@ -647,70 +517,53 @@ export function AppearanceCustomizer() {
               onClick={() => setInterfaceStyle(option.id)}
             >
               <span className={css.StyleOptionTitle}>{option.label}</span>
-              <span className={css.StyleOptionDescription}>{option.description}</span>
             </button>
           ))}
         </div>
 
-        <div className={css.CustomizerLayout}>
-          <div className={css.ControlColumn}>
-            <div className={css.ToneGrid}>
-              <div className={css.ToneCard}>
-                <ColorField
-                  title={'\u4E3B\u9898\u8272'}
-                  value={accentColorId}
-                  onChange={setAccentColorId}
-                  resolver={(value) => getAccentColorHex(value, theme.classNames)}
-                  themeDefaultLabel={'\u8DDF\u968F\u4E3B\u9898'}
-                />
-                <OpacityField
-                  title={'\u4E3B\u9898\u8272\u900F\u660E\u5EA6'}
-                  description={
-                    '\u5F71\u54CD\u754C\u9762\u4E2D\u7684\u4E3B\u9898\u8272\u5F3A\u5EA6\u548C\u67D0\u4E9B\u6309\u94AE\u7684\u663E\u793A\u611F\u3002'
-                  }
-                  value={accentOpacity}
-                  onChange={setAccentOpacity}
-                />
-              </div>
-              <div className={css.ToneCard}>
-                <ColorField
-                  title={'\u81EA\u5DF1\u7684\u6C14\u6CE1\u989C\u8272'}
-                  value={outgoingBubbleColorId}
-                  onChange={setOutgoingBubbleColorId}
-                  resolver={getOutgoingBubbleColorHex}
-                />
-                <OpacityField
-                  title={'\u81EA\u5DF1\u6C14\u6CE1\u900F\u660E\u5EA6'}
-                  description={
-                    '\u540C\u8272\u60C5\u51B5\u4E0B\uFF0C\u81EA\u5DF1\u7684\u6C14\u6CE1\u9ED8\u8BA4\u4F1A\u6BD4\u4ED6\u4EBA\u66F4\u6DF1\u4E00\u4E9B\u3002'
-                  }
-                  value={outgoingBubbleOpacity}
-                  onChange={setOutgoingBubbleOpacity}
-                />
-              </div>
-              <div className={css.ToneCard}>
-                <ColorField
-                  title={'\u4ED6\u4EBA\u7684\u6C14\u6CE1\u989C\u8272'}
-                  value={incomingBubbleColorId}
-                  onChange={setIncomingBubbleColorId}
-                  resolver={getIncomingBubbleColorHex}
-                />
-                <OpacityField
-                  title={'\u4ED6\u4EBA\u6C14\u6CE1\u900F\u660E\u5EA6'}
-                  value={incomingBubbleOpacity}
-                  onChange={setIncomingBubbleOpacity}
-                />
-              </div>
-            </div>
-          </div>
+        {appearancePreview}
 
-          <div className={css.PreviewColumn}>
-            <div className={css.StickyPreviewStack}>
-              {appearancePreview}
-              {backgroundControls}
-            </div>
+        <div className={css.ToneGrid}>
+          <div className={css.ToneCard}>
+            <ColorField
+              title={'\u4E3B\u9898\u8272'}
+              value={accentColorId}
+              onChange={setAccentColorId}
+              themeDefaultLabel={'\u8DDF\u968F\u4E3B\u9898'}
+            />
+            <OpacityField
+              title={'\u4E3B\u9898\u8272\u900F\u660E\u5EA6'}
+              value={accentOpacity}
+              onChange={setAccentOpacity}
+            />
+          </div>
+          <div className={css.ToneCard}>
+            <ColorField
+              title={'\u81EA\u5DF1\u7684\u6C14\u6CE1\u989C\u8272'}
+              value={outgoingBubbleColorId}
+              onChange={setOutgoingBubbleColorId}
+            />
+            <OpacityField
+              title={'\u81EA\u5DF1\u6C14\u6CE1\u900F\u660E\u5EA6'}
+              value={outgoingBubbleOpacity}
+              onChange={setOutgoingBubbleOpacity}
+            />
+          </div>
+          <div className={css.ToneCard}>
+            <ColorField
+              title={'\u4ED6\u4EBA\u7684\u6C14\u6CE1\u989C\u8272'}
+              value={incomingBubbleColorId}
+              onChange={setIncomingBubbleColorId}
+            />
+            <OpacityField
+              title={'\u4ED6\u4EBA\u6C14\u6CE1\u900F\u660E\u5EA6'}
+              value={incomingBubbleOpacity}
+              onChange={setIncomingBubbleOpacity}
+            />
           </div>
         </div>
+
+        {backgroundControls}
       </div>
     </SequenceCard>
   );
