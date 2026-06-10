@@ -169,6 +169,7 @@ const BubbleTextVar = createVar();
 const BubbleBorderVar = createVar();
 const BubbleShadowVar = createVar();
 const BubbleBackdropVar = createVar();
+const BubbleTailWidth = toRem(9);
 
 export const BubbleContent = style({
   vars: {
@@ -181,16 +182,28 @@ export const BubbleContent = style({
   boxSizing: 'border-box',
   maxWidth: `min(${toRem(600)}, 100%)`,
   padding: config.space.S200,
-  background: BubbleBackgroundVar,
+  background: 'transparent',
   color: BubbleTextVar,
-  border: `1px solid ${BubbleBorderVar}`,
-  boxShadow: BubbleShadowVar,
-  backdropFilter: BubbleBackdropVar,
-  WebkitBackdropFilter: BubbleBackdropVar,
+  border: '1px solid transparent',
   borderRadius: config.radii.R500,
   position: 'relative',
   isolation: 'isolate',
   zIndex: 0,
+  selectors: {
+    '&::before': {
+      content: '""',
+      position: 'absolute',
+      inset: 0,
+      background: BubbleBackgroundVar,
+      border: `1px solid ${BubbleBorderVar}`,
+      borderRadius: 'inherit',
+      boxShadow: BubbleShadowVar,
+      backdropFilter: BubbleBackdropVar,
+      WebkitBackdropFilter: BubbleBackdropVar,
+      pointerEvents: 'none',
+      zIndex: -1,
+    },
+  },
 });
 
 export const BubbleStack = style({
@@ -244,19 +257,14 @@ export const BubbleContentArrowLeft = style({
   borderLeftColor: 'transparent',
   selectors: {
     '&::before': {
-      content: '""',
-      position: 'absolute',
-      top: toRem(11),
-      left: toRem(-5),
-      width: toRem(12),
-      height: toRem(12),
-      background: BubbleBackgroundVar,
-      backdropFilter: BubbleBackdropVar,
-      WebkitBackdropFilter: BubbleBackdropVar,
-      borderRadius: toRem(3),
-      transform: 'rotate(45deg)',
-      pointerEvents: 'none',
-      zIndex: -1,
+      left: `-${BubbleTailWidth}`,
+      clipPath: `polygon(${BubbleTailWidth} 0, 100% 0, 100% 100%, ${BubbleTailWidth} 100%, ${BubbleTailWidth} ${toRem(
+        24
+      )}, ${toRem(6)} ${toRem(23)}, ${toRem(3)} ${toRem(21)}, ${toRem(
+        1
+      )} ${toRem(19)}, 0 ${toRem(17)}, ${toRem(1)} ${toRem(15)}, ${toRem(
+        3
+      )} ${toRem(13)}, ${toRem(6)} ${toRem(11)}, ${BubbleTailWidth} ${toRem(10)})`,
     },
   },
 });
