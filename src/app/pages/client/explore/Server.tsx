@@ -43,7 +43,12 @@ import { allRoomsAtom } from '../../../state/room-list/roomList';
 import { useRoomNavigate } from '../../../hooks/useRoomNavigate';
 import { getMxIdServer } from '../../../utils/matrix';
 import { stopPropagation } from '../../../utils/keyboard';
-import { isCompactScreenSize, ScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
+import {
+  isCompactScreenSize,
+  isDesktopLikeScreenSize,
+  ScreenSize,
+  useScreenSizeContext,
+} from '../../../hooks/useScreenSize';
 import { BackRouteHandler } from '../../../components/BackRouteHandler';
 
 const useServerSearchParams = (searchParams: URLSearchParams): ExploreServerPathSearchParams =>
@@ -348,6 +353,7 @@ export function PublicRooms() {
   const allRooms = useAtomValue(allRoomsAtom);
   const { navigateSpace, navigateRoom } = useRoomNavigate();
   const screenSize = useScreenSizeContext();
+  const showBackButton = !isDesktopLikeScreenSize(screenSize);
 
   const [searchParams] = useSearchParams();
   const serverSearchParams = useServerSearchParams(searchParams);
@@ -496,7 +502,7 @@ export function PublicRooms() {
         ) : (
           <>
             <Box grow="Yes" basis="No">
-              {isCompactScreenSize(screenSize) && (
+              {showBackButton && (
                 <BackRouteHandler>
                   {(onBack) => (
                     <IconButton onClick={onBack}>

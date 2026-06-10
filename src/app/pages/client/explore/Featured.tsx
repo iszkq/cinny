@@ -16,7 +16,7 @@ import {
 import { RoomTopicViewer } from '../../../components/room-topic-viewer';
 import * as css from './style.css';
 import { useRoomNavigate } from '../../../hooks/useRoomNavigate';
-import { isCompactScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
+import { isDesktopLikeScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
 import { BackRouteHandler } from '../../../components/BackRouteHandler';
 
 export function FeaturedRooms() {
@@ -24,12 +24,12 @@ export function FeaturedRooms() {
   const { rooms, spaces } = featuredCommunities ?? {};
   const allRooms = useAtomValue(allRoomsAtom);
   const screenSize = useScreenSizeContext();
-  const compact = isCompactScreenSize(screenSize);
+  const showBackButton = !isDesktopLikeScreenSize(screenSize);
   const { navigateSpace, navigateRoom } = useRoomNavigate();
 
   return (
     <Page>
-      {compact && (
+      {showBackButton && (
         <PageHeader>
           <Box shrink="No">
             <BackRouteHandler>

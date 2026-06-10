@@ -26,7 +26,12 @@ import { Page, PageContent, PageContentCenter, PageHeader } from '../../../compo
 import { BackRouteHandler } from '../../../components/BackRouteHandler';
 import { useAccountData } from '../../../hooks/useAccountData';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
-import { isCompactScreenSize, ScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
+import {
+  isCompactScreenSize,
+  isDesktopLikeScreenSize,
+  ScreenSize,
+  useScreenSizeContext,
+} from '../../../hooks/useScreenSize';
 import {
   AccountDataEvent,
   CinnyExploreNavCard,
@@ -493,6 +498,7 @@ export function ExploreNavView() {
   const { navId } = useParams();
   const navigate = useNavigate();
   const screenSize = useScreenSizeContext();
+  const showBackButton = !isDesktopLikeScreenSize(screenSize);
   const [sectionDialogOpen, setSectionDialogOpen] = useState(false);
   const [editingSection, setEditingSection] = useState<CinnyExploreNavSection>();
   const [cardDialogState, setCardDialogState] = useState<{
@@ -633,7 +639,7 @@ export function ExploreNavView() {
 
       <PageHeader balance={isCompactScreenSize(screenSize)}>
         <Box grow="Yes" basis="No">
-          {isCompactScreenSize(screenSize) && (
+          {showBackButton && (
             <BackRouteHandler>
               {(onBack) => (
                 <IconButton onClick={onBack}>

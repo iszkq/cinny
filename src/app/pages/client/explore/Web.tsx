@@ -4,7 +4,12 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Page, PageHeader } from '../../../components/page';
 import { BackRouteHandler } from '../../../components/BackRouteHandler';
 import { useAccountData } from '../../../hooks/useAccountData';
-import { isCompactScreenSize, ScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
+import {
+  isCompactScreenSize,
+  isDesktopLikeScreenSize,
+  ScreenSize,
+  useScreenSizeContext,
+} from '../../../hooks/useScreenSize';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { AccountDataEvent, CinnyExploreSourcesContent } from '../../../../types/matrix/accountData';
 import { getExploreFeaturedPath } from '../../pathUtils';
@@ -120,6 +125,7 @@ export function ExploreWebView() {
   const mx = useMatrixClient();
   const { webId } = useParams();
   const screenSize = useScreenSizeContext();
+  const showBackButton = !isDesktopLikeScreenSize(screenSize);
   const navigate = useNavigate();
   const [refreshKey, setRefreshKey] = useState(0);
   const [mode, setMode] = useState<WebViewMode>('probing');
@@ -289,7 +295,7 @@ export function ExploreWebView() {
     <Page>
       <PageHeader balance={isCompactScreenSize(screenSize)}>
         <Box grow="Yes" basis="No">
-          {isCompactScreenSize(screenSize) && (
+          {showBackButton && (
             <BackRouteHandler>
               {(onBack) => (
                 <IconButton onClick={onBack}>

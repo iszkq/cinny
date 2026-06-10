@@ -13,13 +13,14 @@ import {
 import { useClientConfig } from '../../../hooks/useClientConfig';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { getMxIdServer } from '../../../utils/matrix';
-import { isCompactScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
+import { isDesktopLikeScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
 import { useNavToActivePathAtom } from '../../../state/hooks/navToActivePath';
 import { desktopPageNavCollapsedAtom } from '../../../state/desktopPageNav';
 
 export function ExploreTab() {
   const mx = useMatrixClient();
   const screenSize = useScreenSizeContext();
+  const desktopLayout = isDesktopLikeScreenSize(screenSize);
   const clientConfig = useClientConfig();
   const navigate = useNavigate();
   const desktopPageNavCollapsed = useAtomValue(desktopPageNavCollapsedAtom);
@@ -29,7 +30,7 @@ export function ExploreTab() {
   const exploreSelected = useExploreSelected();
 
   const handleExploreClick = () => {
-    if (isCompactScreenSize(screenSize)) {
+    if (!desktopLayout) {
       navigate(getExplorePath());
       return;
     }

@@ -1,4 +1,4 @@
-import React, { FormEventHandler, MouseEventHandler, useMemo, useState } from 'react';
+import React, { FormEventHandler, MouseEventHandler, useLayoutEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import FocusTrap from 'focus-trap-react';
 import { useSetAtom } from 'jotai';
@@ -64,7 +64,7 @@ import {
   upsertExploreCustomSource,
 } from './customSources';
 import { CompactClientNavButton } from '../CompactClientNavButton';
-import { ScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
+import { ScreenSize, isDesktopLikeScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
 import { desktopPageNavCollapsedAtom } from '../../../state/desktopPageNav';
 
 const PROBE_TIMEOUT_MS = 2500;
@@ -600,6 +600,7 @@ export function Explore() {
   const mx = useMatrixClient();
   const screenSize = useScreenSizeContext();
   const desktop = screenSize === ScreenSize.Desktop;
+  const desktopLayout = isDesktopLikeScreenSize(screenSize);
   const setDesktopPageNavCollapsed = useSetAtom(desktopPageNavCollapsedAtom);
   useNavToActivePathMapper('explore');
   const navigate = useNavigate();
@@ -608,6 +609,12 @@ export function Explore() {
   const userServer = userId ? getMxIdServer(userId) : undefined;
   const servers =
     clientConfig.featuredCommunities?.servers?.filter((server) => server !== userServer) ?? [];
+
+  useLayoutEffect(() => {
+    if (!desktopLayout) return;
+
+    setDesktopPageNavCollapsed(false);
+  }, [desktopLayout, setDesktopPageNavCollapsed]);
 
   const builtInServers = useMemo(() => {
     const nextServers = new Set<string>();

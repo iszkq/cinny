@@ -17,12 +17,13 @@ import {
 } from '../../pathUtils';
 import { useInboxSelected } from '../../../hooks/router/useInbox';
 import { UnreadBadge } from '../../../components/unread-badge';
-import { isCompactScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
+import { isDesktopLikeScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
 import { useNavToActivePathAtom } from '../../../state/hooks/navToActivePath';
 import { desktopPageNavCollapsedAtom } from '../../../state/desktopPageNav';
 
 export function InboxTab() {
   const screenSize = useScreenSizeContext();
+  const desktopLayout = isDesktopLikeScreenSize(screenSize);
   const navigate = useNavigate();
   const desktopPageNavCollapsed = useAtomValue(desktopPageNavCollapsedAtom);
   const setDesktopPageNavCollapsed = useSetAtom(desktopPageNavCollapsedAtom);
@@ -32,7 +33,7 @@ export function InboxTab() {
   const inviteCount = allInvites.length;
 
   const handleInboxClick = () => {
-    if (isCompactScreenSize(screenSize)) {
+    if (!desktopLayout) {
       navigate(getInboxPath());
       return;
     }
