@@ -50,19 +50,21 @@ export const BubbleLayout = as<'div', BubbleLayoutProps>(
           </>
         ) : (
           <>
-            <Box className={css.BubbleRow}>
-              <Box className={css.BubbleMain}>
-                <Box>
-                  <Box
-                    className={classNames(
-                      css.BubbleContent,
-                      css.BubbleTone[tone],
-                      before ? css.BubbleContentArrowLeft : undefined
-                    )}
-                    direction="Column"
-                  >
-                    {before ? <BubbleLeftArrow /> : null}
-                    {children}
+            <Box className={css.BubbleStack}>
+              <Box className={css.BubbleRow}>
+                <Box className={css.BubbleMain}>
+                  <Box>
+                    <Box
+                      className={classNames(
+                        css.BubbleContent,
+                        css.BubbleTone[tone],
+                        before ? css.BubbleContentArrowLeft : undefined
+                      )}
+                      direction="Column"
+                    >
+                      {before ? <BubbleLeftArrow /> : null}
+                      {children}
+                    </Box>
                   </Box>
                 </Box>
               </Box>

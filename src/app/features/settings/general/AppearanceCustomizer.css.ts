@@ -21,7 +21,7 @@ export const StyleOptions = style({
 
 export const CustomizerLayout = style({
   display: 'grid',
-  gridTemplateColumns: `minmax(0, 1.15fr) minmax(${toRem(300)}, 0.85fr)`,
+  gridTemplateColumns: `minmax(${toRem(250)}, 0.86fr) minmax(${toRem(320)}, 1.14fr)`,
   gap: config.space.S300,
   alignItems: 'start',
   '@media': {
@@ -57,6 +57,7 @@ export const StickyPreviewStack = style({
 
 export const ToneGrid = style({
   display: 'grid',
+  gridTemplateColumns: `repeat(auto-fit, minmax(${toRem(220)}, 1fr))`,
   gap: config.space.S200,
 });
 
@@ -64,10 +65,11 @@ export const ToneCard = style({
   display: 'flex',
   flexDirection: 'column',
   gap: config.space.S200,
-  padding: config.space.S250,
+  padding: config.space.S200,
   borderRadius: config.radii.R300,
   border: `1px solid ${color.SurfaceVariant.ContainerLine}`,
   background: color.Surface.Container,
+  minWidth: 0,
 });
 
 export const StyleOptionButton = style({
@@ -162,22 +164,147 @@ export const SwatchMeta = style({
   color: color.SurfaceVariant.OnContainer,
 });
 
-export const SwatchGrid = style({
-  display: 'flex',
-  flexWrap: 'wrap',
-  gap: config.space.S100,
-  alignItems: 'center',
+export const ColorField = style({
+  position: 'relative',
+  minWidth: 0,
 });
 
-export const ThemeDefaultSwatchButton = style({
-  minHeight: toRem(30),
+export const ColorSummaryButton = style({
+  width: '100%',
+  minHeight: toRem(52),
+  border: `1px solid ${color.SurfaceVariant.ContainerLine}`,
+  borderRadius: config.radii.R300,
+  background: color.Surface.Container,
+  color: color.Surface.OnContainer,
+  padding: `${config.space.S150} ${config.space.S200}`,
+  display: 'grid',
+  gridTemplateColumns: `${toRem(28)} minmax(0, 1fr) ${toRem(18)}`,
+  alignItems: 'center',
+  gap: config.space.S150,
+  textAlign: 'left',
+  cursor: 'pointer',
+  transition: 'border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease',
+  selectors: {
+    '&:hover, &:focus-visible': {
+      background: color.Surface.ContainerHover,
+      borderColor: color.Primary.Main,
+    },
+    '&[aria-expanded=true]': {
+      borderColor: color.Primary.Main,
+      boxShadow: `0 0 0 1px ${color.Primary.Main}`,
+    },
+  },
+});
+
+export const ColorSummarySwatch = style({
+  width: toRem(28),
+  height: toRem(28),
+  borderRadius: config.radii.R300,
+  boxShadow: `inset 0 0 0 1px rgba(255, 255, 255, 0.22), 0 0 0 1px ${color.SurfaceVariant.ContainerLine}`,
+});
+
+export const ColorSummaryText = style({
+  display: 'flex',
+  flexDirection: 'column',
+  gap: toRem(2),
+  minWidth: 0,
+});
+
+export const ColorSummaryTitle = style({
+  fontSize: toRem(13),
+  lineHeight: toRem(18),
+  fontWeight: 600,
+  overflow: 'hidden',
+  whiteSpace: 'nowrap',
+  textOverflow: 'ellipsis',
+});
+
+export const ColorSummaryMeta = style({
+  fontSize: toRem(12),
+  lineHeight: toRem(16),
+  color: color.SurfaceVariant.OnContainer,
+  overflow: 'hidden',
+  whiteSpace: 'nowrap',
+  textOverflow: 'ellipsis',
+});
+
+export const ColorSummaryIcon = style({
+  color: color.SurfaceVariant.OnContainer,
+});
+
+export const ColorPickerMenu = style({
+  width: toRem(248),
+  maxWidth: 'calc(100vw - 32px)',
+  padding: config.space.S200,
+  borderRadius: config.radii.R400,
+});
+
+export const ColorPickerHeader = style({
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: config.space.S200,
+  paddingBottom: config.space.S150,
+});
+
+export const ColorPickerMeta = style({
+  fontSize: toRem(12),
+  lineHeight: toRem(16),
+  color: color.SurfaceVariant.OnContainer,
+});
+
+export const ColorPickerGrid = style({
+  display: 'grid',
+  gridTemplateColumns: `repeat(6, ${toRem(30)})`,
+  gap: config.space.S100,
+});
+
+export const ColorPickerDefaultButton = style({
+  gridColumn: '1 / -1',
+  minHeight: toRem(34),
   borderRadius: config.radii.R300,
   border: `1px solid ${color.SurfaceVariant.ContainerLine}`,
   background: color.Surface.Container,
-  padding: `${config.space.S100} ${config.space.S125}`,
+  color: color.Surface.OnContainer,
+  padding: `0 ${config.space.S150}`,
   display: 'inline-flex',
   alignItems: 'center',
   gap: config.space.S100,
+  cursor: 'pointer',
+  transition: 'border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease',
+  selectors: {
+    '&:hover, &:focus-visible': {
+      background: color.Surface.ContainerHover,
+      borderColor: color.Primary.Main,
+    },
+    '&[aria-pressed=true]': {
+      borderColor: color.Primary.Main,
+      boxShadow: `0 0 0 1px ${color.Primary.Main}`,
+    },
+  },
+});
+
+export const ColorPickerDefaultSwatch = style({
+  width: toRem(18),
+  height: toRem(18),
+  borderRadius: config.radii.R300,
+  boxShadow: `inset 0 0 0 1px rgba(255, 255, 255, 0.22), 0 0 0 1px ${color.SurfaceVariant.ContainerLine}`,
+  flexShrink: 0,
+});
+
+export const ColorPickerDefaultLabel = style({
+  fontSize: toRem(12),
+  lineHeight: toRem(16),
+  fontWeight: 600,
+});
+
+export const ColorPickerSwatchButton = style({
+  width: toRem(30),
+  height: toRem(30),
+  borderRadius: config.radii.R300,
+  border: `1px solid ${color.SurfaceVariant.ContainerLine}`,
+  background: 'transparent',
+  padding: toRem(2),
   cursor: 'pointer',
   transition: 'transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease',
   selectors: {
@@ -192,15 +319,53 @@ export const ThemeDefaultSwatchButton = style({
   },
 });
 
-export const ThemeDefaultSwatchFill = style({
-  width: toRem(16),
-  height: toRem(16),
-  borderRadius: toRem(999),
-  boxShadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.18)',
+export const ColorPickerSwatchFill = style({
+  display: 'block',
+  width: '100%',
+  height: '100%',
+  borderRadius: toRem(5),
+  boxShadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.16)',
+});
+
+export const ColorPickerCustomButton = style({
+  gridColumn: '1 / -1',
+  position: 'relative',
+  minHeight: toRem(34),
+  borderRadius: config.radii.R300,
+  border: `1px solid ${color.SurfaceVariant.ContainerLine}`,
+  background: color.Surface.Container,
+  color: color.Surface.OnContainer,
+  padding: `0 ${config.space.S150}`,
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: config.space.S100,
+  cursor: 'pointer',
+  overflow: 'hidden',
+  transition: 'border-color 120ms ease, background-color 120ms ease',
+  selectors: {
+    '&:hover, &:focus-within': {
+      background: color.Surface.ContainerHover,
+      borderColor: color.Primary.Main,
+    },
+  },
+});
+
+export const ColorPickerCustomInput = style({
+  position: 'absolute',
+  inset: 0,
+  opacity: 0,
+  cursor: 'pointer',
+});
+
+export const ColorPickerCustomSwatch = style({
+  width: toRem(18),
+  height: toRem(18),
+  borderRadius: config.radii.R300,
+  boxShadow: `inset 0 0 0 1px rgba(255, 255, 255, 0.22), 0 0 0 1px ${color.SurfaceVariant.ContainerLine}`,
   flexShrink: 0,
 });
 
-export const ThemeDefaultSwatchLabel = style({
+export const ColorPickerCustomLabel = style({
   fontSize: toRem(12),
   lineHeight: toRem(16),
   fontWeight: 600,
@@ -233,71 +398,6 @@ export const BackgroundPreviewBadge = style({
   fontWeight: 600,
   backdropFilter: 'blur(12px)',
   WebkitBackdropFilter: 'blur(12px)',
-});
-
-export const SwatchButton = style({
-  width: toRem(30),
-  height: toRem(30),
-  borderRadius: config.radii.R300,
-  border: `1px solid ${color.SurfaceVariant.ContainerLine}`,
-  background: 'transparent',
-  padding: toRem(2),
-  cursor: 'pointer',
-  transition: 'transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease',
-  selectors: {
-    '&:hover, &:focus-visible': {
-      borderColor: color.Primary.Main,
-      transform: 'translateY(-1px)',
-    },
-    '&[aria-pressed=true]': {
-      borderColor: color.Primary.Main,
-      boxShadow: `0 0 0 1px ${color.Primary.Main}`,
-    },
-  },
-});
-
-export const SwatchFill = style({
-  display: 'block',
-  width: '100%',
-  height: '100%',
-  borderRadius: toRem(5),
-  boxShadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.16)',
-});
-
-export const CustomColorField = style({
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: config.space.S100,
-  paddingInlineStart: toRem(4),
-});
-
-export const CustomColorInput = style({
-  width: toRem(30),
-  height: toRem(30),
-  border: 'none',
-  borderRadius: config.radii.R300,
-  background: 'transparent',
-  padding: 0,
-  cursor: 'pointer',
-  selectors: {
-    '&::-webkit-color-swatch-wrapper': {
-      padding: 0,
-    },
-    '&::-webkit-color-swatch': {
-      border: `1px solid ${color.SurfaceVariant.ContainerLine}`,
-      borderRadius: config.radii.R300,
-    },
-    '&::-moz-color-swatch': {
-      border: `1px solid ${color.SurfaceVariant.ContainerLine}`,
-      borderRadius: config.radii.R300,
-    },
-  },
-});
-
-export const CustomColorLabel = style({
-  fontSize: toRem(12),
-  lineHeight: toRem(16),
-  color: color.SurfaceVariant.OnContainer,
 });
 
 export const PreviewRoot = style({

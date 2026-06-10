@@ -64,8 +64,9 @@ export const MessageReadReceiptsRow = style({
 });
 
 export const MessageReadReceiptsRowAside = style({
-  paddingTop: 0,
+  paddingTop: config.space.S100,
   alignSelf: 'flex-end',
+  maxWidth: '100%',
 });
 
 export const MessageSendStatus = style({
@@ -112,6 +113,10 @@ export const MessageReadReceiptsButtonAside = style({
   backgroundColor: 'transparent',
   boxShadow: 'none',
   gap: config.space.S100,
+  flexWrap: 'wrap',
+  justifyContent: 'flex-end',
+  rowGap: config.space.S100,
+  maxWidth: '100%',
   selectors: {
     '&:hover, &:focus-visible': {
       backgroundColor: 'transparent',
@@ -157,6 +162,11 @@ export const MessageReadReceiptStack = style({
 
 export const MessageReadReceiptStackAside = style({
   paddingLeft: 0,
+  flexWrap: 'wrap',
+  justifyContent: 'flex-end',
+  columnGap: toRem(2),
+  rowGap: config.space.S100,
+  maxWidth: '100%',
 });
 
 export const MessageReadReceiptAvatar = style({
@@ -173,7 +183,7 @@ export const MessageReadReceiptAvatar = style({
 });
 
 export const MessageReadReceiptAvatarAside = style({
-  marginLeft: toRem(-8),
+  marginLeft: 0,
   borderColor: color.SurfaceVariant.Container,
   boxShadow: '0 2px 8px rgba(15, 23, 42, 0.08)',
 });

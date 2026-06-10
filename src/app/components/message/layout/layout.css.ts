@@ -193,22 +193,27 @@ export const BubbleContent = style({
   position: 'relative',
 });
 
+export const BubbleStack = style({
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'flex-start',
+  gap: config.space.S100,
+  minWidth: 0,
+  maxWidth: '100%',
+});
+
 export const BubbleRow = style({
   display: 'flex',
-  alignItems: 'flex-end',
-  justifyContent: 'space-between',
-  gap: config.space.S250,
   minWidth: 0,
   maxWidth: '100%',
 });
 
 export const BubbleMain = style({
   minWidth: 0,
-  flex: '1 1 auto',
+  maxWidth: '100%',
 });
 
 export const BubbleAside = style({
-  flexShrink: 0,
   alignSelf: 'flex-end',
   maxWidth: '100%',
 });

@@ -56,32 +56,37 @@ export function DesktopUpdatePrompt({ open, requestClose }: DesktopUpdatePromptP
               gap="400"
               style={{
                 width: 'min(100vw - 2rem, 42rem)',
-                maxHeight: 'min(80vh, 42rem)',
+                maxHeight: 'min(86vh, 42rem)',
                 padding: toRem(20),
+                overflow: 'hidden',
               }}
             >
-              <Box direction="Column" gap="100">
+              <Box direction="Column" gap="100" shrink="No">
                 <Text size="H4">{'\u53d1\u73b0\u65b0\u7248\u672c'}</Text>
                 <Text size="T300" priority="300">
                   {`${formatVersionLabel(APP_VERSION)} -> ${formatVersionLabel(pendingUpdate.version)}`}
                 </Text>
               </Box>
 
-              <Text size="T300">{progressText ?? message}</Text>
+              <Text size="T300" truncate>
+                {progressText ?? message}
+              </Text>
 
               <Box
                 direction="Column"
-                gap="200"
                 style={{
-                  maxHeight: toRem(280),
+                  flex: '1 1 auto',
+                  minHeight: 0,
+                  maxHeight: 'min(42vh, 18rem)',
                   overflowY: 'auto',
-                  paddingRight: toRem(4),
+                  overflowX: 'hidden',
+                  paddingRight: toRem(6),
                 }}
               >
-                <ReleaseNotes body={pendingUpdate.body} />
+                <ReleaseNotes compact body={pendingUpdate.body} />
               </Box>
 
-              <Box justifyContent="End" gap="200" wrap="Wrap">
+              <Box justifyContent="End" gap="200" wrap="Wrap" shrink="No">
                 <Button
                   variant="Secondary"
                   fill="Soft"

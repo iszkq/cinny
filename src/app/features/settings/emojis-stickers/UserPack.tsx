@@ -1,4 +1,12 @@
-import React, { ChangeEventHandler, FormEventHandler, useCallback, useState } from 'react';
+import React, {
+  ChangeEventHandler,
+  FormEventHandler,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   Avatar,
   AvatarFallback,
@@ -52,6 +60,42 @@ const createFallbackPackName = (content: UserImagePacksContent) => {
   }
 
   return nextName;
+};
+
+const PACK_ORDER_SAVE_DEBOUNCE_MS = 180;
+
+const getPackIds = (packs: ImagePack[]): string[] => packs.map((pack) => pack.id);
+
+const packIdListsEqual = (packIdsA: string[], packIdsB: string[]): boolean =>
+  packIdsA.length === packIdsB.length &&
+  packIdsA.every((packId, index) => packId === packIdsB[index]);
+
+const reconcilePackOrder = (packOrder: string[] | undefined, packs: ImagePack[]): string[] => {
+  const packIds = getPackIds(packs);
+  if (!packOrder) return packIds;
+
+  const knownPackIds = new Set(packIds);
+  const seenPackIds = new Set<string>();
+  const nextOrder = packOrder.filter((packId) => {
+    if (!knownPackIds.has(packId) || seenPackIds.has(packId)) return false;
+    seenPackIds.add(packId);
+    return true;
+  });
+
+  packIds.forEach((packId) => {
+    if (!seenPackIds.has(packId)) {
+      nextOrder.push(packId);
+    }
+  });
+
+  return nextOrder;
+};
+
+const movePackId = (packIds: string[], sourceIndex: number, targetIndex: number): string[] => {
+  const nextPackIds = [...packIds];
+  const [packId] = nextPackIds.splice(sourceIndex, 1);
+  nextPackIds.splice(targetIndex, 0, packId);
+  return nextPackIds;
 };
 
 function CreatePersonalPackTile({ onViewPack }: UserPackProps) {
@@ -193,9 +237,73 @@ export function UserPack({ onViewPack }: UserPackProps) {
       : undefined);
   const customPersonalPacks = personalPacks.filter((imagePack) => imagePack.id !== defaultPackId);
   const [removingPackId, setRemovingPackId] = useState<string>();
-  const [movingPackId, setMovingPackId] = useState<string>();
+  const [optimisticPackOrder, setOptimisticPackOrder] = useState<string[]>();
+  const [savingPackOrder, setSavingPackOrder] = useState(false);
   const [removeError, setRemoveError] = useState<string>();
   const [moveError, setMoveError] = useState<string>();
+  const packOrderSaveTimerRef = useRef<number>();
+  const packOrderSaveIdRef = useRef(0);
+
+  const customPackOrder = useMemo(
+    () => reconcilePackOrder(optimisticPackOrder, customPersonalPacks),
+    [customPersonalPacks, optimisticPackOrder]
+  );
+  const orderedCustomPersonalPacks = useMemo(() => {
+    const packIdToPack = new Map(customPersonalPacks.map((pack) => [pack.id, pack]));
+    return customPackOrder
+      .map((packId) => packIdToPack.get(packId))
+      .filter((pack): pack is ImagePack => !!pack);
+  }, [customPackOrder, customPersonalPacks]);
+
+  useEffect(
+    () => () => {
+      if (packOrderSaveTimerRef.current) {
+        window.clearTimeout(packOrderSaveTimerRef.current);
+      }
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (!optimisticPackOrder || savingPackOrder) return;
+
+    const serverOrder = getPackIds(customPersonalPacks);
+    if (
+      packIdListsEqual(reconcilePackOrder(optimisticPackOrder, customPersonalPacks), serverOrder)
+    ) {
+      setOptimisticPackOrder(undefined);
+    }
+  }, [customPersonalPacks, optimisticPackOrder, savingPackOrder]);
+
+  const schedulePackOrderSave = useCallback(
+    (nextCustomPackOrder: string[]) => {
+      if (!defaultPackId) return;
+
+      if (packOrderSaveTimerRef.current) {
+        window.clearTimeout(packOrderSaveTimerRef.current);
+      }
+
+      const saveId = packOrderSaveIdRef.current + 1;
+      packOrderSaveIdRef.current = saveId;
+      setSavingPackOrder(true);
+      packOrderSaveTimerRef.current = window.setTimeout(() => {
+        packOrderSaveTimerRef.current = undefined;
+
+        setPersonalPackOrder(mx, [defaultPackId, ...nextCustomPackOrder])
+          .then(() => {
+            if (packOrderSaveIdRef.current !== saveId) return;
+            setSavingPackOrder(false);
+          })
+          .catch(() => {
+            if (packOrderSaveIdRef.current !== saveId) return;
+            setMoveError('\u5206\u7c7b\u6392\u5e8f\u4fdd\u5b58\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5\u3002');
+            setOptimisticPackOrder(undefined);
+            setSavingPackOrder(false);
+          });
+      }, PACK_ORDER_SAVE_DEBOUNCE_MS);
+    },
+    [defaultPackId, mx]
+  );
 
   const handleView = useCallback(
     (imagePack?: ImagePack) => {
@@ -220,7 +328,7 @@ export function UserPack({ onViewPack }: UserPackProps) {
 
   const handleDelete = useCallback(
     async (imagePack: ImagePack) => {
-      if (removingPackId || movingPackId) return;
+      if (removingPackId || savingPackOrder) return;
 
       const packName = imagePack.meta.name ?? '\u672a\u547d\u540d\u5206\u7c7b';
       if (!window.confirm(`\u786e\u5b9a\u5220\u9664\u300c${packName}\u300d\u5417\uff1f`)) return;
@@ -254,35 +362,25 @@ export function UserPack({ onViewPack }: UserPackProps) {
         setRemovingPackId(undefined);
       }
     },
-    [movingPackId, mx, removingPackId]
+    [mx, removingPackId, savingPackOrder]
   );
 
   const handleMove = useCallback(
-    async (imagePack: ImagePack, direction: 'up' | 'down') => {
-      if (!defaultPackId || removingPackId || movingPackId) return;
+    (imagePack: ImagePack, direction: 'up' | 'down') => {
+      if (!defaultPackId || removingPackId) return;
 
-      const sourceIndex = customPersonalPacks.findIndex((pack) => pack.id === imagePack.id);
+      const sourceIndex = customPackOrder.findIndex((packId) => packId === imagePack.id);
       if (sourceIndex < 0) return;
 
       const targetIndex = direction === 'up' ? sourceIndex - 1 : sourceIndex + 1;
-      if (targetIndex < 0 || targetIndex >= customPersonalPacks.length) return;
+      if (targetIndex < 0 || targetIndex >= customPackOrder.length) return;
 
       setMoveError(undefined);
-      setMovingPackId(imagePack.id);
-
-      try {
-        const nextCustomPacks = [...customPersonalPacks];
-        const [targetPack] = nextCustomPacks.splice(sourceIndex, 1);
-        nextCustomPacks.splice(targetIndex, 0, targetPack);
-
-        await setPersonalPackOrder(mx, [defaultPackId, ...nextCustomPacks.map((pack) => pack.id)]);
-      } catch {
-        setMoveError('\u5206\u7c7b\u6392\u5e8f\u4fdd\u5b58\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5\u3002');
-      } finally {
-        setMovingPackId(undefined);
-      }
+      const nextCustomPackOrder = movePackId(customPackOrder, sourceIndex, targetIndex);
+      setOptimisticPackOrder(nextCustomPackOrder);
+      schedulePackOrderSave(nextCustomPackOrder);
     },
-    [customPersonalPacks, defaultPackId, movingPackId, mx, removingPackId]
+    [customPackOrder, defaultPackId, removingPackId, schedulePackOrderSave]
   );
 
   const renderPack = (imagePack: ImagePack, isDefault = false, index = -1, total = 0) => {
@@ -303,7 +401,10 @@ export function UserPack({ onViewPack }: UserPackProps) {
         gap="400"
       >
         <SettingTile
-          title={imagePack.meta.name ?? (isDefault ? '\u9ed8\u8ba4\u5206\u7c7b' : '\u672a\u547d\u540d\u5206\u7c7b')}
+          title={
+            imagePack.meta.name ??
+            (isDefault ? '\u9ed8\u8ba4\u5206\u7c7b' : '\u672a\u547d\u540d\u5206\u7c7b')
+          }
           description={<span className={LineClamp2}>{description}</span>}
           before={
             <Avatar size="300" radii="300">
@@ -325,7 +426,7 @@ export function UserPack({ onViewPack }: UserPackProps) {
                     radii="300"
                     variant="Secondary"
                     onClick={() => handleMove(imagePack, 'up')}
-                    disabled={movingPackId === imagePack.id || removingPackId === imagePack.id || index <= 0}
+                    disabled={!!removingPackId || index <= 0}
                     title={'\u4e0a\u79fb'}
                   >
                     <Icon src={Icons.ChevronTop} size="100" />
@@ -335,12 +436,7 @@ export function UserPack({ onViewPack }: UserPackProps) {
                     radii="300"
                     variant="Secondary"
                     onClick={() => handleMove(imagePack, 'down')}
-                    disabled={
-                      movingPackId === imagePack.id ||
-                      removingPackId === imagePack.id ||
-                      index < 0 ||
-                      index >= total - 1
-                    }
+                    disabled={!!removingPackId || index < 0 || index >= total - 1}
                     title={'\u4e0b\u79fb'}
                   >
                     <Icon src={Icons.ChevronBottom} size="100" />
@@ -350,7 +446,7 @@ export function UserPack({ onViewPack }: UserPackProps) {
                     radii="300"
                     variant="Secondary"
                     onClick={() => handleDelete(imagePack)}
-                    disabled={removingPackId === imagePack.id || !!movingPackId}
+                    disabled={removingPackId === imagePack.id || savingPackOrder}
                     title={'\u5220\u9664'}
                   >
                     {removingPackId === imagePack.id ? (
@@ -381,38 +477,40 @@ export function UserPack({ onViewPack }: UserPackProps) {
   };
 
   return (
-    <Box direction="Column" gap="100">
-      <Text size="L400">{'\u4e2a\u4eba\u5206\u7c7b'}</Text>
-      {defaultPack && renderPack(defaultPack, true)}
-      {customPersonalPacks.map((imagePack, index) =>
-        renderPack(imagePack, false, index, customPersonalPacks.length)
-      )}
+    <Box direction="Column" gap="400">
       <CreatePersonalPackTile onViewPack={onViewPack} />
-      {customPersonalPacks.length === 0 && (
-        <SequenceCard
-          className={SequenceCardStyle}
-          variant="SurfaceVariant"
-          direction="Column"
-          gap="400"
-        >
-          <SettingTile
-            title={'\u6682\u65e0\u81ea\u5b9a\u4e49\u5206\u7c7b'}
-            description={
-              '\u4f60\u76ee\u524d\u53ea\u6709\u4e00\u4e2a\u9ed8\u8ba4\u5206\u7c7b\uff0c\u53ef\u4ee5\u901a\u8fc7\u4e0a\u65b9\u7684\u201c\u65b0\u5efa\u4e2a\u4eba\u5206\u7c7b\u201d\u6309\u94ae\u518d\u521b\u5efa\u66f4\u591a\u5206\u7c7b\u3002'
-            }
-          />
-        </SequenceCard>
-      )}
-      {removeError && (
-        <Text size="T200" priority="300">
-          {removeError}
-        </Text>
-      )}
-      {moveError && (
-        <Text size="T200" priority="300">
-          {moveError}
-        </Text>
-      )}
+      <Box direction="Column" gap="100">
+        <Text size="L400">{'\u4e2a\u4eba\u5206\u7c7b'}</Text>
+        {defaultPack && renderPack(defaultPack, true)}
+        {orderedCustomPersonalPacks.map((imagePack, index) =>
+          renderPack(imagePack, false, index, orderedCustomPersonalPacks.length)
+        )}
+        {customPersonalPacks.length === 0 && (
+          <SequenceCard
+            className={SequenceCardStyle}
+            variant="SurfaceVariant"
+            direction="Column"
+            gap="400"
+          >
+            <SettingTile
+              title={'\u6682\u65e0\u81ea\u5b9a\u4e49\u5206\u7c7b'}
+              description={
+                '\u4f60\u76ee\u524d\u53ea\u6709\u4e00\u4e2a\u9ed8\u8ba4\u5206\u7c7b\uff0c\u53ef\u4ee5\u901a\u8fc7\u4e0a\u65b9\u7684\u201c\u65b0\u5efa\u4e2a\u4eba\u5206\u7c7b\u201d\u6309\u94ae\u518d\u521b\u5efa\u66f4\u591a\u5206\u7c7b\u3002'
+              }
+            />
+          </SequenceCard>
+        )}
+        {removeError && (
+          <Text size="T200" priority="300">
+            {removeError}
+          </Text>
+        )}
+        {moveError && (
+          <Text size="T200" priority="300">
+            {moveError}
+          </Text>
+        )}
+      </Box>
     </Box>
   );
 }

@@ -1,6 +1,18 @@
 import React, { CSSProperties, useCallback, useState } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
-import { Box, Button, Icon, Icons, Spinner, Text, color } from 'folds';
+import FocusTrap from 'focus-trap-react';
+import {
+  Box,
+  Button,
+  Icon,
+  Icons,
+  Menu,
+  PopOut,
+  RectCords,
+  Spinner,
+  Text,
+  color,
+} from 'folds';
 import { SequenceCard } from '../../../components/sequence-card';
 import { useTheme } from '../../../hooks/useTheme';
 import { useSetting } from '../../../state/hooks/settings';
@@ -14,6 +26,7 @@ import {
   loadImageElement,
   selectFile,
 } from '../../../utils/dom';
+import { stopPropagation } from '../../../utils/keyboard';
 import {
   CARD_BACKDROP_VAR,
   CARD_BG_VAR,
@@ -168,54 +181,113 @@ type ColorFieldProps = {
 };
 
 function ColorField({ title, value, onChange, resolver, themeDefaultLabel }: ColorFieldProps) {
+  const [pickerAnchor, setPickerAnchor] = useState<RectCords>();
   const selected = getSelectedColorMeta(value, resolver, themeDefaultLabel);
+  const pickerOpen = !!pickerAnchor;
+
+  const handleOpenPicker: React.MouseEventHandler<HTMLButtonElement> = (evt) => {
+    if (pickerOpen) {
+      setPickerAnchor(undefined);
+      return;
+    }
+
+    setPickerAnchor(evt.currentTarget.getBoundingClientRect());
+  };
+
+  const handleClosePicker = () => {
+    setPickerAnchor(undefined);
+  };
+
+  const handleSelectColor = (nextValue: string) => {
+    onChange(nextValue);
+    handleClosePicker();
+  };
 
   return (
-    <div className={css.SwatchSection}>
-      <div className={css.SwatchHeader}>
-        <Text size="T300">{title}</Text>
-        <span className={css.SwatchMeta}>
-          {selected.label} {'\u00B7'} {selected.hex}
+    <div className={css.ColorField}>
+      <button
+        type="button"
+        className={css.ColorSummaryButton}
+        aria-expanded={pickerOpen}
+        onClick={handleOpenPicker}
+      >
+        <span className={css.ColorSummarySwatch} style={{ background: selected.hex }} />
+        <span className={css.ColorSummaryText}>
+          <span className={css.ColorSummaryTitle}>{title}</span>
+          <span className={css.ColorSummaryMeta}>
+            {selected.label} {'\u00B7'} {selected.hex}
+          </span>
         </span>
-      </div>
-      <div className={css.SwatchGrid}>
-        {themeDefaultLabel && (
-          <button
-            type="button"
-            className={css.ThemeDefaultSwatchButton}
-            aria-pressed={value === THEME_DEFAULT_ACCENT_ID}
-            onClick={() => onChange(THEME_DEFAULT_ACCENT_ID)}
+        <Icon className={css.ColorSummaryIcon} size="50" src={Icons.ChevronBottom} />
+      </button>
+      <PopOut
+        anchor={pickerAnchor}
+        offset={6}
+        position="Bottom"
+        align="Start"
+        content={
+          <FocusTrap
+            focusTrapOptions={{
+              initialFocus: false,
+              onDeactivate: handleClosePicker,
+              clickOutsideDeactivates: true,
+              escapeDeactivates: stopPropagation,
+            }}
           >
-            <span
-              className={css.ThemeDefaultSwatchFill}
-              style={{ background: resolver(THEME_DEFAULT_ACCENT_ID) }}
-            />
-            <span className={css.ThemeDefaultSwatchLabel}>{themeDefaultLabel}</span>
-          </button>
-        )}
-        {appearanceColorPresets.map((preset) => (
-          <button
-            key={preset.id}
-            type="button"
-            className={css.SwatchButton}
-            aria-pressed={value === preset.id}
-            title={preset.label}
-            onClick={() => onChange(preset.id)}
-          >
-            <span className={css.SwatchFill} style={{ background: preset.value }} />
-          </button>
-        ))}
-        <label className={css.CustomColorField}>
-          <input
-            className={css.CustomColorInput}
-            type="color"
-            aria-label={`${title} \u81EA\u5B9A\u4E49\u989C\u8272`}
-            value={resolver(value).toLowerCase()}
-            onChange={(evt) => onChange(evt.currentTarget.value.toUpperCase())}
-          />
-          <span className={css.CustomColorLabel}>{'\u81EA\u5B9A\u4E49'}</span>
-        </label>
-      </div>
+            <Menu className={css.ColorPickerMenu}>
+              <div className={css.ColorPickerHeader}>
+                <Text size="T300">{title}</Text>
+                <span className={css.ColorPickerMeta}>{selected.hex}</span>
+              </div>
+              <div className={css.ColorPickerGrid}>
+                {themeDefaultLabel && (
+                  <button
+                    type="button"
+                    className={css.ColorPickerDefaultButton}
+                    aria-pressed={value === THEME_DEFAULT_ACCENT_ID}
+                    onClick={() => handleSelectColor(THEME_DEFAULT_ACCENT_ID)}
+                  >
+                    <span
+                      className={css.ColorPickerDefaultSwatch}
+                      style={{ background: resolver(THEME_DEFAULT_ACCENT_ID) }}
+                    />
+                    <span className={css.ColorPickerDefaultLabel}>{themeDefaultLabel}</span>
+                  </button>
+                )}
+                {appearanceColorPresets.map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    className={css.ColorPickerSwatchButton}
+                    aria-pressed={value === preset.id}
+                    title={preset.label}
+                    onClick={() => handleSelectColor(preset.id)}
+                  >
+                    <span
+                      className={css.ColorPickerSwatchFill}
+                      style={{ background: preset.value }}
+                    />
+                  </button>
+                ))}
+                <label className={css.ColorPickerCustomButton}>
+                  <input
+                    className={css.ColorPickerCustomInput}
+                    type="color"
+                    aria-label={`${title} \u81EA\u5B9A\u4E49\u989C\u8272`}
+                    value={resolver(value).toLowerCase()}
+                    onChange={(evt) => onChange(evt.currentTarget.value.toUpperCase())}
+                  />
+                  <span
+                    className={css.ColorPickerCustomSwatch}
+                    style={{ background: resolver(value) }}
+                  />
+                  <span className={css.ColorPickerCustomLabel}>{'\u81EA\u5B9A\u4E49'}</span>
+                </label>
+              </div>
+            </Menu>
+          </FocusTrap>
+        }
+      />
     </div>
   );
 }
