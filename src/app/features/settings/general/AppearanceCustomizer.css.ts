@@ -4,7 +4,7 @@ import { color, config, toRem } from 'folds';
 export const ControlSection = style({
   display: 'flex',
   flexDirection: 'column',
-  gap: config.space.S250,
+  gap: config.space.S300,
 });
 
 export const SectionHeader = style({
@@ -57,23 +57,22 @@ export const StickyPreviewStack = style({
 
 export const ToneGrid = style({
   display: 'grid',
-  gridTemplateColumns: `repeat(3, minmax(${toRem(150)}, 1fr))`,
-  gap: config.space.S200,
+  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+  gap: config.space.S250,
   '@media': {
-    'screen and (max-width: 720px)': {
+    'screen and (max-width: 920px)': {
+      gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+    },
+    'screen and (max-width: 620px)': {
       gridTemplateColumns: 'minmax(0, 1fr)',
     },
   },
 });
 
 export const ToneCard = style({
-  display: 'grid',
-  gridTemplateColumns: 'minmax(0, 1fr)',
+  display: 'flex',
+  flexDirection: 'column',
   gap: config.space.S150,
-  padding: config.space.S150,
-  borderRadius: config.radii.R300,
-  border: `1px solid ${color.SurfaceVariant.ContainerLine}`,
-  background: color.Surface.Container,
   minWidth: 0,
 });
 
@@ -121,7 +120,7 @@ export const StyleOptionDescription = style({
 export const SwatchSection = style({
   display: 'flex',
   flexDirection: 'column',
-  gap: config.space.S150,
+  gap: config.space.S200,
 });
 
 export const OpacitySection = style({
@@ -190,7 +189,7 @@ export const SelectLabel = style({
 export const FieldSelect = style({
   width: '100%',
   minWidth: 0,
-  height: toRem(38),
+  height: toRem(40),
   border: `1px solid ${color.SurfaceVariant.ContainerLine}`,
   borderRadius: config.radii.R300,
   background: color.Surface.Container,
@@ -216,16 +215,16 @@ export const ColorField = style({
 
 export const ColorSummaryButton = style({
   width: '100%',
-  minHeight: toRem(52),
+  minHeight: toRem(44),
   border: `1px solid ${color.SurfaceVariant.ContainerLine}`,
   borderRadius: config.radii.R300,
   background: color.Surface.Container,
   color: color.Surface.OnContainer,
-  padding: `${config.space.S150} ${config.space.S200}`,
+  padding: `${config.space.S100} ${config.space.S200}`,
   display: 'grid',
-  gridTemplateColumns: `${toRem(28)} minmax(0, 1fr) ${toRem(18)}`,
+  gridTemplateColumns: `${toRem(24)} minmax(0, 1fr) ${toRem(18)}`,
   alignItems: 'center',
-  gap: config.space.S150,
+  gap: config.space.S100,
   textAlign: 'left',
   cursor: 'pointer',
   transition: 'border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease',
@@ -242,8 +241,8 @@ export const ColorSummaryButton = style({
 });
 
 export const ColorSummarySwatch = style({
-  width: toRem(28),
-  height: toRem(28),
+  width: toRem(24),
+  height: toRem(24),
   borderRadius: config.radii.R300,
   boxShadow: `inset 0 0 0 1px rgba(255, 255, 255, 0.22), 0 0 0 1px ${color.SurfaceVariant.ContainerLine}`,
 });
@@ -251,13 +250,13 @@ export const ColorSummarySwatch = style({
 export const ColorSummaryText = style({
   display: 'flex',
   flexDirection: 'column',
-  gap: toRem(2),
+  gap: toRem(1),
   minWidth: 0,
 });
 
 export const ColorSummaryTitle = style({
   fontSize: toRem(13),
-  lineHeight: toRem(18),
+  lineHeight: toRem(16),
   fontWeight: 600,
   overflow: 'hidden',
   whiteSpace: 'nowrap',
@@ -265,8 +264,8 @@ export const ColorSummaryTitle = style({
 });
 
 export const ColorSummaryMeta = style({
-  fontSize: toRem(12),
-  lineHeight: toRem(16),
+  fontSize: toRem(11),
+  lineHeight: toRem(14),
   color: color.SurfaceVariant.OnContainer,
   overflow: 'hidden',
   whiteSpace: 'nowrap',
@@ -278,7 +277,7 @@ export const ColorSummaryIcon = style({
 });
 
 export const ColorPickerMenu = style({
-  width: toRem(248),
+  width: toRem(264),
   maxWidth: 'calc(100vw - 32px)',
   padding: config.space.S200,
   borderRadius: config.radii.R400,
@@ -392,6 +391,10 @@ export const ColorPickerCustomButton = style({
       background: color.Surface.ContainerHover,
       borderColor: color.Primary.Main,
     },
+    '&[data-selected=true]': {
+      borderColor: color.Primary.Main,
+      boxShadow: `0 0 0 1px ${color.Primary.Main}`,
+    },
   },
 });
 
@@ -417,7 +420,7 @@ export const ColorPickerCustomLabel = style({
 });
 
 export const BackgroundPreview = style({
-  minHeight: toRem(148),
+  minHeight: toRem(136),
   borderRadius: config.radii.R300,
   border: `1px solid ${color.SurfaceVariant.ContainerLine}`,
   overflow: 'hidden',
@@ -446,7 +449,7 @@ export const BackgroundPreviewBadge = style({
 });
 
 export const PreviewRoot = style({
-  padding: config.space.S200,
+  padding: config.space.S250,
   borderRadius: config.radii.R400,
   overflow: 'hidden',
 });

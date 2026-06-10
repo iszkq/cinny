@@ -16,24 +16,6 @@ import { useDesktopUpdater } from '../hooks/useDesktopUpdater';
 import { openDesktopUpdateDownloadUrl } from '../utils/desktopUpdater';
 import { stopPropagation } from '../utils/keyboard';
 
-const updateDialogStyle = {
-  width: 'calc(100vw - 1.5rem)',
-  maxWidth: toRem(544),
-  maxHeight: 'calc(100vh - 1.5rem)',
-  minWidth: 0,
-  boxSizing: 'border-box' as const,
-  overflow: 'hidden' as const,
-};
-
-const updateDialogContentStyle = {
-  width: '100%',
-  minWidth: 0,
-  maxHeight: 'calc(100vh - 1.5rem)',
-  padding: toRem(20),
-  boxSizing: 'border-box' as const,
-  overflow: 'hidden' as const,
-};
-
 type DesktopUpdatePromptProps = {
   open: boolean;
   requestClose: () => void;
@@ -55,6 +37,13 @@ export function DesktopUpdatePrompt({ open, requestClose }: DesktopUpdatePromptP
 
   const downloading = status === 'downloading';
   const manualDownloadUrl = pendingUpdate.downloadUrl;
+  const versionLabel = formatVersionLabel(pendingUpdate.version);
+  const promptText =
+    status === 'downloading'
+      ? progressText ?? message
+      : status === 'error' || status === 'installed'
+      ? message
+      : `\u53d1\u73b0\u65b0\u7248\u672c ${versionLabel}\uff0c\u53ef\u4ee5\u76f4\u63a5\u4e0b\u8f7d\u5b89\u88c5\u3002`;
 
   return (
     <Overlay open backdrop={<OverlayBackdrop />}>
@@ -67,11 +56,16 @@ export function DesktopUpdatePrompt({ open, requestClose }: DesktopUpdatePromptP
             escapeDeactivates: stopPropagation,
           }}
         >
-          <Dialog variant="Background" style={updateDialogStyle}>
+          <Dialog variant="Background">
             <Box
               direction="Column"
               gap="400"
-              style={updateDialogContentStyle}
+              style={{
+                width: 'min(100vw - 2rem, 34rem)',
+                maxHeight: 'min(86vh, 42rem)',
+                padding: toRem(20),
+                overflow: 'hidden',
+              }}
             >
               <Box direction="Column" gap="100" shrink="No">
                 <Text size="H4">{'\u53d1\u73b0\u65b0\u7248\u672c'}</Text>
@@ -80,8 +74,8 @@ export function DesktopUpdatePrompt({ open, requestClose }: DesktopUpdatePromptP
                 </Text>
               </Box>
 
-              <Text size="T300" truncate>
-                {progressText ?? message}
+              <Text size="T300">
+                {promptText}
               </Text>
 
               <Box justifyContent="End" gap="200" wrap="Wrap" shrink="No">

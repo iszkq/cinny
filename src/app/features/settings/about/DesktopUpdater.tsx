@@ -27,8 +27,8 @@ export function DesktopUpdater() {
   const currentVersionLabel = formatVersionLabel(APP_VERSION);
   const nextVersionLabel = pendingUpdate && formatVersionLabel(pendingUpdate.version);
   const latestVersionLabel = latestRelease && formatVersionLabel(latestRelease.version);
-  const releaseNotesBody = pendingUpdate?.body ?? latestRelease?.body;
-  const showReleaseNotes = Boolean(pendingUpdate || latestRelease);
+  const releaseNotesBody = latestRelease?.body ?? pendingUpdate?.body;
+  const releaseNotesVersionLabel = latestVersionLabel ?? nextVersionLabel;
   const statusText = progressText ?? message;
   const manualDownloadUrl = pendingUpdate?.downloadUrl ?? latestRelease?.downloadUrl;
 
@@ -118,11 +118,21 @@ export function DesktopUpdater() {
             </Box>
           }
         />
-        {showReleaseNotes && (
-          <SettingTile title={'\u66f4\u65b0\u8bf4\u660e'}>
-            <ReleaseNotes body={releaseNotesBody} />
-          </SettingTile>
-        )}
+        <SettingTile
+          title={'\u66f4\u65b0\u8bf4\u660e'}
+          description={
+            releaseNotesVersionLabel ? `\u6700\u65b0 release ${releaseNotesVersionLabel}` : undefined
+          }
+        >
+          <ReleaseNotes
+            body={releaseNotesBody}
+            emptyText={
+              checking || !lastCheckedAt
+                ? '\u6b63\u5728\u83b7\u53d6\u6700\u65b0 release \u66f4\u65b0\u8bf4\u660e...'
+                : '\u6682\u65e0\u66f4\u65b0\u8bf4\u660e\u3002'
+            }
+          />
+        </SettingTile>
       </SequenceCard>
     </Box>
   );

@@ -171,51 +171,76 @@ const parseLatestDesktopRelease = (payload: {
   };
 };
 
-export const fetchLatestDesktopRelease = async (): Promise<DesktopUpdateReleaseInfo | undefined> => {
-  if (!isDesktopUpdaterSupported()) {
-    throw new Error('Desktop updater is only available in the Tauri desktop app.');
+const mergeLatestDesktopReleaseInfo = (
+  manifestRelease?: DesktopUpdateReleaseInfo,
+  githubRelease?: DesktopUpdateReleaseInfo
+): DesktopUpdateReleaseInfo | undefined => {
+  if (!manifestRelease) return githubRelease;
+  if (!githubRelease) return manifestRelease;
+
+  const sameVersion =
+    normalizeDesktopUpdateVersion(manifestRelease.version) ===
+    normalizeDesktopUpdateVersion(githubRelease.version);
+
+  if (!sameVersion) {
+    return {
+      ...githubRelease,
+      downloadUrl: githubRelease.downloadUrl ?? manifestRelease.downloadUrl,
+    };
   }
 
-  try {
-    const response = await fetch(DESKTOP_UPDATER_MANIFEST_URL, {
-      cache: 'no-store',
-    });
+  return {
+    version: githubRelease.version,
+    date: githubRelease.date ?? manifestRelease.date,
+    body: githubRelease.body ?? manifestRelease.body,
+    downloadUrl: manifestRelease.downloadUrl ?? githubRelease.downloadUrl,
+  };
+};
 
-    if (response.ok) {
+export const fetchLatestDesktopRelease = async (): Promise<DesktopUpdateReleaseInfo | undefined> => {
+  const [manifestRelease, githubRelease] = await Promise.all([
+    (async () => {
+      const response = await fetch(DESKTOP_UPDATER_MANIFEST_URL, {
+        cache: 'no-store',
+      });
+
+      if (!response.ok) {
+        return undefined;
+      }
+
       const manifestPayload = (await response.json()) as {
         version?: unknown;
         notes?: unknown;
         pub_date?: unknown;
         platforms?: unknown;
       };
-      const manifestRelease = parseLatestDesktopManifest(manifestPayload);
-      if (manifestRelease) {
-        return manifestRelease;
+
+      return parseLatestDesktopManifest(manifestPayload);
+    })().catch(() => undefined),
+    (async () => {
+      const response = await fetch(DESKTOP_UPDATER_RELEASE_API_URL, {
+        cache: 'no-store',
+        headers: {
+          Accept: 'application/vnd.github+json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch latest GitHub release: ${response.status}`);
       }
-    }
-  } catch {
-    // Fall through to GitHub Release API so About page and update prompt can still show notes.
-  }
 
-  const response = await fetch(DESKTOP_UPDATER_RELEASE_API_URL, {
-    cache: 'no-store',
-    headers: {
-      Accept: 'application/vnd.github+json',
-    },
-  });
+      const releasePayload = (await response.json()) as {
+        tag_name?: unknown;
+        body?: unknown;
+        published_at?: unknown;
+        assets?: unknown;
+      };
 
-  if (!response.ok) {
-    throw new Error(`Failed to fetch latest GitHub release: ${response.status}`);
-  }
+      return parseLatestDesktopRelease(releasePayload);
+    })().catch(() => undefined),
+  ]);
 
-  const releasePayload = (await response.json()) as {
-    tag_name?: unknown;
-    body?: unknown;
-    published_at?: unknown;
-    assets?: unknown;
-  };
-
-  return parseLatestDesktopRelease(releasePayload);
+  return mergeLatestDesktopReleaseInfo(manifestRelease, githubRelease);
 };
 
 export const openDesktopUpdateDownloadUrl = async (url: string): Promise<void> => {

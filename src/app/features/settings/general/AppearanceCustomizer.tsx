@@ -1,3 +1,4 @@
+import FocusTrap from 'focus-trap-react';
 import React, { CSSProperties, useCallback, useState } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import {
@@ -5,6 +6,9 @@ import {
   Button,
   Icon,
   Icons,
+  Menu,
+  PopOut,
+  RectCords,
   Spinner,
   Text,
   color,
@@ -39,10 +43,13 @@ import {
   PAGE_NAV_BORDER_VAR,
   appearanceColorPresets,
   getAccentColorHex,
+  getIncomingBubbleColorHex,
+  getOutgoingBubbleColorHex,
   getPreviewBubbleStyle,
   getPreviewChromeStyle,
 } from '../../../theme/appearance';
 import { THEME_DEFAULT_ACCENT_ID } from '../../../theme/appearanceShared';
+import { stopPropagation } from '../../../utils/keyboard';
 import { SequenceCardStyle } from '../styles.css';
 import * as css from './AppearanceCustomizer.css';
 
@@ -147,6 +154,7 @@ const getPreviewBackgroundStyle = (backgroundDataUrl?: string): CSSProperties | 
 type ColorFieldProps = {
   title: string;
   value: string;
+  resolvedHex: string;
   onChange: (value: string) => void;
   themeDefaultLabel?: string;
 };
@@ -155,30 +163,168 @@ const isColorValueInOptions = (value: string, allowThemeDefault: boolean): boole
   (allowThemeDefault && value === THEME_DEFAULT_ACCENT_ID) ||
   appearanceColorPresets.some((preset) => preset.id === value);
 
-function ColorField({ title, value, onChange, themeDefaultLabel }: ColorFieldProps) {
+const normalizeHexColor = (value: string, fallback: string): string => {
+  const nextValue = value.trim();
+
+  if (!/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(nextValue)) {
+    return fallback.toUpperCase();
+  }
+
+  if (nextValue.length === 4) {
+    return `#${nextValue[1]}${nextValue[1]}${nextValue[2]}${nextValue[2]}${nextValue[3]}${nextValue[3]}`.toUpperCase();
+  }
+
+  return nextValue.toUpperCase();
+};
+
+const getColorSummary = (value: string, resolvedHex: string, themeDefaultLabel?: string) => {
+  if (themeDefaultLabel && value === THEME_DEFAULT_ACCENT_ID) {
+    return {
+      label: themeDefaultLabel,
+      hex: normalizeHexColor(resolvedHex, '#000000'),
+    };
+  }
+
+  const preset = appearanceColorPresets.find((item) => item.id === value);
+  if (preset) {
+    return {
+      label: preset.label,
+      hex: normalizeHexColor(preset.value, resolvedHex),
+    };
+  }
+
+  return {
+    label: '\u81ea\u5B9A\u4E49',
+    hex: normalizeHexColor(value, resolvedHex),
+  };
+};
+
+function ColorField({ title, value, resolvedHex, onChange, themeDefaultLabel }: ColorFieldProps) {
   const allowThemeDefault = Boolean(themeDefaultLabel);
+  const [menuCords, setMenuCords] = useState<RectCords>();
+  const summary = getColorSummary(value, resolvedHex, themeDefaultLabel);
+  const customHex = normalizeHexColor(
+    isColorValueInOptions(value, allowThemeDefault) ? resolvedHex : value,
+    resolvedHex
+  );
+
+  const handleToggleMenu = useCallback<React.MouseEventHandler<HTMLButtonElement>>((evt) => {
+    const nextAnchor = evt.currentTarget.getBoundingClientRect();
+    setMenuCords((current) => (current ? undefined : nextAnchor));
+  }, []);
+
+  const handleCloseMenu = useCallback(() => {
+    setMenuCords(undefined);
+  }, []);
+
+  const handlePresetSelect = useCallback(
+    (nextValue: string) => {
+      onChange(nextValue);
+      handleCloseMenu();
+    },
+    [handleCloseMenu, onChange]
+  );
 
   return (
-    <label className={css.SelectField}>
+    <div className={css.SelectField}>
       <span className={css.SelectLabel}>{title}</span>
-      <select
-        className={css.FieldSelect}
-        value={value}
-        onChange={(evt) => onChange(evt.currentTarget.value)}
+      <PopOut
+        anchor={menuCords}
+        offset={6}
+        position="Bottom"
+        align="Start"
+        content={
+          <FocusTrap
+            focusTrapOptions={{
+              initialFocus: false,
+              onDeactivate: handleCloseMenu,
+              clickOutsideDeactivates: true,
+              isKeyForward: (evt: KeyboardEvent) =>
+                evt.key === 'ArrowDown' || evt.key === 'ArrowRight',
+              isKeyBackward: (evt: KeyboardEvent) =>
+                evt.key === 'ArrowUp' || evt.key === 'ArrowLeft',
+              escapeDeactivates: stopPropagation,
+            }}
+          >
+            <Menu className={css.ColorPickerMenu}>
+              <div className={css.ColorPickerHeader}>
+                <Text size="T300">{title}</Text>
+                <span className={css.ColorPickerMeta}>{summary.hex}</span>
+              </div>
+              <div className={css.ColorPickerGrid}>
+                {themeDefaultLabel && (
+                  <button
+                    type="button"
+                    className={css.ColorPickerDefaultButton}
+                    aria-pressed={value === THEME_DEFAULT_ACCENT_ID}
+                    onClick={() => handlePresetSelect(THEME_DEFAULT_ACCENT_ID)}
+                  >
+                    <span
+                      className={css.ColorPickerDefaultSwatch}
+                      style={{ background: resolvedHex }}
+                    />
+                    <span className={css.ColorPickerDefaultLabel}>{themeDefaultLabel}</span>
+                  </button>
+                )}
+                {appearanceColorPresets.map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    className={css.ColorPickerSwatchButton}
+                    aria-label={`${preset.label} ${preset.value.toUpperCase()}`}
+                    aria-pressed={value === preset.id}
+                    title={`${preset.label} ${preset.value.toUpperCase()}`}
+                    onClick={() => handlePresetSelect(preset.id)}
+                  >
+                    <span
+                      className={css.ColorPickerSwatchFill}
+                      style={{ background: preset.value }}
+                    />
+                  </button>
+                ))}
+                <label
+                  className={css.ColorPickerCustomButton}
+                  data-selected={
+                    !isColorValueInOptions(value, allowThemeDefault) ? 'true' : undefined
+                  }
+                >
+                  <input
+                    className={css.ColorPickerCustomInput}
+                    type="color"
+                    value={customHex}
+                    aria-label={`${title} \u81EA\u5B9A\u4E49\u989C\u8272`}
+                    onChange={(evt) =>
+                      handlePresetSelect(normalizeHexColor(evt.currentTarget.value, customHex))
+                    }
+                  />
+                  <span
+                    className={css.ColorPickerCustomSwatch}
+                    style={{ background: customHex }}
+                  />
+                  <span className={css.ColorPickerCustomLabel}>
+                    {`\u81EA\u5B9A\u4E49 ${customHex}`}
+                  </span>
+                </label>
+              </div>
+            </Menu>
+          </FocusTrap>
+        }
       >
-        {themeDefaultLabel && (
-          <option value={THEME_DEFAULT_ACCENT_ID}>{themeDefaultLabel}</option>
-        )}
-        {!isColorValueInOptions(value, allowThemeDefault) && (
-          <option value={value}>{'\u81EA\u5B9A\u4E49'}</option>
-        )}
-        {appearanceColorPresets.map((preset) => (
-          <option key={preset.id} value={preset.id}>
-            {preset.label}
-          </option>
-        ))}
-      </select>
-    </label>
+        <button
+          type="button"
+          className={css.ColorSummaryButton}
+          aria-expanded={!!menuCords}
+          onClick={handleToggleMenu}
+        >
+          <span className={css.ColorSummarySwatch} style={{ background: summary.hex }} />
+          <span className={css.ColorSummaryText}>
+            <span className={css.ColorSummaryTitle}>{summary.label}</span>
+            <span className={css.ColorSummaryMeta}>{summary.hex}</span>
+          </span>
+          <Icon className={css.ColorSummaryIcon} size="50" src={Icons.ChevronBottom} />
+        </button>
+      </PopOut>
+    </div>
   );
 }
 
@@ -253,6 +399,8 @@ export function AppearanceCustomizer() {
   const [backgroundError, setBackgroundError] = useState<string>();
 
   const accentColor = getAccentColorHex(accentColorId, theme.classNames);
+  const outgoingBubbleColor = getOutgoingBubbleColorHex(outgoingBubbleColorId);
+  const incomingBubbleColor = getIncomingBubbleColorHex(incomingBubbleColorId);
   const previewChrome = getPreviewChromeStyle(
     interfaceStyle,
     theme.kind,
@@ -528,6 +676,7 @@ export function AppearanceCustomizer() {
             <ColorField
               title={'\u4E3B\u9898\u8272'}
               value={accentColorId}
+              resolvedHex={accentColor}
               onChange={setAccentColorId}
               themeDefaultLabel={'\u8DDF\u968F\u4E3B\u9898'}
             />
@@ -541,6 +690,7 @@ export function AppearanceCustomizer() {
             <ColorField
               title={'\u81EA\u5DF1\u7684\u6C14\u6CE1\u989C\u8272'}
               value={outgoingBubbleColorId}
+              resolvedHex={outgoingBubbleColor}
               onChange={setOutgoingBubbleColorId}
             />
             <OpacityField
@@ -553,6 +703,7 @@ export function AppearanceCustomizer() {
             <ColorField
               title={'\u4ED6\u4EBA\u7684\u6C14\u6CE1\u989C\u8272'}
               value={incomingBubbleColorId}
+              resolvedHex={incomingBubbleColor}
               onChange={setIncomingBubbleColorId}
             />
             <OpacityField
