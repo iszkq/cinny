@@ -85,6 +85,6 @@ npm run desktop:build:nsis
 - A valid Windows auto-update release must include the installer `.exe`, its `.sig`, and `latest.json`.
 - With Tauri 2, the Windows build output itself only guarantees the installer and signature artifacts. `latest.json` is not expected to exist as a plain file under `src-tauri/target/release/bundle/`.
 - This repository now generates `latest.json` in the tagged GitHub Actions release workflow after the NSIS bundle is built and signed, then uploads it to the GitHub Release with `gh release upload`.
-- The updater `notes` field is filled from the GitHub Release body, so the desktop app's update dialog and About page show the same release notes you publish on GitHub.
+- The updater `notes` field is generated as a short plain-text summary from the GitHub Release body so older desktop update dialogs stay compact. Keep the full release notes in the GitHub Release body.
 - If a release was already published without `latest.json` or with the wrong desktop version, replace the release assets or publish a new tag such as `v4.12.1`.
 - The GitHub Actions workflow now uses `tauri-action` only to build the Windows bundle. On `v*` tags, a follow-up step creates the GitHub Release if needed and uploads the exact built `.exe`, `.sig`, and generated `latest.json`.

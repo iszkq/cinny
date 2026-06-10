@@ -17,6 +17,33 @@ import { openDesktopUpdateDownloadUrl } from '../utils/desktopUpdater';
 import { stopPropagation } from '../utils/keyboard';
 import { ReleaseNotes } from './ReleaseNotes';
 
+const updateDialogStyle = {
+  width: 'calc(100vw - 1.5rem)',
+  maxWidth: toRem(560),
+  maxHeight: 'calc(100vh - 1.5rem)',
+  minWidth: 0,
+  boxSizing: 'border-box' as const,
+  overflow: 'hidden' as const,
+};
+
+const updateDialogContentStyle = {
+  width: '100%',
+  minWidth: 0,
+  maxHeight: 'calc(100vh - 1.5rem)',
+  padding: toRem(20),
+  boxSizing: 'border-box' as const,
+  overflow: 'hidden' as const,
+};
+
+const updateNotesStyle = {
+  flex: '1 1 auto',
+  minHeight: toRem(96),
+  maxHeight: 'min(36vh, 14rem)',
+  overflowY: 'auto' as const,
+  overflowX: 'hidden' as const,
+  paddingRight: toRem(6),
+};
+
 type DesktopUpdatePromptProps = {
   open: boolean;
   requestClose: () => void;
@@ -50,16 +77,11 @@ export function DesktopUpdatePrompt({ open, requestClose }: DesktopUpdatePromptP
             escapeDeactivates: stopPropagation,
           }}
         >
-          <Dialog variant="Background">
+          <Dialog variant="Background" style={updateDialogStyle}>
             <Box
               direction="Column"
               gap="400"
-              style={{
-                width: 'min(100vw - 2rem, 42rem)',
-                maxHeight: 'min(86vh, 42rem)',
-                padding: toRem(20),
-                overflow: 'hidden',
-              }}
+              style={updateDialogContentStyle}
             >
               <Box direction="Column" gap="100" shrink="No">
                 <Text size="H4">{'\u53d1\u73b0\u65b0\u7248\u672c'}</Text>
@@ -72,17 +94,7 @@ export function DesktopUpdatePrompt({ open, requestClose }: DesktopUpdatePromptP
                 {progressText ?? message}
               </Text>
 
-              <Box
-                direction="Column"
-                style={{
-                  flex: '1 1 auto',
-                  minHeight: 0,
-                  maxHeight: 'min(42vh, 18rem)',
-                  overflowY: 'auto',
-                  overflowX: 'hidden',
-                  paddingRight: toRem(6),
-                }}
-              >
+              <Box direction="Column" style={updateNotesStyle}>
                 <ReleaseNotes compact body={pendingUpdate.body} />
               </Box>
 

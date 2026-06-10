@@ -98,9 +98,23 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($releaseBody)) {
             $releaseBody = "Starfire v$version"
           }
+          $updaterNotes = $releaseBody -replace "`r`n?", "`n"
+          $updaterNotes = $updaterNotes -replace '(?m)^\s{0,3}#{1,6}\s*', ''
+          $updaterNotes = $updaterNotes -replace '(?m)^\s*[-*+]\s+', ''
+          $updaterNotes = $updaterNotes -replace '(?m)^\s*\d+\.\s+', ''
+          $updaterNotes = $updaterNotes -replace '[`*_>\[\]#]', ''
+          $updaterNotes = $updaterNotes -replace '\s+', ' '
+          $updaterNotes = $updaterNotes.Trim()
+          if ([string]::IsNullOrWhiteSpace($updaterNotes)) {
+            $updaterNotes = "Starfire v$version"
+          }
+          $maxNotesLength = 120
+          if ($updaterNotes.Length -gt $maxNotesLength) {
+            $updaterNotes = $updaterNotes.Substring(0, $maxNotesLength).TrimEnd() + "..."
+          }
           $manifest = @{
             version = $version
-            notes = $releaseBody
+            notes = $updaterNotes
             pub_date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
             platforms = @{
               'windows-x86_64' = @{
