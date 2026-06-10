@@ -21,6 +21,7 @@ import {
   ImageUsage,
   UserImagePacksContent,
   getCustomUserImagePacksContent,
+  setPersonalPackOrder,
   setCustomUserImagePacksContent,
 } from '../../../plugins/custom-emoji';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
@@ -176,9 +177,25 @@ export function UserPack({ onViewPack }: UserPackProps) {
   const useAuthentication = useMediaAuthentication();
 
   const personalPacks = useAllPersonalImagePacks();
-  const defaultPackId = mx.getUserId() ?? '';
+  const defaultPackId = mx.getUserId();
+  const defaultPack =
+    (defaultPackId && personalPacks.find((imagePack) => imagePack.id === defaultPackId)) ||
+    (defaultPackId
+      ? new ImagePack(
+          defaultPackId,
+          {
+            pack: {
+              display_name: '\u9ed8\u8ba4\u5206\u7c7b',
+            },
+          },
+          undefined
+        )
+      : undefined);
+  const customPersonalPacks = personalPacks.filter((imagePack) => imagePack.id !== defaultPackId);
   const [removingPackId, setRemovingPackId] = useState<string>();
+  const [movingPackId, setMovingPackId] = useState<string>();
   const [removeError, setRemoveError] = useState<string>();
+  const [moveError, setMoveError] = useState<string>();
 
   const handleView = useCallback(
     (imagePack?: ImagePack) => {
@@ -203,7 +220,7 @@ export function UserPack({ onViewPack }: UserPackProps) {
 
   const handleDelete = useCallback(
     async (imagePack: ImagePack) => {
-      if (removingPackId) return;
+      if (removingPackId || movingPackId) return;
 
       const packName = imagePack.meta.name ?? '\u672a\u547d\u540d\u5206\u7c7b';
       if (!window.confirm(`\u786e\u5b9a\u5220\u9664\u300c${packName}\u300d\u5417\uff1f`)) return;
@@ -237,10 +254,38 @@ export function UserPack({ onViewPack }: UserPackProps) {
         setRemovingPackId(undefined);
       }
     },
-    [mx, removingPackId]
+    [movingPackId, mx, removingPackId]
   );
 
-  const renderPack = (imagePack: ImagePack, isDefault = false) => {
+  const handleMove = useCallback(
+    async (imagePack: ImagePack, direction: 'up' | 'down') => {
+      if (!defaultPackId || removingPackId || movingPackId) return;
+
+      const sourceIndex = customPersonalPacks.findIndex((pack) => pack.id === imagePack.id);
+      if (sourceIndex < 0) return;
+
+      const targetIndex = direction === 'up' ? sourceIndex - 1 : sourceIndex + 1;
+      if (targetIndex < 0 || targetIndex >= customPersonalPacks.length) return;
+
+      setMoveError(undefined);
+      setMovingPackId(imagePack.id);
+
+      try {
+        const nextCustomPacks = [...customPersonalPacks];
+        const [targetPack] = nextCustomPacks.splice(sourceIndex, 1);
+        nextCustomPacks.splice(targetIndex, 0, targetPack);
+
+        await setPersonalPackOrder(mx, [defaultPackId, ...nextCustomPacks.map((pack) => pack.id)]);
+      } catch {
+        setMoveError('\u5206\u7c7b\u6392\u5e8f\u4fdd\u5b58\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5\u3002');
+      } finally {
+        setMovingPackId(undefined);
+      }
+    },
+    [customPersonalPacks, defaultPackId, movingPackId, mx, removingPackId]
+  );
+
+  const renderPack = (imagePack: ImagePack, isDefault = false, index = -1, total = 0) => {
     const avatarMxc = imagePack.getAvatarUrl(ImageUsage.Emoticon);
     const avatarUrl = avatarMxc ? mxcUrlToHttp(mx, avatarMxc, useAuthentication) : undefined;
     const description =
@@ -274,19 +319,47 @@ export function UserPack({ onViewPack }: UserPackProps) {
           after={
             <Box gap="200">
               {!isDefault && (
-                <IconButton
-                  size="300"
-                  radii="300"
-                  variant="Secondary"
-                  onClick={() => handleDelete(imagePack)}
-                  disabled={removingPackId === imagePack.id}
-                >
-                  {removingPackId === imagePack.id ? (
-                    <Spinner size="100" />
-                  ) : (
-                    <Icon src={Icons.Delete} size="100" />
-                  )}
-                </IconButton>
+                <>
+                  <IconButton
+                    size="300"
+                    radii="300"
+                    variant="Secondary"
+                    onClick={() => handleMove(imagePack, 'up')}
+                    disabled={movingPackId === imagePack.id || removingPackId === imagePack.id || index <= 0}
+                    title={'\u4e0a\u79fb'}
+                  >
+                    <Icon src={Icons.ChevronTop} size="100" />
+                  </IconButton>
+                  <IconButton
+                    size="300"
+                    radii="300"
+                    variant="Secondary"
+                    onClick={() => handleMove(imagePack, 'down')}
+                    disabled={
+                      movingPackId === imagePack.id ||
+                      removingPackId === imagePack.id ||
+                      index < 0 ||
+                      index >= total - 1
+                    }
+                    title={'\u4e0b\u79fb'}
+                  >
+                    <Icon src={Icons.ChevronBottom} size="100" />
+                  </IconButton>
+                  <IconButton
+                    size="300"
+                    radii="300"
+                    variant="Secondary"
+                    onClick={() => handleDelete(imagePack)}
+                    disabled={removingPackId === imagePack.id || !!movingPackId}
+                    title={'\u5220\u9664'}
+                  >
+                    {removingPackId === imagePack.id ? (
+                      <Spinner size="100" />
+                    ) : (
+                      <Icon src={Icons.Delete} size="100" />
+                    )}
+                  </IconButton>
+                </>
               )}
               <Button
                 variant="Secondary"
@@ -308,11 +381,14 @@ export function UserPack({ onViewPack }: UserPackProps) {
   };
 
   return (
-      <Box direction="Column" gap="100">
-        <Text size="L400">{'\u4e2a\u4eba\u5206\u7c7b'}</Text>
-      {personalPacks.map((imagePack) => renderPack(imagePack, imagePack.id === defaultPackId))}
+    <Box direction="Column" gap="100">
+      <Text size="L400">{'\u4e2a\u4eba\u5206\u7c7b'}</Text>
+      {defaultPack && renderPack(defaultPack, true)}
+      {customPersonalPacks.map((imagePack, index) =>
+        renderPack(imagePack, false, index, customPersonalPacks.length)
+      )}
       <CreatePersonalPackTile onViewPack={onViewPack} />
-      {personalPacks.filter((imagePack) => imagePack.id !== defaultPackId).length === 0 && (
+      {customPersonalPacks.length === 0 && (
         <SequenceCard
           className={SequenceCardStyle}
           variant="SurfaceVariant"
@@ -330,6 +406,11 @@ export function UserPack({ onViewPack }: UserPackProps) {
       {removeError && (
         <Text size="T200" priority="300">
           {removeError}
+        </Text>
+      )}
+      {moveError && (
+        <Text size="T200" priority="300">
+          {moveError}
         </Text>
       )}
     </Box>

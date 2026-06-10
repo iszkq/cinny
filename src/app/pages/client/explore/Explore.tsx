@@ -724,7 +724,7 @@ export function Explore() {
             {desktop ? (
               <IconButton
                 aria-label="Collapse section list"
-                variant="Background"
+                fill="None"
                 onClick={() => setDesktopPageNavCollapsed(true)}
               >
                 <Icon src={Icons.ArrowLeft} size="200" />

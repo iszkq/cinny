@@ -166,10 +166,10 @@ export const BubbleBefore = style({
 
 const BubbleBackgroundVar = createVar();
 const BubbleTextVar = createVar();
-const BubbleBorderVar = createVar();
+export const BubbleBorderVar = createVar();
 const BubbleShadowVar = createVar();
 const BubbleBackdropVar = createVar();
-const BubbleArrowFillVar = createVar();
+export const BubbleArrowFillVar = createVar();
 
 export const BubbleContent = style({
   vars: {
@@ -191,6 +191,26 @@ export const BubbleContent = style({
   WebkitBackdropFilter: BubbleBackdropVar,
   borderRadius: config.radii.R500,
   position: 'relative',
+});
+
+export const BubbleRow = style({
+  display: 'flex',
+  alignItems: 'flex-end',
+  justifyContent: 'space-between',
+  gap: config.space.S250,
+  minWidth: 0,
+  maxWidth: '100%',
+});
+
+export const BubbleMain = style({
+  minWidth: 0,
+  flex: '1 1 auto',
+});
+
+export const BubbleAside = style({
+  flexShrink: 0,
+  alignSelf: 'flex-end',
+  maxWidth: '100%',
 });
 
 export const BubbleTone = styleVariants({
@@ -222,14 +242,14 @@ export const BubbleContentArrowLeft = style({
 });
 
 export const BubbleLeftArrow = style({
-  width: toRem(9),
-  height: toRem(8),
+  width: toRem(14),
+  height: toRem(12),
   color: BubbleArrowFillVar,
 
   position: 'absolute',
-  top: 0,
-  left: toRem(-8),
-  zIndex: 1,
+  top: toRem(-1),
+  left: toRem(-10),
+  zIndex: 2,
 });
 
 export const Username = style({

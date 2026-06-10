@@ -3,7 +3,7 @@ import { useAtomValue } from 'jotai';
 import { Avatar, Box, config, Icon, IconButton, Icons, IconSrc, Text } from 'folds';
 import { JoinRule } from 'matrix-js-sdk';
 import { PageNav, PageNavContent, PageNavHeader, PageRoot } from '../../components/page';
-import { isCompactScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
+import { isDesktopLikeScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { mxcUrlToHttp } from '../../utils/matrix';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
@@ -76,7 +76,7 @@ export function SpaceSettings({ initialPage, requestClose }: SpaceSettingsProps)
     : undefined;
 
   const screenSize = useScreenSizeContext();
-  const compact = isCompactScreenSize(screenSize);
+  const compact = !isDesktopLikeScreenSize(screenSize);
   const [activePage, setActivePage] = useState<SpaceSettingsPage | undefined>(() => {
     if (initialPage) return initialPage;
     return compact ? undefined : SpaceSettingsPage.GeneralPage;

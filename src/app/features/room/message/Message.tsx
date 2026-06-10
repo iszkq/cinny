@@ -935,12 +935,14 @@ export const MessageInlineReadReceipts = as<
     room: Room;
     eventId: string;
     readerIds: string[];
+    placement?: 'inline' | 'aside';
   }
->(({ room, eventId, readerIds, ...props }, ref) => {
+>(({ room, eventId, readerIds, placement = 'inline', ...props }, ref) => {
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
   const [readReceiptAvatarCount] = useSetting(settingsAtom, 'readReceiptAvatarCount');
   const [open, setOpen] = useState(false);
+  const aside = placement === 'aside';
 
   const configuredVisibleCount = Number.isFinite(readReceiptAvatarCount)
     ? Math.trunc(readReceiptAvatarCount)
@@ -978,9 +980,17 @@ export const MessageInlineReadReceipts = as<
           </FocusTrap>
         </OverlayCenter>
       </Overlay>
-      <Box className={css.MessageReadReceiptsRow}>
+      <Box
+        className={classNames(
+          css.MessageReadReceiptsRow,
+          aside && css.MessageReadReceiptsRowAside
+        )}
+      >
         <button
-          className={css.MessageReadReceiptsButton}
+          className={classNames(
+            css.MessageReadReceiptsButton,
+            aside && css.MessageReadReceiptsButtonAside
+          )}
           type="button"
           onClick={() => setOpen(true)}
           aria-pressed={open}
@@ -988,13 +998,27 @@ export const MessageInlineReadReceipts = as<
           {...props}
           ref={ref}
         >
-          <Icon className={css.MessageReadReceiptsIcon} size="100" src={Icons.CheckTwice} />
+          {!aside && (
+            <Icon className={css.MessageReadReceiptsIcon} size="100" src={Icons.CheckTwice} />
+          )}
           {overflowCount > 0 && (
-            <Text className={css.MessageReadReceiptOverflow} size="T100" priority="300">
+            <Text
+              className={classNames(
+                css.MessageReadReceiptOverflow,
+                aside && css.MessageReadReceiptOverflowAside
+              )}
+              size="T100"
+              priority="300"
+            >
               {`+${overflowCount}`}
             </Text>
           )}
-          <Box className={css.MessageReadReceiptStack}>
+          <Box
+            className={classNames(
+              css.MessageReadReceiptStack,
+              aside && css.MessageReadReceiptStackAside
+            )}
+          >
             {visibleReaderIds.map((readerId) => {
               const avatarMxcUrl = room.getMember(readerId)?.getMxcAvatarUrl();
               const avatarUrl = avatarMxcUrl
@@ -1004,7 +1028,10 @@ export const MessageInlineReadReceipts = as<
               return (
                 <Avatar
                   key={readerId}
-                  className={css.MessageReadReceiptAvatar}
+                  className={classNames(
+                    css.MessageReadReceiptAvatar,
+                    aside && css.MessageReadReceiptAvatarAside
+                  )}
                   size="200"
                   title={getName(readerId)}
                 >
@@ -1576,6 +1603,47 @@ export const Message = as<'div', MessageProps>(
       </AvatarBase>
     );
 
+    const readReceiptsJSX =
+      !hideReadReceipts && readReceiptUserIds && readReceiptUserIds.length > 0 ? (
+        <MessageInlineReadReceipts
+          room={room}
+          eventId={mEvent.getId() ?? ''}
+          readerIds={readReceiptUserIds}
+          placement={messageLayout === MessageLayout.Bubble ? 'aside' : 'inline'}
+        />
+      ) : null;
+
+    const messageBodyJSX = edit && onEditId ? (
+      <MessageEditor
+        style={{
+          maxWidth: '100%',
+          width: '100vw',
+        }}
+        roomId={room.roomId}
+        room={room}
+        mEvent={mEvent}
+        imagePackRooms={imagePackRooms}
+        onCancel={() => onEditId()}
+      />
+    ) : (
+      children
+    );
+
+    const bubbleContentJSX = (
+      <Box
+        direction="Column"
+        alignSelf="Start"
+        style={{
+          maxWidth: '100%',
+        }}
+      >
+        {reply}
+        {messageBodyJSX}
+        {reactions}
+        <MessageSendStatus room={room} mEvent={mEvent} />
+      </Box>
+    );
+
     const msgContentJSX = (
       <Box
         direction="Column"
@@ -1585,30 +1653,10 @@ export const Message = as<'div', MessageProps>(
         }}
       >
         {reply}
-        {edit && onEditId ? (
-          <MessageEditor
-            style={{
-              maxWidth: '100%',
-              width: '100vw',
-            }}
-            roomId={room.roomId}
-            room={room}
-            mEvent={mEvent}
-            imagePackRooms={imagePackRooms}
-            onCancel={() => onEditId()}
-          />
-        ) : (
-          children
-        )}
+        {messageBodyJSX}
         {reactions}
         <MessageSendStatus room={room} mEvent={mEvent} />
-        {!hideReadReceipts && readReceiptUserIds && readReceiptUserIds.length > 0 && (
-          <MessageInlineReadReceipts
-            room={room}
-            eventId={mEvent.getId() ?? ''}
-            readerIds={readReceiptUserIds}
-          />
-        )}
+        {messageLayout !== MessageLayout.Bubble && readReceiptsJSX}
       </Box>
     );
 
@@ -2014,11 +2062,12 @@ export const Message = as<'div', MessageProps>(
           <BubbleLayout
             before={avatarJSX}
             header={headerJSX}
+            after={readReceiptsJSX}
             tone={isOwnMessage ? 'self' : 'other'}
             onContextMenu={handleContextMenu}
             onClick={handleMessageClick}
           >
-            {msgContentJSX}
+            {bubbleContentJSX}
           </BubbleLayout>
         )}
         {messageLayout !== MessageLayout.Compact && messageLayout !== MessageLayout.Bubble && (

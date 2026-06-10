@@ -119,7 +119,7 @@ function DirectHeader() {
             {desktop ? (
               <IconButton
                 aria-label="Collapse section list"
-                variant="Background"
+                fill="None"
                 onClick={handleToggleCollapsed}
               >
                 <Icon src={Icons.ArrowLeft} size="200" />
@@ -134,7 +134,7 @@ function DirectHeader() {
             </Text>
           </Box>
           <Box>
-            <IconButton aria-pressed={!!menuAnchor} variant="Background" onClick={handleOpenMenu}>
+            <IconButton aria-pressed={!!menuAnchor} fill="None" onClick={handleOpenMenu}>
               <Icon src={Icons.VerticalDots} size="200" />
             </IconButton>
           </Box>

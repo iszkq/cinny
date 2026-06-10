@@ -465,6 +465,75 @@ export function AppearanceCustomizer() {
     </div>
   );
 
+  const backgroundControls = (
+    <div className={css.SwatchSection}>
+      <div className={css.SwatchHeader}>
+        <Text size="T300">{'\u804a\u5929\u80cc\u666f'}</Text>
+        <span className={css.SwatchMeta}>
+          {chatBackgroundDataUrl ? '\u5df2\u542f\u7528' : '\u672a\u8bbe\u7f6e'}
+        </span>
+      </div>
+
+      <Box wrap="Wrap" gap="200">
+        <Button
+          size="300"
+          variant="Secondary"
+          fill="Soft"
+          radii="300"
+          before={
+            backgroundLoading ? (
+              <Spinner size="50" />
+            ) : (
+              <Icon size="50" src={Icons.Photo} />
+            )
+          }
+          onClick={() => {
+            handlePickBackground().catch(() => undefined);
+          }}
+          disabled={backgroundLoading}
+        >
+          <Text size="B300">{'\u4e0a\u4f20\u80cc\u666f\u56fe'}</Text>
+        </Button>
+        <Button
+          size="300"
+          variant="Secondary"
+          fill="Soft"
+          radii="300"
+          before={<Icon size="50" src={Icons.Cross} />}
+          onClick={handleRemoveBackground}
+          disabled={!chatBackgroundDataUrl || backgroundLoading}
+        >
+          <Text size="B300">{'\u79fb\u9664\u80cc\u666f'}</Text>
+        </Button>
+      </Box>
+
+      <div
+        className={css.BackgroundPreview}
+        style={{
+          background: previewChrome[CONTENT_BG_VAR],
+          ...previewBackgroundStyle,
+        }}
+      >
+        <span className={css.BackgroundPreviewBadge}>
+          {chatBackgroundDataUrl
+            ? '\u804a\u5929\u80cc\u666f\u9884\u89c8'
+            : '\u672a\u8bbe\u7f6e\u804a\u5929\u80cc\u666f'}
+        </span>
+      </div>
+
+      <Text size="T200" priority="300">
+        {
+          '\u80cc\u666f\u56fe\u4f1a\u5148\u5728\u672c\u5730\u7acb\u5373\u9884\u89c8\uff0c\u7136\u540e\u540c\u6b65\u5230\u5f53\u524d Matrix \u8d26\u53f7\uff0c\u540c\u4e00\u8d26\u53f7\u7684\u5176\u4ed6\u6d4f\u89c8\u5668\u548c\u684c\u9762\u7aef\u767b\u5f55\u540e\u4e5f\u4f1a\u8ddf\u968f\u3002'
+        }
+      </Text>
+      {backgroundError && (
+        <Text size="T200" style={{ color: color.Critical.Main }}>
+          {backgroundError}
+        </Text>
+      )}
+    </div>
+  );
+
   return (
     <SequenceCard
       className={SequenceCardStyle}
@@ -511,110 +580,64 @@ export function AppearanceCustomizer() {
           ))}
         </div>
 
-        {appearancePreview}
-
-        <ColorField
-          title={'\u4E3B\u9898\u8272'}
-          value={accentColorId}
-          onChange={setAccentColorId}
-          resolver={(value) => getAccentColorHex(value, theme.classNames)}
-          themeDefaultLabel={'\u8DDF\u968F\u4E3B\u9898'}
-        />
-        <OpacityField
-          title={'\u4E3B\u9898\u8272\u900F\u660E\u5EA6'}
-          description={'\u5F71\u54CD\u754C\u9762\u4E2D\u7684\u4E3B\u9898\u8272\u5F3A\u5EA6\u548C\u67D0\u4E9B\u6309\u94AE\u7684\u663E\u793A\u611F\u3002'}
-          value={accentOpacity}
-          onChange={setAccentOpacity}
-        />
-        <ColorField
-          title={'\u81EA\u5DF1\u7684\u6C14\u6CE1\u989C\u8272'}
-          value={outgoingBubbleColorId}
-          onChange={setOutgoingBubbleColorId}
-          resolver={getOutgoingBubbleColorHex}
-        />
-        <OpacityField
-          title={'\u81EA\u5DF1\u6C14\u6CE1\u900F\u660E\u5EA6'}
-          description={'\u540C\u8272\u60C5\u51B5\u4E0B\uFF0C\u81EA\u5DF1\u7684\u6C14\u6CE1\u9ED8\u8BA4\u4F1A\u6BD4\u4ED6\u4EBA\u66F4\u6DF1\u4E00\u4E9B\u3002'}
-          value={outgoingBubbleOpacity}
-          onChange={setOutgoingBubbleOpacity}
-        />
-        <ColorField
-          title={'\u4ED6\u4EBA\u7684\u6C14\u6CE1\u989C\u8272'}
-          value={incomingBubbleColorId}
-          onChange={setIncomingBubbleColorId}
-          resolver={getIncomingBubbleColorHex}
-        />
-        <OpacityField
-          title={'\u4ED6\u4EBA\u6C14\u6CE1\u900F\u660E\u5EA6'}
-          value={incomingBubbleOpacity}
-          onChange={setIncomingBubbleOpacity}
-        />
-
-        <div className={css.SwatchSection}>
-          <div className={css.SwatchHeader}>
-            <Text size="T300">{'\u804A\u5929\u80CC\u666F'}</Text>
-            <span className={css.SwatchMeta}>
-              {chatBackgroundDataUrl ? '\u5DF2\u542F\u7528' : '\u672A\u8BBE\u7F6E'}
-            </span>
+        <div className={css.CustomizerLayout}>
+          <div className={css.ControlColumn}>
+            <div className={css.ToneGrid}>
+              <div className={css.ToneCard}>
+                <ColorField
+                  title={'\u4E3B\u9898\u8272'}
+                  value={accentColorId}
+                  onChange={setAccentColorId}
+                  resolver={(value) => getAccentColorHex(value, theme.classNames)}
+                  themeDefaultLabel={'\u8DDF\u968F\u4E3B\u9898'}
+                />
+                <OpacityField
+                  title={'\u4E3B\u9898\u8272\u900F\u660E\u5EA6'}
+                  description={
+                    '\u5F71\u54CD\u754C\u9762\u4E2D\u7684\u4E3B\u9898\u8272\u5F3A\u5EA6\u548C\u67D0\u4E9B\u6309\u94AE\u7684\u663E\u793A\u611F\u3002'
+                  }
+                  value={accentOpacity}
+                  onChange={setAccentOpacity}
+                />
+              </div>
+              <div className={css.ToneCard}>
+                <ColorField
+                  title={'\u81EA\u5DF1\u7684\u6C14\u6CE1\u989C\u8272'}
+                  value={outgoingBubbleColorId}
+                  onChange={setOutgoingBubbleColorId}
+                  resolver={getOutgoingBubbleColorHex}
+                />
+                <OpacityField
+                  title={'\u81EA\u5DF1\u6C14\u6CE1\u900F\u660E\u5EA6'}
+                  description={
+                    '\u540C\u8272\u60C5\u51B5\u4E0B\uFF0C\u81EA\u5DF1\u7684\u6C14\u6CE1\u9ED8\u8BA4\u4F1A\u6BD4\u4ED6\u4EBA\u66F4\u6DF1\u4E00\u4E9B\u3002'
+                  }
+                  value={outgoingBubbleOpacity}
+                  onChange={setOutgoingBubbleOpacity}
+                />
+              </div>
+              <div className={css.ToneCard}>
+                <ColorField
+                  title={'\u4ED6\u4EBA\u7684\u6C14\u6CE1\u989C\u8272'}
+                  value={incomingBubbleColorId}
+                  onChange={setIncomingBubbleColorId}
+                  resolver={getIncomingBubbleColorHex}
+                />
+                <OpacityField
+                  title={'\u4ED6\u4EBA\u6C14\u6CE1\u900F\u660E\u5EA6'}
+                  value={incomingBubbleOpacity}
+                  onChange={setIncomingBubbleOpacity}
+                />
+              </div>
+            </div>
           </div>
 
-          <Box wrap="Wrap" gap="200">
-            <Button
-              size="300"
-              variant="Secondary"
-              fill="Soft"
-              radii="300"
-              before={
-                backgroundLoading ? (
-                  <Spinner size="50" />
-                ) : (
-                  <Icon size="50" src={Icons.Photo} />
-                )
-              }
-              onClick={() => {
-                handlePickBackground().catch(() => undefined);
-              }}
-              disabled={backgroundLoading}
-            >
-              <Text size="B300">{'\u4E0A\u4F20\u80CC\u666F\u56FE'}</Text>
-            </Button>
-            <Button
-              size="300"
-              variant="Secondary"
-              fill="Soft"
-              radii="300"
-              before={<Icon size="50" src={Icons.Cross} />}
-              onClick={handleRemoveBackground}
-              disabled={!chatBackgroundDataUrl || backgroundLoading}
-            >
-              <Text size="B300">{'\u79FB\u9664\u80CC\u666F'}</Text>
-            </Button>
-          </Box>
-
-          <div
-            className={css.BackgroundPreview}
-            style={{
-              background: previewChrome[CONTENT_BG_VAR],
-              ...previewBackgroundStyle,
-            }}
-          >
-            <span className={css.BackgroundPreviewBadge}>
-              {chatBackgroundDataUrl
-                ? '\u804A\u5929\u80CC\u666F\u9884\u89C8'
-                : '\u672A\u8BBE\u7F6E\u804A\u5929\u80CC\u666F'}
-            </span>
+          <div className={css.PreviewColumn}>
+            <div className={css.StickyPreviewStack}>
+              {appearancePreview}
+              {backgroundControls}
+            </div>
           </div>
-
-          <Text size="T200" priority="300">
-            {
-              '\u80CC\u666F\u56FE\u4F1A\u5148\u5728\u672C\u5730\u7ACB\u5373\u9884\u89C8\uff0c\u7136\u540E\u540C\u6B65\u5230\u5F53\u524D Matrix \u8D26\u53F7\uff0C\u540C\u4E00\u8D26\u53F7\u7684\u5176\u4ED6\u6D4F\u89C8\u5668\u548C\u684C\u9762\u7AEF\u767B\u5F55\u540E\u4E5F\u4F1A\u8DDF\u968F\u3002'
-            }
-          </Text>
-          {backgroundError && (
-            <Text size="T200" style={{ color: color.Critical.Main }}>
-              {backgroundError}
-            </Text>
-          )}
         </div>
       </div>
     </SequenceCard>

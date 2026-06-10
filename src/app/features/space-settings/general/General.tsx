@@ -17,6 +17,7 @@ import { useRoomPermissions } from '../../../hooks/useRoomPermissions';
 type GeneralProps = {
   requestClose: () => void;
 };
+
 export function General({ requestClose }: GeneralProps) {
   const room = useRoom();
   const powerLevels = usePowerLevels(room);
@@ -29,7 +30,7 @@ export function General({ requestClose }: GeneralProps) {
         <Box grow="Yes" gap="200">
           <Box grow="Yes" alignItems="Center" gap="200">
             <Text size="H3" truncate>
-              常规
+              {'\u5e38\u89c4'}
             </Text>
           </Box>
           <Box shrink="No">
@@ -45,17 +46,17 @@ export function General({ requestClose }: GeneralProps) {
             <Box direction="Column" gap="700">
               <RoomProfile permissions={permissions} />
               <Box direction="Column" gap="100">
-                <Text size="L400">选项</Text>
+                <Text size="L400">{'\u9009\u9879'}</Text>
                 <RoomJoinRules permissions={permissions} />
                 <RoomPublish permissions={permissions} />
               </Box>
               <Box direction="Column" gap="100">
-                <Text size="L400">地址</Text>
+                <Text size="L400">{'\u5730\u5740'}</Text>
                 <RoomPublishedAddresses permissions={permissions} />
                 <RoomLocalAddresses permissions={permissions} />
               </Box>
               <Box direction="Column" gap="100">
-                <Text size="L400">高级选项</Text>
+                <Text size="L400">{'\u9ad8\u7ea7\u9009\u9879'}</Text>
                 <RoomUpgrade permissions={permissions} requestClose={requestClose} />
               </Box>
             </Box>

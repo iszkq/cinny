@@ -108,6 +108,7 @@ export function ImageViewerDialog({
   const [windowOffset, setWindowOffset] = useState<WindowOffset>({ x: 0, y: 0 });
   const dragCleanupRef = useRef<(() => void) | null>(null);
   const nativePreviewRef = useRef<NativePreviewRef>();
+  const [nativePreviewFailed, setNativePreviewFailed] = useState(false);
   const latestNativeInputRef = useRef<LatestNativePreviewInput>({
     src,
     alt,
@@ -243,12 +244,14 @@ export function ImageViewerDialog({
       setMaximized(false);
       setMinimized(false);
       setWindowOffset({ x: 0, y: 0 });
+      setNativePreviewFailed(false);
       clearDragListeners();
       closeNativePreview();
       return undefined;
     }
 
     let mounted = true;
+    setNativePreviewFailed(false);
     setImageSize({});
     loadImageElement(src)
       .then((img) => {
@@ -300,6 +303,9 @@ export function ImageViewerDialog({
       const nativePreview = await openNativeImagePreviewWindow(payload);
       if (!nativePreview) {
         unlistenAction?.();
+        if (!cancelled) {
+          setNativePreviewFailed(true);
+        }
         return;
       }
 
@@ -325,6 +331,9 @@ export function ImageViewerDialog({
       unlistenReady?.();
       nativePreviewRef.current = undefined;
       setNativePreviewActive(false);
+      if (!cancelled) {
+        setNativePreviewFailed(true);
+      }
     });
 
     return () => {
@@ -390,6 +399,7 @@ export function ImageViewerDialog({
   }, [getClampedWindowOffset, maximized, minimized, mobile, nativePreviewActive, open]);
 
   if (!open) return null;
+  if (desktopNativePreview && !nativePreviewFailed) return null;
   if (nativePreviewActive) return null;
 
   const modalStyle = getImageViewerModalStyle(imageSize.width, imageSize.height);

@@ -59,9 +59,13 @@ export const ReactionsTooltipText = style({
 export const MessageReadReceiptsRow = style({
   display: 'flex',
   justifyContent: 'flex-end',
-  alignSelf: 'flex-end',
   maxWidth: '100%',
   paddingTop: config.space.S200,
+});
+
+export const MessageReadReceiptsRowAside = style({
+  paddingTop: 0,
+  alignSelf: 'flex-end',
 });
 
 export const MessageSendStatus = style({
@@ -100,6 +104,27 @@ export const MessageReadReceiptsButton = style([
   },
 ]);
 
+export const MessageReadReceiptsButtonAside = style({
+  minHeight: 'auto',
+  padding: 0,
+  border: 'none',
+  borderRadius: 0,
+  backgroundColor: 'transparent',
+  boxShadow: 'none',
+  gap: config.space.S100,
+  selectors: {
+    '&:hover, &:focus-visible': {
+      backgroundColor: 'transparent',
+      borderColor: 'transparent',
+      boxShadow: 'none',
+      transform: `translateY(${toRem(-1)})`,
+    },
+    '&:active': {
+      transform: 'translateY(0)',
+    },
+  },
+});
+
 export const MessageReadReceiptsIcon = style({
   flexShrink: 0,
   opacity: config.opacity.P400,
@@ -110,11 +135,28 @@ export const MessageReadReceiptOverflow = style({
   lineHeight: 1,
 });
 
+export const MessageReadReceiptOverflowAside = style({
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  minHeight: toRem(20),
+  minWidth: toRem(20),
+  padding: `0 ${config.space.S100}`,
+  borderRadius: '999px',
+  backgroundColor: color.SurfaceVariant.Container,
+  border: `1px solid ${color.SurfaceVariant.ContainerLine}`,
+  boxShadow: '0 1px 2px rgba(15, 23, 42, 0.06)',
+});
+
 export const MessageReadReceiptStack = style({
   display: 'flex',
   alignItems: 'center',
   minWidth: 0,
   paddingLeft: config.space.S100,
+});
+
+export const MessageReadReceiptStackAside = style({
+  paddingLeft: 0,
 });
 
 export const MessageReadReceiptAvatar = style({
@@ -128,4 +170,10 @@ export const MessageReadReceiptAvatar = style({
       marginLeft: 0,
     },
   },
+});
+
+export const MessageReadReceiptAvatarAside = style({
+  marginLeft: toRem(-8),
+  borderColor: color.SurfaceVariant.Container,
+  boxShadow: '0 2px 8px rgba(15, 23, 42, 0.08)',
 });

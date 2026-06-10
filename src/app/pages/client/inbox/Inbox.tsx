@@ -61,7 +61,7 @@ export function Inbox() {
             {desktop ? (
               <IconButton
                 aria-label={'\u6536\u8d77\u4fa7\u8fb9\u680f'}
-                variant="Background"
+                fill="None"
                 onClick={() => setDesktopPageNavCollapsed(true)}
               >
                 <Icon src={Icons.ArrowLeft} size="200" />

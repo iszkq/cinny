@@ -281,7 +281,7 @@ function SpaceHeader() {
             {desktop ? (
               <IconButton
                 aria-label="Collapse section list"
-                variant="Background"
+                fill="None"
                 onClick={handleToggleCollapsed}
               >
                 <Icon src={Icons.ArrowLeft} size="200" />
@@ -299,7 +299,7 @@ function SpaceHeader() {
           <Box shrink="No">
             <IconButton
               aria-pressed={!!menuAnchor}
-              variant="Background"
+              fill="None"
               onClick={handleOpenMenu}
             >
               <Icon src={Icons.VerticalDots} size="200" />

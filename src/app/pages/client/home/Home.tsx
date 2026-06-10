@@ -18,7 +18,7 @@ import {
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import FocusTrap from 'focus-trap-react';
-import { factoryRoomIdByActivity, factoryRoomIdByAtoZ } from '../../../utils/sort';
+import { factoryRoomIdByActivity } from '../../../utils/sort';
 import {
   NavButton,
   NavCategory,
@@ -127,7 +127,7 @@ function HomeHeader() {
         <Box alignItems="Center" grow="Yes" gap="300">
           <Box shrink="No">
             {desktop ? (
-              <IconButton aria-label="Collapse section list" variant="Background" onClick={handleToggleCollapsed}>
+              <IconButton aria-label="Collapse section list" fill="None" onClick={handleToggleCollapsed}>
                 <Icon src={Icons.ArrowLeft} size="200" />
               </IconButton>
             ) : (
@@ -140,7 +140,7 @@ function HomeHeader() {
             </Text>
           </Box>
           <Box>
-            <IconButton aria-pressed={!!menuAnchor} variant="Background" onClick={handleOpenMenu}>
+            <IconButton aria-pressed={!!menuAnchor} fill="None" onClick={handleOpenMenu}>
               <Icon src={Icons.VerticalDots} size="200" />
             </IconButton>
           </Box>
@@ -229,11 +229,7 @@ export function Home() {
   const [closedCategories, setClosedCategories] = useAtom(useClosedNavCategoriesAtom());
 
   const sortedRooms = useMemo(() => {
-    const items = Array.from(rooms).sort(
-      closedCategories.has(DEFAULT_CATEGORY_ID)
-        ? factoryRoomIdByActivity(mx)
-        : factoryRoomIdByAtoZ(mx)
-    );
+    const items = Array.from(rooms).sort(factoryRoomIdByActivity(mx));
     if (closedCategories.has(DEFAULT_CATEGORY_ID)) {
       return items.filter((rId) => roomToUnread.has(rId) || rId === selectedRoomId);
     }

@@ -133,6 +133,7 @@ import { useAccessiblePowerTagColors, useGetMemberPowerTag } from '../../hooks/u
 import { useTheme } from '../../hooks/useTheme';
 import { useRoomCreatorsTag } from '../../hooks/useRoomCreatorsTag';
 import { usePowerLevelTags } from '../../hooks/usePowerLevelTags';
+import { useRoomLatestRenderedEvent } from '../../hooks/useRoomLatestRenderedEvent';
 import { ForwardableMessage, isForwardableMessage } from './forwardMessages';
 import { ForwardMessagesModal } from './ForwardMessagesModal';
 import { ScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
@@ -718,6 +719,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     () => getTimelineImageViewerItemsInRange(timeline.linkedTimelines, timeline.range),
     [timeline.linkedTimelines, timeline.range]
   );
+  const latestRenderedEventId = useRoomLatestRenderedEvent(room)?.getId();
   const canPaginateBack =
     typeof timeline.linkedTimelines[0]?.getPaginationToken(Direction.Backward) === 'string';
   const rangeAtStart = timeline.range.start === 0;
@@ -831,6 +833,17 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
 
     return receiptMap;
   }, [ignoredUsersSet, mx, receiptTick, room, timeline.linkedTimelines, visibleItems]);
+
+  const getInlineReadReceiptUserIds = useCallback(
+    (targetEventId: string): string[] | undefined => {
+      if (screenSize !== ScreenSize.Mobile && latestRenderedEventId === targetEventId) {
+        return undefined;
+      }
+
+      return messageReadReceipts.get(targetEventId);
+    },
+    [latestRenderedEventId, messageReadReceipts, screenSize]
+  );
 
   const loadEventTimeline = useEventTimelineLoader(
     mx,
@@ -1544,7 +1557,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
         legacyUsernameColor={legacyUsernameColor || direct}
         hour24Clock={hour24Clock}
         dateFormatString={dateFormatString}
-        readReceiptUserIds={messageReadReceipts.get(mEventId)}
+        readReceiptUserIds={getInlineReadReceiptUserIds(mEventId)}
       >
         {mEvent.isRedacted() ? (
           <RedactedContent reason={mEvent.getUnsigned().redacted_because?.content.reason} />
@@ -1661,7 +1674,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             legacyUsernameColor={legacyUsernameColor || direct}
             hour24Clock={hour24Clock}
             dateFormatString={dateFormatString}
-            readReceiptUserIds={messageReadReceipts.get(mEventId)}
+            readReceiptUserIds={getInlineReadReceiptUserIds(mEventId)}
           >
             {mEvent.isRedacted() ? (
               <RedactedContent reason={mEvent.getUnsigned().redacted_because?.content.reason} />
@@ -1766,7 +1779,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             legacyUsernameColor={legacyUsernameColor || direct}
             hour24Clock={hour24Clock}
             dateFormatString={dateFormatString}
-            readReceiptUserIds={messageReadReceipts.get(mEventId)}
+            readReceiptUserIds={getInlineReadReceiptUserIds(mEventId)}
           >
             <EncryptedContent mEvent={mEvent}>
               {() => {
@@ -1927,7 +1940,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             legacyUsernameColor={legacyUsernameColor || direct}
             hour24Clock={hour24Clock}
             dateFormatString={dateFormatString}
-            readReceiptUserIds={messageReadReceipts.get(mEventId)}
+            readReceiptUserIds={getInlineReadReceiptUserIds(mEventId)}
           >
             {mEvent.isRedacted() ? (
               <RedactedContent reason={mEvent.getUnsigned().redacted_because?.content.reason} />

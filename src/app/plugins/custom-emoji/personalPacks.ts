@@ -27,7 +27,8 @@ export const cloneUserImagePacksContent = (
 
 export const getPersonalPackOrder = (
   content: UserImagePacksContent | undefined,
-  packIds: string[]
+  packIds: string[],
+  pinnedPackId?: string
 ): string[] => {
   const knownPackIds = new Set(packIds);
   const seen = new Set<string>();
@@ -52,6 +53,15 @@ export const getPersonalPackOrder = (
     seen.add(packId);
     nextOrder.push(packId);
   });
+
+  if (pinnedPackId) {
+    const pinnedIndex = nextOrder.indexOf(pinnedPackId);
+
+    if (pinnedIndex > 0) {
+      nextOrder.splice(pinnedIndex, 1);
+      nextOrder.unshift(pinnedPackId);
+    }
+  }
 
   return nextOrder;
 };
@@ -277,7 +287,8 @@ export const setPersonalPackOrder = async (
       ...content,
       order: order.filter((packId) => currentOrder.includes(packId)),
     },
-    knownPackIds
+    knownPackIds,
+    userId
   );
 
   await setCustomUserImagePacksContent(mx, content);

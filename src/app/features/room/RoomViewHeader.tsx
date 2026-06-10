@@ -46,7 +46,11 @@ import { roomToUnreadAtom } from '../../state/room/roomToUnread';
 import { copyToClipboard } from '../../utils/dom';
 import { LeaveRoomPrompt } from '../../components/leave-room-prompt';
 import { useRoomAvatar, useRoomName, useRoomTopic } from '../../hooks/useRoomMeta';
-import { isCompactScreenSize, ScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
+import {
+  isCompactScreenSize,
+  isDesktopLikeScreenSize,
+  useScreenSizeContext,
+} from '../../hooks/useScreenSize';
 import { stopPropagation } from '../../utils/keyboard';
 import { getMatrixToRoom } from '../../plugins/matrix-to';
 import { getViaServers } from '../../plugins/via-servers';
@@ -275,7 +279,8 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
     : undefined;
 
   const [peopleDrawer, setPeopleDrawer] = useSetting(settingsAtom, 'isPeopleDrawer');
-  const compact = isCompactScreenSize(screenSize);
+  const desktopLayout = isDesktopLikeScreenSize(screenSize);
+  const compact = isCompactScreenSize(screenSize) && !desktopLayout;
 
   const handleSearchClick = () => {
     const searchParams: _SearchPathSearchParams = {
@@ -460,7 +465,7 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
             }
           />
 
-          {screenSize === ScreenSize.Desktop && (
+          {desktopLayout && (
             <TooltipProvider
               position="Bottom"
               offset={4}

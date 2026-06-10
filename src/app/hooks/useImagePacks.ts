@@ -590,7 +590,8 @@ export const usePersonalImagePacks = (usage: ImageUsage): ImagePack[] => {
     const packs = getPersonalPacks(userPack, customUserPacks);
     const orderedIds = getPersonalPackOrder(
       getCustomUserImagePacksContent(mx),
-      packs.map((pack) => pack.id)
+      packs.map((pack) => pack.id),
+      userPack?.id
     );
 
     return sortImagePacksByOrder(packs, orderedIds).filter(
@@ -608,7 +609,8 @@ export const useAllPersonalImagePacks = (): ImagePack[] => {
     const packs = getPersonalPacks(userPack, customUserPacks);
     const orderedIds = getPersonalPackOrder(
       getCustomUserImagePacksContent(mx),
-      packs.map((pack) => pack.id)
+      packs.map((pack) => pack.id),
+      userPack?.id
     );
 
     return sortImagePacksByOrder(packs, orderedIds);

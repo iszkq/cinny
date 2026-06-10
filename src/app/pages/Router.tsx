@@ -35,7 +35,6 @@ import {
 } from './paths';
 import {
   getAppPathFromHref,
-  getExploreFeaturedPath,
   getHomePath,
   getInboxNotificationsPath,
   getLoginPath,
@@ -43,11 +42,24 @@ import {
   getSpaceLobbyPath,
 } from './pathUtils';
 import { ClientBindAtoms, ClientLayout, ClientRoot } from './client';
-import { Home, HomeRouteRoomProvider, HomeSearch } from './client/home';
-import { Direct, DirectCreate, DirectRouteRoomProvider, DirectSearch } from './client/direct';
+import { Home, HomeLanding, HomeRouteRoomProvider, HomeSearch } from './client/home';
+import {
+  Direct,
+  DirectCreate,
+  DirectLanding,
+  DirectRouteRoomProvider,
+  DirectSearch,
+} from './client/direct';
 import { Favorites } from './client/favorites';
 import { RouteSpaceProvider, Space, SpaceRouteRoomProvider, SpaceSearch } from './client/space';
-import { Explore, ExploreNavView, ExploreWebView, FeaturedRooms, PublicRooms } from './client/explore';
+import {
+  Explore,
+  ExploreLanding,
+  ExploreNavView,
+  ExploreWebView,
+  FeaturedRooms,
+  PublicRooms,
+} from './client/explore';
 import { Notifications, Inbox, Invites } from './client/inbox';
 import { setAfterLoginRedirectPath } from './afterLoginRedirectPath';
 import { Room } from '../features/room';
@@ -175,7 +187,7 @@ export const createRouter = (clientConfig: ClientConfig, screenSize: ScreenSize)
             </PageRoot>
           }
         >
-          {compact ? null : <Route index element={<WelcomePage />} />}
+          <Route index element={<HomeLanding />} />
           <Route path={_CREATE_PATH} element={<HomeCreateRoom />} />
           <Route path={_JOIN_PATH} element={<p>join</p>} />
           <Route path={_SEARCH_PATH} element={<HomeSearch />} />
@@ -202,7 +214,7 @@ export const createRouter = (clientConfig: ClientConfig, screenSize: ScreenSize)
             </PageRoot>
           }
         >
-          {compact ? null : <Route index element={<WelcomePage />} />}
+          <Route index element={<DirectLanding />} />
           <Route path={_CREATE_PATH} element={<DirectCreate />} />
           <Route path={_SEARCH_PATH} element={<DirectSearch />} />
           <Route
@@ -269,13 +281,7 @@ export const createRouter = (clientConfig: ClientConfig, screenSize: ScreenSize)
             </PageRoot>
           }
         >
-          {compact ? null : (
-            <Route
-              index
-              loader={() => redirect(getExploreFeaturedPath())}
-              element={<WelcomePage />}
-            />
-          )}
+          <Route index element={<ExploreLanding />} />
           <Route path={_FEATURED_PATH} element={<FeaturedRooms />} />
           <Route path={_NAV_PATH} element={<ExploreNavView />} />
           <Route path={_WEB_PATH} element={<ExploreWebView />} />
