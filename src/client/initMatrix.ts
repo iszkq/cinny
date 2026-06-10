@@ -63,6 +63,17 @@ const clearAllServiceWorkerCaches = async () => {
   await Promise.all(cacheKeys.map((key) => window.caches.delete(key)));
 };
 
+const clearAllServiceWorkerRegistrations = async () => {
+  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) {
+    return;
+  }
+
+  const registrations = await navigator.serviceWorker.getRegistrations().catch(() => []);
+  await Promise.all(
+    registrations.map((registration) => registration.unregister().catch(() => false))
+  );
+};
+
 const clearAllIndexedDbDatabases = async () => {
   if (typeof window === 'undefined' || typeof window.indexedDB?.databases !== 'function') {
     return;
@@ -115,14 +126,11 @@ export const clearAllLocalData = async (mx?: MatrixClient) => {
   }
 
   await clearAllServiceWorkerCaches();
+  await clearAllServiceWorkerRegistrations();
   await clearDesktopMediaCache();
   await clearAllIndexedDbDatabases();
-  const preservedSettingsEntries = snapshotLocalStorageEntries([SETTINGS_STORAGE_KEY]);
-  const preservedPinLockEntries = snapshotPinLockStorage();
   window.localStorage.clear();
   window.sessionStorage.clear();
-  restoreLocalStorageEntries(preservedSettingsEntries);
-  restorePinLockStorage(preservedPinLockEntries);
 };
 
 export const clearCacheAndReload = async (mx: MatrixClient) => {

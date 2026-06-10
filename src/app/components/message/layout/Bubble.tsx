@@ -14,12 +14,15 @@ function BubbleLeftArrow() {
       xmlns="http://www.w3.org/2000/svg"
     >
       <path
-        fillRule="evenodd"
-        clipRule="evenodd"
         d="M13.6 11.4V0.6H7.2C4.36 0.6 2.94 4.03 4.95 6.04L10.87 11.4H13.6Z"
         fill="currentColor"
+      />
+      <path
+        d="M13.6 0.6H7.2C4.36 0.6 2.94 4.03 4.95 6.04L10.87 11.4"
+        fill="none"
         stroke={`var(${css.BubbleBorderVar})`}
         strokeWidth="1.15"
+        strokeLinecap="round"
         strokeLinejoin="round"
       />
     </svg>

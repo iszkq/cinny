@@ -174,7 +174,7 @@ export function About({ requestClose }: AboutProps) {
                   <SettingTile
                     title={'\u6e05\u7a7a\u5168\u90e8\u672c\u5730\u6570\u636e'}
                     description={
-                      '\u6e05\u9664 IndexedDB\u3001localStorage\u3001sessionStorage \u4e0e\u5168\u90e8\u7f13\u5b58\uff0c\u5b8c\u6210\u540e\u9700\u8981\u91cd\u65b0\u767b\u5f55\u3002'
+                      '\u6e05\u9664\u5e94\u7528\u5185\u5168\u90e8\u672c\u5730\u6570\u636e\u4e0e\u7f13\u5b58\uff0c\u6062\u590d\u5230\u521d\u59cb\u72b6\u6001\uff0c\u5b8c\u6210\u540e\u9700\u8981\u91cd\u65b0\u767b\u5f55\u3002'
                     }
                     after={
                       <Button
