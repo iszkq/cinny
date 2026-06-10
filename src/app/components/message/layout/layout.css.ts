@@ -166,10 +166,9 @@ export const BubbleBefore = style({
 
 const BubbleBackgroundVar = createVar();
 const BubbleTextVar = createVar();
-export const BubbleBorderVar = createVar();
+const BubbleBorderVar = createVar();
 const BubbleShadowVar = createVar();
 const BubbleBackdropVar = createVar();
-export const BubbleArrowFillVar = createVar();
 
 export const BubbleContent = style({
   vars: {
@@ -178,7 +177,6 @@ export const BubbleContent = style({
     [BubbleBorderVar]: 'transparent',
     [BubbleShadowVar]: 'none',
     [BubbleBackdropVar]: 'none',
-    [BubbleArrowFillVar]: color.SurfaceVariant.Container,
   },
   boxSizing: 'border-box',
   maxWidth: `min(${toRem(600)}, 100%)`,
@@ -227,7 +225,6 @@ export const BubbleTone = styleVariants({
       [BubbleBorderVar]: `var(${BUBBLE_SELF_BORDER_VAR})`,
       [BubbleShadowVar]: `var(${BUBBLE_SELF_SHADOW_VAR})`,
       [BubbleBackdropVar]: `var(${BUBBLE_SELF_BACKDROP_VAR})`,
-      [BubbleArrowFillVar]: `var(${BUBBLE_SELF_BG_VAR})`,
     },
   },
   other: {
@@ -237,25 +234,28 @@ export const BubbleTone = styleVariants({
       [BubbleBorderVar]: `var(${BUBBLE_OTHER_BORDER_VAR})`,
       [BubbleShadowVar]: `var(${BUBBLE_OTHER_SHADOW_VAR})`,
       [BubbleBackdropVar]: `var(${BUBBLE_OTHER_BACKDROP_VAR})`,
-      [BubbleArrowFillVar]: `var(${BUBBLE_OTHER_BG_VAR})`,
     },
   },
 });
 
 export const BubbleContentArrowLeft = style({
   borderTopLeftRadius: 0,
-});
-
-export const BubbleLeftArrow = style({
-  width: toRem(18),
-  height: toRem(14),
-  color: BubbleArrowFillVar,
-
-  position: 'absolute',
-  top: toRem(-1),
-  left: toRem(-12),
-  pointerEvents: 'none',
-  zIndex: 1,
+  borderLeftColor: 'transparent',
+  selectors: {
+    '&::before': {
+      content: '""',
+      position: 'absolute',
+      top: toRem(-1),
+      left: toRem(-12),
+      width: toRem(12),
+      height: toRem(14),
+      background: BubbleBackgroundVar,
+      backdropFilter: BubbleBackdropVar,
+      WebkitBackdropFilter: BubbleBackdropVar,
+      clipPath: 'polygon(100% 0, 100% 100%, 68% 100%, 12% 56%, 0 36%, 12% 0)',
+      pointerEvents: 'none',
+    },
+  },
 });
 
 export const Username = style({

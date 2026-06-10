@@ -3,33 +3,6 @@ import classNames from 'classnames';
 import { Box, as } from 'folds';
 import * as css from './layout.css';
 
-function BubbleLeftArrow() {
-  return (
-    <svg
-      className={css.BubbleLeftArrow}
-      width="18"
-      height="14"
-      viewBox="0 0 18 14"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden="true"
-    >
-      <path
-        d="M18 13.2V0.8H6.4C3 0.8 1.5 4.9 3.8 7.1L10.2 13.2H18Z"
-        fill="currentColor"
-      />
-      <path
-        d="M18 0.8H6.4C3 0.8 1.5 4.9 3.8 7.1L10.2 13.2"
-        fill="none"
-        stroke={`var(${css.BubbleBorderVar})`}
-        strokeWidth="1.15"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
 type BubbleLayoutProps = {
   hideBubble?: boolean;
   before?: ReactNode;
@@ -66,7 +39,6 @@ export const BubbleLayout = as<'div', BubbleLayoutProps>(
                       )}
                       direction="Column"
                     >
-                      {before ? <BubbleLeftArrow /> : null}
                       {children}
                     </Box>
                   </Box>
