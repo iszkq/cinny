@@ -21,6 +21,15 @@ type DesktopUpdatePromptProps = {
   requestClose: () => void;
 };
 
+const dialogStyle = {
+  width: 'calc(100vw - 1.5rem)',
+  maxWidth: '34rem',
+  maxHeight: 'calc(100vh - 1.5rem)',
+  minWidth: 0,
+  boxSizing: 'border-box' as const,
+  overflow: 'hidden' as const,
+};
+
 export function DesktopUpdatePrompt({ open, requestClose }: DesktopUpdatePromptProps) {
   const {
     pendingUpdate,
@@ -56,13 +65,11 @@ export function DesktopUpdatePrompt({ open, requestClose }: DesktopUpdatePromptP
             escapeDeactivates: stopPropagation,
           }}
         >
-          <Dialog variant="Background">
+          <Dialog variant="Background" style={dialogStyle}>
             <Box
               direction="Column"
               gap="400"
               style={{
-                width: 'min(calc(100vw - 2rem), 34rem)',
-                maxHeight: 'min(86vh, 42rem)',
                 padding: toRem(20),
                 minWidth: 0,
                 boxSizing: 'border-box',
@@ -81,7 +88,13 @@ export function DesktopUpdatePrompt({ open, requestClose }: DesktopUpdatePromptP
                 {promptText}
               </Text>
 
-              <Box justifyContent="End" gap="200" wrap="Wrap" shrink="No">
+              <Box
+                justifyContent="End"
+                gap="200"
+                wrap="Wrap"
+                shrink="No"
+                style={{ width: '100%', minWidth: 0 }}
+              >
                 <Button
                   variant="Secondary"
                   fill="Soft"
@@ -106,7 +119,7 @@ export function DesktopUpdatePrompt({ open, requestClose }: DesktopUpdatePromptP
                   }
                 >
                   <Text size="B300">
-                    {downloading ? '\u5b89\u88c5\u4e2d...' : '\u4e0b\u8f7d\u5e76\u5b89\u88c5'}
+                    {downloading ? '\u5b89\u88c5\u4e2d...' : '\u4e0b\u8f7d\u5b89\u88c5'}
                   </Text>
                 </Button>
                 {manualDownloadUrl && (

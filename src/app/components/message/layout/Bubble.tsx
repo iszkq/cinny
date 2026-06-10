@@ -7,18 +7,19 @@ function BubbleLeftArrow() {
   return (
     <svg
       className={css.BubbleLeftArrow}
-      width="14"
-      height="12"
-      viewBox="0 0 14 12"
+      width="18"
+      height="14"
+      viewBox="0 0 18 14"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
     >
       <path
-        d="M13.6 11.4V0.6H7.2C4.36 0.6 2.94 4.03 4.95 6.04L10.87 11.4H13.6Z"
+        d="M18 13.2V0.8H6.4C3 0.8 1.5 4.9 3.8 7.1L10.2 13.2H18Z"
         fill="currentColor"
       />
       <path
-        d="M13.6 0.6H7.2C4.36 0.6 2.94 4.03 4.95 6.04L10.87 11.4"
+        d="M18 0.8H6.4C3 0.8 1.5 4.9 3.8 7.1L10.2 13.2"
         fill="none"
         stroke={`var(${css.BubbleBorderVar})`}
         strokeWidth="1.15"

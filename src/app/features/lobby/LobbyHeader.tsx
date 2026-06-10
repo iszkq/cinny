@@ -31,7 +31,6 @@ import { UseStateProvider } from '../../components/UseStateProvider';
 import { LeaveSpacePrompt } from '../../components/leave-space-prompt';
 import { stopPropagation } from '../../utils/keyboard';
 import { isCompactScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
-import { BackRouteHandler } from '../../components/BackRouteHandler';
 import { mxcUrlToHttp } from '../../utils/matrix';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 import { useOpenSpaceSettings } from '../../state/hooks/spaceSettings';
@@ -163,15 +162,7 @@ export function LobbyHeader({ showProfile, powerLevels }: LobbyHeaderProps) {
       <Box grow="Yes" alignItems="Center" gap="200">
         {compact ? (
           <>
-            <Box shrink="No">
-              <BackRouteHandler>
-                {(onBack) => (
-                  <IconButton fill="None" onClick={onBack}>
-                    <Icon src={Icons.ArrowLeft} />
-                  </IconButton>
-                )}
-              </BackRouteHandler>
-            </Box>
+            <Box grow="Yes" basis="No" />
             <Box grow="Yes" justifyContent="Center">
               {showProfile && (
                 <Text size="H3" truncate>
@@ -204,8 +195,8 @@ export function LobbyHeader({ showProfile, powerLevels }: LobbyHeaderProps) {
         )}
         <Box
           shrink="No"
-          grow={compact ? 'No' : 'Yes'}
-          basis={compact ? 'Yes' : 'No'}
+          grow="Yes"
+          basis="No"
           justifyContent="End"
         >
           {!compact && (

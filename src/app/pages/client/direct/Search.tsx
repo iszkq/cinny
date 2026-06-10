@@ -1,6 +1,5 @@
 import React, { useRef } from 'react';
-import { Box, Icon, Icons, IconButton, Scroll, Text } from 'folds';
-import { BackRouteHandler } from '../../../components/BackRouteHandler';
+import { Box, Icon, Icons, Scroll, Text } from 'folds';
 import { Page, PageContent, PageContentCenter, PageHeader } from '../../../components/page';
 import { MessageSearch } from '../../../features/message-search';
 import { isCompactScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
@@ -16,17 +15,7 @@ export function DirectSearch() {
     <Page>
       <PageHeader balance>
         <Box grow="Yes" alignItems="Center" gap="200">
-          <Box grow="Yes" basis="No">
-            {compact && (
-              <BackRouteHandler>
-                {(onBack) => (
-                  <IconButton onClick={onBack}>
-                    <Icon src={Icons.ArrowLeft} />
-                  </IconButton>
-                )}
-              </BackRouteHandler>
-            )}
-          </Box>
+          <Box grow="Yes" basis="No" />
           <Box justifyContent="Center" alignItems="Center" gap="200">
             {!compact && <Icon size="400" src={Icons.Search} />}
             <Text size="H3" truncate>

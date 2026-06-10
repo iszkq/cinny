@@ -82,7 +82,6 @@ import { EncryptedContent } from '../../../features/room/message';
 import { useMentionClickHandler } from '../../../hooks/useMentionClickHandler';
 import { useSpoilerClickHandler } from '../../../hooks/useSpoilerClickHandler';
 import { isCompactScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
-import { BackRouteHandler } from '../../../components/BackRouteHandler';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { allRoomsAtom } from '../../../state/room-list/roomList';
 import { usePowerLevels } from '../../../hooks/usePowerLevels';
@@ -723,17 +722,7 @@ export function Notifications() {
     <Page>
       <PageHeader balance>
         <Box grow="Yes" gap="200">
-          <Box grow="Yes" basis="No">
-            {compact && (
-              <BackRouteHandler>
-                {(onBack) => (
-                  <IconButton onClick={onBack}>
-                    <Icon src={Icons.ArrowLeft} />
-                  </IconButton>
-                )}
-              </BackRouteHandler>
-            )}
-          </Box>
+          <Box grow="Yes" basis="No" />
           <Box alignItems="Center" gap="200">
             {!compact && <Icon size="400" src={Icons.Message} />}
             <Text size="H3" truncate>

@@ -1,10 +1,9 @@
 import React, { useRef } from 'react';
-import { Box, Icon, Icons, Text, Scroll, IconButton } from 'folds';
+import { Box, Icon, Icons, Text, Scroll } from 'folds';
 import { Page, PageContent, PageContentCenter, PageHeader } from '../../../components/page';
 import { MessageSearch } from '../../../features/message-search';
 import { useHomeRooms } from './useHomeRooms';
 import { isCompactScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
-import { BackRouteHandler } from '../../../components/BackRouteHandler';
 
 export function HomeSearch() {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -16,17 +15,7 @@ export function HomeSearch() {
     <Page>
       <PageHeader balance>
         <Box grow="Yes" alignItems="Center" gap="200">
-          <Box grow="Yes" basis="No">
-            {compact && (
-              <BackRouteHandler>
-                {(onBack) => (
-                  <IconButton onClick={onBack}>
-                    <Icon src={Icons.ArrowLeft} />
-                  </IconButton>
-                )}
-              </BackRouteHandler>
-            )}
-          </Box>
+          <Box grow="Yes" basis="No" />
           <Box justifyContent="Center" alignItems="Center" gap="200">
             {!compact && <Icon size="400" src={Icons.Search} />}
             <Text size="H3" truncate>

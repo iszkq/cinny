@@ -244,32 +244,18 @@ export const BubbleTone = styleVariants({
 
 export const BubbleContentArrowLeft = style({
   borderTopLeftRadius: 0,
-  selectors: {
-    '&::before': {
-      content: '',
-      position: 'absolute',
-      top: toRem(1),
-      left: toRem(-1),
-      width: toRem(6),
-      height: toRem(16),
-      background: BubbleBackgroundVar,
-      backdropFilter: BubbleBackdropVar,
-      WebkitBackdropFilter: BubbleBackdropVar,
-      pointerEvents: 'none',
-      zIndex: 1,
-    },
-  },
 });
 
 export const BubbleLeftArrow = style({
-  width: toRem(14),
-  height: toRem(12),
+  width: toRem(18),
+  height: toRem(14),
   color: BubbleArrowFillVar,
 
   position: 'absolute',
   top: toRem(-1),
-  left: toRem(-10),
-  zIndex: 2,
+  left: toRem(-12),
+  pointerEvents: 'none',
+  zIndex: 1,
 });
 
 export const Username = style({
