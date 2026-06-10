@@ -244,6 +244,21 @@ export const BubbleTone = styleVariants({
 
 export const BubbleContentArrowLeft = style({
   borderTopLeftRadius: 0,
+  selectors: {
+    '&::before': {
+      content: '',
+      position: 'absolute',
+      top: toRem(1),
+      left: toRem(-1),
+      width: toRem(6),
+      height: toRem(16),
+      background: BubbleBackgroundVar,
+      backdropFilter: BubbleBackdropVar,
+      WebkitBackdropFilter: BubbleBackdropVar,
+      pointerEvents: 'none',
+      zIndex: 1,
+    },
+  },
 });
 
 export const BubbleLeftArrow = style({

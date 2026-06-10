@@ -61,10 +61,13 @@ export function DesktopUpdatePrompt({ open, requestClose }: DesktopUpdatePromptP
               direction="Column"
               gap="400"
               style={{
-                width: 'min(100vw - 2rem, 34rem)',
+                width: 'min(calc(100vw - 2rem), 34rem)',
                 maxHeight: 'min(86vh, 42rem)',
                 padding: toRem(20),
-                overflow: 'hidden',
+                minWidth: 0,
+                boxSizing: 'border-box',
+                overflowX: 'hidden',
+                overflowY: 'auto',
               }}
             >
               <Box direction="Column" gap="100" shrink="No">
