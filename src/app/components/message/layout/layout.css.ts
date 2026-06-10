@@ -189,6 +189,8 @@ export const BubbleContent = style({
   WebkitBackdropFilter: BubbleBackdropVar,
   borderRadius: config.radii.R500,
   position: 'relative',
+  isolation: 'isolate',
+  zIndex: 0,
 });
 
 export const BubbleStack = style({
@@ -239,21 +241,22 @@ export const BubbleTone = styleVariants({
 });
 
 export const BubbleContentArrowLeft = style({
-  borderTopLeftRadius: 0,
   borderLeftColor: 'transparent',
   selectors: {
     '&::before': {
       content: '""',
       position: 'absolute',
-      top: toRem(-1),
-      left: toRem(-12),
+      top: toRem(11),
+      left: toRem(-5),
       width: toRem(12),
-      height: toRem(14),
+      height: toRem(12),
       background: BubbleBackgroundVar,
       backdropFilter: BubbleBackdropVar,
       WebkitBackdropFilter: BubbleBackdropVar,
-      clipPath: 'polygon(100% 0, 100% 100%, 68% 100%, 12% 56%, 0 36%, 12% 0)',
+      borderRadius: toRem(3),
+      transform: 'rotate(45deg)',
       pointerEvents: 'none',
+      zIndex: -1,
     },
   },
 });
