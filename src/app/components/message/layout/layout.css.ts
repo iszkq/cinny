@@ -170,7 +170,6 @@ const BubbleBorderVar = createVar();
 const BubbleShadowVar = createVar();
 const BubbleBackdropVar = createVar();
 const BubbleTailWidth = toRem(7);
-const BubbleTailOverlap = toRem(3);
 
 export const BubbleContent = style({
   vars: {
@@ -183,16 +182,28 @@ export const BubbleContent = style({
   boxSizing: 'border-box',
   maxWidth: `min(${toRem(600)}, 100%)`,
   padding: config.space.S200,
-  background: BubbleBackgroundVar,
+  background: 'transparent',
   color: BubbleTextVar,
-  border: `1px solid ${BubbleBorderVar}`,
-  boxShadow: BubbleShadowVar,
-  backdropFilter: BubbleBackdropVar,
-  WebkitBackdropFilter: BubbleBackdropVar,
+  border: '1px solid transparent',
   borderRadius: config.radii.R500,
   position: 'relative',
   isolation: 'isolate',
   zIndex: 0,
+  selectors: {
+    '&::before': {
+      content: '""',
+      position: 'absolute',
+      inset: 0,
+      background: BubbleBackgroundVar,
+      border: `1px solid ${BubbleBorderVar}`,
+      borderRadius: 'inherit',
+      boxShadow: BubbleShadowVar,
+      backdropFilter: BubbleBackdropVar,
+      WebkitBackdropFilter: BubbleBackdropVar,
+      pointerEvents: 'none',
+      zIndex: -1,
+    },
+  },
 });
 
 export const BubbleStack = style({
@@ -246,19 +257,24 @@ export const BubbleContentArrowLeft = style({
   borderLeftColor: 'transparent',
   selectors: {
     '&::before': {
-      content: '""',
-      position: 'absolute',
-      top: toRem(7),
       left: `-${BubbleTailWidth}`,
-      width: `calc(${BubbleTailWidth} + ${BubbleTailOverlap})`,
-      height: toRem(13),
-      background: BubbleBackgroundVar,
-      backdropFilter: BubbleBackdropVar,
-      WebkitBackdropFilter: BubbleBackdropVar,
-      clipPath:
-        'polygon(100% 0, 76% 8%, 58% 22%, 43% 36%, 16% 46%, 0 50%, 16% 56%, 43% 66%, 58% 80%, 76% 94%, 100% 100%)',
-      pointerEvents: 'none',
-      zIndex: -1,
+      clipPath: `polygon(${toRem(20)} 0, 100% 0, 100% 100%, ${toRem(
+        20
+      )} 100%, ${toRem(15)} calc(100% - ${toRem(1)}), ${toRem(
+        11
+      )} calc(100% - ${toRem(3)}), ${toRem(8)} calc(100% - ${toRem(
+        7
+      )}), ${BubbleTailWidth} calc(100% - ${toRem(
+        12
+      )}), ${BubbleTailWidth} ${toRem(20)}, ${toRem(5)} ${toRem(18)}, ${toRem(
+        3
+      )} ${toRem(16)}, ${toRem(1)} ${toRem(14)}, 0 ${toRem(13)}, ${toRem(
+        1
+      )} ${toRem(12)}, ${toRem(3)} ${toRem(10)}, ${toRem(5)} ${toRem(
+        8
+      )}, ${BubbleTailWidth} ${toRem(7)}, ${toRem(8)} ${toRem(6)}, ${toRem(
+        11
+      )} ${toRem(3)}, ${toRem(15)} ${toRem(1)})`,
     },
   },
 });
