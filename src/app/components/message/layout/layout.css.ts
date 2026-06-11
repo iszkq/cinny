@@ -170,6 +170,7 @@ const BubbleBorderVar = createVar();
 const BubbleShadowVar = createVar();
 const BubbleBackdropVar = createVar();
 const BubbleTailWidth = toRem(7);
+const BubbleTailLength = toRem(6.5);
 
 export const BubbleContent = style({
   vars: {
@@ -257,24 +258,26 @@ export const BubbleContentArrowLeft = style({
   borderLeftColor: 'transparent',
   selectors: {
     '&::before': {
-      left: `-${BubbleTailWidth}`,
+      left: `-${BubbleTailLength}`,
       clipPath: `polygon(${toRem(20)} 0, 100% 0, 100% 100%, ${toRem(
-        20
-      )} 100%, ${toRem(15)} calc(100% - ${toRem(1)}), ${toRem(
-        11
-      )} calc(100% - ${toRem(3)}), ${toRem(8)} calc(100% - ${toRem(
-        7
-      )}), ${BubbleTailWidth} calc(100% - ${toRem(
-        12
-      )}), ${BubbleTailWidth} ${toRem(20)}, ${toRem(5)} ${toRem(18)}, ${toRem(
+        18
+      )} 100%, ${toRem(14)} calc(100% - ${toRem(1)}), ${toRem(11)} calc(100% - ${toRem(
         3
-      )} ${toRem(16)}, ${toRem(1)} ${toRem(14)}, 0 ${toRem(13)}, ${toRem(
-        1
-      )} ${toRem(12)}, ${toRem(3)} ${toRem(10)}, ${toRem(5)} ${toRem(
-        8
-      )}, ${BubbleTailWidth} ${toRem(7)}, ${toRem(8)} ${toRem(6)}, ${toRem(
+      )}), ${toRem(8.8)} calc(100% - ${toRem(6)}), ${toRem(7.2)} calc(100% - ${toRem(
+        10
+      )}), ${toRem(6.6)} calc(100% - ${toRem(14)}), ${BubbleTailLength} ${toRem(
+        24
+      )}, ${toRem(5.8)} ${toRem(21.7)}, ${toRem(4.4)} ${toRem(19.8)}, ${toRem(
+        2.6
+      )} ${toRem(18.2)}, ${toRem(1.1)} ${toRem(16.7)}, 0 ${toRem(15.2)}, ${toRem(
+        0.5
+      )} ${toRem(13.8)}, ${toRem(1.9)} ${toRem(12.5)}, ${toRem(3.7)} ${toRem(
         11
-      )} ${toRem(3)}, ${toRem(15)} ${toRem(1)})`,
+      )}, ${toRem(5.1)} ${toRem(9.1)}, ${toRem(6.1)} ${toRem(7)}, ${toRem(6.6)} ${toRem(
+        4.8
+      )}, ${toRem(7.8)} ${toRem(2.8)}, ${toRem(9.8)} ${toRem(1.3)}, ${toRem(
+        12.3
+      )} ${toRem(0.4)}, ${toRem(15.2)} ${toRem(0.08)})`,
     },
   },
 });
