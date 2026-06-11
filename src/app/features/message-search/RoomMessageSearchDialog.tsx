@@ -478,6 +478,7 @@ function DateFilterField({
   maxDate,
 }: DateFilterFieldProps) {
   const [pickerAnchor, setPickerAnchor] = useState<RectCords>();
+  const [hoveredDateKey, setHoveredDateKey] = useState<string>();
   const pickerOpen = !!pickerAnchor;
   const selectedDate = useMemo(() => getParsedDate(value), [value]);
   const minDateValue = useMemo(
@@ -522,6 +523,7 @@ function DateFilterField({
 
   const handleTogglePicker: MouseEventHandler<HTMLButtonElement> = (evt) => {
     if (pickerOpen) {
+      setHoveredDateKey(undefined);
       setPickerAnchor(undefined);
       return;
     }
@@ -536,11 +538,13 @@ function DateFilterField({
 
   const handleDateChange = (nextDate: dayjs.Dayjs) => {
     onChange(nextDate.format('YYYY-MM-DD'));
+    setHoveredDateKey(undefined);
     setPickerAnchor(undefined);
   };
 
   const handleClear = () => {
     onChange('');
+    setHoveredDateKey(undefined);
     setPickerAnchor(undefined);
   };
 
@@ -558,7 +562,10 @@ function DateFilterField({
           <FocusTrap
             focusTrapOptions={{
               initialFocus: false,
-              onDeactivate: () => setPickerAnchor(undefined),
+              onDeactivate: () => {
+                setHoveredDateKey(undefined);
+                setPickerAnchor(undefined);
+              },
               clickOutsideDeactivates: true,
               isKeyForward: (evt: KeyboardEvent) =>
                 evt.key === 'ArrowDown' || evt.key === 'ArrowRight',
@@ -661,6 +668,7 @@ function DateFilterField({
 
                   <Box style={DATE_GRID_STYLE}>
                     {monthGrid.map((date) => {
+                      const dateKey = date.format('YYYY-MM-DD');
                       const currentTs = date.startOf('day').valueOf();
                       const disabled =
                         currentTs < minDateValue.valueOf() || currentTs > maxDateValue.valueOf();
@@ -669,6 +677,7 @@ function DateFilterField({
                       const selected =
                         !!selectedDate &&
                         date.startOf('day').valueOf() === selectedDate.startOf('day').valueOf();
+                      const hovered = hoveredDateKey === dateKey && !disabled && !selected;
                       let dayBackground = 'transparent';
                       let dayColor = 'inherit';
                       let dayBorder = '1px solid transparent';
@@ -677,6 +686,10 @@ function DateFilterField({
                         dayBackground = '#2f6df6';
                         dayColor = '#ffffff';
                         dayBorder = '1px solid rgba(47, 109, 246, 0.2)';
+                      } else if (hovered) {
+                        dayBackground = 'rgba(219, 234, 254, 0.92)';
+                        dayColor = '#2563eb';
+                        dayBorder = '1px solid rgba(191, 219, 254, 0.98)';
                       } else if (outsideMonth || disabled) {
                         dayBackground = 'rgba(246, 248, 251, 0.96)';
                         dayBorder = '1px solid rgba(241, 245, 249, 0.98)';
@@ -692,9 +705,17 @@ function DateFilterField({
 
                       return (
                         <button
-                          key={date.format('YYYY-MM-DD')}
+                          key={dateKey}
                           type="button"
                           onClick={() => !disabled && handleDateChange(date)}
+                          onMouseEnter={() => !disabled && setHoveredDateKey(dateKey)}
+                          onMouseLeave={() =>
+                            setHoveredDateKey((current) => (current === dateKey ? undefined : current))
+                          }
+                          onFocus={() => !disabled && setHoveredDateKey(dateKey)}
+                          onBlur={() =>
+                            setHoveredDateKey((current) => (current === dateKey ? undefined : current))
+                          }
                           disabled={disabled}
                           style={{
                             height: toRem(38),
@@ -710,6 +731,8 @@ function DateFilterField({
                             opacity: disabled ? 0.72 : 1,
                             padding: 0,
                             boxShadow: 'none',
+                            transition:
+                              'background-color 120ms ease, border-color 120ms ease, color 120ms ease',
                           }}
                         >
                           {date.date()}
