@@ -197,9 +197,13 @@ export const useDesktopUpdater = () => {
           ]);
           pendingUpdateHandle = update;
           const resolvedUpdate = mergePendingUpdateInfo(update, latestRelease);
+          const sameAsCurrentVersion =
+            !!resolvedUpdate &&
+            normalizeDesktopUpdateVersion(resolvedUpdate.version) ===
+              normalizeDesktopUpdateVersion(APP_VERSION);
 
           setState((current) => {
-            if (!resolvedUpdate) {
+            if (!resolvedUpdate || sameAsCurrentVersion) {
               pendingUpdateHandle = undefined;
               return {
                 ...current,
