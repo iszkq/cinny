@@ -131,16 +131,49 @@ const DATE_TRIGGER_STYLE = {
 };
 
 const DATE_PANEL_STYLE = {
-  width: 'min(calc(100vw - 48px), 22rem)',
-  padding: config.space.S200,
-  borderRadius: config.radii.R400,
-  boxShadow: '0 20px 48px rgba(15, 23, 42, 0.18)',
+  width: 'min(calc(100vw - 48px), 18.5rem)',
+  padding: config.space.S150,
+  borderRadius: config.radii.R500,
+  border: '1px solid rgba(191, 219, 254, 0.72)',
+  background:
+    'linear-gradient(180deg, rgba(255, 255, 255, 0.985) 0%, rgba(248, 250, 252, 0.98) 100%)',
+  backdropFilter: 'blur(18px)',
+  boxShadow: '0 24px 56px rgba(15, 23, 42, 0.16)',
 };
 
 const DATE_GRID_STYLE = {
   display: 'grid',
   gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
-  gap: config.space.S100,
+  gap: toRem(4),
+};
+
+const DATE_NAV_BUTTON_STYLE = {
+  width: toRem(28),
+  height: toRem(28),
+  minWidth: toRem(28),
+  minHeight: toRem(28),
+  border: '1px solid rgba(203, 213, 225, 0.88)',
+  borderRadius: config.radii.R300,
+  background: 'rgba(255, 255, 255, 0.9)',
+  color: 'inherit',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  cursor: 'pointer',
+  boxShadow: '0 6px 18px rgba(15, 23, 42, 0.08)',
+};
+
+const DATE_WEEKDAY_STYLE = {
+  padding: `${toRem(2)} 0`,
+  color: 'rgba(100, 116, 139, 0.92)',
+  letterSpacing: toRem(0.3),
+};
+
+const DATE_FOOTER_ACTION_STYLE = {
+  border: '1px solid rgba(203, 213, 225, 0.9)',
+  background: 'rgba(255, 255, 255, 0.92)',
+  color: 'inherit',
+  boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.82)',
 };
 
 const FILTER_PANEL_STYLE = {
@@ -149,7 +182,7 @@ const FILTER_PANEL_STYLE = {
 };
 
 const DATE_PICKER_MIN_TS = dayjs('2000-01-01').startOf('day').valueOf();
-const WEEKDAY_LABELS = ['一', '二', '三', '四', '五', '六', '日'];
+const WEEKDAY_LABELS = ['\u4e00', '\u4e8c', '\u4e09', '\u56db', '\u4e94', '\u516d', '\u65e5'];
 
 const formatDateLabel = (value?: string): string =>
   value ? dayjs(value).format('YYYY / MM / DD') : '';
@@ -536,67 +569,84 @@ function DateFilterField({
             }}
           >
             <Menu variant="Surface" style={DATE_PANEL_STYLE}>
-              <Box direction="Column" gap="200">
-                <Box direction="Column" gap="100">
-                  <Text size="T200" priority="300">
-                    {label}
-                  </Text>
-                  <Box alignItems="Center" justifyContent="SpaceBetween" gap="100">
-                    <Box gap="100">
-                      <IconButton
-                        size="300"
-                        variant="SurfaceVariant"
-                        radii="300"
-                        onClick={() => handleMonthShift(-1, 'year')}
-                        disabled={!canGoPrevYear}
-                        style={SOFT_CONTROL_STYLE}
-                      >
-                        <Text size="B300">{'<<'}</Text>
-                      </IconButton>
-                      <IconButton
-                        size="300"
-                        variant="SurfaceVariant"
-                        radii="300"
-                        onClick={() => handleMonthShift(-1, 'month')}
-                        disabled={!canGoPrevMonth}
-                        style={SOFT_CONTROL_STYLE}
-                      >
-                        <Icon size="100" src={Icons.ArrowLeft} />
-                      </IconButton>
-                    </Box>
+              <Box direction="Column" gap="150">
+                <Box
+                  alignItems="Center"
+                  justifyContent="SpaceBetween"
+                  gap="100"
+                  style={{ minWidth: 0 }}
+                >
+                  <Box gap="50">
+                    <button
+                      type="button"
+                      onClick={() => handleMonthShift(-1, 'year')}
+                      disabled={!canGoPrevYear}
+                      style={{
+                        ...DATE_NAV_BUTTON_STYLE,
+                        opacity: canGoPrevYear ? 1 : 0.42,
+                        cursor: canGoPrevYear ? 'pointer' : 'not-allowed',
+                      }}
+                    >
+                      <Text size="T200">{'<<'}</Text>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleMonthShift(-1, 'month')}
+                      disabled={!canGoPrevMonth}
+                      style={{
+                        ...DATE_NAV_BUTTON_STYLE,
+                        opacity: canGoPrevMonth ? 1 : 0.42,
+                        cursor: canGoPrevMonth ? 'pointer' : 'not-allowed',
+                      }}
+                    >
+                      <Icon size="100" src={Icons.ArrowLeft} />
+                    </button>
+                  </Box>
 
-                    <Text size="L400" align="Center">
+                  <Box direction="Column" gap="25" alignItems="Center" style={{ minWidth: 0 }}>
+                    <Text size="T200" priority="300">
+                      {label}
+                    </Text>
+                    <Text
+                      size="L400"
+                      align="Center"
+                      style={{ fontWeight: 700, letterSpacing: toRem(0.2) }}
+                    >
                       {visibleMonth.format('YYYY\u5e74 M\u6708')}
                     </Text>
+                  </Box>
 
-                    <Box gap="100">
-                      <IconButton
-                        size="300"
-                        variant="SurfaceVariant"
-                        radii="300"
-                        onClick={() => handleMonthShift(1, 'month')}
-                        disabled={!canGoNextMonth}
-                        style={SOFT_CONTROL_STYLE}
-                      >
-                        <Icon size="100" src={Icons.ArrowRight} />
-                      </IconButton>
-                      <IconButton
-                        size="300"
-                        variant="SurfaceVariant"
-                        radii="300"
-                        onClick={() => handleMonthShift(1, 'year')}
-                        disabled={!canGoNextYear}
-                        style={SOFT_CONTROL_STYLE}
-                      >
-                        <Text size="B300">{'>>'}</Text>
-                      </IconButton>
-                    </Box>
+                  <Box gap="50">
+                    <button
+                      type="button"
+                      onClick={() => handleMonthShift(1, 'month')}
+                      disabled={!canGoNextMonth}
+                      style={{
+                        ...DATE_NAV_BUTTON_STYLE,
+                        opacity: canGoNextMonth ? 1 : 0.42,
+                        cursor: canGoNextMonth ? 'pointer' : 'not-allowed',
+                      }}
+                    >
+                      <Icon size="100" src={Icons.ArrowRight} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleMonthShift(1, 'year')}
+                      disabled={!canGoNextYear}
+                      style={{
+                        ...DATE_NAV_BUTTON_STYLE,
+                        opacity: canGoNextYear ? 1 : 0.42,
+                        cursor: canGoNextYear ? 'pointer' : 'not-allowed',
+                      }}
+                    >
+                      <Text size="T200">{'>>'}</Text>
+                    </button>
                   </Box>
                 </Box>
 
                 <Line variant="SurfaceVariant" size="300" />
 
-                <Box direction="Column" gap="100">
+                <Box direction="Column" gap="50">
                   <Box style={DATE_GRID_STYLE}>
                     {WEEKDAY_LABELS.map((weekday) => (
                       <Text
@@ -604,7 +654,7 @@ function DateFilterField({
                         size="T200"
                         priority="300"
                         align="Center"
-                        style={{ padding: `${config.space.S100} 0` }}
+                        style={DATE_WEEKDAY_STYLE}
                       >
                         {weekday}
                       </Text>
@@ -646,16 +696,22 @@ function DateFilterField({
                           onClick={() => !disabled && handleDateChange(date)}
                           disabled={disabled}
                           style={{
-                            minHeight: toRem(36),
-                            border: 'none',
-                            borderRadius: config.radii.R300,
+                            height: toRem(34),
+                            border: selected
+                              ? '1px solid rgba(37, 99, 235, 0.2)'
+                              : '1px solid rgba(226, 232, 240, 0.58)',
+                            borderRadius: config.radii.R200,
                             background: dayBackground,
                             color: dayColor,
                             font: 'inherit',
                             fontWeight: selected ? 600 : 500,
+                            fontSize: toRem(15),
                             cursor: disabled ? 'not-allowed' : 'pointer',
                             opacity: disabled ? 0.48 : 1,
-                            boxShadow: selected ? '0 10px 24px rgba(37, 99, 235, 0.22)' : 'none',
+                            padding: 0,
+                            boxShadow: selected
+                              ? '0 10px 22px rgba(37, 99, 235, 0.22)'
+                              : 'inset 0 1px 0 rgba(255, 255, 255, 0.72)',
                           }}
                         >
                           {date.date()}
@@ -665,17 +721,24 @@ function DateFilterField({
                   </Box>
                 </Box>
 
+                <Line variant="SurfaceVariant" size="300" />
+
                 <Box justifyContent="SpaceBetween" alignItems="Center" gap="100">
-                  <Text size="T200" priority="300" truncate>
-                    {value ? formatDateLabel(value) : placeholder}
-                  </Text>
+                  <Box grow="Yes" direction="Column" gap="25" style={{ minWidth: 0 }}>
+                    <Text size="T200" priority="300">
+                      {value ? '\u5df2\u9009\u65e5\u671f' : label}
+                    </Text>
+                    <Text size="L400" truncate>
+                      {value ? formatDateLabel(value) : placeholder}
+                    </Text>
+                  </Box>
                   <Box shrink="No" gap="100">
                     {value && (
                       <Chip
                         variant="SurfaceVariant"
                         radii="Pill"
                         onClick={handleClear}
-                        style={INACTIVE_PILL_STYLE}
+                        style={DATE_FOOTER_ACTION_STYLE}
                       >
                         <Text size="T200">{'\u6e05\u7a7a'}</Text>
                       </Chip>
@@ -684,7 +747,7 @@ function DateFilterField({
                       variant="SurfaceVariant"
                       radii="Pill"
                       onClick={() => setPickerAnchor(undefined)}
-                      style={INACTIVE_PILL_STYLE}
+                      style={DATE_FOOTER_ACTION_STYLE}
                     >
                       <Text size="T200">{'\u5173\u95ed'}</Text>
                     </Chip>
