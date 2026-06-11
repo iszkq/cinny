@@ -42,7 +42,7 @@ import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 import { useRoomMembers } from '../../hooks/useRoomMembers';
 import { useRoomNavigate } from '../../hooks/useRoomNavigate';
-import { isCompactScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
+import { isDesktopLikeScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
 import { useSetting } from '../../state/hooks/settings';
 import { settingsAtom } from '../../state/settings';
 import { ContainerColor } from '../../styles/ContainerColor.css';
@@ -816,7 +816,8 @@ export function RoomMessageSearchDialog({
   const mx = useMatrixClient();
   const { navigateRoom } = useRoomNavigate();
   const screenSize = useScreenSizeContext();
-  const compact = isCompactScreenSize(screenSize);
+  const desktopLike = isDesktopLikeScreenSize(screenSize);
+  const compact = !desktopLike;
 
   const [mediaAutoLoad] = useSetting(settingsAtom, 'mediaAutoLoad');
   const [urlPreview] = useSetting(settingsAtom, 'urlPreview');
