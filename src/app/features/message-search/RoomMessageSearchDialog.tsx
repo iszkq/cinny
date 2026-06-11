@@ -37,7 +37,6 @@ import {
   toRem,
 } from 'folds';
 import { SequenceCard } from '../../components/sequence-card';
-import { DatePicker } from '../../components/time-date';
 import { UserAvatar } from '../../components/user-avatar';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
@@ -79,7 +78,7 @@ const RESULTS_SHELL_STYLE = {
 };
 
 const HEADER_STYLE = {
-  padding: `${config.space.S500} ${config.space.S400} ${config.space.S300}`,
+  padding: `${config.space.S500} ${config.space.S400}`,
   position: 'relative' as const,
   zIndex: 2,
   background:
@@ -89,7 +88,7 @@ const HEADER_STYLE = {
 const TOOLBAR_STYLE = {
   position: 'relative' as const,
   zIndex: 1,
-  background: 'rgba(255, 255, 255, 0.96)',
+  background: 'rgba(255, 255, 255, 0.98)',
 };
 
 const SOFT_CONTROL_STYLE = {
@@ -131,20 +130,52 @@ const DATE_TRIGGER_STYLE = {
   boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.8)',
 };
 
+const DATE_PANEL_STYLE = {
+  width: 'min(calc(100vw - 48px), 22rem)',
+  padding: config.space.S200,
+  borderRadius: config.radii.R400,
+  boxShadow: '0 20px 48px rgba(15, 23, 42, 0.18)',
+};
+
+const DATE_GRID_STYLE = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
+  gap: config.space.S100,
+};
+
 const FILTER_PANEL_STYLE = {
   background:
     'linear-gradient(180deg, rgba(248, 250, 252, 0.84) 0%, rgba(255, 255, 255, 0.98) 100%)',
 };
 
 const DATE_PICKER_MIN_TS = dayjs('2000-01-01').startOf('day').valueOf();
+const WEEKDAY_LABELS = ['一', '二', '三', '四', '五', '六', '日'];
 
 const formatDateLabel = (value?: string): string =>
-  value ? dayjs(value).format('YYYY / MM / DD') : '\u5e74 / \u6708 / \u65e5';
+  value ? dayjs(value).format('YYYY / MM / DD') : '';
 
-const dateValueToTs = (value?: string): number => {
-  if (!value) return dayjs().startOf('day').valueOf();
+const getParsedDate = (value?: string): dayjs.Dayjs | undefined => {
+  if (!value) return undefined;
   const parsed = dayjs(value);
-  return parsed.isValid() ? parsed.startOf('day').valueOf() : dayjs().startOf('day').valueOf();
+  return parsed.isValid() ? parsed.startOf('day') : undefined;
+};
+
+const getMonthGrid = (month: dayjs.Dayjs): dayjs.Dayjs[] => {
+  const monthStart = month.startOf('month');
+  const offset = (monthStart.day() + 6) % 7;
+  const calendarStart = monthStart.subtract(offset, 'day');
+
+  return Array.from({ length: 42 }, (_, index) => calendarStart.add(index, 'day'));
+};
+
+const clampMonthToRange = (month: dayjs.Dayjs, minDate?: string, maxDate?: string): dayjs.Dayjs => {
+  const normalizedMonth = month.startOf('month');
+  const minMonth = (getParsedDate(minDate) ?? dayjs(DATE_PICKER_MIN_TS)).startOf('month');
+  const maxMonth = (getParsedDate(maxDate) ?? dayjs()).startOf('month');
+
+  if (normalizedMonth.valueOf() < minMonth.valueOf()) return minMonth;
+  if (normalizedMonth.valueOf() > maxMonth.valueOf()) return maxMonth;
+  return normalizedMonth;
 };
 
 const CATEGORY_TABS: Array<{ id: SearchCategory; label: string }> = [
@@ -398,21 +429,82 @@ function MemberSelector({ room, selectedUserIds, onChange }: MemberSelectorProps
 }
 
 type DateFilterFieldProps = {
+  label: string;
+  placeholder: string;
   value: string;
   onChange: (value: string) => void;
+  minDate?: string;
+  maxDate?: string;
 };
 
-function DateFilterField({ value, onChange }: DateFilterFieldProps) {
+function DateFilterField({
+  label,
+  placeholder,
+  value,
+  onChange,
+  minDate,
+  maxDate,
+}: DateFilterFieldProps) {
   const [pickerAnchor, setPickerAnchor] = useState<RectCords>();
   const pickerOpen = !!pickerAnchor;
-  const selectedTs = useMemo(() => dateValueToTs(value), [value]);
+  const selectedDate = useMemo(() => getParsedDate(value), [value]);
+  const minDateValue = useMemo(
+    () => getParsedDate(minDate) ?? dayjs(DATE_PICKER_MIN_TS),
+    [minDate]
+  );
+  const maxDateValue = useMemo(() => getParsedDate(maxDate) ?? dayjs().startOf('day'), [maxDate]);
+  const [visibleMonth, setVisibleMonth] = useState<dayjs.Dayjs>(() =>
+    clampMonthToRange(selectedDate ?? maxDateValue, minDate, maxDate)
+  );
+  const monthGrid = useMemo(() => getMonthGrid(visibleMonth), [visibleMonth]);
+  const canGoPrevYear = useMemo(
+    () =>
+      visibleMonth.subtract(1, 'year').startOf('month').valueOf() >=
+      minDateValue.startOf('month').valueOf(),
+    [minDateValue, visibleMonth]
+  );
+  const canGoPrevMonth = useMemo(
+    () =>
+      visibleMonth.subtract(1, 'month').startOf('month').valueOf() >=
+      minDateValue.startOf('month').valueOf(),
+    [minDateValue, visibleMonth]
+  );
+  const canGoNextMonth = useMemo(
+    () =>
+      visibleMonth.add(1, 'month').startOf('month').valueOf() <=
+      maxDateValue.startOf('month').valueOf(),
+    [maxDateValue, visibleMonth]
+  );
+  const canGoNextYear = useMemo(
+    () =>
+      visibleMonth.add(1, 'year').startOf('month').valueOf() <=
+      maxDateValue.startOf('month').valueOf(),
+    [maxDateValue, visibleMonth]
+  );
+
+  useEffect(() => {
+    setVisibleMonth((current) =>
+      clampMonthToRange(current ?? selectedDate ?? maxDateValue, minDate, maxDate)
+    );
+  }, [maxDate, maxDateValue, minDate, selectedDate]);
 
   const handleTogglePicker: MouseEventHandler<HTMLButtonElement> = (evt) => {
-    setPickerAnchor((current) => (current ? undefined : evt.currentTarget.getBoundingClientRect()));
+    if (pickerOpen) {
+      setPickerAnchor(undefined);
+      return;
+    }
+
+    setVisibleMonth(clampMonthToRange(selectedDate ?? maxDateValue, minDate, maxDate));
+    setPickerAnchor(evt.currentTarget.getBoundingClientRect());
   };
 
-  const handleDateChange = (nextTs: number) => {
-    onChange(dayjs(nextTs).format('YYYY-MM-DD'));
+  const handleMonthShift = (amount: number, unit: 'month' | 'year') => {
+    setVisibleMonth((current) => clampMonthToRange(current.add(amount, unit), minDate, maxDate));
+  };
+
+  const handleDateChange = (nextDate: dayjs.Dayjs) => {
+    onChange(nextDate.format('YYYY-MM-DD'));
+    setPickerAnchor(undefined);
   };
 
   const handleClear = () => {
@@ -421,82 +513,203 @@ function DateFilterField({ value, onChange }: DateFilterFieldProps) {
   };
 
   return (
-    <PopOut
-      anchor={pickerAnchor}
-      align="End"
-      position="Bottom"
-      offset={8}
-      content={
-        <FocusTrap
-          focusTrapOptions={{
-            initialFocus: false,
-            onDeactivate: () => setPickerAnchor(undefined),
-            clickOutsideDeactivates: true,
-            isKeyForward: (evt: KeyboardEvent) =>
-              evt.key === 'ArrowDown' || evt.key === 'ArrowRight',
-            isKeyBackward: (evt: KeyboardEvent) => evt.key === 'ArrowUp' || evt.key === 'ArrowLeft',
-            escapeDeactivates: stopPropagation,
-          }}
-        >
-          <Menu
-            variant="Surface"
-            style={{
-              width: 'fit-content',
-              maxWidth: 'calc(100vw - 48px)',
-              padding: config.space.S200,
+    <Box direction="Column" gap="100">
+      <Text size="T200" priority="300">
+        {label}
+      </Text>
+      <PopOut
+        anchor={pickerAnchor}
+        align="End"
+        position="Bottom"
+        offset={8}
+        content={
+          <FocusTrap
+            focusTrapOptions={{
+              initialFocus: false,
+              onDeactivate: () => setPickerAnchor(undefined),
+              clickOutsideDeactivates: true,
+              isKeyForward: (evt: KeyboardEvent) =>
+                evt.key === 'ArrowDown' || evt.key === 'ArrowRight',
+              isKeyBackward: (evt: KeyboardEvent) =>
+                evt.key === 'ArrowUp' || evt.key === 'ArrowLeft',
+              escapeDeactivates: stopPropagation,
             }}
           >
-            <Box direction="Column" gap="200">
-              <Box alignItems="Center" justifyContent="SpaceBetween" gap="200">
-                <Text size="L400">
-                  {value ? formatDateLabel(value) : '\u9009\u62e9\u65e5\u671f'}
-                </Text>
-                <Box shrink="No" gap="100">
-                  {value && (
+            <Menu variant="Surface" style={DATE_PANEL_STYLE}>
+              <Box direction="Column" gap="200">
+                <Box direction="Column" gap="100">
+                  <Text size="T200" priority="300">
+                    {label}
+                  </Text>
+                  <Box alignItems="Center" justifyContent="SpaceBetween" gap="100">
+                    <Box gap="100">
+                      <IconButton
+                        size="300"
+                        variant="SurfaceVariant"
+                        radii="300"
+                        onClick={() => handleMonthShift(-1, 'year')}
+                        disabled={!canGoPrevYear}
+                        style={SOFT_CONTROL_STYLE}
+                      >
+                        <Text size="B300">{'<<'}</Text>
+                      </IconButton>
+                      <IconButton
+                        size="300"
+                        variant="SurfaceVariant"
+                        radii="300"
+                        onClick={() => handleMonthShift(-1, 'month')}
+                        disabled={!canGoPrevMonth}
+                        style={SOFT_CONTROL_STYLE}
+                      >
+                        <Icon size="100" src={Icons.ArrowLeft} />
+                      </IconButton>
+                    </Box>
+
+                    <Text size="L400" align="Center">
+                      {visibleMonth.format('YYYY\u5e74 M\u6708')}
+                    </Text>
+
+                    <Box gap="100">
+                      <IconButton
+                        size="300"
+                        variant="SurfaceVariant"
+                        radii="300"
+                        onClick={() => handleMonthShift(1, 'month')}
+                        disabled={!canGoNextMonth}
+                        style={SOFT_CONTROL_STYLE}
+                      >
+                        <Icon size="100" src={Icons.ArrowRight} />
+                      </IconButton>
+                      <IconButton
+                        size="300"
+                        variant="SurfaceVariant"
+                        radii="300"
+                        onClick={() => handleMonthShift(1, 'year')}
+                        disabled={!canGoNextYear}
+                        style={SOFT_CONTROL_STYLE}
+                      >
+                        <Text size="B300">{'>>'}</Text>
+                      </IconButton>
+                    </Box>
+                  </Box>
+                </Box>
+
+                <Line variant="SurfaceVariant" size="300" />
+
+                <Box direction="Column" gap="100">
+                  <Box style={DATE_GRID_STYLE}>
+                    {WEEKDAY_LABELS.map((weekday) => (
+                      <Text
+                        key={weekday}
+                        size="T200"
+                        priority="300"
+                        align="Center"
+                        style={{ padding: `${config.space.S100} 0` }}
+                      >
+                        {weekday}
+                      </Text>
+                    ))}
+                  </Box>
+
+                  <Box style={DATE_GRID_STYLE}>
+                    {monthGrid.map((date) => {
+                      const currentTs = date.startOf('day').valueOf();
+                      const disabled =
+                        currentTs < minDateValue.valueOf() || currentTs > maxDateValue.valueOf();
+                      const outsideMonth =
+                        date.startOf('month').valueOf() !== visibleMonth.startOf('month').valueOf();
+                      const selected =
+                        !!selectedDate &&
+                        date.startOf('day').valueOf() === selectedDate.startOf('day').valueOf();
+                      let dayBackground = 'rgba(248, 250, 252, 0.92)';
+                      let dayColor = 'inherit';
+
+                      if (selected) {
+                        dayBackground = '#2563eb';
+                        dayColor = '#ffffff';
+                      } else if (outsideMonth) {
+                        dayBackground = 'rgba(241, 245, 249, 0.72)';
+                      }
+
+                      if (selected) {
+                        dayColor = '#ffffff';
+                      } else if (disabled) {
+                        dayColor = 'rgba(148, 163, 184, 0.92)';
+                      } else if (outsideMonth) {
+                        dayColor = 'rgba(100, 116, 139, 0.96)';
+                      }
+
+                      return (
+                        <button
+                          key={date.format('YYYY-MM-DD')}
+                          type="button"
+                          onClick={() => !disabled && handleDateChange(date)}
+                          disabled={disabled}
+                          style={{
+                            minHeight: toRem(36),
+                            border: 'none',
+                            borderRadius: config.radii.R300,
+                            background: dayBackground,
+                            color: dayColor,
+                            font: 'inherit',
+                            fontWeight: selected ? 600 : 500,
+                            cursor: disabled ? 'not-allowed' : 'pointer',
+                            opacity: disabled ? 0.48 : 1,
+                            boxShadow: selected ? '0 10px 24px rgba(37, 99, 235, 0.22)' : 'none',
+                          }}
+                        >
+                          {date.date()}
+                        </button>
+                      );
+                    })}
+                  </Box>
+                </Box>
+
+                <Box justifyContent="SpaceBetween" alignItems="Center" gap="100">
+                  <Text size="T200" priority="300" truncate>
+                    {value ? formatDateLabel(value) : placeholder}
+                  </Text>
+                  <Box shrink="No" gap="100">
+                    {value && (
+                      <Chip
+                        variant="SurfaceVariant"
+                        radii="Pill"
+                        onClick={handleClear}
+                        style={INACTIVE_PILL_STYLE}
+                      >
+                        <Text size="T200">{'\u6e05\u7a7a'}</Text>
+                      </Chip>
+                    )}
                     <Chip
                       variant="SurfaceVariant"
                       radii="Pill"
-                      onClick={handleClear}
+                      onClick={() => setPickerAnchor(undefined)}
                       style={INACTIVE_PILL_STYLE}
                     >
-                      <Text size="T200">{'\u6e05\u7a7a'}</Text>
+                      <Text size="T200">{'\u5173\u95ed'}</Text>
                     </Chip>
-                  )}
-                  <Chip
-                    variant="SurfaceVariant"
-                    radii="Pill"
-                    onClick={() => setPickerAnchor(undefined)}
-                    style={INACTIVE_PILL_STYLE}
-                  >
-                    <Text size="T200">{'\u5173\u95ed'}</Text>
-                  </Chip>
+                  </Box>
                 </Box>
               </Box>
-              <DatePicker
-                min={DATE_PICKER_MIN_TS}
-                max={Date.now()}
-                value={selectedTs}
-                onChange={handleDateChange}
-              />
-            </Box>
-          </Menu>
-        </FocusTrap>
-      }
-    >
-      <button
-        type="button"
-        onClick={handleTogglePicker}
-        aria-expanded={pickerOpen}
-        style={DATE_TRIGGER_STYLE}
+            </Menu>
+          </FocusTrap>
+        }
       >
-        <Box grow="Yes" alignItems="Center" justifyContent="SpaceBetween" gap="200">
-          <Text size="T300" priority={value ? '400' : '300'}>
-            {formatDateLabel(value)}
-          </Text>
-          <Icon size="100" src={pickerOpen ? Icons.ChevronTop : Icons.ChevronBottom} />
-        </Box>
-      </button>
-    </PopOut>
+        <button
+          type="button"
+          onClick={handleTogglePicker}
+          aria-expanded={pickerOpen}
+          style={DATE_TRIGGER_STYLE}
+        >
+          <Box grow="Yes" alignItems="Center" justifyContent="SpaceBetween" gap="200">
+            <Text size="T300" priority={value ? '400' : '300'} truncate>
+              {value ? formatDateLabel(value) : placeholder}
+            </Text>
+            <Icon size="100" src={pickerOpen ? Icons.ChevronTop : Icons.ChevronBottom} />
+          </Box>
+        </button>
+      </PopOut>
+    </Box>
   );
 }
 
@@ -707,7 +920,7 @@ export function RoomMessageSearchDialog({
           <Dialog variant="Surface" style={DIALOG_STYLE}>
             <Box direction="Column" style={{ height: '100%', minWidth: 0 }}>
               <Box alignItems="Center" gap="300" style={HEADER_STYLE}>
-                <Box grow="Yes" direction="Column" gap="50" style={{ minWidth: 0 }}>
+                <Box grow="Yes" direction="Column" gap="100" style={{ minWidth: 0 }}>
                   <Text size="H4" truncate>
                     {'\u804a\u5929\u8bb0\u5f55'}
                   </Text>
@@ -731,23 +944,25 @@ export function RoomMessageSearchDialog({
               <Line variant="SurfaceVariant" size="300" />
 
               <Box
-                grow="Yes"
                 direction="Column"
                 gap="300"
-                style={{ padding: config.space.S400, minHeight: 0 }}
+                style={{
+                  padding: `${config.space.S300} ${config.space.S400}`,
+                  ...TOOLBAR_STYLE,
+                }}
               >
-                <Box direction="Column" gap="250" style={TOOLBAR_STYLE}>
+                <Box
+                  as="form"
+                  onSubmit={handleSearchSubmit}
+                  direction="Column"
+                  gap="200"
+                  style={{ width: '100%', minWidth: 0 }}
+                >
                   <Box
-                    as="form"
-                    onSubmit={handleSearchSubmit}
                     direction={compact ? 'Column' : 'Row'}
-                    gap="150"
+                    gap="200"
                     alignItems={compact ? undefined : 'Center'}
-                    style={{
-                      width: '100%',
-                      maxWidth: compact ? '100%' : toRem(620),
-                      minWidth: 0,
-                    }}
+                    style={{ width: '100%', minWidth: 0 }}
                   >
                     <Box grow="Yes" style={{ minWidth: 0, width: '100%' }}>
                       <Input
@@ -756,7 +971,7 @@ export function RoomMessageSearchDialog({
                         size="500"
                         variant="Background"
                         outlined
-                        style={{ minWidth: 0, ...SOFT_CONTROL_STYLE }}
+                        style={{ width: '100%', minWidth: 0, ...SOFT_CONTROL_STYLE }}
                         placeholder={'\u641c\u7d22\u5f53\u524d\u4f1a\u8bdd\u8bb0\u5f55'}
                         before={
                           status === 'pending' && hasSearchCriteria ? (
@@ -767,7 +982,13 @@ export function RoomMessageSearchDialog({
                         }
                       />
                     </Box>
-                    <Box shrink="No" gap="100" wrap="Wrap">
+
+                    <Box
+                      shrink="No"
+                      gap="100"
+                      wrap="Wrap"
+                      justifyContent={compact ? 'End' : undefined}
+                    >
                       {(searchInput || term) && (
                         <Button
                           type="button"
@@ -784,6 +1005,7 @@ export function RoomMessageSearchDialog({
                           </Box>
                         </Button>
                       )}
+
                       <Button
                         type="submit"
                         size="400"
@@ -795,8 +1017,16 @@ export function RoomMessageSearchDialog({
                       </Button>
                     </Box>
                   </Box>
+                </Box>
 
-                  <Box gap="200" wrap="Wrap" alignItems="Center">
+                <Box
+                  direction={compact ? 'Column' : 'Row'}
+                  gap="200"
+                  alignItems={compact ? undefined : 'Center'}
+                  justifyContent="SpaceBetween"
+                  style={{ width: '100%', minWidth: 0 }}
+                >
+                  <Box gap="100" wrap="Wrap" alignItems="Center" style={{ minWidth: 0 }}>
                     {CATEGORY_TABS.map((tab) => {
                       const active = category === tab.id;
 
@@ -806,29 +1036,45 @@ export function RoomMessageSearchDialog({
                           type="button"
                           onClick={() => setCategory(tab.id)}
                           style={{
-                            border: 'none',
-                            borderBottom: `${toRem(2)} solid ${active ? '#3b82f6' : 'transparent'}`,
-                            background: active ? 'rgba(59, 130, 246, 0.10)' : 'transparent',
+                            border: active
+                              ? '1px solid rgba(59, 130, 246, 0.24)'
+                              : '1px solid rgba(203, 213, 225, 0.9)',
+                            background: active
+                              ? 'rgba(59, 130, 246, 0.12)'
+                              : 'rgba(255, 255, 255, 0.92)',
                             color: active ? '#2563eb' : 'inherit',
                             padding: `${config.space.S100} ${config.space.S200}`,
                             borderRadius: config.radii.R300,
                             cursor: 'pointer',
                             font: 'inherit',
                             fontWeight: active ? 600 : 500,
+                            boxShadow: active
+                              ? '0 8px 20px rgba(59, 130, 246, 0.12)'
+                              : 'inset 0 1px 0 rgba(255, 255, 255, 0.72)',
                           }}
                         >
                           <Text size="L400">{tab.label}</Text>
                         </button>
                       );
                     })}
-
-                    <Box grow="Yes" />
-                    <Text size="T300" priority="300">
-                      {searchStatusLabel}
-                    </Text>
                   </Box>
-                </Box>
 
+                  <Text size="T300" priority="300" style={{ flexShrink: 0 }}>
+                    {searchStatusLabel}
+                  </Text>
+                </Box>
+              </Box>
+
+              <Line variant="SurfaceVariant" size="300" />
+
+              <Box
+                grow="Yes"
+                direction="Column"
+                style={{
+                  padding: `${config.space.S300} ${config.space.S400} ${config.space.S400}`,
+                  minHeight: 0,
+                }}
+              >
                 <Box grow="Yes" direction={compact ? 'Column' : 'Row'} style={RESULTS_SHELL_STYLE}>
                   <Box grow="Yes" style={{ minHeight: 0, minWidth: 0 }}>
                     <Scroll ref={scrollRef} size="300" hideTrack visibility="Hover">
@@ -1012,9 +1258,21 @@ export function RoomMessageSearchDialog({
                           <Text size="T200" priority="300">
                             {'\u65e5\u671f'}
                           </Text>
-                          <Box direction="Column" gap="100">
-                            <DateFilterField value={dateFrom} onChange={setDateFrom} />
-                            <DateFilterField value={dateTo} onChange={setDateTo} />
+                          <Box direction="Column" gap="200">
+                            <DateFilterField
+                              label={'\u5f00\u59cb\u65e5\u671f'}
+                              placeholder={'\u70b9\u51fb\u9009\u62e9'}
+                              value={dateFrom}
+                              onChange={setDateFrom}
+                              maxDate={dateTo || undefined}
+                            />
+                            <DateFilterField
+                              label={'\u7ed3\u675f\u65e5\u671f'}
+                              placeholder={'\u70b9\u51fb\u9009\u62e9'}
+                              value={dateTo}
+                              onChange={setDateTo}
+                              minDate={dateFrom || undefined}
+                            />
                           </Box>
                         </Box>
 
