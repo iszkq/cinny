@@ -918,8 +918,8 @@ export function RoomMessageSearchDialog({
           }}
         >
           <Dialog variant="Surface" style={DIALOG_STYLE}>
-            <Box direction="Column" style={{ height: '100%', minWidth: 0 }}>
-              <Box alignItems="Center" gap="300" style={HEADER_STYLE}>
+            <Box direction="Column" style={{ height: '100%', minWidth: 0, minHeight: 0 }}>
+              <Box shrink="No" alignItems="Center" gap="300" style={HEADER_STYLE}>
                 <Box grow="Yes" direction="Column" gap="100" style={{ minWidth: 0 }}>
                   <Text size="H4" truncate>
                     {'\u804a\u5929\u8bb0\u5f55'}
@@ -941,9 +941,12 @@ export function RoomMessageSearchDialog({
                 </Box>
               </Box>
 
-              <Line variant="SurfaceVariant" size="300" />
+              <Box shrink="No">
+                <Line variant="SurfaceVariant" size="300" />
+              </Box>
 
               <Box
+                shrink="No"
                 direction="Column"
                 gap="300"
                 style={{
@@ -1065,7 +1068,9 @@ export function RoomMessageSearchDialog({
                 </Box>
               </Box>
 
-              <Line variant="SurfaceVariant" size="300" />
+              <Box shrink="No">
+                <Line variant="SurfaceVariant" size="300" />
+              </Box>
 
               <Box
                 grow="Yes"
