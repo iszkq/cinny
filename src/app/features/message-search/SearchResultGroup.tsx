@@ -5,7 +5,17 @@ import { IEventWithRoomId, JoinRule, RelationType, Room } from 'matrix-js-sdk';
 import { Avatar, Box, Chip, Header, Icon, Icons, Text, config } from 'folds';
 import { Opts as LinkifyOpts } from 'linkifyjs';
 import { RenderMessageContent } from '../../components/RenderMessageContent';
-import { AvatarBase, ImageContent, MSticker, ModernLayout, RedactedContent, Reply, Time, Username, UsernameBold } from '../../components/message';
+import {
+  AvatarBase,
+  ImageContent,
+  MSticker,
+  ModernLayout,
+  RedactedContent,
+  Reply,
+  Time,
+  Username,
+  UsernameBold,
+} from '../../components/message';
 import { Image } from '../../components/media';
 import { ImageViewer } from '../../components/image-viewer';
 import { PowerIcon } from '../../components/power';
@@ -53,6 +63,7 @@ type SearchResultGroupProps = {
   legacyUsernameColor?: boolean;
   hour24Clock: boolean;
   dateFormatString: string;
+  hideRoomHeader?: boolean;
 };
 
 export function SearchResultGroup({
@@ -65,6 +76,7 @@ export function SearchResultGroup({
   legacyUsernameColor,
   hour24Clock,
   dateFormatString,
+  hideRoomHeader,
 }: SearchResultGroupProps) {
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
@@ -181,11 +193,7 @@ export function SearchResultGroup({
                 autoPlay={mediaAutoLoad}
                 previewMediaStrategy="stable"
                 renderImage={(p) => (
-                  <Image
-                    {...p}
-                    loading={mediaAutoLoad ? 'eager' : 'lazy'}
-                    decoding="async"
-                  />
+                  <Image {...p} loading={mediaAutoLoad ? 'eager' : 'lazy'} decoding="async" />
                 )}
                 renderViewer={(p) => <ImageViewer {...p} />}
               />
@@ -229,28 +237,30 @@ export function SearchResultGroup({
 
   return (
     <Box direction="Column" gap="200">
-      <Header size="300">
-        <Box gap="200" grow="Yes">
-          <Avatar size="200" radii="300">
-            <RoomAvatar
-              roomId={room.roomId}
-              src={getRoomAvatarUrl(mx, room, 96, useAuthentication)}
-              alt={room.name}
-              renderFallback={() => (
-                <RoomIcon
-                  size="50"
-                  roomType={room.getType()}
-                  joinRule={room.getJoinRule() ?? JoinRule.Restricted}
-                  filled
-                />
-              )}
-            />
-          </Avatar>
-          <Text size="H4" truncate>
-            {room.name}
-          </Text>
-        </Box>
-      </Header>
+      {!hideRoomHeader && (
+        <Header size="300">
+          <Box gap="200" grow="Yes">
+            <Avatar size="200" radii="300">
+              <RoomAvatar
+                roomId={room.roomId}
+                src={getRoomAvatarUrl(mx, room, 96, useAuthentication)}
+                alt={room.name}
+                renderFallback={() => (
+                  <RoomIcon
+                    size="50"
+                    roomType={room.getType()}
+                    joinRule={room.getJoinRule() ?? JoinRule.Restricted}
+                    filled
+                  />
+                )}
+              />
+            </Avatar>
+            <Text size="H4" truncate>
+              {room.name}
+            </Text>
+          </Box>
+        </Header>
+      )}
 
       <Box direction="Column" gap="100">
         {items.map((item) => {

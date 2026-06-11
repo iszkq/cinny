@@ -50,6 +50,18 @@ export type SearchResult = {
   groups: ResultGroup[];
 };
 
+export type MessageSearchParams = {
+  term?: string;
+  order?: string;
+  rooms?: string[];
+  senders?: string[];
+  senderQuery?: string;
+  msgTypes?: SearchMessageType[];
+  dateFrom?: string;
+  dateTo?: string;
+  onlyLinks?: boolean;
+};
+
 type LocalResultItem = {
   rank: number;
   event: IEventWithRoomId;
@@ -72,7 +84,7 @@ const emptyResult = (): SearchResult => ({
   groups: [],
 });
 
-const unique = <T,>(items: T[]): T[] => Array.from(new Set(items));
+const unique = <T>(items: T[]): T[] => Array.from(new Set(items));
 
 const normalizeSearchText = (value: string): string =>
   value.toLowerCase().replace(/\s+/g, ' ').trim();
@@ -285,42 +297,95 @@ const createCacheKey = (params: MessageSearchParams): string =>
 
 const resolveTargetRooms = (mx: MatrixClient, roomIds?: string[]): Room[] => {
   if (roomIds && roomIds.length > 0) {
-    return roomIds
-      .map((roomId) => mx.getRoom(roomId))
-      .filter((room): room is Room => !!room);
+    return roomIds.map((roomId) => mx.getRoom(roomId)).filter((room): room is Room => !!room);
   }
 
   return mx.getRooms();
 };
 
 const paginateLocalRoomHistory = async (mx: MatrixClient, room: Room) => {
-  let timeline = getLiveTimeline(room);
   let pageCount = 0;
 
-  if (room.hasEncryptionStateEvent()) {
-    await decryptAllTimelineEvent(mx, timeline);
-  }
+  const loadTimeline = async (timeline: ReturnType<typeof getLiveTimeline>): Promise<void> => {
+    if (room.hasEncryptionStateEvent()) {
+      await decryptAllTimelineEvent(mx, timeline);
+    }
 
-  while (
-    timeline.getPaginationToken(Direction.Backward) &&
-    pageCount < MAX_LOCAL_HISTORY_PAGES_PER_ROOM
-  ) {
+    if (
+      !timeline.getPaginationToken(Direction.Backward) ||
+      pageCount >= MAX_LOCAL_HISTORY_PAGES_PER_ROOM
+    ) {
+      return;
+    }
+
     const paginated = await mx.paginateEventTimeline(timeline, {
       backwards: true,
       limit: LOCAL_HISTORY_PAGINATION_LIMIT,
     });
-    if (!paginated) break;
+    if (!paginated) return;
 
     const previousTimeline = timeline.getNeighbouringTimeline(Direction.Backward);
-    if (!previousTimeline || previousTimeline === timeline) break;
+    if (!previousTimeline || previousTimeline === timeline) return;
 
-    timeline = previousTimeline;
     pageCount += 1;
+    await loadTimeline(previousTimeline);
+  };
 
-    if (room.hasEncryptionStateEvent()) {
-      await decryptAllTimelineEvent(mx, timeline);
-    }
-  }
+  await loadTimeline(getLiveTimeline(room));
+};
+
+const collectRoomLocalResults = async (
+  mx: MatrixClient,
+  room: Room,
+  terms: string[],
+  targetSenders?: Set<string>,
+  senderQuery?: string,
+  msgTypes?: SearchMessageType[],
+  dateFrom?: string,
+  dateTo?: string,
+  onlyLinks?: boolean
+): Promise<LocalResultItem[]> => {
+  await paginateLocalRoomHistory(mx, room);
+
+  const seenEventIds = new Set<string>();
+  const roomResults: LocalResultItem[] = [];
+  const timelines = getLinkedTimelines(getLiveTimeline(room));
+
+  timelines.forEach((timeline) => {
+    timeline.getEvents().forEach((matrixEvent) => {
+      const eventId = matrixEvent.getId();
+      if (!eventId || seenEventIds.has(eventId)) return;
+      seenEventIds.add(eventId);
+
+      const sender = matrixEvent.getSender();
+      if (targetSenders && (!sender || !targetSenders.has(sender))) return;
+      if (!matchesSenderFilter(room, sender ?? undefined, senderQuery)) return;
+
+      const ts = matrixEvent.getTs();
+      if (!matchesDateRange(ts, dateFrom, dateTo)) return;
+
+      const messageType = getMatrixEventMessageType(matrixEvent);
+      if (!matchesMessageType(messageType, msgTypes)) return;
+      if (!eventMatchesLinkFilter(matrixEvent, messageType, onlyLinks)) return;
+
+      const body = eventToSearchBody(matrixEvent);
+      if (!body) return;
+
+      if (terms.length > 0) {
+        const normalizedBody = normalizeSearchText(body);
+        const matched = terms.every((token) => normalizedBody.includes(token));
+        if (!matched) return;
+      }
+
+      roomResults.push({
+        rank: terms.length > 0 ? calculateLocalRank(body, terms) : 0,
+        event: toSearchEvent(matrixEvent, room.roomId),
+        ts,
+      });
+    });
+  });
+
+  return roomResults;
 };
 
 const searchLocalRoomHistory = async (
@@ -331,8 +396,15 @@ const searchLocalRoomHistory = async (
     params;
   const searchKey = createCacheKey(params);
   const searchTerm = term?.trim();
+  const hasLocalFilters =
+    !!(senders && senders.length > 0) ||
+    !!senderQuery ||
+    !!dateFrom ||
+    !!dateTo ||
+    !!onlyLinks ||
+    !!(msgTypes && msgTypes.length > 0);
 
-  if (!searchTerm) {
+  if (!searchTerm && !hasLocalFilters) {
     return {
       key: searchKey,
       highlights: [],
@@ -340,7 +412,7 @@ const searchLocalRoomHistory = async (
     };
   }
 
-  const terms = getSearchTerms(searchTerm);
+  const terms = searchTerm ? getSearchTerms(searchTerm) : [];
   const targetSenders = senders ? new Set(senders) : undefined;
   const targetRooms = resolveTargetRooms(mx, rooms);
 
@@ -352,44 +424,26 @@ const searchLocalRoomHistory = async (
     };
   }
 
-  const results: LocalResultItem[] = [];
-  for (const room of targetRooms) {
-    await paginateLocalRoomHistory(mx, room);
-
-    const seenEventIds = new Set<string>();
-    const timelines = getLinkedTimelines(getLiveTimeline(room));
-    timelines.forEach((timeline) => {
-      timeline.getEvents().forEach((matrixEvent) => {
-        const eventId = matrixEvent.getId();
-        if (!eventId || seenEventIds.has(eventId)) return;
-        seenEventIds.add(eventId);
-
-        const sender = matrixEvent.getSender();
-        if (targetSenders && (!sender || !targetSenders.has(sender))) return;
-        if (!matchesSenderFilter(room, sender ?? undefined, senderQuery)) return;
-
-        const ts = matrixEvent.getTs();
-        if (!matchesDateRange(ts, dateFrom, dateTo)) return;
-
-        const messageType = getMatrixEventMessageType(matrixEvent);
-        if (!matchesMessageType(messageType, msgTypes)) return;
-        if (!eventMatchesLinkFilter(matrixEvent, messageType, onlyLinks)) return;
-
-        const body = eventToSearchBody(matrixEvent);
-        if (!body) return;
-
-        const normalizedBody = normalizeSearchText(body);
-        const matched = terms.every((token) => normalizedBody.includes(token));
-        if (!matched) return;
-
-        results.push({
-          rank: calculateLocalRank(body, terms),
-          event: toSearchEvent(matrixEvent, room.roomId),
-          ts,
-        });
-      });
-    });
-  }
+  const roomResults = await targetRooms.reduce<Promise<LocalResultItem[][]>>(
+    async (pendingResults, room) => {
+      const collectedResults = await pendingResults;
+      const nextRoomResults = await collectRoomLocalResults(
+        mx,
+        room,
+        terms,
+        targetSenders,
+        senderQuery,
+        msgTypes,
+        dateFrom,
+        dateTo,
+        onlyLinks
+      );
+      collectedResults.push(nextRoomResults);
+      return collectedResults;
+    },
+    Promise.resolve([])
+  );
+  const results = roomResults.flat();
 
   results.sort((a, b) => {
     if (order === SearchOrderBy.Rank) {
@@ -443,24 +497,18 @@ const parseSearchResult = (result: ISearchResponse): SearchResult => {
   return searchResult;
 };
 
-export type MessageSearchParams = {
-  term?: string;
-  order?: string;
-  rooms?: string[];
-  senders?: string[];
-  senderQuery?: string;
-  msgTypes?: SearchMessageType[];
-  dateFrom?: string;
-  dateTo?: string;
-  onlyLinks?: boolean;
-};
 export const useMessageSearch = (params: MessageSearchParams) => {
   const mx = useMatrixClient();
   const { term, order, rooms, senders, senderQuery, msgTypes, dateFrom, dateTo, onlyLinks } =
     params;
   const localCacheRef = useRef<LocalSearchCache>();
-  const hasAdvancedFilters =
-    !!senderQuery || !!dateFrom || !!dateTo || !!onlyLinks || !!(msgTypes && msgTypes.length > 0);
+  const hasLocalFilters =
+    !!(senders && senders.length > 0) ||
+    !!senderQuery ||
+    !!dateFrom ||
+    !!dateTo ||
+    !!onlyLinks ||
+    !!(msgTypes && msgTypes.length > 0);
 
   const searchLocalFallback = useCallback(
     async (nextBatch?: string): Promise<SearchResult> => {
@@ -486,11 +534,16 @@ export const useMessageSearch = (params: MessageSearchParams) => {
 
   const searchMessages = useCallback(
     async (nextBatch?: string) => {
-      if (!term) return emptyResult();
+      if (!term) {
+        if (hasLocalFilters) {
+          return searchLocalFallback(nextBatch);
+        }
+        return emptyResult();
+      }
 
       const limit = LOCAL_SEARCH_PAGE_LIMIT;
       const shouldUseLocalHistory =
-        hasAdvancedFilters ||
+        hasLocalFilters ||
         (!!rooms &&
           rooms.length > 0 &&
           rooms.some((roomId) => mx.getRoom(roomId)?.hasEncryptionStateEvent()));
@@ -538,7 +591,7 @@ export const useMessageSearch = (params: MessageSearchParams) => {
         throw error;
       }
     },
-    [hasAdvancedFilters, mx, order, rooms, searchLocalFallback, senders, term]
+    [hasLocalFilters, mx, order, rooms, searchLocalFallback, senders, term]
   );
 
   return searchMessages;

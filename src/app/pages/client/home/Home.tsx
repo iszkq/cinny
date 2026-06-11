@@ -27,22 +27,17 @@ import {
   NavEmptyLayout,
   NavItem,
   NavItemContent,
-  NavLink,
 } from '../../../components/nav';
 import {
   encodeSearchParamValueArray,
   getExplorePath,
   getHomeCreatePath,
   getHomeRoomPath,
-  getHomeSearchPath,
   withSearchParam,
 } from '../../pathUtils';
 import { getCanonicalAliasOrRoomId } from '../../../utils/matrix';
 import { useSelectedRoom } from '../../../hooks/router/useSelectedRoom';
-import {
-  useHomeCreateSelected,
-  useHomeSearchSelected,
-} from '../../../hooks/router/useHomeSelected';
+import { useHomeCreateSelected } from '../../../hooks/router/useHomeSelected';
 import { useHomeRooms } from './useHomeRooms';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { VirtualTile } from '../../../components/virtualizer';
@@ -127,7 +122,11 @@ function HomeHeader() {
         <Box alignItems="Center" grow="Yes" gap="300">
           <Box shrink="No">
             {desktop ? (
-              <IconButton aria-label="Collapse section list" fill="None" onClick={handleToggleCollapsed}>
+              <IconButton
+                aria-label="Collapse section list"
+                fill="None"
+                onClick={handleToggleCollapsed}
+              >
                 <Icon src={Icons.ArrowLeft} size="200" />
               </IconButton>
             ) : (
@@ -224,7 +223,6 @@ export function Home() {
 
   const selectedRoomId = useSelectedRoom();
   const createRoomSelected = useHomeCreateSelected();
-  const searchSelected = useHomeSearchSelected();
   const noRoomToDisplay = rooms.length === 0;
   const [closedCategories, setClosedCategories] = useAtom(useClosedNavCategoriesAtom());
 
@@ -263,11 +261,11 @@ export function Home() {
                       <Avatar size="200" radii="400">
                         <Icon src={Icons.Plus} size="100" />
                       </Avatar>
-                        <Box as="span" grow="Yes">
-                          <Text as="span" size="Inherit" truncate>
-                            {'\u521b\u5efa\u623f\u95f4'}
-                          </Text>
-                        </Box>
+                      <Box as="span" grow="Yes">
+                        <Text as="span" size="Inherit" truncate>
+                          {'\u521b\u5efa\u623f\u95f4'}
+                        </Text>
+                      </Box>
                     </Box>
                   </NavItemContent>
                 </NavButton>
@@ -310,22 +308,6 @@ export function Home() {
                   </>
                 )}
               </UseStateProvider>
-              <NavItem variant="Background" radii="400" aria-selected={searchSelected}>
-                <NavLink to={getHomeSearchPath()}>
-                  <NavItemContent>
-                    <Box as="span" grow="Yes" alignItems="Center" gap="200">
-                      <Avatar size="200" radii="400">
-                        <Icon src={Icons.Search} size="100" filled={searchSelected} />
-                      </Avatar>
-                      <Box as="span" grow="Yes">
-                        <Text as="span" size="Inherit" truncate>
-                          {'\u6d88\u606f\u641c\u7d22'}
-                        </Text>
-                      </Box>
-                    </Box>
-                  </NavItemContent>
-                </NavLink>
-              </NavItem>
             </NavCategory>
             <NavCategory>
               <NavCategoryHeader>

@@ -28,9 +28,8 @@ import {
   NavEmptyLayout,
   NavItem,
   NavItemContent,
-  NavLink,
 } from '../../../components/nav';
-import { getDirectCreatePath, getDirectRoomPath, getDirectSearchPath } from '../../pathUtils';
+import { getDirectCreatePath, getDirectRoomPath } from '../../pathUtils';
 import { getCanonicalAliasOrRoomId } from '../../../utils/matrix';
 import { useSelectedRoom } from '../../../hooks/router/useSelectedRoom';
 import { VirtualTile } from '../../../components/virtualizer';
@@ -51,10 +50,7 @@ import {
   getRoomNotificationMode,
   useRoomsNotificationPreferencesContext,
 } from '../../../hooks/useRoomsNotificationPreferences';
-import {
-  useDirectCreateSelected,
-  useDirectSearchSelected,
-} from '../../../hooks/router/useDirectSelected';
+import { useDirectCreateSelected } from '../../../hooks/router/useDirectSelected';
 import { CompactClientNavButton } from '../CompactClientNavButton';
 import { isDesktopLikeScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
 import { desktopPageNavCollapsedAtom } from '../../../state/desktopPageNav';
@@ -84,7 +80,7 @@ const DirectMenu = forwardRef<HTMLDivElement, DirectMenuProps>(({ requestClose }
           radii="300"
           aria-disabled={!unread}
         >
-            <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
+          <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
             {'\u6807\u8bb0\u4e3a\u5df2\u8bfb'}
           </Text>
         </MenuItem>
@@ -205,7 +201,6 @@ export function Direct() {
   const navigate = useNavigate();
 
   const createDirectSelected = useDirectCreateSelected();
-  const searchSelected = useDirectSearchSelected();
 
   const selectedRoomId = useSelectedRoom();
   const noRoomToDisplay = directs.length === 0;
@@ -254,22 +249,6 @@ export function Direct() {
                     </Box>
                   </NavItemContent>
                 </NavButton>
-              </NavItem>
-              <NavItem variant="Background" radii="400" aria-selected={searchSelected}>
-                <NavLink to={getDirectSearchPath()}>
-                  <NavItemContent>
-                    <Box as="span" grow="Yes" alignItems="Center" gap="200">
-                      <Avatar size="200" radii="400">
-                        <Icon src={Icons.Search} size="100" filled={searchSelected} />
-                      </Avatar>
-                      <Box as="span" grow="Yes">
-                        <Text as="span" size="Inherit" truncate>
-                          {'\u6d88\u606f\u641c\u7d22'}
-                        </Text>
-                      </Box>
-                    </Box>
-                  </NavItemContent>
-                </NavLink>
               </NavItem>
             </NavCategory>
             <NavCategory>

@@ -38,13 +38,10 @@ import {
   NavItemContent,
   NavLink,
 } from '../../../components/nav';
-import { getSpaceLobbyPath, getSpaceRoomPath, getSpaceSearchPath } from '../../pathUtils';
+import { getSpaceLobbyPath, getSpaceRoomPath } from '../../pathUtils';
 import { getCanonicalAliasOrRoomId, isRoomAlias } from '../../../utils/matrix';
 import { useSelectedRoom } from '../../../hooks/router/useSelectedRoom';
-import {
-  useSpaceLobbySelected,
-  useSpaceSearchSelected,
-} from '../../../hooks/router/useSelectedSpace';
+import { useSpaceLobbySelected } from '../../../hooks/router/useSelectedSpace';
 import { useSpace } from '../../../hooks/useSpace';
 import { VirtualTile } from '../../../components/virtualizer';
 import { RoomNavCategoryButton, RoomNavItem } from '../../../features/room-nav';
@@ -297,11 +294,7 @@ function SpaceHeader() {
             {joinRules?.join_rule !== JoinRule.Public && <Icon src={Icons.Lock} size="50" />}
           </Box>
           <Box shrink="No">
-            <IconButton
-              aria-pressed={!!menuAnchor}
-              fill="None"
-              onClick={handleOpenMenu}
-            >
+            <IconButton aria-pressed={!!menuAnchor} fill="None" onClick={handleOpenMenu}>
               <Icon src={Icons.VerticalDots} size="200" />
             </IconButton>
           </Box>
@@ -368,10 +361,16 @@ export function SpaceTombstone({ roomId, replacementRoomId }: SpaceTombstoneProp
     >
       <Box direction="Column" grow="Yes" gap="100">
         <Text size="L400">{'\u7a7a\u95f4\u5df2\u5347\u7ea7'}</Text>
-        <Text size="T200">{'\u8be5\u7a7a\u95f4\u5df2\u88ab\u66ff\u6362\uff0c\u4e0d\u518d\u5904\u4e8e\u6d3b\u8dc3\u72b6\u6001\u3002'}</Text>
+        <Text size="T200">
+          {
+            '\u8be5\u7a7a\u95f4\u5df2\u88ab\u66ff\u6362\uff0c\u4e0d\u518d\u5904\u4e8e\u6d3b\u8dc3\u72b6\u6001\u3002'
+          }
+        </Text>
         {joinState.status === AsyncStatus.Error && (
           <Text className={BreakWord} style={{ color: color.Critical.Main }} size="T200">
-            {(joinState.error as any)?.message ?? '\u52a0\u5165\u65b0\u7a7a\u95f4\u5931\u8d25\u3002'}
+            {joinState.error instanceof Error
+              ? joinState.error.message
+              : '\u52a0\u5165\u65b0\u7a7a\u95f4\u5931\u8d25\u3002'}
           </Text>
         )}
       </Box>
@@ -418,7 +417,6 @@ export function Space() {
   const tombstoneEvent = useStateEvent(space, StateEvent.RoomTombstone);
   const selectedRoomId = useSelectedRoom();
   const lobbySelected = useSpaceLobbySelected(spaceIdOrAlias);
-  const searchSelected = useSpaceSearchSelected(spaceIdOrAlias);
   const callEmbed = useCallEmbed();
 
   const [closedCategories, setClosedCategories] = useAtom(useClosedNavCategoriesAtom());
@@ -495,22 +493,6 @@ export function Space() {
                 </NavItemContent>
               </NavLink>
             </NavItem>
-            <NavItem variant="Background" radii="400" aria-selected={searchSelected}>
-              <NavLink to={getSpaceSearchPath(getCanonicalAliasOrRoomId(mx, space.roomId))}>
-                <NavItemContent>
-                  <Box as="span" grow="Yes" alignItems="Center" gap="200">
-                    <Avatar size="200" radii="400">
-                      <Icon src={Icons.Search} size="100" filled={searchSelected} />
-                    </Avatar>
-                    <Box as="span" grow="Yes">
-                      <Text as="span" size="Inherit" truncate>
-                        {'\u6d88\u606f\u641c\u7d22'}
-                      </Text>
-                    </Box>
-                  </Box>
-                </NavItemContent>
-              </NavLink>
-            </NavItem>
           </NavCategory>
           <NavCategory
             style={{
@@ -532,9 +514,7 @@ export function Space() {
                     key={vItem.index}
                     ref={virtualizer.measureElement}
                   >
-                    <div
-                      style={{ paddingTop: vItem.index === 0 ? undefined : config.space.S400 }}
-                    >
+                    <div style={{ paddingTop: vItem.index === 0 ? undefined : config.space.S400 }}>
                       <NavCategoryHeader>
                         <RoomNavCategoryButton
                           data-category-id={categoryId}
@@ -550,21 +530,14 @@ export function Space() {
               }
 
               return (
-                <VirtualTile
-                  virtualItem={vItem}
-                  key={vItem.index}
-                  ref={virtualizer.measureElement}
-                >
+                <VirtualTile virtualItem={vItem} key={vItem.index} ref={virtualizer.measureElement}>
                   <RoomNavItem
                     room={room}
                     selected={selectedRoomId === roomId}
                     showAvatar
                     direct={mDirects.has(roomId)}
                     linkPath={getToLink(roomId)}
-                    notificationMode={getRoomNotificationMode(
-                      notificationPreferences,
-                      room.roomId
-                    )}
+                    notificationMode={getRoomNotificationMode(notificationPreferences, room.roomId)}
                   />
                 </VirtualTile>
               );

@@ -78,8 +78,8 @@ export function MessageSearch({
 
   const searchParamRooms = useMemo(() => {
     if (!searchPathSearchParams.rooms) return undefined;
-    const joinedRoomIds = decodeSearchParamValueArray(searchPathSearchParams.rooms).filter((roomId) =>
-      allRooms.includes(roomId)
+    const joinedRoomIds = decodeSearchParamValueArray(searchPathSearchParams.rooms).filter(
+      (roomId) => allRooms.includes(roomId)
     );
     return joinedRoomIds.length > 0 ? joinedRoomIds : undefined;
   }, [allRooms, searchPathSearchParams.rooms]);
@@ -122,28 +122,35 @@ export function MessageSearch({
     searchPathSearchParams,
     senders,
   ]);
+  const hasSearchCriteria =
+    !!msgSearchParams.term ||
+    !!(msgSearchParams.senders && msgSearchParams.senders.length > 0) ||
+    !!msgSearchParams.senderQuery ||
+    !!msgSearchParams.dateFrom ||
+    !!msgSearchParams.dateTo ||
+    !!msgSearchParams.onlyLinks ||
+    !!(msgSearchParams.msgTypes && msgSearchParams.msgTypes.length > 0);
 
   const searchMessages = useMessageSearch(msgSearchParams);
 
-  const { status, data, error, fetchNextPage, hasNextPage, isFetchingNextPage } =
-    useInfiniteQuery({
-      enabled: !!msgSearchParams.term,
-      queryKey: [
-        'search',
-        msgSearchParams.term,
-        msgSearchParams.order,
-        msgSearchParams.rooms,
-        msgSearchParams.senders,
-        msgSearchParams.senderQuery,
-        msgSearchParams.msgTypes,
-        msgSearchParams.dateFrom,
-        msgSearchParams.dateTo,
-        msgSearchParams.onlyLinks,
-      ],
-      queryFn: ({ pageParam }) => searchMessages(pageParam),
-      initialPageParam: '',
-      getNextPageParam: (lastPage) => lastPage.nextToken,
-    });
+  const { status, data, error, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
+    enabled: hasSearchCriteria,
+    queryKey: [
+      'search',
+      msgSearchParams.term,
+      msgSearchParams.order,
+      msgSearchParams.rooms,
+      msgSearchParams.senders,
+      msgSearchParams.senderQuery,
+      msgSearchParams.msgTypes,
+      msgSearchParams.dateFrom,
+      msgSearchParams.dateTo,
+      msgSearchParams.onlyLinks,
+    ],
+    queryFn: ({ pageParam }) => searchMessages(pageParam),
+    initialPageParam: '',
+    getNextPageParam: (lastPage) => lastPage.nextToken,
+  });
 
   const groups = useMemo(() => data?.pages.flatMap((result) => result.groups) ?? [], [data]);
   const highlights = useMemo(() => {
@@ -334,19 +341,21 @@ export function MessageSearch({
         />
       </Box>
 
-      {!msgSearchParams.term && status === 'pending' && (
+      {!hasSearchCriteria && status === 'pending' && (
         <PageHeroEmpty>
           <PageHeroSection>
             <PageHero
               icon={<Icon size="600" src={Icons.Message} />}
               title={'\u641c\u7d22\u6d88\u606f'}
-              subTitle={'\u4f7f\u7528\u5173\u952e\u8bcd\u5728\u5f53\u524d\u4f1a\u8bdd\u8303\u56f4\u5185\u67e5\u627e\u5386\u53f2\u6d88\u606f\u3002'}
+              subTitle={
+                '\u4f7f\u7528\u5173\u952e\u8bcd\u5728\u5f53\u524d\u4f1a\u8bdd\u8303\u56f4\u5185\u67e5\u627e\u5386\u53f2\u6d88\u606f\u3002'
+              }
             />
           </PageHeroSection>
         </PageHeroEmpty>
       )}
 
-      {msgSearchParams.term && groups.length === 0 && status === 'success' && (
+      {hasSearchCriteria && groups.length === 0 && status === 'success' && (
         <Box
           className={ContainerColor({ variant: 'Warning' })}
           style={{ padding: config.space.S300, borderRadius: config.radii.R400 }}
@@ -354,15 +363,19 @@ export function MessageSearch({
           gap="200"
         >
           <Icon size="200" src={Icons.Info} />
-          <Text>
-            {'\u672a\u627e\u5230\u4e0e '}
-            <b>{`"${msgSearchParams.term}"`}</b>
-            {' \u76f8\u5173\u7684\u7ed3\u679c'}
-          </Text>
+          {msgSearchParams.term ? (
+            <Text>
+              {'\u672a\u627e\u5230\u4e0e '}
+              <b>{`"${msgSearchParams.term}"`}</b>
+              {' \u76f8\u5173\u7684\u7ed3\u679c'}
+            </Text>
+          ) : (
+            <Text>{'\u5f53\u524d\u7b5b\u9009\u6761\u4ef6\u4e0b\u6682\u65e0\u8bb0\u5f55'}</Text>
+          )}
         </Box>
       )}
 
-      {((msgSearchParams.term && status === 'pending') ||
+      {((hasSearchCriteria && status === 'pending') ||
         (groups.length > 0 && vItems.length === 0)) && (
         <Box direction="Column" gap="100">
           {[...Array(8).keys()].map((key) => (
@@ -374,9 +387,15 @@ export function MessageSearch({
       {vItems.length > 0 && (
         <Box direction="Column" gap="300">
           <Box direction="Column" gap="200">
-            <Text size="H5">{`"${msgSearchParams.term}" \u7684\u641c\u7d22\u7ed3\u679c`}</Text>
+            <Text size="H5">
+              {msgSearchParams.term
+                ? `"${msgSearchParams.term}" \u7684\u641c\u7d22\u7ed3\u679c`
+                : '\u7b5b\u9009\u7ed3\u679c'}
+            </Text>
             <Text size="T300" priority="300">
-              {'\u70b9\u51fb\u7ed3\u679c\u5373\u53ef\u8df3\u8f6c\u5230\u539f\u6d88\u606f\u5e76\u9ad8\u4eae\u5b9a\u4f4d\u3002'}
+              {
+                '\u70b9\u51fb\u7ed3\u679c\u5373\u53ef\u8df3\u8f6c\u5230\u539f\u6d88\u606f\u5e76\u9ad8\u4eae\u5b9a\u4f4d\u3002'
+              }
             </Text>
             <Line size="300" variant="Surface" />
           </Box>
