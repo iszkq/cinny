@@ -10,7 +10,6 @@ import React, {
 import { useAtom, useAtomValue } from 'jotai';
 import { isKeyHotkey } from 'is-hotkey';
 import { EventType, IContent, MsgType, RelationType, Room } from 'matrix-js-sdk';
-import { IImageInfo } from '../../../types/matrix/common';
 import { ReactEditor } from 'slate-react';
 import { Descendant, Editor, Transforms } from 'slate';
 import {
@@ -60,12 +59,8 @@ import {
   getMentions,
 } from '../../components/editor';
 import { EmojiBoard, EmojiBoardTab } from '../../components/emoji-board';
-import { SelectFileOptions } from '../../utils/dom';
-import {
-  TUploadContent,
-  encryptFile,
-  getMxIdLocalPart,
-} from '../../utils/matrix';
+import { getAudioFileUrl, loadAudioElement, SelectFileOptions } from '../../utils/dom';
+import { getAudioInfo, TUploadContent, encryptFile, getMxIdLocalPart } from '../../utils/matrix';
 import { useTypingStatusUpdater } from '../../hooks/useTypingStatusUpdater';
 import { useFilePicker } from '../../hooks/useFilePicker';
 import { useFilePasteHandler } from '../../hooks/useFilePasteHandler';
@@ -101,6 +96,7 @@ import {
   getImageMsgContent,
   getVideoMsgContent,
 } from './msgContent';
+import { dispatchRoomFollowLatest } from '../../utils/roomViewEvents';
 import { getMemberDisplayName, getMentionContent, trimReplyFromBody } from '../../utils/room';
 import { CommandAutocomplete } from './CommandAutocomplete';
 import { Command, SHRUG, TABLEFLIP, UNFLIP, useCommands } from '../../hooks/useCommands';
@@ -119,8 +115,6 @@ import { useRoomCreatorsTag } from '../../hooks/useRoomCreatorsTag';
 import { usePowerLevelTags } from '../../hooks/usePowerLevelTags';
 import { useComposingCheck } from '../../hooks/useComposingCheck';
 import { useInterval } from '../../hooks/useInterval';
-import { getAudioFileUrl, loadAudioElement } from '../../utils/dom';
-import { getAudioInfo } from '../../utils/matrix';
 import { CreatePollModal } from './CreatePollModal';
 import {
   createPollMessageContent,
@@ -128,6 +122,7 @@ import {
   OUTGOING_POLL_START_EVENT_TYPE,
 } from '../../utils/polls';
 import { ScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
+import { IImageInfo } from '../../../types/matrix/common';
 
 interface RoomInputProps {
   editor: Editor;
@@ -371,7 +366,9 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const handleEditorChange = useCallback(() => {
       if (suppressEditorRealtimeUpdatesRef.current) return;
 
-      const hasContentChange = editor.operations.some((operation) => operation.type !== 'set_selection');
+      const hasContentChange = editor.operations.some(
+        (operation) => operation.type !== 'set_selection'
+      );
 
       if (hasContentChange) {
         if (sendTypingNotifications) {
@@ -432,20 +429,19 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
 
     const startVoiceRecording = useCallback(async () => {
       if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
-        setRecordingError('\u5f53\u524d\u6d4f\u89c8\u5668\u4e0d\u652f\u6301\u8bed\u97f3\u5f55\u5236\u3002');
+        setRecordingError(
+          '\u5f53\u524d\u6d4f\u89c8\u5668\u4e0d\u652f\u6301\u8bed\u97f3\u5f55\u5236\u3002'
+        );
         return;
       }
 
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         const mimeType =
-          [
-            'audio/webm;codecs=opus',
-            'audio/ogg;codecs=opus',
-            'audio/webm',
-            'audio/ogg',
-          ].find(
-            (type) => typeof MediaRecorder.isTypeSupported === 'function' && MediaRecorder.isTypeSupported(type)
+          ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/webm', 'audio/ogg'].find(
+            (type) =>
+              typeof MediaRecorder.isTypeSupported === 'function' &&
+              MediaRecorder.isTypeSupported(type)
           ) ?? 'audio/webm';
 
         const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
@@ -473,7 +469,9 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         setRecording(true);
       } catch (error) {
         setRecordingError(
-          error instanceof Error ? error.message : '\u65e0\u6cd5\u8bbf\u95ee\u9ea6\u514b\u98ce\u3002'
+          error instanceof Error
+            ? error.message
+            : '\u65e0\u6cd5\u8bbf\u95ee\u9ea6\u514b\u98ce\u3002'
         );
         stopRecordingTracks();
       }
@@ -539,8 +537,10 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
 
       setSendError(undefined);
       const sentUploads: UploadSuccess[] = [];
+      const sendUploadAtIndex = async (index: number): Promise<boolean> => {
+        const upload = uploads[index];
+        if (!upload) return true;
 
-      for (const upload of uploads) {
         const fileItem = selectedFiles.find((f) => f.file === upload.file);
         if (!fileItem) {
           if (sentUploads.length > 0) {
@@ -563,6 +563,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           }
 
           await mx.sendMessage(roomId, content as never);
+          dispatchRoomFollowLatest(roomId);
           sentUploads.push(upload);
         } catch (error) {
           if (sentUploads.length > 0) {
@@ -575,7 +576,11 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           );
           return false;
         }
-      }
+        return sendUploadAtIndex(index + 1);
+      };
+
+      const sentAll = await sendUploadAtIndex(0);
+      if (!sentAll) return false;
 
       handleRemoveUpload(sentUploads.map((item) => item.file));
       return true;
@@ -672,6 +677,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
 
       try {
         await mx.sendMessage(roomId, content as never);
+        dispatchRoomFollowLatest(roomId);
       } catch (error) {
         if (isEmptyEditor(editor)) {
           restoreEditorDraft(editor, draftSnapshot);
@@ -729,26 +735,29 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       moveCursor(editor, true);
     };
 
-    const closeEmojiBoard = useCallback((fromPointerTrigger = false) => {
-      const now = Date.now();
-      if (
-        fromPointerTrigger ||
-        now - emojiBoardTouchTriggerRef.current < EMOJI_BOARD_REOPEN_SUPPRESS_MS
-      ) {
-        const suppressUntil = now + EMOJI_BOARD_REOPEN_SUPPRESS_MS;
-        emojiBoardSuppressOpenUntilRef.current = suppressUntil;
-        emojiBoardSkipClickUntilRef.current = suppressUntil;
-      }
-      setEmojiBoardOpen(false);
-      if (!mobileOrTablet()) {
-        if (emojiBoardFocusTimerRef.current) {
-          window.clearTimeout(emojiBoardFocusTimerRef.current);
+    const closeEmojiBoard = useCallback(
+      (fromPointerTrigger = false) => {
+        const now = Date.now();
+        if (
+          fromPointerTrigger ||
+          now - emojiBoardTouchTriggerRef.current < EMOJI_BOARD_REOPEN_SUPPRESS_MS
+        ) {
+          const suppressUntil = now + EMOJI_BOARD_REOPEN_SUPPRESS_MS;
+          emojiBoardSuppressOpenUntilRef.current = suppressUntil;
+          emojiBoardSkipClickUntilRef.current = suppressUntil;
         }
-        emojiBoardFocusTimerRef.current = window.setTimeout(() => {
-          ReactEditor.focus(editor);
-        }, 0);
-      }
-    }, [editor]);
+        setEmojiBoardOpen(false);
+        if (!mobileOrTablet()) {
+          if (emojiBoardFocusTimerRef.current) {
+            window.clearTimeout(emojiBoardFocusTimerRef.current);
+          }
+          emojiBoardFocusTimerRef.current = window.setTimeout(() => {
+            ReactEditor.focus(editor);
+          }, 0);
+        }
+      },
+      [editor]
+    );
 
     const toggleEmojiBoardTab = useCallback(
       (nextTab: EmojiBoardTab) => {
@@ -794,6 +803,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           url: mxc,
           ...(info ? { info } : {}),
         });
+        dispatchRoomFollowLatest(roomId);
       } catch (error) {
         setSendError(getSendErrorMessage(error));
       }
@@ -839,6 +849,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
 
         try {
           await mx.sendEvent(roomId, OUTGOING_POLL_START_EVENT_TYPE, content as never);
+          dispatchRoomFollowLatest(roomId);
           setReplyDraft(undefined);
           sendTypingStatus(false);
           closePollDialog();
@@ -908,7 +919,9 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                   {`\u62d6\u653e\u6587\u4ef6\u5230\u201c${room?.name || '\u623f\u95f4'}\u201d`}
                 </Text>
                 <Text align="Center">
-                  {'\u62d6\u62fd\u6587\u4ef6\u5230\u8fd9\u91cc\uff0c\u6216\u70b9\u51fb\u9009\u62e9\u6587\u4ef6'}
+                  {
+                    '\u62d6\u62fd\u6587\u4ef6\u5230\u8fd9\u91cc\uff0c\u6216\u70b9\u51fb\u9009\u62e9\u6587\u4ef6'
+                  }
                 </Text>
               </Box>
             </Dialog>
@@ -1175,10 +1188,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                     aria-pressed={emojiBoardOpen && emojiBoardTab === EmojiBoardTab.Sticker}
                     onPointerDown={(evt) => {
                       emojiBoardTouchTriggerRef.current = Date.now();
-                      if (
-                        emojiBoardOpen &&
-                        emojiBoardTab === EmojiBoardTab.Sticker
-                      ) {
+                      if (emojiBoardOpen && emojiBoardTab === EmojiBoardTab.Sticker) {
                         evt.preventDefault();
                         evt.stopPropagation();
                         closeEmojiBoard(true);

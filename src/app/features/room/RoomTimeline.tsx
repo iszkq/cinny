@@ -86,6 +86,7 @@ import {
   getRoomReadMarkerEventId,
   getReactionContent,
   isMembershipChanged,
+  roomHaveUnread,
   reactionOrEditEvent,
 } from '../../utils/room';
 import { useSetting } from '../../state/hooks/settings';
@@ -100,6 +101,7 @@ import {
   useIntersectionObserver,
 } from '../../hooks/useIntersectionObserver';
 import { markAsRead, ROOM_MARKED_AS_READ } from '../../utils/notifications';
+import { ROOM_FOLLOW_LATEST } from '../../utils/roomViewEvents';
 import { useDebounce } from '../../hooks/useDebounce';
 import { getResizeObserverEntry, useResizeObserver } from '../../hooks/useResizeObserver';
 import * as css from './RoomTimeline.css';
@@ -562,6 +564,7 @@ const getEmptyTimeline = () => ({
 const getRoomUnreadInfo = (room: Room, scrollTo = false) => {
   const readUptoEventId = getRoomReadMarkerEventId(room, room.client.getUserId());
   if (!readUptoEventId) return undefined;
+  if (!roomHaveUnread(room.client, room)) return undefined;
   const evtTimeline = getEventTimeline(room, readUptoEventId);
   const latestTimeline = evtTimeline && getFirstLinkedTimeline(evtTimeline, Direction.Forward);
   return {
@@ -1082,6 +1085,10 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
   );
 
   const tryAutoMarkAsRead = useCallback(() => {
+    if (eventId && atLiveEndRef.current) {
+      navigateRoom(room.roomId, undefined, { replace: true });
+    }
+
     const readUptoEventId = readUptoEventIdRef.current;
     if (!readUptoEventId) {
       requestAnimationFrame(() => markAsRead(mx, room.roomId, privateReceipt));
@@ -1092,7 +1099,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     if (latestTimeline === room.getLiveTimeline()) {
       requestAnimationFrame(() => markAsRead(mx, room.roomId, privateReceipt));
     }
-  }, [mx, room, privateReceipt]);
+  }, [eventId, mx, navigateRoom, room, privateReceipt]);
 
   const debounceSetAtBottom = useDebounce(
     useCallback((entry: IntersectionObserverEntry) => {
@@ -1307,6 +1314,33 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     };
   }, [room.roomId, syncUnreadInfo]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+
+    const handleFollowLatest = (evt: Event) => {
+      const customEvent = evt as CustomEvent<{ roomId?: string }>;
+      if (customEvent.detail?.roomId !== room.roomId) return;
+
+      if (eventId) {
+        navigateRoom(room.roomId, undefined, { replace: true });
+      }
+
+      if (document.hasFocus()) {
+        requestAnimationFrame(() => markAsRead(mx, room.roomId, privateReceipt));
+      }
+
+      setUnreadInfo(undefined);
+      setTimeline(getInitialTimeline(room));
+      scrollToBottomRef.current.count += 1;
+      scrollToBottomRef.current.smooth = true;
+    };
+
+    window.addEventListener(ROOM_FOLLOW_LATEST, handleFollowLatest);
+    return () => {
+      window.removeEventListener(ROOM_FOLLOW_LATEST, handleFollowLatest);
+    };
+  }, [eventId, mx, navigateRoom, privateReceipt, room]);
+
   // scroll out of view msg editor in view.
   useEffect(() => {
     if (editId) {
@@ -1327,9 +1361,14 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     if (eventId) {
       navigateRoom(room.roomId, undefined, { replace: true });
     }
+    setUnreadInfo(undefined);
     setTimeline(getInitialTimeline(room));
     scrollToBottomRef.current.count += 1;
     scrollToBottomRef.current.smooth = false;
+
+    if (document.hasFocus()) {
+      requestAnimationFrame(() => markAsRead(mx, room.roomId, privateReceipt));
+    }
   };
 
   const handleJumpToUnread = () => {
@@ -1340,6 +1379,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
   };
 
   const handleMarkAsRead = () => {
+    setUnreadInfo(undefined);
     markAsRead(mx, room.roomId, privateReceipt);
   };
 
