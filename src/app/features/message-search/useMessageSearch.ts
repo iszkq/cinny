@@ -60,6 +60,7 @@ export type MessageSearchParams = {
   dateFrom?: string;
   dateTo?: string;
   onlyLinks?: boolean;
+  includeAllMessages?: boolean;
 };
 
 type LocalResultItem = {
@@ -293,6 +294,7 @@ const createCacheKey = (params: MessageSearchParams): string =>
     dateFrom: params.dateFrom ?? '',
     dateTo: params.dateTo ?? '',
     onlyLinks: params.onlyLinks ?? false,
+    includeAllMessages: params.includeAllMessages ?? false,
   });
 
 const resolveTargetRooms = (mx: MatrixClient, roomIds?: string[]): Room[] => {
@@ -392,8 +394,18 @@ const searchLocalRoomHistory = async (
   mx: MatrixClient,
   params: MessageSearchParams
 ): Promise<LocalSearchCache> => {
-  const { term, order, rooms, senders, senderQuery, msgTypes, dateFrom, dateTo, onlyLinks } =
-    params;
+  const {
+    term,
+    order,
+    rooms,
+    senders,
+    senderQuery,
+    msgTypes,
+    dateFrom,
+    dateTo,
+    onlyLinks,
+    includeAllMessages,
+  } = params;
   const searchKey = createCacheKey(params);
   const searchTerm = term?.trim();
   const hasLocalFilters =
@@ -404,7 +416,7 @@ const searchLocalRoomHistory = async (
     !!onlyLinks ||
     !!(msgTypes && msgTypes.length > 0);
 
-  if (!searchTerm && !hasLocalFilters) {
+  if (!searchTerm && !hasLocalFilters && !includeAllMessages) {
     return {
       key: searchKey,
       highlights: [],
@@ -499,8 +511,18 @@ const parseSearchResult = (result: ISearchResponse): SearchResult => {
 
 export const useMessageSearch = (params: MessageSearchParams) => {
   const mx = useMatrixClient();
-  const { term, order, rooms, senders, senderQuery, msgTypes, dateFrom, dateTo, onlyLinks } =
-    params;
+  const {
+    term,
+    order,
+    rooms,
+    senders,
+    senderQuery,
+    msgTypes,
+    dateFrom,
+    dateTo,
+    onlyLinks,
+    includeAllMessages,
+  } = params;
   const localCacheRef = useRef<LocalSearchCache>();
   const hasLocalFilters =
     !!(senders && senders.length > 0) ||
@@ -535,7 +557,7 @@ export const useMessageSearch = (params: MessageSearchParams) => {
   const searchMessages = useCallback(
     async (nextBatch?: string) => {
       if (!term) {
-        if (hasLocalFilters) {
+        if (hasLocalFilters || includeAllMessages) {
           return searchLocalFallback(nextBatch);
         }
         return emptyResult();
@@ -543,6 +565,7 @@ export const useMessageSearch = (params: MessageSearchParams) => {
 
       const limit = LOCAL_SEARCH_PAGE_LIMIT;
       const shouldUseLocalHistory =
+        !!includeAllMessages ||
         hasLocalFilters ||
         (!!rooms &&
           rooms.length > 0 &&
@@ -591,7 +614,7 @@ export const useMessageSearch = (params: MessageSearchParams) => {
         throw error;
       }
     },
-    [hasLocalFilters, mx, order, rooms, searchLocalFallback, senders, term]
+    [hasLocalFilters, includeAllMessages, mx, order, rooms, searchLocalFallback, senders, term]
   );
 
   return searchMessages;

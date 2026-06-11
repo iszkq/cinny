@@ -7,9 +7,9 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import dayjs from 'dayjs';
 import FocusTrap from 'focus-trap-react';
 import { useInfiniteQuery } from '@tanstack/react-query';
-import { useVirtualizer } from '@tanstack/react-virtual';
 import { Room, RoomMember, SearchOrderBy } from 'matrix-js-sdk';
 import {
   Avatar,
@@ -37,8 +37,8 @@ import {
   toRem,
 } from 'folds';
 import { SequenceCard } from '../../components/sequence-card';
+import { DatePicker } from '../../components/time-date';
 import { UserAvatar } from '../../components/user-avatar';
-import { VirtualTile } from '../../components/virtualizer';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 import { useRoomMembers } from '../../hooks/useRoomMembers';
@@ -58,8 +58,13 @@ type SearchCategory = 'all' | 'files' | 'media' | 'links';
 const DIALOG_STYLE = {
   width: 'calc(100vw - 32px)',
   maxWidth: toRem(1120),
-  height: 'min(86vh, 52rem)',
+  height: 'min(88vh, 56rem)',
   minWidth: 0,
+  overflow: 'hidden' as const,
+  borderRadius: config.radii.R500,
+  background:
+    'linear-gradient(180deg, rgba(255, 255, 255, 0.99) 0%, rgba(248, 250, 252, 0.98) 100%)',
+  boxShadow: '0 32px 80px rgba(15, 23, 42, 0.22)',
 };
 
 const RESULTS_SHELL_STYLE = {
@@ -67,18 +72,79 @@ const RESULTS_SHELL_STYLE = {
   borderRadius: config.radii.R500,
   border: '1px solid rgba(148, 163, 184, 0.22)',
   overflow: 'hidden' as const,
+  position: 'relative' as const,
+  isolation: 'isolate' as const,
+  background: 'rgba(255, 255, 255, 0.92)',
+  boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.78)',
 };
 
-const DATE_INPUT_STYLE = {
-  minHeight: toRem(38),
+const HEADER_STYLE = {
+  padding: `${config.space.S500} ${config.space.S400} ${config.space.S300}`,
+  position: 'relative' as const,
+  zIndex: 2,
+  background:
+    'linear-gradient(180deg, rgba(255, 255, 255, 0.99) 0%, rgba(255, 255, 255, 0.96) 100%)',
+};
+
+const TOOLBAR_STYLE = {
+  position: 'relative' as const,
+  zIndex: 1,
+  background: 'rgba(255, 255, 255, 0.96)',
+};
+
+const SOFT_CONTROL_STYLE = {
+  border: '1px solid rgba(203, 213, 225, 0.9)',
+  background: 'rgba(248, 250, 252, 0.96)',
+  boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.78)',
+};
+
+const PRIMARY_ACTION_STYLE = {
+  border: '1px solid rgba(37, 99, 235, 0.42)',
+  background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+  color: '#ffffff',
+  boxShadow: '0 10px 24px rgba(59, 130, 246, 0.24)',
+};
+
+const ACTIVE_PILL_STYLE = {
+  border: '1px solid rgba(59, 130, 246, 0.24)',
+  background: 'rgba(59, 130, 246, 0.12)',
+  color: '#1d4ed8',
+};
+
+const INACTIVE_PILL_STYLE = {
+  border: '1px solid rgba(203, 213, 225, 0.88)',
+  background: 'rgba(248, 250, 252, 0.96)',
+  color: 'inherit',
+};
+
+const DATE_TRIGGER_STYLE = {
+  minHeight: toRem(42),
   width: '100%',
   minWidth: 0,
   borderRadius: config.radii.R300,
-  border: '1px solid rgba(148, 163, 184, 0.34)',
-  background: 'rgba(255, 255, 255, 0.9)',
+  border: '1px solid rgba(203, 213, 225, 0.9)',
+  background: 'rgba(255, 255, 255, 0.94)',
   padding: `0 ${config.space.S200}`,
   color: 'inherit',
   boxSizing: 'border-box' as const,
+  cursor: 'pointer',
+  boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.8)',
+};
+
+const FILTER_PANEL_STYLE = {
+  background:
+    'linear-gradient(180deg, rgba(248, 250, 252, 0.84) 0%, rgba(255, 255, 255, 0.98) 100%)',
+};
+
+const DATE_PICKER_MIN_TS = dayjs('2000-01-01').startOf('day').valueOf();
+
+const formatDateLabel = (value?: string): string =>
+  value ? dayjs(value).format('YYYY / MM / DD') : '\u5e74 / \u6708 / \u65e5';
+
+const dateValueToTs = (value?: string): number => {
+  if (!value) return dayjs().startOf('day').valueOf();
+  const parsed = dayjs(value);
+  return parsed.isValid() ? parsed.startOf('day').valueOf() : dayjs().startOf('day').valueOf();
 };
 
 const CATEGORY_TABS: Array<{ id: SearchCategory; label: string }> = [
@@ -316,7 +382,7 @@ function MemberSelector({ room, selectedUserIds, onChange }: MemberSelectorProps
         fill="Soft"
         outlined
         onClick={handleOpenMenu}
-        style={{ width: '100%' }}
+        style={{ width: '100%', ...SOFT_CONTROL_STYLE }}
       >
         <Box grow="Yes" alignItems="Center" justifyContent="SpaceBetween" gap="200">
           <Text size="T300" truncate>
@@ -327,6 +393,109 @@ function MemberSelector({ room, selectedUserIds, onChange }: MemberSelectorProps
           <Icon size="100" src={Icons.ChevronBottom} />
         </Box>
       </Button>
+    </PopOut>
+  );
+}
+
+type DateFilterFieldProps = {
+  value: string;
+  onChange: (value: string) => void;
+};
+
+function DateFilterField({ value, onChange }: DateFilterFieldProps) {
+  const [pickerAnchor, setPickerAnchor] = useState<RectCords>();
+  const pickerOpen = !!pickerAnchor;
+  const selectedTs = useMemo(() => dateValueToTs(value), [value]);
+
+  const handleTogglePicker: MouseEventHandler<HTMLButtonElement> = (evt) => {
+    setPickerAnchor((current) => (current ? undefined : evt.currentTarget.getBoundingClientRect()));
+  };
+
+  const handleDateChange = (nextTs: number) => {
+    onChange(dayjs(nextTs).format('YYYY-MM-DD'));
+  };
+
+  const handleClear = () => {
+    onChange('');
+    setPickerAnchor(undefined);
+  };
+
+  return (
+    <PopOut
+      anchor={pickerAnchor}
+      align="End"
+      position="Bottom"
+      offset={8}
+      content={
+        <FocusTrap
+          focusTrapOptions={{
+            initialFocus: false,
+            onDeactivate: () => setPickerAnchor(undefined),
+            clickOutsideDeactivates: true,
+            isKeyForward: (evt: KeyboardEvent) =>
+              evt.key === 'ArrowDown' || evt.key === 'ArrowRight',
+            isKeyBackward: (evt: KeyboardEvent) => evt.key === 'ArrowUp' || evt.key === 'ArrowLeft',
+            escapeDeactivates: stopPropagation,
+          }}
+        >
+          <Menu
+            variant="Surface"
+            style={{
+              width: 'fit-content',
+              maxWidth: 'calc(100vw - 48px)',
+              padding: config.space.S200,
+            }}
+          >
+            <Box direction="Column" gap="200">
+              <Box alignItems="Center" justifyContent="SpaceBetween" gap="200">
+                <Text size="L400">
+                  {value ? formatDateLabel(value) : '\u9009\u62e9\u65e5\u671f'}
+                </Text>
+                <Box shrink="No" gap="100">
+                  {value && (
+                    <Chip
+                      variant="SurfaceVariant"
+                      radii="Pill"
+                      onClick={handleClear}
+                      style={INACTIVE_PILL_STYLE}
+                    >
+                      <Text size="T200">{'\u6e05\u7a7a'}</Text>
+                    </Chip>
+                  )}
+                  <Chip
+                    variant="SurfaceVariant"
+                    radii="Pill"
+                    onClick={() => setPickerAnchor(undefined)}
+                    style={INACTIVE_PILL_STYLE}
+                  >
+                    <Text size="T200">{'\u5173\u95ed'}</Text>
+                  </Chip>
+                </Box>
+              </Box>
+              <DatePicker
+                min={DATE_PICKER_MIN_TS}
+                max={Date.now()}
+                value={selectedTs}
+                onChange={handleDateChange}
+              />
+            </Box>
+          </Menu>
+        </FocusTrap>
+      }
+    >
+      <button
+        type="button"
+        onClick={handleTogglePicker}
+        aria-expanded={pickerOpen}
+        style={DATE_TRIGGER_STYLE}
+      >
+        <Box grow="Yes" alignItems="Center" justifyContent="SpaceBetween" gap="200">
+          <Text size="T300" priority={value ? '400' : '300'}>
+            {formatDateLabel(value)}
+          </Text>
+          <Icon size="100" src={pickerOpen ? Icons.ChevronTop : Icons.ChevronBottom} />
+        </Box>
+      </button>
     </PopOut>
   );
 }
@@ -365,7 +534,8 @@ export function RoomMessageSearchDialog({
   const categoryFilters = useMemo(() => getCategoryFilters(category), [category]);
   const hasFilterSelection =
     category !== 'all' || selectedSenders.length > 0 || !!dateFrom || !!dateTo;
-  const hasSearchCriteria = !!term || hasFilterSelection;
+  const browsingAllMessages = !term && !hasFilterSelection;
+  const hasSearchCriteria = browsingAllMessages || !!term || hasFilterSelection;
 
   const searchParams: MessageSearchParams = useMemo(
     () => ({
@@ -377,8 +547,10 @@ export function RoomMessageSearchDialog({
       dateFrom: dateFrom || undefined,
       dateTo: dateTo || undefined,
       onlyLinks: categoryFilters.onlyLinks,
+      includeAllMessages: browsingAllMessages,
     }),
     [
+      browsingAllMessages,
       categoryFilters.msgTypes,
       categoryFilters.onlyLinks,
       dateFrom,
@@ -437,34 +609,33 @@ export function RoomMessageSearchDialog({
     [groups]
   );
 
-  const virtualizer = useVirtualizer({
-    count: groups.length,
-    getScrollElement: () => scrollRef.current,
-    estimateSize: () => 40,
-    overscan: 1,
-  });
-  const vItems = virtualizer.getVirtualItems();
-
   useEffect(() => {
     if (!scrollRef.current) return;
     scrollRef.current.scrollTo({ top: 0 });
-    virtualizer.scrollToOffset(0);
-  }, [category, dateFrom, dateTo, order, selectedSendersKey, term, virtualizer]);
-
-  const lastVItem = vItems[vItems.length - 1];
-  const lastVItemIndex: number | undefined = lastVItem?.index;
-  const lastGroupIndex = groups.length - 1;
+  }, [category, dateFrom, dateTo, order, selectedSendersKey, term]);
 
   useEffect(() => {
-    if (
-      lastGroupIndex > -1 &&
-      lastGroupIndex === lastVItemIndex &&
-      !isFetchingNextPage &&
-      hasNextPage
-    ) {
-      fetchNextPage();
-    }
-  }, [fetchNextPage, hasNextPage, isFetchingNextPage, lastGroupIndex, lastVItemIndex]);
+    const scrollElement = scrollRef.current;
+    if (!scrollElement) return undefined;
+
+    const handleScroll = () => {
+      if (!hasNextPage || isFetchingNextPage) return;
+
+      const remainingHeight =
+        scrollElement.scrollHeight - scrollElement.scrollTop - scrollElement.clientHeight;
+
+      if (remainingHeight <= 240) {
+        fetchNextPage();
+      }
+    };
+
+    handleScroll();
+    scrollElement.addEventListener('scroll', handleScroll);
+
+    return () => {
+      scrollElement.removeEventListener('scroll', handleScroll);
+    };
+  }, [fetchNextPage, groups.length, hasNextPage, isFetchingNextPage]);
 
   const handleSearchSubmit: FormEventHandler<HTMLFormElement> = (evt) => {
     evt.preventDefault();
@@ -495,18 +666,32 @@ export function RoomMessageSearchDialog({
   };
 
   const searchStatusLabel = useMemo(() => {
-    if (!hasSearchCriteria) {
-      return '\u652f\u6301\u5173\u952e\u8bcd\u3001\u5206\u7c7b\u3001\u65f6\u95f4\u548c\u6210\u5458\u7b5b\u9009';
-    }
-
     if (status === 'pending') {
-      return '\u641c\u7d22\u4e2d...';
+      return browsingAllMessages
+        ? '\u52a0\u8f7d\u804a\u5929\u8bb0\u5f55...'
+        : '\u641c\u7d22\u4e2d...';
     }
 
-    return resultCount > 0
-      ? `\u627e\u5230 ${resultCount} \u6761\u8bb0\u5f55`
+    if (resultCount > 0) {
+      return browsingAllMessages
+        ? `\u5df2\u663e\u793a ${resultCount} \u6761\u8bb0\u5f55`
+        : `\u627e\u5230 ${resultCount} \u6761\u8bb0\u5f55`;
+    }
+
+    return browsingAllMessages
+      ? '\u5f53\u524d\u4f1a\u8bdd\u6682\u65e0\u53ef\u663e\u793a\u8bb0\u5f55'
       : '\u6682\u65e0\u5339\u914d\u8bb0\u5f55';
-  }, [hasSearchCriteria, resultCount, status]);
+  }, [browsingAllMessages, resultCount, status]);
+
+  const emptyStateLabel = useMemo(() => {
+    if (browsingAllMessages) {
+      return '\u5f53\u524d\u4f1a\u8bdd\u6682\u65e0\u53ef\u663e\u793a\u8bb0\u5f55';
+    }
+    if (term) {
+      return `\u672a\u627e\u5230\u4e0e "${term}" \u76f8\u5173\u7684\u8bb0\u5f55`;
+    }
+    return '\u5f53\u524d\u7b5b\u9009\u6761\u4ef6\u4e0b\u6682\u65e0\u8bb0\u5f55';
+  }, [browsingAllMessages, term]);
 
   return (
     <Overlay open backdrop={<OverlayBackdrop />}>
@@ -521,7 +706,7 @@ export function RoomMessageSearchDialog({
         >
           <Dialog variant="Surface" style={DIALOG_STYLE}>
             <Box direction="Column" style={{ height: '100%', minWidth: 0 }}>
-              <Box alignItems="Center" gap="300" style={{ padding: config.space.S400 }}>
+              <Box alignItems="Center" gap="300" style={HEADER_STYLE}>
                 <Box grow="Yes" direction="Column" gap="50" style={{ minWidth: 0 }}>
                   <Text size="H4" truncate>
                     {'\u804a\u5929\u8bb0\u5f55'}
@@ -536,6 +721,7 @@ export function RoomMessageSearchDialog({
                     variant="SurfaceVariant"
                     size="300"
                     radii="300"
+                    style={SOFT_CONTROL_STYLE}
                   >
                     <Icon src={Icons.Cross} />
                   </IconButton>
@@ -550,117 +736,118 @@ export function RoomMessageSearchDialog({
                 gap="300"
                 style={{ padding: config.space.S400, minHeight: 0 }}
               >
-                <Box as="form" onSubmit={handleSearchSubmit}>
-                  <Input
-                    value={searchInput}
-                    onChange={handleSearchInputChange}
-                    size="500"
-                    variant="Background"
-                    outlined
-                    style={{ minWidth: 0 }}
-                    placeholder={'\u641c\u7d22\u5f53\u524d\u4f1a\u8bdd\u8bb0\u5f55'}
-                    before={
-                      status === 'pending' && hasSearchCriteria ? (
-                        <Spinner variant="Secondary" size="200" />
-                      ) : (
-                        <Icon size="200" src={Icons.Search} />
-                      )
-                    }
-                    after={
-                      <Box gap="100">
-                        {(searchInput || term) && (
-                          <Chip
-                            type="button"
-                            variant="Secondary"
-                            size="400"
-                            radii="Pill"
-                            outlined
-                            after={<Icon size="50" src={Icons.Cross} />}
-                            onClick={handleClearSearch}
-                          >
+                <Box direction="Column" gap="250" style={TOOLBAR_STYLE}>
+                  <Box
+                    as="form"
+                    onSubmit={handleSearchSubmit}
+                    direction={compact ? 'Column' : 'Row'}
+                    gap="150"
+                    alignItems={compact ? undefined : 'Center'}
+                    style={{
+                      width: '100%',
+                      maxWidth: compact ? '100%' : toRem(620),
+                      minWidth: 0,
+                    }}
+                  >
+                    <Box grow="Yes" style={{ minWidth: 0, width: '100%' }}>
+                      <Input
+                        value={searchInput}
+                        onChange={handleSearchInputChange}
+                        size="500"
+                        variant="Background"
+                        outlined
+                        style={{ minWidth: 0, ...SOFT_CONTROL_STYLE }}
+                        placeholder={'\u641c\u7d22\u5f53\u524d\u4f1a\u8bdd\u8bb0\u5f55'}
+                        before={
+                          status === 'pending' && hasSearchCriteria ? (
+                            <Spinner variant="Secondary" size="200" />
+                          ) : (
+                            <Icon size="200" src={Icons.Search} />
+                          )
+                        }
+                      />
+                    </Box>
+                    <Box shrink="No" gap="100" wrap="Wrap">
+                      {(searchInput || term) && (
+                        <Button
+                          type="button"
+                          size="400"
+                          variant="Secondary"
+                          radii="Pill"
+                          outlined
+                          onClick={handleClearSearch}
+                          style={SOFT_CONTROL_STYLE}
+                        >
+                          <Box alignItems="Center" gap="100">
+                            <Icon size="50" src={Icons.Cross} />
                             <Text size="B300">{'\u6e05\u7a7a'}</Text>
-                          </Chip>
-                        )}
-                        <Chip type="submit" variant="Primary" size="400" radii="Pill" outlined>
-                          <Text size="B300">{'\u641c\u7d22'}</Text>
-                        </Chip>
-                      </Box>
-                    }
-                  />
-                </Box>
-
-                <Box gap="200" wrap="Wrap" alignItems="Center">
-                  {CATEGORY_TABS.map((tab) => {
-                    const active = category === tab.id;
-
-                    return (
-                      <button
-                        key={tab.id}
-                        type="button"
-                        onClick={() => setCategory(tab.id)}
-                        style={{
-                          border: 'none',
-                          borderBottom: `${toRem(2)} solid ${active ? '#3b82f6' : 'transparent'}`,
-                          background: 'transparent',
-                          color: active ? '#3b82f6' : 'inherit',
-                          padding: `${config.space.S100} ${config.space.S200}`,
-                          cursor: 'pointer',
-                          font: 'inherit',
-                        }}
+                          </Box>
+                        </Button>
+                      )}
+                      <Button
+                        type="submit"
+                        size="400"
+                        variant="Primary"
+                        radii="Pill"
+                        style={PRIMARY_ACTION_STYLE}
                       >
-                        <Text size="L400">{tab.label}</Text>
-                      </button>
-                    );
-                  })}
+                        <Text size="B300">{'\u641c\u7d22'}</Text>
+                      </Button>
+                    </Box>
+                  </Box>
 
-                  <Box grow="Yes" />
-                  <Text size="T300" priority="300">
-                    {searchStatusLabel}
-                  </Text>
+                  <Box gap="200" wrap="Wrap" alignItems="Center">
+                    {CATEGORY_TABS.map((tab) => {
+                      const active = category === tab.id;
+
+                      return (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          onClick={() => setCategory(tab.id)}
+                          style={{
+                            border: 'none',
+                            borderBottom: `${toRem(2)} solid ${active ? '#3b82f6' : 'transparent'}`,
+                            background: active ? 'rgba(59, 130, 246, 0.10)' : 'transparent',
+                            color: active ? '#2563eb' : 'inherit',
+                            padding: `${config.space.S100} ${config.space.S200}`,
+                            borderRadius: config.radii.R300,
+                            cursor: 'pointer',
+                            font: 'inherit',
+                            fontWeight: active ? 600 : 500,
+                          }}
+                        >
+                          <Text size="L400">{tab.label}</Text>
+                        </button>
+                      );
+                    })}
+
+                    <Box grow="Yes" />
+                    <Text size="T300" priority="300">
+                      {searchStatusLabel}
+                    </Text>
+                  </Box>
                 </Box>
 
                 <Box grow="Yes" direction={compact ? 'Column' : 'Row'} style={RESULTS_SHELL_STYLE}>
                   <Box grow="Yes" style={{ minHeight: 0, minWidth: 0 }}>
                     <Scroll ref={scrollRef} size="300" hideTrack visibility="Hover">
-                      <Box direction="Column" gap="300" style={{ padding: config.space.S300 }}>
-                        {!hasSearchCriteria && (
-                          <Box
-                            className={ContainerColor({ variant: 'SurfaceVariant' })}
-                            direction="Column"
-                            alignItems="Center"
-                            justifyContent="Center"
-                            gap="200"
-                            style={{
-                              minHeight: compact ? toRem(260) : toRem(420),
-                              borderRadius: config.radii.R400,
-                              padding: config.space.S500,
-                            }}
-                          >
-                            <Icon size="600" src={Icons.Search} />
-                            <Text size="H4" align="Center">
-                              {'\u641c\u7d22\u5f53\u524d\u804a\u5929\u8bb0\u5f55'}
-                            </Text>
-                            <Text size="T300" priority="300" align="Center">
-                              {
-                                '\u53ef\u4ee5\u76f4\u63a5\u6309\u5173\u952e\u8bcd\u641c\u7d22\uff0c\u4e5f\u53ef\u4ee5\u901a\u8fc7\u5206\u7c7b\u3001\u6210\u5458\u548c\u65f6\u95f4\u7b5b\u9009\u5386\u53f2\u6d88\u606f\u3002'
-                              }
-                            </Text>
+                      <Box
+                        direction="Column"
+                        gap="300"
+                        style={{ padding: config.space.S300, paddingTop: config.space.S400 }}
+                      >
+                        {hasSearchCriteria && status === 'pending' && groups.length === 0 && (
+                          <Box direction="Column" gap="100">
+                            {[...Array(6).keys()].map((key) => (
+                              <SequenceCard
+                                variant="SurfaceVariant"
+                                key={key}
+                                style={{ minHeight: toRem(84) }}
+                              />
+                            ))}
                           </Box>
                         )}
-
-                        {hasSearchCriteria &&
-                          ((status === 'pending' && groups.length === 0) ||
-                            (groups.length > 0 && vItems.length === 0)) && (
-                            <Box direction="Column" gap="100">
-                              {[...Array(6).keys()].map((key) => (
-                                <SequenceCard
-                                  variant="SurfaceVariant"
-                                  key={key}
-                                  style={{ minHeight: toRem(84) }}
-                                />
-                              ))}
-                            </Box>
-                          )}
 
                         {hasSearchCriteria && status === 'success' && groups.length === 0 && (
                           <Box
@@ -673,53 +860,31 @@ export function RoomMessageSearchDialog({
                             gap="200"
                           >
                             <Icon size="200" src={Icons.Info} />
-                            <Text>
-                              {term
-                                ? `\u672a\u627e\u5230\u4e0e "${term}" \u76f8\u5173\u7684\u8bb0\u5f55`
-                                : '\u5f53\u524d\u7b5b\u9009\u6761\u4ef6\u4e0b\u6682\u65e0\u8bb0\u5f55'}
-                            </Text>
+                            <Text>{emptyStateLabel}</Text>
                           </Box>
                         )}
 
-                        {vItems.length > 0 && (
-                          <div
-                            style={{
-                              position: 'relative',
-                              height: virtualizer.getTotalSize(),
-                            }}
-                          >
-                            {vItems.map((vItem) => {
-                              const group = groups[vItem.index];
-                              if (!group) return null;
+                        {groups.map((group) => {
+                          const groupRoom =
+                            group.roomId === room.roomId ? room : mx.getRoom(group.roomId);
+                          if (!groupRoom) return null;
 
-                              const groupRoom =
-                                group.roomId === room.roomId ? room : mx.getRoom(group.roomId);
-                              if (!groupRoom) return null;
-
-                              return (
-                                <VirtualTile
-                                  virtualItem={vItem}
-                                  key={`${group.roomId}-${vItem.index}`}
-                                  ref={virtualizer.measureElement}
-                                  style={{ paddingBottom: config.space.S300 }}
-                                >
-                                  <SearchResultGroup
-                                    room={groupRoom}
-                                    highlights={highlights}
-                                    items={group.items}
-                                    mediaAutoLoad={mediaAutoLoad}
-                                    urlPreview={urlPreview}
-                                    onOpen={handleOpenResult}
-                                    legacyUsernameColor={legacyUsernameColor || direct}
-                                    hour24Clock={hour24Clock}
-                                    dateFormatString={dateFormatString}
-                                    hideRoomHeader
-                                  />
-                                </VirtualTile>
-                              );
-                            })}
-                          </div>
-                        )}
+                          return (
+                            <SearchResultGroup
+                              key={group.roomId}
+                              room={groupRoom}
+                              highlights={highlights}
+                              items={group.items}
+                              mediaAutoLoad={mediaAutoLoad}
+                              urlPreview={urlPreview}
+                              onOpen={handleOpenResult}
+                              legacyUsernameColor={legacyUsernameColor || direct}
+                              hour24Clock={hour24Clock}
+                              dateFormatString={dateFormatString}
+                              hideRoomHeader
+                            />
+                          );
+                        })}
 
                         {isFetchingNextPage && (
                           <Box justifyContent="Center" alignItems="Center">
@@ -759,6 +924,7 @@ export function RoomMessageSearchDialog({
                       minWidth: compact ? 0 : toRem(288),
                       maxWidth: compact ? '100%' : toRem(288),
                       minHeight: 0,
+                      ...FILTER_PANEL_STYLE,
                     }}
                   >
                     <Scroll size="300" hideTrack visibility="Hover">
@@ -783,6 +949,11 @@ export function RoomMessageSearchDialog({
                               outlined={order === SearchOrderBy.Rank}
                               aria-pressed={order !== SearchOrderBy.Rank}
                               onClick={() => setOrder(SearchOrderBy.Recent)}
+                              style={
+                                order !== SearchOrderBy.Rank
+                                  ? ACTIVE_PILL_STYLE
+                                  : INACTIVE_PILL_STYLE
+                              }
                             >
                               <Text size="T200">{'\u6700\u65b0'}</Text>
                             </Chip>
@@ -792,6 +963,11 @@ export function RoomMessageSearchDialog({
                               outlined={order !== SearchOrderBy.Rank}
                               aria-pressed={order === SearchOrderBy.Rank}
                               onClick={() => setOrder(SearchOrderBy.Rank)}
+                              style={
+                                order === SearchOrderBy.Rank
+                                  ? ACTIVE_PILL_STYLE
+                                  : INACTIVE_PILL_STYLE
+                              }
                             >
                               <Text size="T200">{'\u76f8\u5173\u5ea6'}</Text>
                             </Chip>
@@ -837,18 +1013,8 @@ export function RoomMessageSearchDialog({
                             {'\u65e5\u671f'}
                           </Text>
                           <Box direction="Column" gap="100">
-                            <input
-                              type="date"
-                              value={dateFrom}
-                              onChange={(evt) => setDateFrom(evt.currentTarget.value)}
-                              style={DATE_INPUT_STYLE}
-                            />
-                            <input
-                              type="date"
-                              value={dateTo}
-                              onChange={(evt) => setDateTo(evt.currentTarget.value)}
-                              style={DATE_INPUT_STYLE}
-                            />
+                            <DateFilterField value={dateFrom} onChange={setDateFrom} />
+                            <DateFilterField value={dateTo} onChange={setDateTo} />
                           </Box>
                         </Box>
 
@@ -860,6 +1026,7 @@ export function RoomMessageSearchDialog({
                               fill="Soft"
                               outlined
                               onClick={handleResetFilters}
+                              style={SOFT_CONTROL_STYLE}
                             >
                               <Text size="B300">{'\u6e05\u7a7a\u7b5b\u9009'}</Text>
                             </Button>
