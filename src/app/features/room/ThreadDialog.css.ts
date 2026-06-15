@@ -1,28 +1,79 @@
 import { style } from '@vanilla-extract/css';
 import { DefaultReset, color, config, toRem } from 'folds';
 
+const dialogViewportHeight = 'var(--thread-dialog-viewport-height, 100vh)';
+const mobileDialogInset = toRem(12);
+const mobileBreakpoint = 'screen and (max-width: 600px)';
+
+export const OverlayCenter = style({
+  height: dialogViewportHeight,
+  minHeight: 0,
+  padding: config.space.S300,
+  overflow: 'hidden',
+
+  '@media': {
+    [mobileBreakpoint]: {
+      alignItems: 'Start',
+      padding: mobileDialogInset,
+      paddingTop: `calc(${mobileDialogInset} + env(safe-area-inset-top, 0px))`,
+      paddingBottom: `calc(${mobileDialogInset} + env(safe-area-inset-bottom, 0px))`,
+    },
+  },
+});
+
 export const Dialog = style({
   width: 'calc(100vw - 32px)',
   maxWidth: toRem(760),
-  maxHeight: 'calc(100vh - 48px)',
+  maxHeight: `calc(${dialogViewportHeight} - 48px)`,
   overflow: 'hidden',
+
+  '@media': {
+    [mobileBreakpoint]: {
+      width: `calc(100vw - (${mobileDialogInset} * 2))`,
+      maxWidth: 'none',
+      maxHeight: `calc(${dialogViewportHeight} - (${mobileDialogInset} * 2) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px))`,
+      borderRadius: config.radii.R400,
+    },
+  },
 });
 
 export const Shell = style({
-  maxHeight: 'calc(100vh - 48px)',
+  maxHeight: `calc(${dialogViewportHeight} - 48px)`,
   minHeight: 0,
+
+  '@media': {
+    [mobileBreakpoint]: {
+      maxHeight: 'inherit',
+    },
+  },
 });
 
 export const Header = style({
+  flexShrink: 0,
   padding: config.space.S400,
   paddingBottom: config.space.S300,
+
+  '@media': {
+    [mobileBreakpoint]: {
+      padding: `${config.space.S300} ${config.space.S300} ${config.space.S200}`,
+    },
+  },
 });
 
 export const RootPanel = style({
+  flexShrink: 0,
   padding: config.space.S400,
   backgroundColor: color.SurfaceVariant.Container,
   borderTop: `${config.borderWidth.B300} solid ${color.SurfaceVariant.ContainerLine}`,
   borderBottom: `${config.borderWidth.B300} solid ${color.SurfaceVariant.ContainerLine}`,
+
+  '@media': {
+    [mobileBreakpoint]: {
+      maxHeight: toRem(220),
+      padding: config.space.S300,
+      overflowY: 'auto',
+    },
+  },
 });
 
 export const RootMessage = style({
@@ -34,6 +85,18 @@ export const RootMessage = style({
 export const Content = style({
   padding: config.space.S400,
   paddingRight: config.space.S300,
+
+  '@media': {
+    [mobileBreakpoint]: {
+      padding: config.space.S300,
+      paddingRight: config.space.S200,
+    },
+  },
+});
+
+export const ScrollArea = style({
+  minHeight: 0,
+  overflow: 'hidden',
 });
 
 export const MessageList = style({
@@ -47,6 +110,12 @@ export const MessageCard = style({
   borderRadius: config.radii.R400,
   border: `${config.borderWidth.B300} solid ${color.Surface.ContainerLine}`,
   backgroundColor: color.Surface.Container,
+
+  '@media': {
+    [mobileBreakpoint]: {
+      padding: config.space.S200,
+    },
+  },
 });
 
 export const MessageHeader = style({
@@ -80,8 +149,15 @@ export const Footer = style({
 });
 
 export const ComposerFooter = style({
+  flexShrink: 0,
   padding: config.space.S300,
   backgroundColor: color.Surface.Container,
+
+  '@media': {
+    [mobileBreakpoint]: {
+      padding: config.space.S200,
+    },
+  },
 });
 
 export const ComposerForm = style({
@@ -94,7 +170,15 @@ export const ComposerTextArea = style({
   minHeight: toRem(52),
   maxHeight: toRem(132),
   flexGrow: 1,
+  fontSize: toRem(16),
   lineHeight: 1.45,
+
+  '@media': {
+    [mobileBreakpoint]: {
+      minHeight: toRem(44),
+      maxHeight: toRem(96),
+    },
+  },
 });
 
 export const ComposerSendButton = style({
@@ -107,6 +191,14 @@ export const ComposerSendButton = style({
 
 export const ComposerError = style({
   color: color.Critical.Main,
+});
+
+export const ComposerHint = style({
+  '@media': {
+    [mobileBreakpoint]: {
+      display: 'none',
+    },
+  },
 });
 
 export const IconBadge = style([

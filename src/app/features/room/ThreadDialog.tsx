@@ -79,6 +79,11 @@ import * as css from './ThreadDialog.css';
 
 const THREAD_PAGE_LIMIT = 50;
 const THREAD_MAX_PAGES = 5;
+const THREAD_DIALOG_VIEWPORT_HEIGHT_VAR = '--thread-dialog-viewport-height';
+
+type ThreadDialogViewportStyle = React.CSSProperties & {
+  [THREAD_DIALOG_VIEWPORT_HEIGHT_VAR]?: string;
+};
 
 type ThreadRelationsResult = {
   originalEvent?: MatrixEvent | null;
@@ -121,6 +126,52 @@ const getLocalThreadEvents = (timelineSet: EventTimelineSet, rootEventId: string
   timelineSet.relations
     .getAllChildEventsForEvent(rootEventId)
     .filter((mEvent) => getThreadRootId(mEvent) === rootEventId && !reactionOrEditEvent(mEvent));
+
+const getThreadDialogViewportHeight = (): number | undefined => {
+  if (typeof window === 'undefined') return undefined;
+
+  return Math.round(window.visualViewport?.height ?? window.innerHeight);
+};
+
+const useThreadDialogViewportStyle = (): ThreadDialogViewportStyle | undefined => {
+  const [viewportHeight, setViewportHeight] = useState<number>();
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+
+    let animationFrame = 0;
+    const updateViewportHeight = () => {
+      cancelAnimationFrame(animationFrame);
+      animationFrame = requestAnimationFrame(() => {
+        setViewportHeight(getThreadDialogViewportHeight());
+      });
+    };
+
+    updateViewportHeight();
+
+    const viewport = window.visualViewport;
+    viewport?.addEventListener('resize', updateViewportHeight);
+    viewport?.addEventListener('scroll', updateViewportHeight);
+    window.addEventListener('resize', updateViewportHeight);
+
+    return () => {
+      cancelAnimationFrame(animationFrame);
+      viewport?.removeEventListener('resize', updateViewportHeight);
+      viewport?.removeEventListener('scroll', updateViewportHeight);
+      window.removeEventListener('resize', updateViewportHeight);
+    };
+  }, []);
+
+  return useMemo(
+    () =>
+      viewportHeight
+        ? {
+            [THREAD_DIALOG_VIEWPORT_HEIGHT_VAR]: `${viewportHeight}px`,
+          }
+        : undefined,
+    [viewportHeight]
+  );
+};
 
 const mergeThreadEvents = (rootEventId: string, events: MatrixEvent[]): MatrixEvent[] => {
   const eventMap = new Map<string, MatrixEvent>();
@@ -557,7 +608,7 @@ function ThreadReplyComposer({ room, rootEventId, rootEvent, onSent }: ThreadRep
           )}
         </Button>
       </Box>
-      <Text size="T200" priority="300">
+      <Text className={css.ComposerHint} size="T200" priority="300">
         Enter 发送，Shift + Enter 换行
       </Text>
     </Box>
@@ -582,6 +633,7 @@ export function ThreadDialog({
 }: ThreadDialogProps) {
   const mx = useMatrixClient();
   const queryClient = useQueryClient();
+  const viewportStyle = useThreadDialogViewportStyle();
   const [, setTimelineRevision] = useState(0);
   const getLocalRootEvent = useCallback(
     () => timelineSet.findEventById(rootEventId),
@@ -674,7 +726,7 @@ export function ThreadDialog({
 
   return (
     <Overlay open backdrop={<OverlayBackdrop />}>
-      <OverlayCenter>
+      <OverlayCenter className={css.OverlayCenter} style={viewportStyle}>
         <Dialog className={css.Dialog} variant="Surface">
           <Box className={css.Shell} direction="Column">
             <Header className={css.Header} variant="Surface" size="600">
@@ -731,7 +783,7 @@ export function ThreadDialog({
               </Box>
             </Box>
 
-            <Box grow="Yes" style={{ minHeight: 0 }}>
+            <Box className={css.ScrollArea} grow="Yes">
               <Scroll size="300" hideTrack visibility="Hover">
                 <Box className={css.Content} direction="Column" gap="300">
                   {threadQuery.isLoading && (
