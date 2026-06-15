@@ -43,7 +43,7 @@ import { getCanonicalAliasOrRoomId, isRoomAlias } from '../../../utils/matrix';
 import { useSelectedRoom } from '../../../hooks/router/useSelectedRoom';
 import { useSpaceLobbySelected } from '../../../hooks/router/useSelectedSpace';
 import { useSpace } from '../../../hooks/useSpace';
-import { VirtualTile } from '../../../components/virtualizer';
+import { useVirtualizerScrollMargin, VirtualTile } from '../../../components/virtualizer';
 import {
   RoomNavCategoryButton,
   RoomNavCreateCategoryItem,
@@ -414,6 +414,7 @@ export function Space() {
   useNavToActivePathMapper(space.roomId);
   const spaceIdOrAlias = getCanonicalAliasOrRoomId(mx, space.roomId);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const { scrollMargin, virtualListRef } = useVirtualizerScrollMargin(scrollRef);
   const mDirects = useAtomValue(mDirectAtom);
   const roomToUnread = useAtomValue(roomToUnreadAtom);
   const categorizedRoomIds = useRoomNavCategorizedRoomIds(space.roomId);
@@ -498,6 +499,7 @@ export function Space() {
     getScrollElement: () => scrollRef.current,
     estimateSize: () => 0,
     overscan: 10,
+    scrollMargin,
   });
 
   const handleCategoryClick = useCategoryHandler(setClosedCategories, (categoryId) =>
@@ -555,6 +557,7 @@ export function Space() {
             direct={(roomId) => mDirects.has(roomId)}
           />
           <NavCategory
+            ref={virtualListRef}
             style={{
               height: virtualizer.getTotalSize(),
               position: 'relative',
@@ -573,6 +576,7 @@ export function Space() {
                     virtualItem={vItem}
                     key={vItem.index}
                     ref={virtualizer.measureElement}
+                    style={{ top: vItem.start - scrollMargin }}
                   >
                     <div style={{ paddingTop: vItem.index === 0 ? undefined : config.space.S400 }}>
                       <NavCategoryHeader>
@@ -590,7 +594,12 @@ export function Space() {
               }
 
               return (
-                <VirtualTile virtualItem={vItem} key={vItem.index} ref={virtualizer.measureElement}>
+                <VirtualTile
+                  virtualItem={vItem}
+                  key={vItem.index}
+                  ref={virtualizer.measureElement}
+                  style={{ top: vItem.start - scrollMargin }}
+                >
                   <RoomNavItem
                     room={room}
                     selected={selectedRoomId === roomId}

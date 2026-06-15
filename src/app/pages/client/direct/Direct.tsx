@@ -39,7 +39,7 @@ import {
 import { getDirectCreatePath, getDirectRoomPath } from '../../pathUtils';
 import { getCanonicalAliasOrRoomId } from '../../../utils/matrix';
 import { useSelectedRoom } from '../../../hooks/router/useSelectedRoom';
-import { VirtualTile } from '../../../components/virtualizer';
+import { useVirtualizerScrollMargin, VirtualTile } from '../../../components/virtualizer';
 import {
   RoomNavCategoryButton,
   RoomNavCreateCategoryItem,
@@ -209,6 +209,7 @@ export function Direct() {
   const mx = useMatrixClient();
   useNavToActivePathMapper('direct');
   const scrollRef = useRef<HTMLDivElement>(null);
+  const { scrollMargin, virtualListRef } = useVirtualizerScrollMargin(scrollRef);
   const directs = useDirectRooms();
   const notificationPreferences = useRoomsNotificationPreferencesContext();
   const roomToUnread = useAtomValue(roomToUnreadAtom);
@@ -249,6 +250,7 @@ export function Direct() {
     getScrollElement: () => scrollRef.current,
     estimateSize: () => 38,
     overscan: 10,
+    scrollMargin,
   });
 
   const handleCategoryClick = useCategoryHandler(setClosedCategories, (categoryId) =>
@@ -306,6 +308,7 @@ export function Direct() {
                   </RoomNavCategoryButton>
                 </NavCategoryHeader>
                 <div
+                  ref={virtualListRef}
                   style={{
                     position: 'relative',
                     height: virtualizer.getTotalSize(),
@@ -322,6 +325,7 @@ export function Direct() {
                         virtualItem={vItem}
                         key={vItem.index}
                         ref={virtualizer.measureElement}
+                        style={{ top: vItem.start - scrollMargin }}
                       >
                         <RoomNavItem
                           room={room}

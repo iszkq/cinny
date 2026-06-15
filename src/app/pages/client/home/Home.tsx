@@ -47,7 +47,7 @@ import { useSelectedRoom } from '../../../hooks/router/useSelectedRoom';
 import { useHomeCreateSelected } from '../../../hooks/router/useHomeSelected';
 import { useHomeRooms } from './useHomeRooms';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
-import { VirtualTile } from '../../../components/virtualizer';
+import { useVirtualizerScrollMargin, VirtualTile } from '../../../components/virtualizer';
 import {
   RoomNavCategoryButton,
   RoomNavCreateCategoryItem,
@@ -230,6 +230,7 @@ export function Home() {
   const mx = useMatrixClient();
   useNavToActivePathMapper('home');
   const scrollRef = useRef<HTMLDivElement>(null);
+  const { scrollMargin, virtualListRef } = useVirtualizerScrollMargin(scrollRef);
   const rooms = useHomeRooms();
   const notificationPreferences = useRoomsNotificationPreferencesContext();
   const roomToUnread = useAtomValue(roomToUnreadAtom);
@@ -269,6 +270,7 @@ export function Home() {
     getScrollElement: () => scrollRef.current,
     estimateSize: () => 38,
     overscan: 10,
+    scrollMargin,
   });
 
   const handleCategoryClick = useCategoryHandler(setClosedCategories, (categoryId) =>
@@ -363,6 +365,7 @@ export function Home() {
                   </RoomNavCategoryButton>
                 </NavCategoryHeader>
                 <div
+                  ref={virtualListRef}
                   style={{
                     position: 'relative',
                     height: virtualizer.getTotalSize(),
@@ -379,6 +382,7 @@ export function Home() {
                         virtualItem={vItem}
                         key={vItem.index}
                         ref={virtualizer.measureElement}
+                        style={{ top: vItem.start - scrollMargin }}
                       >
                         <RoomNavItem
                           room={room}
