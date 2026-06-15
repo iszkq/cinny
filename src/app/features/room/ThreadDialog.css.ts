@@ -79,6 +79,36 @@ export const Footer = style({
   borderTop: `${config.borderWidth.B300} solid ${color.SurfaceVariant.ContainerLine}`,
 });
 
+export const ComposerFooter = style({
+  padding: config.space.S300,
+  backgroundColor: color.Surface.Container,
+});
+
+export const ComposerForm = style({
+  minWidth: 0,
+  alignItems: 'End',
+});
+
+export const ComposerTextArea = style({
+  minWidth: 0,
+  minHeight: toRem(52),
+  maxHeight: toRem(132),
+  flexGrow: 1,
+  lineHeight: 1.45,
+});
+
+export const ComposerSendButton = style({
+  width: toRem(44),
+  minWidth: toRem(44),
+  height: toRem(44),
+  padding: 0,
+  flexShrink: 0,
+});
+
+export const ComposerError = style({
+  color: color.Critical.Main,
+});
+
 export const IconBadge = style([
   DefaultReset,
   {

@@ -1,18 +1,31 @@
-import React, { useCallback, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import React, {
+  FormEventHandler,
+  KeyboardEventHandler,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { HTMLReactParserOptions } from 'html-react-parser';
 import {
   Direction,
+  EventTimelineSetHandlerMap,
   EventTimelineSet,
+  IContent,
   MatrixClient,
   MatrixEvent,
   MsgType,
   RelationType,
   Room,
+  RoomEvent,
+  RoomEventHandlerMap,
 } from 'matrix-js-sdk';
 import {
   Avatar,
   Box,
+  Button,
   Chip,
   Dialog,
   Header,
@@ -25,6 +38,7 @@ import {
   OverlayCenter,
   Scroll,
   Spinner,
+  TextArea,
   Text,
 } from 'folds';
 import { Opts as LinkifyOpts } from 'linkifyjs';
@@ -52,9 +66,11 @@ import {
   getEditedEvent,
   getMemberAvatarMxc,
   getMemberDisplayName,
+  getMentionContent,
   reactionOrEditEvent,
 } from '../../utils/room';
 import { getMxIdLocalPart, mxcUrlToHttp } from '../../utils/matrix';
+import { dispatchRoomFollowLatest } from '../../utils/roomViewEvents';
 import { POLL_START_EVENT_TYPE, UNSTABLE_POLL_START_EVENT_TYPE } from '../../utils/polls';
 import { GetContentCallback, MessageEvent } from '../../../types/matrix/room';
 import colorMXID from '../../../util/colorMXID';
@@ -208,6 +224,27 @@ const fetchThreadRelations = async (
   }
 
   return { originalEvent, events, hasMore };
+};
+
+const getThreadSendErrorMessage = (error: unknown): string => {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    return '当前网络已断开，这条回复还没有真正发送出去。';
+  }
+
+  const matrixError = error as {
+    data?: { error?: string };
+    message?: string;
+  };
+
+  if (typeof matrixError?.data?.error === 'string' && matrixError.data.error.trim()) {
+    return `发送失败：${matrixError.data.error}`;
+  }
+
+  if (typeof matrixError?.message === 'string' && matrixError.message.trim()) {
+    return `发送失败：${matrixError.message}`;
+  }
+
+  return '发送失败，请稍后重试。';
 };
 
 type ThreadMessageViewProps = {
@@ -419,6 +456,114 @@ function ThreadMessageView({
   );
 }
 
+type ThreadReplyComposerProps = {
+  room: Room;
+  rootEventId: string;
+  rootEvent?: MatrixEvent;
+  onSent: () => void;
+};
+
+function ThreadReplyComposer({ room, rootEventId, rootEvent, onSent }: ThreadReplyComposerProps) {
+  const mx = useMatrixClient();
+  const textAreaRef = useRef<HTMLTextAreaElement>(null);
+  const [message, setMessage] = useState('');
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string>();
+
+  const trimmedMessage = message.trim();
+  const canSend = trimmedMessage.length > 0 && !sending;
+
+  const submit = useCallback(async () => {
+    if (!canSend) return;
+
+    const rootSenderId = rootEvent?.getSender();
+    const myUserId = mx.getUserId();
+    const mentionUserIds = rootSenderId && rootSenderId !== myUserId ? [rootSenderId] : [];
+    const content: IContent = {
+      msgtype: MsgType.Text,
+      body: trimmedMessage,
+      'm.relates_to': {
+        'm.in_reply_to': {
+          event_id: rootEventId,
+        },
+        event_id: rootEventId,
+        rel_type: RelationType.Thread,
+        is_falling_back: false,
+      },
+      'm.mentions': getMentionContent(mentionUserIds, false),
+    };
+
+    setSending(true);
+    setSendError(undefined);
+
+    try {
+      await mx.sendMessage(room.roomId, content as never);
+      setMessage('');
+      dispatchRoomFollowLatest(room.roomId);
+      onSent();
+      requestAnimationFrame(() => textAreaRef.current?.focus());
+    } catch (error) {
+      setSendError(getThreadSendErrorMessage(error));
+    } finally {
+      setSending(false);
+    }
+  }, [canSend, mx, onSent, room.roomId, rootEvent, rootEventId, trimmedMessage]);
+
+  const handleSubmit: FormEventHandler<HTMLFormElement> = (evt) => {
+    evt.preventDefault();
+    submit().catch(() => undefined);
+  };
+
+  const handleKeyDown: KeyboardEventHandler<HTMLTextAreaElement> = (evt) => {
+    if (evt.key !== 'Enter' || evt.shiftKey || evt.nativeEvent.isComposing) return;
+
+    evt.preventDefault();
+    submit().catch(() => undefined);
+  };
+
+  return (
+    <Box className={css.ComposerFooter} direction="Column" gap="200">
+      {sendError && (
+        <Text className={css.ComposerError} size="T300">
+          {sendError}
+        </Text>
+      )}
+      <Box as="form" className={css.ComposerForm} gap="200" onSubmit={handleSubmit}>
+        <TextArea
+          ref={textAreaRef}
+          className={css.ComposerTextArea}
+          value={message}
+          onChange={(evt) => setMessage(evt.currentTarget.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="在线程中回复..."
+          variant="SurfaceVariant"
+          radii="400"
+          resize="None"
+          rows={2}
+          disabled={sending}
+        />
+        <Button
+          className={css.ComposerSendButton}
+          type="submit"
+          variant="Primary"
+          radii="400"
+          disabled={!canSend}
+          aria-label="发送线程回复"
+        >
+          {sending ? (
+            <Spinner size="100" variant="Primary" fill="Solid" />
+          ) : (
+            <Icon size="100" src={Icons.Send} filled />
+          )}
+        </Button>
+      </Box>
+      <Text size="T200" priority="300">
+        Enter 发送，Shift + Enter 换行
+      </Text>
+    </Box>
+  );
+}
+
 export function ThreadDialog({
   room,
   timelineSet,
@@ -436,18 +581,21 @@ export function ThreadDialog({
   dateFormatString,
 }: ThreadDialogProps) {
   const mx = useMatrixClient();
+  const queryClient = useQueryClient();
+  const [, setTimelineRevision] = useState(0);
   const getLocalRootEvent = useCallback(
     () => timelineSet.findEventById(rootEventId),
     [timelineSet, rootEventId]
   );
   const rootRoomEvent = useRoomEvent(room, rootEventId, getLocalRootEvent);
-  const localThreadEvents = useMemo(
-    () => getLocalThreadEvents(timelineSet, rootEventId),
-    [timelineSet, rootEventId]
+  const localThreadEvents = getLocalThreadEvents(timelineSet, rootEventId);
+  const threadRelationsQueryKey = useMemo(
+    () => ['room-thread-relations', room.roomId, rootEventId] as const,
+    [room.roomId, rootEventId]
   );
 
   const threadQuery = useQuery({
-    queryKey: ['room-thread-relations', room.roomId, rootEventId],
+    queryKey: threadRelationsQueryKey,
     queryFn: () => fetchThreadRelations(mx, room.roomId, rootEventId),
     staleTime: 30 * 1000,
   });
@@ -467,6 +615,60 @@ export function ThreadDialog({
     requestClose();
     onOpenEvent(eventId);
   };
+
+  const bumpTimelineRevision = useCallback(() => {
+    setTimelineRevision((currentRevision) => currentRevision + 1);
+  }, []);
+
+  const handlePotentialThreadEvent = useCallback(
+    (mEvent: MatrixEvent) => {
+      if (mEvent.getId() === rootEventId || getThreadRootId(mEvent) === rootEventId) {
+        bumpTimelineRevision();
+      }
+    },
+    [bumpTimelineRevision, rootEventId]
+  );
+
+  useEffect(() => {
+    const handleTimeline: EventTimelineSetHandlerMap[RoomEvent.Timeline] = (mEvent, eventRoom) => {
+      if (eventRoom?.roomId !== room.roomId) return;
+      handlePotentialThreadEvent(mEvent);
+    };
+
+    const handleLocalEchoUpdated: RoomEventHandlerMap[RoomEvent.LocalEchoUpdated] = (
+      mEvent,
+      eventRoom
+    ) => {
+      if (eventRoom?.roomId !== room.roomId) return;
+      handlePotentialThreadEvent(mEvent);
+    };
+
+    const handleRedaction: RoomEventHandlerMap[RoomEvent.Redaction] = (_mEvent, eventRoom) => {
+      if (eventRoom?.roomId !== room.roomId) return;
+      bumpTimelineRevision();
+    };
+
+    const handleTimelineRefresh: RoomEventHandlerMap[RoomEvent.TimelineRefresh] = (eventRoom) => {
+      if (eventRoom.roomId !== room.roomId) return;
+      bumpTimelineRevision();
+    };
+
+    room.on(RoomEvent.Timeline, handleTimeline);
+    room.on(RoomEvent.LocalEchoUpdated, handleLocalEchoUpdated);
+    room.on(RoomEvent.Redaction, handleRedaction);
+    room.on(RoomEvent.TimelineRefresh, handleTimelineRefresh);
+    return () => {
+      room.removeListener(RoomEvent.Timeline, handleTimeline);
+      room.removeListener(RoomEvent.LocalEchoUpdated, handleLocalEchoUpdated);
+      room.removeListener(RoomEvent.Redaction, handleRedaction);
+      room.removeListener(RoomEvent.TimelineRefresh, handleTimelineRefresh);
+    };
+  }, [bumpTimelineRevision, handlePotentialThreadEvent, room]);
+
+  const handleSentReply = useCallback(() => {
+    bumpTimelineRevision();
+    queryClient.invalidateQueries({ queryKey: threadRelationsQueryKey }).catch(() => undefined);
+  }, [bumpTimelineRevision, queryClient, threadRelationsQueryKey]);
 
   const replyCountText = `${threadEvents.length} 条回复`;
 
@@ -603,6 +805,14 @@ export function ThreadDialog({
                 </Box>
               </>
             )}
+
+            <Line variant="SurfaceVariant" size="300" />
+            <ThreadReplyComposer
+              room={room}
+              rootEventId={rootEventId}
+              rootEvent={rootEvent}
+              onSent={handleSentReply}
+            />
           </Box>
         </Dialog>
       </OverlayCenter>
