@@ -50,6 +50,7 @@ import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { VirtualTile } from '../../../components/virtualizer';
 import {
   RoomNavCategoryButton,
+  RoomNavCreateCategoryItem,
   RoomNavCategorySections,
   RoomNavItem,
 } from '../../../features/room-nav';
@@ -337,6 +338,10 @@ export function Home() {
                   </>
                 )}
               </UseStateProvider>
+              <RoomNavCreateCategoryItem
+                scope={ROOM_NAV_CATEGORY_SCOPE}
+                label={'\u65b0\u5efa\u623f\u95f4\u5206\u7c7b'}
+              />
             </NavCategory>
             <RoomNavCategorySections
               scope={ROOM_NAV_CATEGORY_SCOPE}

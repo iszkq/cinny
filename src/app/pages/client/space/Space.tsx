@@ -46,6 +46,7 @@ import { useSpace } from '../../../hooks/useSpace';
 import { VirtualTile } from '../../../components/virtualizer';
 import {
   RoomNavCategoryButton,
+  RoomNavCreateCategoryItem,
   RoomNavCategorySections,
   RoomNavItem,
 } from '../../../features/room-nav';
@@ -539,6 +540,10 @@ export function Space() {
                 </NavItemContent>
               </NavLink>
             </NavItem>
+            <RoomNavCreateCategoryItem
+              scope={space.roomId}
+              label={'\u65b0\u5efa\u623f\u95f4\u5206\u7c7b'}
+            />
           </NavCategory>
           <RoomNavCategorySections
             scope={space.roomId}

@@ -1,5 +1,4 @@
 import React, {
-  FormEventHandler,
   MouseEventHandler,
   forwardRef,
   useCallback,
@@ -12,11 +11,9 @@ import { Room } from 'matrix-js-sdk';
 import {
   Avatar,
   Box,
-  Button,
   Icon,
   IconButton,
   Icons,
-  Input,
   Text,
   Menu,
   MenuItem,
@@ -80,9 +77,6 @@ type RoomNavItemMenuProps = {
   categoryScope: string;
 };
 
-const makeCustomCategoryId = (): string =>
-  `category-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-
 const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
   ({ room, requestClose, notificationMode, categoryScope }, ref) => {
     const mx = useMatrixClient();
@@ -100,7 +94,6 @@ const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
     const setRoomNavCategories = useSetAtom(roomNavCategoriesAtom);
 
     const [invitePrompt, setInvitePrompt] = useState(false);
-    const [categoryFormOpen, setCategoryFormOpen] = useState(false);
     const [menuContainer, setMenuContainer] = useState<HTMLDivElement | null>(null);
     const categoryMenuRef = useRef<HTMLDivElement>(null);
     const [categoryMenuAnchor, setCategoryMenuAnchor] = useState<RectCords>();
@@ -195,25 +188,6 @@ const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
       setCategoryMenuAnchor((currentState) => (currentState ? undefined : cords));
     };
 
-    const handleCreateCategory: FormEventHandler<HTMLFormElement> = (evt) => {
-      evt.preventDefault();
-      const nameInput = evt.currentTarget.elements.namedItem('categoryNameInput');
-      if (!(nameInput instanceof HTMLInputElement)) return;
-      const name = nameInput.value.trim();
-      if (!name) return;
-
-      setRoomNavCategories({
-        type: 'CREATE_CATEGORY',
-        category: {
-          id: makeCustomCategoryId(),
-          scope: categoryScope,
-          name,
-        },
-        roomId: room.roomId,
-      });
-      requestClose();
-    };
-
     return (
       <Menu ref={handleMenuRef} style={{ maxWidth: toRem(220), width: '100vw' }}>
         {invitePrompt && room && (
@@ -269,99 +243,65 @@ const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
             </Text>
           </MenuItem>
         </Box>
-        {(customCategories.length > 0 || categoryFormOpen) && (
+        {customCategories.length > 0 && (
           <>
             <Line variant="Surface" size="300" />
             <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
-              {customCategories.length > 0 && (
-                <PopOut
-                  ref={categoryMenuRef}
-                  anchor={categoryMenuAnchor}
-                  position="Right"
-                  align="Start"
-                  offset={4}
-                  container={menuContainer ?? undefined}
-                  content={
-                    <Menu
-                      style={{
-                        maxWidth: toRem(220),
-                        width: '100vw',
-                        maxHeight: toRem(320),
-                        overflowY: 'auto',
-                      }}
-                    >
-                      <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
-                        {customCategories.map((category) => {
-                          const included = category.roomIds.includes(room.roomId);
-
-                          return (
-                            <MenuItem
-                              key={category.id}
-                              onClick={() => handleToggleCategory(category.id, included)}
-                              size="300"
-                              after={
-                                <Icon size="100" src={included ? Icons.Check : Icons.Category} />
-                              }
-                              radii="300"
-                            >
-                              <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-                                {category.name}
-                              </Text>
-                            </MenuItem>
-                          );
-                        })}
-                      </Box>
-                    </Menu>
-                  }
-                >
-                  <MenuItem
-                    onClick={handleOpenCategoryMenu}
-                    size="300"
-                    after={<Icon size="100" src={Icons.ChevronRight} />}
-                    radii="300"
-                    aria-pressed={!!categoryMenuAnchor}
-                    data-category-menu-trigger="true"
+              <PopOut
+                ref={categoryMenuRef}
+                anchor={categoryMenuAnchor}
+                position="Right"
+                align="Start"
+                offset={4}
+                container={menuContainer ?? undefined}
+                content={
+                  <Menu
+                    style={{
+                      maxWidth: toRem(220),
+                      width: '100vw',
+                      maxHeight: toRem(320),
+                      overflowY: 'auto',
+                    }}
                   >
-                    <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-                      选择分类
-                    </Text>
-                  </MenuItem>
-                </PopOut>
-              )}
-              {categoryFormOpen && (
-                <Box as="form" onSubmit={handleCreateCategory} direction="Column" gap="100">
-                  <Input
-                    name="categoryNameInput"
-                    size="300"
-                    variant="Background"
-                    radii="300"
-                    autoFocus
-                    required
-                    placeholder={'\u5206\u7c7b\u540d\u79f0'}
-                  />
-                  <Button type="submit" size="300" variant="Primary" radii="300">
-                    <Text size="B300" truncate>
-                      {'\u521b\u5efa\u5e76\u52a0\u5165'}
-                    </Text>
-                  </Button>
-                </Box>
-              )}
+                    <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
+                      {customCategories.map((category) => {
+                        const included = category.roomIds.includes(room.roomId);
+
+                        return (
+                          <MenuItem
+                            key={category.id}
+                            onClick={() => handleToggleCategory(category.id, included)}
+                            size="300"
+                            after={
+                              <Icon size="100" src={included ? Icons.Check : Icons.Category} />
+                            }
+                            radii="300"
+                          >
+                            <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
+                              {category.name}
+                            </Text>
+                          </MenuItem>
+                        );
+                      })}
+                    </Box>
+                  </Menu>
+                }
+              >
+                <MenuItem
+                  onClick={handleOpenCategoryMenu}
+                  size="300"
+                  after={<Icon size="100" src={Icons.ChevronRight} />}
+                  radii="300"
+                  aria-pressed={!!categoryMenuAnchor}
+                  data-category-menu-trigger="true"
+                >
+                  <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
+                    选择分类
+                  </Text>
+                </MenuItem>
+              </PopOut>
             </Box>
           </>
-        )}
-        {!categoryFormOpen && (
-          <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
-            <MenuItem
-              onClick={() => setCategoryFormOpen(true)}
-              size="300"
-              after={<Icon size="100" src={Icons.Plus} />}
-              radii="300"
-            >
-              <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-                {'\u65b0\u5efa\u5206\u7c7b'}
-              </Text>
-            </MenuItem>
-          </Box>
         )}
         <Line variant="Surface" size="300" />
         <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>

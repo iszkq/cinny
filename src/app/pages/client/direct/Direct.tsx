@@ -42,6 +42,7 @@ import { useSelectedRoom } from '../../../hooks/router/useSelectedRoom';
 import { VirtualTile } from '../../../components/virtualizer';
 import {
   RoomNavCategoryButton,
+  RoomNavCreateCategoryItem,
   RoomNavCategorySections,
   RoomNavItem,
 } from '../../../features/room-nav';
@@ -279,6 +280,10 @@ export function Direct() {
                   </NavItemContent>
                 </NavButton>
               </NavItem>
+              <RoomNavCreateCategoryItem
+                scope={ROOM_NAV_CATEGORY_SCOPE}
+                label={'\u65b0\u5efa\u8054\u7cfb\u4eba\u5206\u7c7b'}
+              />
             </NavCategory>
             <RoomNavCategorySections
               scope={ROOM_NAV_CATEGORY_SCOPE}

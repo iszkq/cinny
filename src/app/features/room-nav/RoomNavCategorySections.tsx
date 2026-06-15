@@ -58,7 +58,6 @@ const makeSectionData = (
 
   categories.forEach((category) => {
     const scopedRoomIds = getScopedRoomIds(category.roomIds, allowedRoomIds);
-    if (scopedRoomIds.length === 0) return;
 
     sections.push({
       id: category.id,
