@@ -3,7 +3,9 @@ import React, {
   MouseEventHandler,
   forwardRef,
   useCallback,
+  useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import { Room } from 'matrix-js-sdk';
@@ -100,6 +102,7 @@ const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
     const [invitePrompt, setInvitePrompt] = useState(false);
     const [categoryFormOpen, setCategoryFormOpen] = useState(false);
     const [menuContainer, setMenuContainer] = useState<HTMLDivElement | null>(null);
+    const categoryMenuRef = useRef<HTMLDivElement>(null);
     const [categoryMenuAnchor, setCategoryMenuAnchor] = useState<RectCords>();
     const favorite = roomNavCategories.favorites.includes(room.roomId);
     const customCategories = useMemo(
@@ -121,6 +124,33 @@ const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
       },
       [ref]
     );
+
+    useEffect(() => {
+      if (!categoryMenuAnchor) return undefined;
+
+      const handleCategoryMenuPointerDown = (evt: PointerEvent) => {
+        const { target } = evt;
+        if (!(target instanceof Node)) return;
+
+        if (categoryMenuRef.current?.contains(target)) return;
+        if (target instanceof Element && target.closest('[data-category-menu-trigger="true"]')) {
+          return;
+        }
+
+        if (menuContainer?.contains(target)) {
+          setCategoryMenuAnchor(undefined);
+          return;
+        }
+
+        requestClose();
+      };
+
+      document.addEventListener('pointerdown', handleCategoryMenuPointerDown, true);
+
+      return () => {
+        document.removeEventListener('pointerdown', handleCategoryMenuPointerDown, true);
+      };
+    }, [categoryMenuAnchor, menuContainer, requestClose]);
 
     const handleMarkAsRead = () => {
       markAsRead(mx, room.roomId, hideActivity);
@@ -245,6 +275,7 @@ const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
             <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
               {customCategories.length > 0 && (
                 <PopOut
+                  ref={categoryMenuRef}
                   anchor={categoryMenuAnchor}
                   position="Right"
                   align="Start"
@@ -289,6 +320,7 @@ const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
                     after={<Icon size="100" src={Icons.ChevronRight} />}
                     radii="300"
                     aria-pressed={!!categoryMenuAnchor}
+                    data-category-menu-trigger="true"
                   >
                     <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
                       选择分类
