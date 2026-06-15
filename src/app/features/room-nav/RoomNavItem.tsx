@@ -1,4 +1,11 @@
-import React, { FormEventHandler, MouseEventHandler, forwardRef, useMemo, useState } from 'react';
+import React, {
+  FormEventHandler,
+  MouseEventHandler,
+  forwardRef,
+  useCallback,
+  useMemo,
+  useState,
+} from 'react';
 import { Room } from 'matrix-js-sdk';
 import {
   Avatar,
@@ -92,10 +99,27 @@ const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
 
     const [invitePrompt, setInvitePrompt] = useState(false);
     const [categoryFormOpen, setCategoryFormOpen] = useState(false);
+    const [menuContainer, setMenuContainer] = useState<HTMLDivElement | null>(null);
+    const [categoryMenuAnchor, setCategoryMenuAnchor] = useState<RectCords>();
     const favorite = roomNavCategories.favorites.includes(room.roomId);
     const customCategories = useMemo(
       () => getRoomNavCustomCategories(roomNavCategories, categoryScope),
       [roomNavCategories, categoryScope]
+    );
+
+    const handleMenuRef = useCallback(
+      (node: HTMLDivElement | null) => {
+        setMenuContainer(node);
+        if (typeof ref === 'function') {
+          ref(node);
+          return;
+        }
+        if (ref) {
+          const refObject = ref as React.MutableRefObject<HTMLDivElement | null>;
+          refObject.current = node;
+        }
+      },
+      [ref]
     );
 
     const handleMarkAsRead = () => {
@@ -136,6 +160,11 @@ const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
       requestClose();
     };
 
+    const handleOpenCategoryMenu: MouseEventHandler<HTMLButtonElement> = (evt) => {
+      const cords = evt.currentTarget.getBoundingClientRect();
+      setCategoryMenuAnchor((currentState) => (currentState ? undefined : cords));
+    };
+
     const handleCreateCategory: FormEventHandler<HTMLFormElement> = (evt) => {
       evt.preventDefault();
       const nameInput = evt.currentTarget.elements.namedItem('categoryNameInput');
@@ -156,7 +185,7 @@ const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
     };
 
     return (
-      <Menu ref={ref} style={{ maxWidth: toRem(220), width: '100vw' }}>
+      <Menu ref={handleMenuRef} style={{ maxWidth: toRem(220), width: '100vw' }}>
         {invitePrompt && room && (
           <InviteUserPrompt
             room={room}
@@ -214,23 +243,59 @@ const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
           <>
             <Line variant="Surface" size="300" />
             <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
-              {customCategories.map((category) => {
-                const included = category.roomIds.includes(room.roomId);
+              {customCategories.length > 0 && (
+                <PopOut
+                  anchor={categoryMenuAnchor}
+                  position="Right"
+                  align="Start"
+                  offset={4}
+                  container={menuContainer ?? undefined}
+                  content={
+                    <Menu
+                      style={{
+                        maxWidth: toRem(220),
+                        width: '100vw',
+                        maxHeight: toRem(320),
+                        overflowY: 'auto',
+                      }}
+                    >
+                      <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
+                        {customCategories.map((category) => {
+                          const included = category.roomIds.includes(room.roomId);
 
-                return (
+                          return (
+                            <MenuItem
+                              key={category.id}
+                              onClick={() => handleToggleCategory(category.id, included)}
+                              size="300"
+                              after={
+                                <Icon size="100" src={included ? Icons.Check : Icons.Category} />
+                              }
+                              radii="300"
+                            >
+                              <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
+                                {category.name}
+                              </Text>
+                            </MenuItem>
+                          );
+                        })}
+                      </Box>
+                    </Menu>
+                  }
+                >
                   <MenuItem
-                    key={category.id}
-                    onClick={() => handleToggleCategory(category.id, included)}
+                    onClick={handleOpenCategoryMenu}
                     size="300"
-                    after={<Icon size="100" src={included ? Icons.Check : Icons.Category} />}
+                    after={<Icon size="100" src={Icons.ChevronRight} />}
                     radii="300"
+                    aria-pressed={!!categoryMenuAnchor}
                   >
                     <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-                      {category.name}
+                      选择分类
                     </Text>
                   </MenuItem>
-                );
-              })}
+                </PopOut>
+              )}
               {categoryFormOpen && (
                 <Box as="form" onSubmit={handleCreateCategory} direction="Column" gap="100">
                   <Input
@@ -240,7 +305,7 @@ const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
                     radii="300"
                     autoFocus
                     required
-                    placeholder="分类名称"
+                    placeholder={'\u5206\u7c7b\u540d\u79f0'}
                   />
                   <Button type="submit" size="300" variant="Primary" radii="300">
                     <Text size="B300" truncate>
