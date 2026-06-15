@@ -1,12 +1,11 @@
 import { WritableAtom, atom } from 'jotai';
 import produce from 'immer';
-import {
-  atomWithLocalStorage,
-  getLocalStorageItem,
-  setLocalStorageItem,
-} from './utils/atomWithLocalStorage';
+import { ClientEvent, MatrixClient, MatrixEvent } from 'matrix-js-sdk';
+import { AccountDataEvent, CinnyRoomNavCategoriesContent } from '../../types/matrix/accountData';
+import { getLocalStorageItem, setLocalStorageItem } from './utils/atomWithLocalStorage';
 
 const ROOM_NAV_CATEGORIES = 'roomNavCategories';
+const ROOM_NAV_CATEGORIES_ACCOUNT_DATA_VERSION = 1;
 
 export const FAVORITE_ROOM_NAV_CATEGORY_ID = 'favorites';
 export const LEGACY_ROOM_NAV_CATEGORY_SCOPE = 'direct';
@@ -68,6 +67,9 @@ const DEFAULT_ROOM_NAV_CATEGORIES: RoomNavCategories = {
 
 const unique = (items: string[]): string[] => Array.from(new Set(items));
 
+const isNonEmptyRoomNavCategories = (roomNavCategories: RoomNavCategories): boolean =>
+  roomNavCategories.favorites.length > 0 || roomNavCategories.categories.length > 0;
+
 const normalizeScope = (scope: unknown): string =>
   typeof scope === 'string' && scope.trim() ? scope.trim() : LEGACY_ROOM_NAV_CATEGORY_SCOPE;
 
@@ -90,7 +92,9 @@ export const getRoomNavCategorizedRoomIds = (
   return roomIds;
 };
 
-const normalizeRoomNavCategories = (value: Partial<RoomNavCategories>): RoomNavCategories => ({
+const normalizeRoomNavCategories = (
+  value: Partial<RoomNavCategories> | CinnyRoomNavCategoriesContent
+): RoomNavCategories => ({
   favorites: unique(Array.isArray(value.favorites) ? value.favorites : []),
   categories: (Array.isArray(value.categories) ? value.categories : [])
     .filter((category) => category && typeof category.id === 'string')
@@ -105,73 +109,168 @@ const normalizeRoomNavCategories = (value: Partial<RoomNavCategories>): RoomNavC
     })),
 });
 
-export const makeRoomNavCategoriesAtom = (userId: string): RoomNavCategoriesAtom => {
+const getRoomNavCategoriesAccountData = (mx: MatrixClient): RoomNavCategories | undefined => {
+  const content = mx
+    .getAccountData(AccountDataEvent.CinnyRoomNavCategories)
+    ?.getContent<CinnyRoomNavCategoriesContent>();
+
+  return content ? normalizeRoomNavCategories(content) : undefined;
+};
+
+const getRoomNavCategoriesAccountDataContent = (
+  roomNavCategories: RoomNavCategories
+): CinnyRoomNavCategoriesContent => ({
+  version: ROOM_NAV_CATEGORIES_ACCOUNT_DATA_VERSION,
+  updatedAt: Date.now(),
+  ...normalizeRoomNavCategories(roomNavCategories),
+});
+
+const getStoredRoomNavCategories = (mx: MatrixClient, storeKey: string): RoomNavCategories => {
+  const accountData = getRoomNavCategoriesAccountData(mx);
+  if (accountData) return accountData;
+
+  return normalizeRoomNavCategories(getLocalStorageItem(storeKey, DEFAULT_ROOM_NAV_CATEGORIES));
+};
+
+export const makeRoomNavCategoriesAtom = (
+  userId: string,
+  mx: MatrixClient
+): RoomNavCategoriesAtom => {
   const storeKey = `${ROOM_NAV_CATEGORIES}${userId}`;
 
-  const baseRoomNavCategoriesAtom = atomWithLocalStorage<RoomNavCategories>(
-    storeKey,
-    (key) => normalizeRoomNavCategories(getLocalStorageItem(key, DEFAULT_ROOM_NAV_CATEGORIES)),
-    (key, value) => setLocalStorageItem(key, normalizeRoomNavCategories(value))
+  const persistRoomNavCategories = (roomNavCategories: RoomNavCategories) => {
+    const normalizedRoomNavCategories = normalizeRoomNavCategories(roomNavCategories);
+    setLocalStorageItem(storeKey, normalizedRoomNavCategories);
+
+    mx.setAccountData(
+      AccountDataEvent.CinnyRoomNavCategories,
+      getRoomNavCategoriesAccountDataContent(normalizedRoomNavCategories)
+    ).catch(() => undefined);
+  };
+
+  const baseRoomNavCategoriesAtom = atom<RoomNavCategories>(
+    getStoredRoomNavCategories(mx, storeKey)
   );
+
+  baseRoomNavCategoriesAtom.onMount = (setAtom) => {
+    const applyAccountData = (content?: CinnyRoomNavCategoriesContent) => {
+      const nextRoomNavCategories = content
+        ? normalizeRoomNavCategories(content)
+        : DEFAULT_ROOM_NAV_CATEGORIES;
+
+      setAtom(nextRoomNavCategories);
+      setLocalStorageItem(storeKey, nextRoomNavCategories);
+    };
+
+    const accountData = mx
+      .getAccountData(AccountDataEvent.CinnyRoomNavCategories)
+      ?.getContent<CinnyRoomNavCategoriesContent>();
+
+    if (accountData) {
+      applyAccountData(accountData);
+    } else {
+      const localRoomNavCategories = normalizeRoomNavCategories(
+        getLocalStorageItem(storeKey, DEFAULT_ROOM_NAV_CATEGORIES)
+      );
+
+      setAtom(localRoomNavCategories);
+
+      if (isNonEmptyRoomNavCategories(localRoomNavCategories)) {
+        mx.setAccountData(
+          AccountDataEvent.CinnyRoomNavCategories,
+          getRoomNavCategoriesAccountDataContent(localRoomNavCategories)
+        ).catch(() => undefined);
+      }
+    }
+
+    const handleAccountData = (event: MatrixEvent) => {
+      if (event.getType() !== AccountDataEvent.CinnyRoomNavCategories) {
+        return;
+      }
+
+      applyAccountData(event.getContent<CinnyRoomNavCategoriesContent>());
+    };
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== storeKey) return;
+
+      setAtom(
+        normalizeRoomNavCategories(getLocalStorageItem(storeKey, DEFAULT_ROOM_NAV_CATEGORIES))
+      );
+    };
+
+    mx.on(ClientEvent.AccountData, handleAccountData);
+    window.addEventListener('storage', handleStorage);
+
+    return () => {
+      mx.removeListener(ClientEvent.AccountData, handleAccountData);
+      window.removeEventListener('storage', handleStorage);
+    };
+  };
 
   const roomNavCategoriesAtom = atom<RoomNavCategories, [RoomNavCategoriesAction], undefined>(
     (get) => get(baseRoomNavCategoriesAtom),
     (get, set, action): undefined => {
-      set(
-        baseRoomNavCategoriesAtom,
-        produce(get(baseRoomNavCategoriesAtom), (draft) => {
-          if (action.type === 'ADD_FAVORITE') {
-            if (!draft.favorites.includes(action.roomId)) {
-              draft.favorites.push(action.roomId);
-            }
+      const currentRoomNavCategories = get(baseRoomNavCategoriesAtom);
+      const nextRoomNavCategories = produce(currentRoomNavCategories, (draft) => {
+        if (action.type === 'ADD_FAVORITE') {
+          if (!draft.favorites.includes(action.roomId)) {
+            draft.favorites.push(action.roomId);
+          }
+          return;
+        }
+
+        if (action.type === 'REMOVE_FAVORITE') {
+          const favoriteIndex = draft.favorites.indexOf(action.roomId);
+          if (favoriteIndex !== -1) {
+            draft.favorites.splice(favoriteIndex, 1);
+          }
+          return;
+        }
+
+        if (action.type === 'CREATE_CATEGORY') {
+          const name = action.category.name.trim();
+          if (!name || draft.categories.some((category) => category.id === action.category.id)) {
             return;
           }
 
-          if (action.type === 'REMOVE_FAVORITE') {
-            const favoriteIndex = draft.favorites.indexOf(action.roomId);
-            if (favoriteIndex !== -1) {
-              draft.favorites.splice(favoriteIndex, 1);
-            }
-            return;
+          draft.categories.push({
+            id: action.category.id,
+            scope: normalizeScope(action.category.scope),
+            name,
+            roomIds: unique(
+              action.roomId
+                ? [...(action.category.roomIds ?? []), action.roomId]
+                : action.category.roomIds ?? []
+            ),
+          });
+          return;
+        }
+
+        const category = draft.categories.find((item) => item.id === action.categoryId);
+        if (!category) return;
+
+        if (action.type === 'ADD_TO_CATEGORY') {
+          if (!category.roomIds.includes(action.roomId)) {
+            category.roomIds.push(action.roomId);
           }
+          return;
+        }
 
-          if (action.type === 'CREATE_CATEGORY') {
-            const name = action.category.name.trim();
-            if (!name || draft.categories.some((category) => category.id === action.category.id)) {
-              return;
-            }
-
-            draft.categories.push({
-              id: action.category.id,
-              scope: normalizeScope(action.category.scope),
-              name,
-              roomIds: unique(
-                action.roomId
-                  ? [...(action.category.roomIds ?? []), action.roomId]
-                  : action.category.roomIds ?? []
-              ),
-            });
-            return;
+        if (action.type === 'REMOVE_FROM_CATEGORY') {
+          const roomIndex = category.roomIds.indexOf(action.roomId);
+          if (roomIndex !== -1) {
+            category.roomIds.splice(roomIndex, 1);
           }
+        }
+      });
 
-          const category = draft.categories.find((item) => item.id === action.categoryId);
-          if (!category) return;
+      if (nextRoomNavCategories === currentRoomNavCategories) {
+        return undefined;
+      }
 
-          if (action.type === 'ADD_TO_CATEGORY') {
-            if (!category.roomIds.includes(action.roomId)) {
-              category.roomIds.push(action.roomId);
-            }
-            return;
-          }
-
-          if (action.type === 'REMOVE_FROM_CATEGORY') {
-            const roomIndex = category.roomIds.indexOf(action.roomId);
-            if (roomIndex !== -1) {
-              category.roomIds.splice(roomIndex, 1);
-            }
-          }
-        })
-      );
+      set(baseRoomNavCategoriesAtom, nextRoomNavCategories);
+      persistRoomNavCategories(nextRoomNavCategories);
       return undefined;
     }
   );

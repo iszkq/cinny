@@ -10,6 +10,7 @@ export enum AccountDataEvent {
   CinnyExploreSources = 'in.cinny.explore_sources',
   CinnyAISettings = 'in.cinny.ai_settings',
   CinnyAppearanceSettings = 'in.cinny.appearance_settings',
+  CinnyRoomNavCategories = 'in.cinny.room_nav_categories',
   CinnyUserEmojiPacks = 'in.cinny.user_emoji_packs',
 
   ElementRecentEmoji = 'io.element.recent_emoji',
@@ -122,6 +123,20 @@ export type CinnyAppearanceSettingsContent = {
   incomingBubbleOpacity?: number;
   chatBackgroundMediaMxc?: string;
   monochromeMode?: boolean;
+};
+
+export type CinnyRoomNavCategoryContent = {
+  id?: string;
+  scope?: string;
+  name?: string;
+  roomIds?: string[];
+};
+
+export type CinnyRoomNavCategoriesContent = {
+  version?: number;
+  updatedAt?: number;
+  favorites?: string[];
+  categories?: CinnyRoomNavCategoryContent[];
 };
 
 export type SecretStorageDefaultKeyContent = {

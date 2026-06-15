@@ -30,7 +30,7 @@ export function ClientInitStorageAtom({ children }: ClientInitStorageAtomProps) 
 
   const callPreferencesAtom = useMemo(() => makeCallPreferencesAtom(userId), [userId]);
 
-  const roomNavCategoriesAtom = useMemo(() => makeRoomNavCategoriesAtom(userId), [userId]);
+  const roomNavCategoriesAtom = useMemo(() => makeRoomNavCategoriesAtom(userId, mx), [mx, userId]);
 
   return (
     <ClosedNavCategoriesProvider value={closedNavCategoriesAtom}>
