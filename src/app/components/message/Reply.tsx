@@ -57,6 +57,7 @@ type ReplyProps = {
   replyEventId: string;
   threadRootId?: string | undefined;
   onClick?: MouseEventHandler | undefined;
+  onThreadClick?: MouseEventHandler | undefined;
   getMemberPowerTag?: GetMemberPowerTag;
   accessibleTagColors?: Map<string, string>;
   legacyUsernameColor?: boolean;
@@ -70,6 +71,7 @@ export const Reply = as<'div', ReplyProps>(
       replyEventId,
       threadRootId,
       onClick,
+      onThreadClick,
       getMemberPowerTag,
       accessibleTagColors,
       legacyUsernameColor,
@@ -103,7 +105,11 @@ export const Reply = as<'div', ReplyProps>(
     return (
       <Box direction="Row" gap="200" alignItems="Center" {...props} ref={ref}>
         {threadRootId && (
-          <ThreadIndicator as="button" data-event-id={threadRootId} onClick={onClick} />
+          <ThreadIndicator
+            as="button"
+            data-event-id={threadRootId}
+            onClick={onThreadClick ?? onClick}
+          />
         )}
         <ReplyLayout
           as="button"

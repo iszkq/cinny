@@ -138,6 +138,7 @@ import { usePowerLevelTags } from '../../hooks/usePowerLevelTags';
 import { useRoomLatestRenderedEvent } from '../../hooks/useRoomLatestRenderedEvent';
 import { ForwardableMessage, isForwardableMessage } from './forwardMessages';
 import { ForwardMessagesModal } from './ForwardMessagesModal';
+import { ThreadDialog } from './ThreadDialog';
 import { ScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
 import { POLL_START_EVENT_TYPE, UNSTABLE_POLL_START_EVENT_TYPE } from '../../utils/polls';
 
@@ -658,6 +659,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
   const [editId, setEditId] = useState<string>();
   const [forwardMessages, setForwardMessages] = useState<Record<string, ForwardableMessage>>({});
   const [forwardDialog, setForwardDialog] = useState(false);
+  const [threadDialogRootId, setThreadDialogRootId] = useState<string>();
   const [receiptTick, setReceiptTick] = useState(0);
 
   const roomToParents = useAtomValue(roomToParentsAtom);
@@ -1418,6 +1420,13 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     },
     [handleOpenEvent]
   );
+  const handleOpenThread: MouseEventHandler = useCallback((evt) => {
+    evt.preventDefault();
+    evt.stopPropagation();
+    const targetId = evt.currentTarget.getAttribute('data-event-id');
+    if (!targetId) return;
+    setThreadDialogRootId(targetId);
+  }, []);
 
   const handleUserClick: MouseEventHandler<HTMLButtonElement> = useCallback(
     (evt) => {
@@ -1599,6 +1608,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
               replyEventId={replyEventId}
               threadRootId={threadRootId}
               onClick={handleOpenReply}
+              onThreadClick={handleOpenThread}
               getMemberPowerTag={getMemberPowerTag}
               accessibleTagColors={accessiblePowerTagColors}
               legacyUsernameColor={legacyUsernameColor || direct}
@@ -1716,6 +1726,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
                   replyEventId={replyEventId}
                   threadRootId={threadRootId}
                   onClick={handleOpenReply}
+                  onThreadClick={handleOpenThread}
                   getMemberPowerTag={getMemberPowerTag}
                   accessibleTagColors={accessiblePowerTagColors}
                   legacyUsernameColor={legacyUsernameColor || direct}
@@ -1821,6 +1832,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
                   replyEventId={replyEventId}
                   threadRootId={threadRootId}
                   onClick={handleOpenReply}
+                  onThreadClick={handleOpenThread}
                   getMemberPowerTag={getMemberPowerTag}
                   accessibleTagColors={accessiblePowerTagColors}
                   legacyUsernameColor={legacyUsernameColor || direct}
@@ -2467,6 +2479,24 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             setForwardDialog(false);
             setForwardMessages({});
           }}
+        />
+      )}
+      {threadDialogRootId && (
+        <ThreadDialog
+          room={room}
+          timelineSet={room.getUnfilteredTimelineSet()}
+          rootEventId={threadDialogRootId}
+          requestClose={() => setThreadDialogRootId(undefined)}
+          onOpenEvent={handleOpenEvent}
+          mediaAutoLoad={mediaAutoLoad}
+          urlPreview={showUrlPreview}
+          htmlReactParserOptions={htmlReactParserOptions}
+          linkifyOpts={linkifyOpts}
+          getMemberPowerTag={getMemberPowerTag}
+          accessibleTagColors={accessiblePowerTagColors}
+          legacyUsernameColor={legacyUsernameColor || direct}
+          hour24Clock={hour24Clock}
+          dateFormatString={dateFormatString}
         />
       )}
       {unreadInfo?.readUptoEventId && !unreadInfo?.inLiveTimeline && (
