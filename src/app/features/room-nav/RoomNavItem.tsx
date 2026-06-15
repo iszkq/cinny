@@ -240,7 +240,7 @@ const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
                     radii="300"
                     autoFocus
                     required
-                    placeholder="\u5206\u7c7b\u540d\u79f0"
+                    placeholder="分类名称"
                   />
                   <Button type="submit" size="300" variant="Primary" radii="300">
                     <Text size="B300" truncate>
