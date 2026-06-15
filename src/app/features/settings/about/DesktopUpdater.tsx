@@ -17,6 +17,7 @@ export function DesktopUpdater() {
     latestRelease,
     progressText,
     lastCheckedAt,
+    canInstallUpdate,
     checkForUpdates,
     downloadAndInstall,
     formatVersionLabel,
@@ -27,6 +28,13 @@ export function DesktopUpdater() {
   const currentVersionLabel = formatVersionLabel(APP_VERSION);
   const nextVersionLabel = pendingUpdate && formatVersionLabel(pendingUpdate.version);
   const latestVersionLabel = latestRelease && formatVersionLabel(latestRelease.version);
+  const latestVersionDescription =
+    latestVersionLabel && latestVersionLabel !== currentVersionLabel
+      ? `${currentVersionLabel} | \u6700\u65b0\u53d1\u5e03 ${latestVersionLabel}`
+      : currentVersionLabel;
+  const currentVersionDescription = nextVersionLabel
+    ? `${currentVersionLabel} -> \u53ef\u66f4\u65b0\u5230 ${nextVersionLabel}`
+    : latestVersionDescription;
   const releaseNotesBody = pendingUpdate?.body ?? latestRelease?.body;
   const statusText = progressText ?? message;
   const manualDownloadUrl = pendingUpdate?.downloadUrl ?? latestRelease?.downloadUrl;
@@ -36,7 +44,7 @@ export function DesktopUpdater() {
       return;
     }
 
-    void checkForUpdates({ silentIfLatest: true, showErrors: false });
+    checkForUpdates({ silentIfLatest: true, showErrors: false }).catch(() => undefined);
   }, [checkForUpdates, desktopSupported, lastCheckedAt, status]);
 
   if (!desktopSupported) {
@@ -52,16 +60,7 @@ export function DesktopUpdater() {
         direction="Column"
         gap="400"
       >
-        <SettingTile
-          title={'\u5f53\u524d\u7248\u672c'}
-          description={
-            nextVersionLabel
-              ? `${currentVersionLabel} -> \u53ef\u66f4\u65b0\u5230 ${nextVersionLabel}`
-              : latestVersionLabel && latestVersionLabel !== currentVersionLabel
-              ? `${currentVersionLabel} | \u6700\u65b0\u53d1\u5e03 ${latestVersionLabel}`
-              : currentVersionLabel
-          }
-        />
+        <SettingTile title={'\u5f53\u524d\u7248\u672c'} description={currentVersionDescription} />
         <SettingTile
           title={'\u81ea\u52a8\u68c0\u67e5\u66f4\u65b0'}
           description={statusText}
@@ -73,7 +72,7 @@ export function DesktopUpdater() {
                 size="300"
                 radii="300"
                 onClick={() => {
-                  void checkForUpdates();
+                  checkForUpdates().catch(() => undefined);
                 }}
                 disabled={!desktopSupported || checking || downloading}
               >
@@ -81,19 +80,17 @@ export function DesktopUpdater() {
                   {checking ? '\u68c0\u67e5\u4e2d...' : '\u68c0\u67e5\u66f4\u65b0'}
                 </Text>
               </Button>
-              {pendingUpdate && (
+              {pendingUpdate && canInstallUpdate && (
                 <Button
                   variant="Primary"
                   size="300"
                   radii="300"
                   onClick={() => {
-                    void downloadAndInstall();
+                    downloadAndInstall().catch(() => undefined);
                   }}
                   disabled={downloading}
                   before={
-                    downloading ? (
-                      <Spinner size="100" fill="Solid" variant="Primary" />
-                    ) : undefined
+                    downloading ? <Spinner size="100" fill="Solid" variant="Primary" /> : undefined
                   }
                 >
                   <Text size="B300">
@@ -103,12 +100,12 @@ export function DesktopUpdater() {
               )}
               {manualDownloadUrl && (
                 <Button
-                  variant="Secondary"
-                  fill="Soft"
+                  variant={pendingUpdate && !canInstallUpdate ? 'Primary' : 'Secondary'}
+                  fill={pendingUpdate && !canInstallUpdate ? undefined : 'Soft'}
                   size="300"
                   radii="300"
                   onClick={() => {
-                    void openDesktopUpdateDownloadUrl(manualDownloadUrl);
+                    openDesktopUpdateDownloadUrl(manualDownloadUrl).catch(() => undefined);
                   }}
                 >
                   <Text size="B300">{'\u624b\u52a8\u4e0b\u8f7d'}</Text>

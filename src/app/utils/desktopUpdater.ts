@@ -65,13 +65,61 @@ export const checkForDesktopUpdate = async (): Promise<PendingDesktopUpdateHandl
 export const normalizeDesktopUpdateVersion = (version: string): string =>
   version.replace(/^v/i, '').trim();
 
+const getDesktopUpdateVersionParts = (version: string): number[] | undefined => {
+  const coreVersion = normalizeDesktopUpdateVersion(version).split(/[-+]/, 1)[0];
+  const parts = coreVersion.split('.');
+
+  if (parts.length < 3) {
+    return undefined;
+  }
+
+  const numericParts = parts.slice(0, 3).map((part) => {
+    if (!/^\d+$/.test(part)) {
+      return Number.NaN;
+    }
+
+    return Number.parseInt(part, 10);
+  });
+
+  if (numericParts.some((part) => Number.isNaN(part))) {
+    return undefined;
+  }
+
+  return numericParts;
+};
+
+export const compareDesktopUpdateVersions = (left: string, right: string): number => {
+  const leftParts = getDesktopUpdateVersionParts(left);
+  const rightParts = getDesktopUpdateVersionParts(right);
+
+  if (!leftParts || !rightParts) {
+    const normalizedLeft = normalizeDesktopUpdateVersion(left);
+    const normalizedRight = normalizeDesktopUpdateVersion(right);
+    return normalizedLeft.localeCompare(normalizedRight, undefined, { numeric: true });
+  }
+
+  for (let index = 0; index < 3; index += 1) {
+    const diff = leftParts[index] - rightParts[index];
+    if (diff !== 0) {
+      return diff;
+    }
+  }
+
+  return 0;
+};
+
+export const isDesktopUpdateNewerThan = (version: string, currentVersion: string): boolean =>
+  compareDesktopUpdateVersions(version, currentVersion) > 0;
+
 export const pendingDesktopUpdatesMatch = (
   left?: Pick<PendingDesktopUpdate, 'version'>,
   right?: Pick<PendingDesktopUpdate, 'version'>
 ): boolean => {
   if (!left || !right) return false;
 
-  return normalizeDesktopUpdateVersion(left.version) === normalizeDesktopUpdateVersion(right.version);
+  return (
+    normalizeDesktopUpdateVersion(left.version) === normalizeDesktopUpdateVersion(right.version)
+  );
 };
 
 export const toPendingDesktopUpdate = (
@@ -150,9 +198,7 @@ const parseLatestDesktopRelease = (payload: {
     return undefined;
   }
 
-  const assets = Array.isArray(payload.assets)
-    ? payload.assets
-    : [];
+  const assets = Array.isArray(payload.assets) ? payload.assets : [];
   const installerAsset = assets.find((asset) => {
     if (!asset || typeof asset !== 'object') return false;
     const name = 'name' in asset ? asset.name : undefined;
@@ -197,7 +243,9 @@ const mergeLatestDesktopReleaseInfo = (
   };
 };
 
-export const fetchLatestDesktopRelease = async (): Promise<DesktopUpdateReleaseInfo | undefined> => {
+export const fetchLatestDesktopRelease = async (): Promise<
+  DesktopUpdateReleaseInfo | undefined
+> => {
   const [manifestRelease, githubRelease] = await Promise.all([
     (async () => {
       const response = await fetch(DESKTOP_UPDATER_MANIFEST_URL, {

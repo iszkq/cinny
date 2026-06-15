@@ -92,6 +92,9 @@ jobs:
           gh release upload $env:RELEASE_TAG $setupFile.FullName $signatureFile.FullName --clobber --repo $env:RELEASE_REPOSITORY
 
           $signature = (Get-Content -LiteralPath $signatureFile.FullName -Raw).Trim()
+          if ([string]::IsNullOrWhiteSpace($signature)) {
+            throw "Generated updater signature file '$($signatureFile.Name)' is empty."
+          }
           $assetName = [System.Uri]::EscapeDataString($setupFile.Name)
           $releaseMetadata = gh release view $env:RELEASE_TAG --repo $env:RELEASE_REPOSITORY --json body | ConvertFrom-Json
           $releaseBody = [string]$releaseMetadata.body
@@ -125,4 +128,18 @@ jobs:
           } | ConvertTo-Json -Depth 6
 
           Set-Content -LiteralPath 'latest.json' -Value $manifest -Encoding utf8NoBOM
+          $manifestCheck = Get-Content -LiteralPath 'latest.json' -Raw | ConvertFrom-Json
+          $windowsUpdate = $manifestCheck.platforms.'windows-x86_64'
+          if ([string]::IsNullOrWhiteSpace([string]$manifestCheck.version)) {
+            throw 'Generated latest.json is missing version.'
+          }
+          if (-not $windowsUpdate) {
+            throw 'Generated latest.json is missing the windows-x86_64 platform entry.'
+          }
+          if ([string]::IsNullOrWhiteSpace([string]$windowsUpdate.url)) {
+            throw 'Generated latest.json is missing the Windows installer URL.'
+          }
+          if ([string]::IsNullOrWhiteSpace([string]$windowsUpdate.signature)) {
+            throw 'Generated latest.json is missing the Windows updater signature.'
+          }
           gh release upload $env:RELEASE_TAG latest.json --clobber --repo $env:RELEASE_REPOSITORY

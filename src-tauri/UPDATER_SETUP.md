@@ -78,6 +78,16 @@ npm run desktop:build:nsis
 
 `v4.12.0`
 
+## 旧客户端更新处理
+
+已经接入 Tauri updater 的旧桌面客户端会读取同一个地址：
+
+`https://github.com/iszkq/cinny/releases/latest/download/latest.json`
+
+所以只要 GitHub 最新 Release 里的 `latest.json` 指向新版本安装包，且版本号高于本机版本，旧客户端就可以通过“检查更新”发现新版本，不需要用户手动去 GitHub 拉取。
+
+如果某次 Release 已经发布，但客户端检测不到更新，优先检查并替换该 Release 里的 `latest.json`，不需要重新打包安装程序。`signature` 字段应直接使用同名 `.sig` 文件内容，不要手动解码、改写或额外包一层 JSON。只有更早的安装包本身没有内置 updater 配置，或者内置了错误的更新地址/公钥时，才需要用户手动安装一次新版。
+
 ## Release checklist
 
 - The desktop bundle version comes from `src-tauri/Cargo.toml`, so it must match the web/app version before tagging a release.
