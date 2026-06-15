@@ -248,19 +248,21 @@ const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
             <Line variant="Surface" size="300" />
             <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
               <PopOut
-                ref={categoryMenuRef}
                 anchor={categoryMenuAnchor}
                 position="Right"
                 align="Start"
                 offset={4}
                 container={menuContainer ?? undefined}
+                style={{ pointerEvents: 'none' }}
                 content={
                   <Menu
+                    ref={categoryMenuRef}
                     style={{
                       maxWidth: toRem(220),
                       width: '100vw',
                       maxHeight: toRem(320),
                       overflowY: 'auto',
+                      pointerEvents: 'auto',
                     }}
                   >
                     <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
