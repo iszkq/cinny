@@ -232,39 +232,42 @@ const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
               </MenuItem>
             )}
           </RoomNotificationModeSwitcher>
-          <MenuItem
-            onClick={handleToggleFavorite}
-            size="300"
-            after={<Icon size="100" src={favorite ? Icons.Check : Icons.Star} />}
-            radii="300"
-          >
-            <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-              {favorite ? '\u4ece\u6536\u85cf\u79fb\u9664' : '\u52a0\u5165\u6536\u85cf'}
-            </Text>
-          </MenuItem>
         </Box>
-        {customCategories.length > 0 && (
-          <>
-            <Line variant="Surface" size="300" />
-            <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
-              <PopOut
-                anchor={categoryMenuAnchor}
-                position="Right"
-                align="Start"
-                offset={4}
-                container={menuContainer ?? undefined}
-                style={{ pointerEvents: 'none' }}
-                content={
-                  <Menu
-                    ref={categoryMenuRef}
-                    style={{
-                      maxWidth: toRem(220),
-                      width: '100vw',
-                      maxHeight: toRem(320),
-                      overflowY: 'auto',
-                      pointerEvents: 'auto',
-                    }}
+        <Line variant="Surface" size="300" />
+        <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
+          <PopOut
+            anchor={categoryMenuAnchor}
+            position="Right"
+            align="Start"
+            offset={4}
+            container={menuContainer ?? undefined}
+            style={{ pointerEvents: 'none' }}
+            content={
+              <Menu
+                ref={categoryMenuRef}
+                style={{
+                  maxWidth: toRem(220),
+                  width: '100vw',
+                  maxHeight: toRem(320),
+                  overflowY: 'auto',
+                  pointerEvents: 'auto',
+                }}
+              >
+                <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
+                  <MenuItem
+                    onClick={handleToggleFavorite}
+                    size="300"
+                    after={<Icon size="100" src={favorite ? Icons.Check : Icons.Star} />}
+                    radii="300"
                   >
+                    <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
+                      {'\u6536\u85cf'}
+                    </Text>
+                  </MenuItem>
+                </Box>
+                {customCategories.length > 0 && (
+                  <>
+                    <Line variant="Surface" size="300" />
                     <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
                       {customCategories.map((category) => {
                         const included = category.roomIds.includes(room.roomId);
@@ -286,25 +289,25 @@ const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
                         );
                       })}
                     </Box>
-                  </Menu>
-                }
-              >
-                <MenuItem
-                  onClick={handleOpenCategoryMenu}
-                  size="300"
-                  after={<Icon size="100" src={Icons.ChevronRight} />}
-                  radii="300"
-                  aria-pressed={!!categoryMenuAnchor}
-                  data-category-menu-trigger="true"
-                >
-                  <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-                    选择分类
-                  </Text>
-                </MenuItem>
-              </PopOut>
-            </Box>
-          </>
-        )}
+                  </>
+                )}
+              </Menu>
+            }
+          >
+            <MenuItem
+              onClick={handleOpenCategoryMenu}
+              size="300"
+              after={<Icon size="100" src={Icons.ChevronRight} />}
+              radii="300"
+              aria-pressed={!!categoryMenuAnchor}
+              data-category-menu-trigger="true"
+            >
+              <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
+                选择分类
+              </Text>
+            </MenuItem>
+          </PopOut>
+        </Box>
         <Line variant="Surface" size="300" />
         <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
           <MenuItem
