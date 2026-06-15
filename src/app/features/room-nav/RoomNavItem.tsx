@@ -95,6 +95,7 @@ const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
 
     const [invitePrompt, setInvitePrompt] = useState(false);
     const [menuContainer, setMenuContainer] = useState<HTMLDivElement | null>(null);
+    const menuContainerRef = useRef<HTMLDivElement | null>(null);
     const categoryMenuRef = useRef<HTMLDivElement>(null);
     const [categoryMenuAnchor, setCategoryMenuAnchor] = useState<RectCords>();
     const favorite = roomNavCategories.favorites.includes(room.roomId);
@@ -105,7 +106,11 @@ const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
 
     const handleMenuRef = useCallback(
       (node: HTMLDivElement | null) => {
-        setMenuContainer(node);
+        if (menuContainerRef.current !== node) {
+          menuContainerRef.current = node;
+          setMenuContainer(node);
+        }
+
         if (typeof ref === 'function') {
           ref(node);
           return;

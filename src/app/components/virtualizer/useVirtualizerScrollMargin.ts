@@ -4,6 +4,7 @@ export const useVirtualizerScrollMargin = <TElement extends HTMLElement>(
   scrollRef: RefObject<HTMLElement>
 ) => {
   const virtualListRef = useRef<TElement>(null);
+  const scrollMarginRef = useRef(0);
   const [scrollMargin, setScrollMargin] = useState(0);
 
   const updateScrollMargin = useCallback(() => {
@@ -18,9 +19,10 @@ export const useVirtualizerScrollMargin = <TElement extends HTMLElement>(
       Math.round(listRect.top - scrollRect.top + scrollElement.scrollTop)
     );
 
-    setScrollMargin((currentScrollMargin) =>
-      currentScrollMargin === nextScrollMargin ? currentScrollMargin : nextScrollMargin
-    );
+    if (scrollMarginRef.current === nextScrollMargin) return;
+
+    scrollMarginRef.current = nextScrollMargin;
+    setScrollMargin(nextScrollMargin);
   }, [scrollRef]);
 
   useLayoutEffect(() => {
