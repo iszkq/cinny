@@ -1,11 +1,13 @@
-import React, { MouseEventHandler, forwardRef, useState } from 'react';
+import React, { FormEventHandler, MouseEventHandler, forwardRef, useState } from 'react';
 import { Room } from 'matrix-js-sdk';
 import {
   Avatar,
   Box,
+  Button,
   Icon,
   IconButton,
   Icons,
+  Input,
   Text,
   Menu,
   MenuItem,
@@ -19,7 +21,7 @@ import {
 } from 'folds';
 import { useFocusWithin, useHover } from 'react-aria';
 import FocusTrap from 'focus-trap-react';
-import { useAtom, useAtomValue } from 'jotai';
+import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { NavItem, NavItemContent, NavItemOptions, NavLink } from '../../components/nav';
 import { UnreadBadge, UnreadBadgeCenter } from '../../components/unread-badge';
 import { RoomAvatar, RoomIcon } from '../../components/room-avatar';
@@ -59,12 +61,17 @@ import { callChatAtom } from '../../state/callEmbed';
 import { useCallPreferencesAtom } from '../../state/hooks/callPreferences';
 import { useAutoDiscoveryInfo } from '../../hooks/useAutoDiscoveryInfo';
 import { livekitSupport } from '../../hooks/useLivekitSupport';
+import { useRoomNavCategoriesAtom } from '../../state/hooks/roomNavCategories';
 
 type RoomNavItemMenuProps = {
   room: Room;
   requestClose: () => void;
   notificationMode?: RoomNotificationMode;
 };
+
+const makeCustomCategoryId = (): string =>
+  `category-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
 const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
   ({ room, requestClose, notificationMode }, ref) => {
     const mx = useMatrixClient();
@@ -77,8 +84,13 @@ const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
     const canInvite = permissions.action('invite', mx.getSafeUserId());
     const openRoomSettings = useOpenRoomSettings();
     const space = useSpaceOptionally();
+    const roomNavCategoriesAtom = useRoomNavCategoriesAtom();
+    const roomNavCategories = useAtomValue(roomNavCategoriesAtom);
+    const setRoomNavCategories = useSetAtom(roomNavCategoriesAtom);
 
     const [invitePrompt, setInvitePrompt] = useState(false);
+    const [categoryFormOpen, setCategoryFormOpen] = useState(false);
+    const favorite = roomNavCategories.favorites.includes(room.roomId);
 
     const handleMarkAsRead = () => {
       markAsRead(mx, room.roomId, hideActivity);
@@ -101,8 +113,43 @@ const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
       requestClose();
     };
 
+    const handleToggleFavorite = () => {
+      setRoomNavCategories({
+        type: favorite ? 'REMOVE_FAVORITE' : 'ADD_FAVORITE',
+        roomId: room.roomId,
+      });
+      requestClose();
+    };
+
+    const handleToggleCategory = (categoryId: string, included: boolean) => {
+      setRoomNavCategories({
+        type: included ? 'REMOVE_FROM_CATEGORY' : 'ADD_TO_CATEGORY',
+        categoryId,
+        roomId: room.roomId,
+      });
+      requestClose();
+    };
+
+    const handleCreateCategory: FormEventHandler<HTMLFormElement> = (evt) => {
+      evt.preventDefault();
+      const nameInput = evt.currentTarget.elements.namedItem('categoryNameInput');
+      if (!(nameInput instanceof HTMLInputElement)) return;
+      const name = nameInput.value.trim();
+      if (!name) return;
+
+      setRoomNavCategories({
+        type: 'CREATE_CATEGORY',
+        category: {
+          id: makeCustomCategoryId(),
+          name,
+        },
+        roomId: room.roomId,
+      });
+      requestClose();
+    };
+
     return (
-      <Menu ref={ref} style={{ maxWidth: toRem(160), width: '100vw' }}>
+      <Menu ref={ref} style={{ maxWidth: toRem(220), width: '100vw' }}>
         {invitePrompt && room && (
           <InviteUserPrompt
             room={room}
@@ -145,7 +192,73 @@ const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
               </MenuItem>
             )}
           </RoomNotificationModeSwitcher>
+          <MenuItem
+            onClick={handleToggleFavorite}
+            size="300"
+            after={<Icon size="100" src={favorite ? Icons.Check : Icons.Star} />}
+            radii="300"
+          >
+            <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
+              {favorite ? '\u4ece\u6536\u85cf\u79fb\u9664' : '\u52a0\u5165\u6536\u85cf'}
+            </Text>
+          </MenuItem>
         </Box>
+        {(roomNavCategories.categories.length > 0 || categoryFormOpen) && (
+          <>
+            <Line variant="Surface" size="300" />
+            <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
+              {roomNavCategories.categories.map((category) => {
+                const included = category.roomIds.includes(room.roomId);
+
+                return (
+                  <MenuItem
+                    key={category.id}
+                    onClick={() => handleToggleCategory(category.id, included)}
+                    size="300"
+                    after={<Icon size="100" src={included ? Icons.Check : Icons.Category} />}
+                    radii="300"
+                  >
+                    <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
+                      {category.name}
+                    </Text>
+                  </MenuItem>
+                );
+              })}
+              {categoryFormOpen && (
+                <Box as="form" onSubmit={handleCreateCategory} direction="Column" gap="100">
+                  <Input
+                    name="categoryNameInput"
+                    size="300"
+                    variant="Background"
+                    radii="300"
+                    autoFocus
+                    required
+                    placeholder="\u5206\u7c7b\u540d\u79f0"
+                  />
+                  <Button type="submit" size="300" variant="Primary" radii="300">
+                    <Text size="B300" truncate>
+                      {'\u521b\u5efa\u5e76\u52a0\u5165'}
+                    </Text>
+                  </Button>
+                </Box>
+              )}
+            </Box>
+          </>
+        )}
+        {!categoryFormOpen && (
+          <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
+            <MenuItem
+              onClick={() => setCategoryFormOpen(true)}
+              size="300"
+              after={<Icon size="100" src={Icons.Plus} />}
+              radii="300"
+            >
+              <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
+                {'\u65b0\u5efa\u5206\u7c7b'}
+              </Text>
+            </MenuItem>
+          </Box>
+        )}
         <Line variant="Surface" size="300" />
         <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
           <MenuItem
@@ -224,7 +337,7 @@ function CallChatToggle() {
     <IconButton
       onClick={() => setChat(!chat)}
       aria-pressed={chat}
-                  aria-label="切换聊天"
+      aria-label="切换聊天"
       variant="Background"
       fill="None"
       size="300"
@@ -414,7 +527,7 @@ export function RoomNavItem({
               onClick={handleOpenMenu}
               aria-pressed={!!menuAnchor}
               aria-controls={`menu-${room.roomId}`}
-                  aria-label="更多选项"
+              aria-label="更多选项"
               variant="Background"
               fill="None"
               size="300"

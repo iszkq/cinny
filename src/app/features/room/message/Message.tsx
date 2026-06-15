@@ -126,6 +126,21 @@ const MIN_INLINE_READ_RECEIPTS = 1;
 const MAX_INLINE_READ_RECEIPTS = 50;
 const MESSAGE_EMOJI_REOPEN_SUPPRESS_MS = 400;
 
+function MessageCopyIcon() {
+  return (
+    <>
+      <path
+        d="M8 4.75C8 3.7835 8.7835 3 9.75 3H17.25C18.2165 3 19 3.7835 19 4.75V14.25C19 15.2165 18.2165 16 17.25 16H9.75C8.7835 16 8 15.2165 8 14.25V4.75ZM9.5 4.75V14.25C9.5 14.3881 9.61193 14.5 9.75 14.5H17.25C17.3881 14.5 17.5 14.3881 17.5 14.25V4.75C17.5 4.61193 17.3881 4.5 17.25 4.5H9.75C9.61193 4.5 9.5 4.61193 9.5 4.75Z"
+        fill="currentColor"
+      />
+      <path
+        d="M5 8.75C5 7.7835 5.7835 7 6.75 7H7V8.5H6.75C6.61193 8.5 6.5 8.61193 6.5 8.75V18.25C6.5 18.3881 6.61193 18.5 6.75 18.5H14.25C14.3881 18.5 14.5 18.3881 14.5 18.25V18H16V18.25C16 19.2165 15.2165 20 14.25 20H6.75C5.7835 20 5 19.2165 5 18.25V8.75Z"
+        fill="currentColor"
+      />
+    </>
+  );
+}
+
 const getMessageCopyText = (mEvent: MatrixEvent): string | undefined => {
   if (mEvent.isRedacted()) return undefined;
 
@@ -612,7 +627,14 @@ export const MessageCopyTextItem = as<
   };
 
   return (
-    <MenuItem size="300" radii="300" onClick={handleCopy} {...props} ref={ref}>
+    <MenuItem
+      size="300"
+      after={<Icon size="100" src={MessageCopyIcon} />}
+      radii="300"
+      onClick={handleCopy}
+      {...props}
+      ref={ref}
+    >
       <Text className={css.MessageMenuItemText} as="span" size="T300" truncate>
         复制消息
       </Text>

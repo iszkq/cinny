@@ -94,6 +94,7 @@ const TOOLBAR_STYLE = {
 const SOFT_CONTROL_STYLE = {
   border: '1px solid rgba(203, 213, 225, 0.9)',
   background: 'rgba(248, 250, 252, 0.96)',
+  color: 'inherit',
   boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.78)',
 };
 
@@ -1087,6 +1088,7 @@ export function RoomMessageSearchDialog({
                           type="button"
                           size="400"
                           variant="Secondary"
+                          fill="Soft"
                           radii="Pill"
                           outlined
                           onClick={handleClearSearch}

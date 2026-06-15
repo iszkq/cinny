@@ -10,13 +10,15 @@ import { makeOpenedSidebarFolderAtom } from '../../state/openedSidebarFolder';
 import { OpenedSidebarFolderProvider } from '../../state/hooks/openedSidebarFolder';
 import { makeCallPreferencesAtom } from '../../state/callPreferences';
 import { CallPreferencesProvider } from '../../state/hooks/callPreferences';
+import { makeRoomNavCategoriesAtom } from '../../state/roomNavCategories';
+import { RoomNavCategoriesProvider } from '../../state/hooks/roomNavCategories';
 
 type ClientInitStorageAtomProps = {
   children: ReactNode;
 };
 export function ClientInitStorageAtom({ children }: ClientInitStorageAtomProps) {
   const mx = useMatrixClient();
-  const userId = mx.getUserId()!;
+  const userId = mx.getSafeUserId();
 
   const closedNavCategoriesAtom = useMemo(() => makeClosedNavCategoriesAtom(userId), [userId]);
 
@@ -28,13 +30,17 @@ export function ClientInitStorageAtom({ children }: ClientInitStorageAtomProps) 
 
   const callPreferencesAtom = useMemo(() => makeCallPreferencesAtom(userId), [userId]);
 
+  const roomNavCategoriesAtom = useMemo(() => makeRoomNavCategoriesAtom(userId), [userId]);
+
   return (
     <ClosedNavCategoriesProvider value={closedNavCategoriesAtom}>
       <ClosedLobbyCategoriesProvider value={closedLobbyCategoriesAtom}>
         <NavToActivePathProvider value={navToActivePathAtom}>
           <OpenedSidebarFolderProvider value={openedSidebarFolderAtom}>
             <CallPreferencesProvider value={callPreferencesAtom}>
-              {children}
+              <RoomNavCategoriesProvider value={roomNavCategoriesAtom}>
+                {children}
+              </RoomNavCategoriesProvider>
             </CallPreferencesProvider>
           </OpenedSidebarFolderProvider>
         </NavToActivePathProvider>

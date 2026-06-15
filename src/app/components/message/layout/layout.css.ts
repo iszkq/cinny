@@ -303,6 +303,8 @@ export const UsernameBold = style({
 export const MessageTextBody = recipe({
   base: {
     wordBreak: 'break-word',
+    userSelect: 'text',
+    WebkitUserSelect: 'text',
   },
   variants: {
     preWrap: {

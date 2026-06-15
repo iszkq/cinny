@@ -593,6 +593,11 @@ const UNREAD_SYNC_STATES = new Set<SyncState>([
   SyncState.Catchup,
   SyncState.Syncing,
 ]);
+const READ_AT_BOTTOM_THRESHOLD = 8;
+
+const isScrollAtBottom = (scrollElement: HTMLElement): boolean =>
+  scrollElement.scrollHeight - scrollElement.scrollTop - scrollElement.offsetHeight <=
+  READ_AT_BOTTOM_THRESHOLD;
 
 const getReceiptTimestamp = (room: Room, userId: string): number | undefined => {
   const receipt = room.getReadReceiptForUserId(userId) as ReceiptWithTs | null;
@@ -1101,6 +1106,24 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     }
   }, [eventId, mx, navigateRoom, room, privateReceipt]);
 
+  const tryAutoMarkAsReadAtLiveBottom = useCallback(() => {
+    const scrollElement = getScrollElement();
+
+    if (!scrollElement) return;
+    if (!document.hasFocus()) return;
+    if (!latestRenderedEventId) return;
+    if (!liveTimelineLinked || !rangeAtEnd) return;
+    if (!isScrollAtBottom(scrollElement)) return;
+
+    tryAutoMarkAsRead();
+  }, [
+    getScrollElement,
+    latestRenderedEventId,
+    liveTimelineLinked,
+    rangeAtEnd,
+    tryAutoMarkAsRead,
+  ]);
+
   const debounceSetAtBottom = useDebounce(
     useCallback((entry: IntersectionObserverEntry) => {
       if (!entry.isIntersecting) setAtBottom(false);
@@ -1170,6 +1193,10 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     if (!document.hasFocus() || !atBottomRef.current) return;
     tryAutoMarkAsRead();
   }, [privateReceipt, tryAutoMarkAsRead]);
+
+  useEffect(() => {
+    tryAutoMarkAsReadAtLiveBottom();
+  }, [tryAutoMarkAsReadAtLiveBottom, unreadInfo]);
 
   useEffect(() => {
     if (screenSize !== ScreenSize.Mobile) {

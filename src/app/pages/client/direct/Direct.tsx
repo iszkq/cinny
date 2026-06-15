@@ -1,4 +1,11 @@
-import React, { MouseEventHandler, forwardRef, useMemo, useRef, useState } from 'react';
+import React, {
+  MouseEventHandler,
+  forwardRef,
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import {
   Avatar,
@@ -33,7 +40,11 @@ import { getDirectCreatePath, getDirectRoomPath } from '../../pathUtils';
 import { getCanonicalAliasOrRoomId } from '../../../utils/matrix';
 import { useSelectedRoom } from '../../../hooks/router/useSelectedRoom';
 import { VirtualTile } from '../../../components/virtualizer';
-import { RoomNavCategoryButton, RoomNavItem } from '../../../features/room-nav';
+import {
+  RoomNavCategoryButton,
+  RoomNavCategorySections,
+  RoomNavItem,
+} from '../../../features/room-nav';
 import { makeNavCategoryId } from '../../../state/closedNavCategories';
 import { roomToUnreadAtom } from '../../../state/room/roomToUnread';
 import { useCategoryHandler } from '../../../hooks/useCategoryHandler';
@@ -214,6 +225,16 @@ export function Direct() {
     return items;
   }, [mx, directs, closedCategories, roomToUnread, selectedRoomId]);
 
+  const getRoom = useCallback((roomId: string) => mx.getRoom(roomId) ?? undefined, [mx]);
+  const getRoomLinkPath = useCallback(
+    (roomId: string) => getDirectRoomPath(getCanonicalAliasOrRoomId(mx, roomId)),
+    [mx]
+  );
+  const getNotificationMode = useCallback(
+    (roomId: string) => getRoomNotificationMode(notificationPreferences, roomId),
+    [notificationPreferences]
+  );
+
   const virtualizer = useVirtualizer({
     count: sortedDirects.length,
     getScrollElement: () => scrollRef.current,
@@ -251,6 +272,15 @@ export function Direct() {
                 </NavButton>
               </NavItem>
             </NavCategory>
+            <RoomNavCategorySections
+              scope="direct"
+              roomIds={directs}
+              selectedRoomId={selectedRoomId}
+              getRoom={getRoom}
+              getLinkPath={getRoomLinkPath}
+              getNotificationMode={getNotificationMode}
+              direct
+            />
             <NavCategory>
               <NavCategoryHeader>
                 <RoomNavCategoryButton

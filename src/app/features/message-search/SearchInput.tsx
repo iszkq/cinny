@@ -45,7 +45,7 @@ export function SearchInput({ active, loading, searchInputRef, onSearch, onReset
           active ? (
             <Chip
               key="resetButton"
-              type="reset"
+              type="button"
               variant="Secondary"
               size="400"
               radii="Pill"

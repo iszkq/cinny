@@ -44,7 +44,11 @@ import { useSelectedRoom } from '../../../hooks/router/useSelectedRoom';
 import { useSpaceLobbySelected } from '../../../hooks/router/useSelectedSpace';
 import { useSpace } from '../../../hooks/useSpace';
 import { VirtualTile } from '../../../components/virtualizer';
-import { RoomNavCategoryButton, RoomNavItem } from '../../../features/room-nav';
+import {
+  RoomNavCategoryButton,
+  RoomNavCategorySections,
+  RoomNavItem,
+} from '../../../features/room-nav';
 import { makeNavCategoryId } from '../../../state/closedNavCategories';
 import { roomToUnreadAtom } from '../../../state/room/roomToUnread';
 import { useCategoryHandler } from '../../../hooks/useCategoryHandler';
@@ -451,6 +455,17 @@ export function Space() {
     )
   );
 
+  const categoryRoomIds = useMemo(
+    () =>
+      hierarchy
+        .map((item) => item.roomId)
+        .filter((roomId) => {
+          const room = mx.getRoom(roomId);
+          return !!room && !room.isSpaceRoom();
+        }),
+    [hierarchy, mx]
+  );
+
   const virtualizer = useVirtualizer({
     count: hierarchy.length,
     getScrollElement: () => scrollRef.current,
@@ -464,6 +479,11 @@ export function Space() {
 
   const getToLink = (roomId: string) =>
     getSpaceRoomPath(spaceIdOrAlias, getCanonicalAliasOrRoomId(mx, roomId));
+
+  const getNotificationMode = useCallback(
+    (roomId: string) => getRoomNotificationMode(notificationPreferences, roomId),
+    [notificationPreferences]
+  );
 
   return (
     <PageNav resizable>
@@ -494,6 +514,15 @@ export function Space() {
               </NavLink>
             </NavItem>
           </NavCategory>
+          <RoomNavCategorySections
+            scope={space.roomId}
+            roomIds={categoryRoomIds}
+            selectedRoomId={selectedRoomId}
+            getRoom={getRoom}
+            getLinkPath={getToLink}
+            getNotificationMode={getNotificationMode}
+            direct={(roomId) => mDirects.has(roomId)}
+          />
           <NavCategory
             style={{
               height: virtualizer.getTotalSize(),
