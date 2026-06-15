@@ -1,5 +1,6 @@
-import { createContext, useContext } from 'react';
-import { RoomNavCategoriesAtom } from '../roomNavCategories';
+import { createContext, useContext, useMemo } from 'react';
+import { useAtomValue } from 'jotai';
+import { getRoomNavCategorizedRoomIds, RoomNavCategoriesAtom } from '../roomNavCategories';
 
 const RoomNavCategoriesAtomContext = createContext<RoomNavCategoriesAtom | null>(null);
 export const RoomNavCategoriesProvider = RoomNavCategoriesAtomContext.Provider;
@@ -12,4 +13,10 @@ export const useRoomNavCategoriesAtom = (): RoomNavCategoriesAtom => {
   }
 
   return anAtom;
+};
+
+export const useRoomNavCategorizedRoomIds = (): Set<string> => {
+  const roomNavCategories = useAtomValue(useRoomNavCategoriesAtom());
+
+  return useMemo(() => getRoomNavCategorizedRoomIds(roomNavCategories), [roomNavCategories]);
 };

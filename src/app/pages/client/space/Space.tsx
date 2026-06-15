@@ -73,6 +73,7 @@ import { getMatrixToRoom } from '../../../plugins/matrix-to';
 import { getViaServers } from '../../../plugins/via-servers';
 import { useSetting } from '../../../state/hooks/settings';
 import { settingsAtom } from '../../../state/settings';
+import { useRoomNavCategorizedRoomIds } from '../../../state/hooks/roomNavCategories';
 import {
   getRoomNotificationMode,
   useRoomsNotificationPreferencesContext,
@@ -414,6 +415,7 @@ export function Space() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const mDirects = useAtomValue(mDirectAtom);
   const roomToUnread = useAtomValue(roomToUnreadAtom);
+  const categorizedRoomIds = useRoomNavCategorizedRoomIds();
   const allRooms = useAtomValue(allRoomsAtom);
   const allJoinedRooms = useMemo(() => new Set(allRooms), [allRooms]);
   const notificationPreferences = useRoomsNotificationPreferencesContext();
@@ -466,8 +468,32 @@ export function Space() {
     [hierarchy, mx]
   );
 
+  const defaultHierarchy = useMemo(() => {
+    const visibleParentIds = new Set<string>();
+
+    hierarchy.forEach((item) => {
+      const room = mx.getRoom(item.roomId);
+      if (!room || room.isSpaceRoom() || categorizedRoomIds.has(item.roomId)) return;
+      if (item.parentId) {
+        visibleParentIds.add(item.parentId);
+      }
+    });
+
+    return hierarchy.filter((item) => {
+      const room = mx.getRoom(item.roomId);
+      if (!room) return false;
+
+      if (room.isSpaceRoom()) {
+        const categoryId = makeNavCategoryId(space.roomId, item.roomId);
+        return closedCategories.has(categoryId) || visibleParentIds.has(item.roomId);
+      }
+
+      return !categorizedRoomIds.has(item.roomId);
+    });
+  }, [mx, hierarchy, categorizedRoomIds, closedCategories, space.roomId]);
+
   const virtualizer = useVirtualizer({
-    count: hierarchy.length,
+    count: defaultHierarchy.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => 0,
     overscan: 10,
@@ -530,7 +556,7 @@ export function Space() {
             }}
           >
             {virtualizer.getVirtualItems().map((vItem) => {
-              const { roomId } = hierarchy[vItem.index] ?? {};
+              const { roomId } = defaultHierarchy[vItem.index] ?? {};
               const room = mx.getRoom(roomId);
               if (!room) return null;
 

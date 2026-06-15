@@ -65,6 +65,16 @@ const DEFAULT_ROOM_NAV_CATEGORIES: RoomNavCategories = {
 
 const unique = (items: string[]): string[] => Array.from(new Set(items));
 
+export const getRoomNavCategorizedRoomIds = (roomNavCategories: RoomNavCategories): Set<string> => {
+  const roomIds = new Set(roomNavCategories.favorites);
+
+  roomNavCategories.categories.forEach((category) => {
+    category.roomIds.forEach((roomId) => roomIds.add(roomId));
+  });
+
+  return roomIds;
+};
+
 const normalizeRoomNavCategories = (value: Partial<RoomNavCategories>): RoomNavCategories => ({
   favorites: unique(Array.isArray(value.favorites) ? value.favorites : []),
   categories: (Array.isArray(value.categories) ? value.categories : [])
