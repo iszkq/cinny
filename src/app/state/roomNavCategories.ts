@@ -52,6 +52,15 @@ type RoomNavCategoriesAction =
       type: 'REMOVE_FROM_CATEGORY';
       categoryId: string;
       roomId: string;
+    }
+  | {
+      type: 'DELETE_CATEGORY';
+      categoryId: string;
+    }
+  | {
+      type: 'MOVE_CATEGORY';
+      categoryId: string;
+      direction: 'UP' | 'DOWN';
     };
 
 export type RoomNavCategoriesAtom = WritableAtom<
@@ -244,6 +253,40 @@ export const makeRoomNavCategoriesAtom = (
                 : action.category.roomIds ?? []
             ),
           });
+          return;
+        }
+
+        if (action.type === 'DELETE_CATEGORY') {
+          const categoryIndex = draft.categories.findIndex((item) => item.id === action.categoryId);
+          if (categoryIndex !== -1) {
+            draft.categories.splice(categoryIndex, 1);
+          }
+          return;
+        }
+
+        if (action.type === 'MOVE_CATEGORY') {
+          const categoryIndex = draft.categories.findIndex((item) => item.id === action.categoryId);
+          if (categoryIndex === -1) return;
+
+          const categoryScope = draft.categories[categoryIndex].scope;
+          const scopedCategoryIndexes = draft.categories.reduce<number[]>(
+            (indexes, category, index) => {
+              if (category.scope === categoryScope) indexes.push(index);
+              return indexes;
+            },
+            []
+          );
+          const scopedCategoryIndex = scopedCategoryIndexes.indexOf(categoryIndex);
+          const targetScopedCategoryIndex =
+            action.direction === 'UP' ? scopedCategoryIndex - 1 : scopedCategoryIndex + 1;
+          const targetCategoryIndex = scopedCategoryIndexes[targetScopedCategoryIndex];
+
+          if (targetCategoryIndex === undefined) return;
+
+          const currentCategory = draft.categories[categoryIndex];
+          const targetCategory = draft.categories[targetCategoryIndex];
+          draft.categories.splice(targetCategoryIndex, 1, currentCategory);
+          draft.categories.splice(categoryIndex, 1, targetCategory);
           return;
         }
 

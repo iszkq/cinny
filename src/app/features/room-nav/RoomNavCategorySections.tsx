@@ -1,6 +1,20 @@
-import React, { useMemo } from 'react';
-import { useAtom, useAtomValue } from 'jotai';
-import { Box } from 'folds';
+import React, { MouseEventHandler, useCallback, useMemo, useState } from 'react';
+import { useAtom, useAtomValue, useSetAtom } from 'jotai';
+import {
+  Box,
+  Icon,
+  IconButton,
+  Icons,
+  Line,
+  Menu,
+  MenuItem,
+  PopOut,
+  RectCords,
+  Text,
+  config,
+  toRem,
+} from 'folds';
+import FocusTrap from 'focus-trap-react';
 import { factoryRoomIdByActivity } from '../../utils/sort';
 import { NavCategory, NavCategoryHeader } from '../../components/nav';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
@@ -9,6 +23,7 @@ import { roomToUnreadAtom } from '../../state/room/roomToUnread';
 import { makeNavCategoryId } from '../../state/closedNavCategories';
 import { useClosedNavCategoriesAtom } from '../../state/hooks/closedNavCategories';
 import { useCategoryHandler } from '../../hooks/useCategoryHandler';
+import { stopPropagation } from '../../utils/keyboard';
 import {
   FAVORITE_ROOM_NAV_CATEGORY_ID,
   getRoomNavCustomCategories,
@@ -24,6 +39,9 @@ type RoomNavCategorySectionData = {
   id: string;
   name: string;
   roomIds: string[];
+  custom: boolean;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
 };
 
 type RoomNavCategorySectionsProps = {
@@ -53,21 +71,143 @@ const makeSectionData = (
       id: FAVORITE_ROOM_NAV_CATEGORY_ID,
       name: '\u6536\u85cf',
       roomIds: favoriteRoomIds,
+      custom: false,
+      canMoveUp: false,
+      canMoveDown: false,
     });
   }
 
-  categories.forEach((category) => {
+  categories.forEach((category, index) => {
     const scopedRoomIds = getScopedRoomIds(category.roomIds, allowedRoomIds);
 
     sections.push({
       id: category.id,
       name: category.name,
       roomIds: scopedRoomIds,
+      custom: true,
+      canMoveUp: index > 0,
+      canMoveDown: index < categories.length - 1,
     });
   });
 
   return sections;
 };
+
+type RoomNavCategoryOptionsProps = {
+  categoryId: string;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+};
+
+function RoomNavCategoryOptions({
+  categoryId,
+  canMoveUp,
+  canMoveDown,
+}: RoomNavCategoryOptionsProps) {
+  const setRoomNavCategories = useSetAtom(useRoomNavCategoriesAtom());
+  const [menuAnchor, setMenuAnchor] = useState<RectCords>();
+
+  const handleOpenMenu: MouseEventHandler<HTMLButtonElement> = (evt) => {
+    evt.stopPropagation();
+    setMenuAnchor((currentState) =>
+      currentState ? undefined : evt.currentTarget.getBoundingClientRect()
+    );
+  };
+
+  const requestClose = useCallback(() => setMenuAnchor(undefined), []);
+
+  const handleMoveCategory = (direction: 'UP' | 'DOWN') => {
+    setRoomNavCategories({
+      type: 'MOVE_CATEGORY',
+      categoryId,
+      direction,
+    });
+    requestClose();
+  };
+
+  const handleDeleteCategory = () => {
+    setRoomNavCategories({
+      type: 'DELETE_CATEGORY',
+      categoryId,
+    });
+    requestClose();
+  };
+
+  return (
+    <PopOut
+      anchor={menuAnchor}
+      position="Bottom"
+      align="End"
+      content={
+        <FocusTrap
+          focusTrapOptions={{
+            initialFocus: false,
+            returnFocusOnDeactivate: false,
+            onDeactivate: requestClose,
+            clickOutsideDeactivates: true,
+            isKeyForward: (evt: KeyboardEvent) => evt.key === 'ArrowDown',
+            isKeyBackward: (evt: KeyboardEvent) => evt.key === 'ArrowUp',
+            escapeDeactivates: stopPropagation,
+          }}
+        >
+          <Menu style={{ maxWidth: toRem(180), width: '100vw' }}>
+            <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
+              <MenuItem
+                onClick={() => handleMoveCategory('UP')}
+                size="300"
+                after={<Icon size="100" src={Icons.ArrowTop} />}
+                radii="300"
+                disabled={!canMoveUp}
+              >
+                <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
+                  {'\u4e0a\u79fb\u5206\u7c7b'}
+                </Text>
+              </MenuItem>
+              <MenuItem
+                onClick={() => handleMoveCategory('DOWN')}
+                size="300"
+                after={<Icon size="100" src={Icons.ArrowBottom} />}
+                radii="300"
+                disabled={!canMoveDown}
+              >
+                <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
+                  {'\u4e0b\u79fb\u5206\u7c7b'}
+                </Text>
+              </MenuItem>
+            </Box>
+            <Line variant="Surface" size="300" />
+            <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
+              <MenuItem
+                onClick={handleDeleteCategory}
+                variant="Critical"
+                fill="None"
+                size="300"
+                after={<Icon size="100" src={Icons.Delete} />}
+                radii="300"
+              >
+                <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
+                  {'\u5220\u9664\u5206\u7c7b'}
+                </Text>
+              </MenuItem>
+            </Box>
+          </Menu>
+        </FocusTrap>
+      }
+    >
+      <IconButton
+        onClick={handleOpenMenu}
+        size="300"
+        variant="Background"
+        fill="None"
+        radii="300"
+        aria-label="分类选项"
+        aria-pressed={!!menuAnchor}
+      >
+        <Icon size="50" src={Icons.VerticalDots} />
+      </IconButton>
+    </PopOut>
+  );
+}
 
 export function RoomNavCategorySections({
   scope,
@@ -124,6 +264,13 @@ export function RoomNavCategorySections({
               >
                 {section.name}
               </RoomNavCategoryButton>
+              {section.custom && (
+                <RoomNavCategoryOptions
+                  categoryId={section.id}
+                  canMoveUp={section.canMoveUp}
+                  canMoveDown={section.canMoveDown}
+                />
+              )}
             </NavCategoryHeader>
             {visibleRoomIds.map((roomId) => {
               const room = getRoom(roomId);
