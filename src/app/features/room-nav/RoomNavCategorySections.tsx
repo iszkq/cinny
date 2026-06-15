@@ -1,10 +1,18 @@
-import React, { MouseEventHandler, useCallback, useMemo, useState } from 'react';
+import React, {
+  FormEventHandler,
+  KeyboardEventHandler,
+  MouseEventHandler,
+  useCallback,
+  useMemo,
+  useState,
+} from 'react';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import {
   Box,
   Icon,
   IconButton,
   Icons,
+  Input,
   Line,
   Menu,
   MenuItem,
@@ -97,12 +105,14 @@ type RoomNavCategoryOptionsProps = {
   categoryId: string;
   canMoveUp: boolean;
   canMoveDown: boolean;
+  onRename: () => void;
 };
 
 function RoomNavCategoryOptions({
   categoryId,
   canMoveUp,
   canMoveDown,
+  onRename,
 }: RoomNavCategoryOptionsProps) {
   const setRoomNavCategories = useSetAtom(useRoomNavCategoriesAtom());
   const [menuAnchor, setMenuAnchor] = useState<RectCords>();
@@ -133,6 +143,11 @@ function RoomNavCategoryOptions({
     requestClose();
   };
 
+  const handleRenameCategory = () => {
+    requestClose();
+    onRename();
+  };
+
   return (
     <PopOut
       anchor={menuAnchor}
@@ -152,6 +167,16 @@ function RoomNavCategoryOptions({
         >
           <Menu style={{ maxWidth: toRem(180), width: '100vw' }}>
             <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
+              <MenuItem
+                onClick={handleRenameCategory}
+                size="300"
+                after={<Icon size="100" src={Icons.Pencil} />}
+                radii="300"
+              >
+                <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
+                  {'\u91cd\u547d\u540d\u5206\u7c7b'}
+                </Text>
+              </MenuItem>
               <MenuItem
                 onClick={() => handleMoveCategory('UP')}
                 size="300"
@@ -221,8 +246,10 @@ export function RoomNavCategorySections({
 }: RoomNavCategorySectionsProps) {
   const mx = useMatrixClient();
   const roomNavCategories = useAtomValue(useRoomNavCategoriesAtom());
+  const setRoomNavCategories = useSetAtom(useRoomNavCategoriesAtom());
   const roomToUnread = useAtomValue(roomToUnreadAtom);
   const [closedCategories, setClosedCategories] = useAtom(useClosedNavCategoriesAtom());
+  const [renamingCategoryId, setRenamingCategoryId] = useState<string>();
   const allowedRoomIds = useMemo(() => new Set(roomIds), [roomIds]);
   const handleCategoryClick = useCategoryHandler(setClosedCategories, (categoryId) =>
     closedCategories.has(categoryId)
@@ -241,6 +268,30 @@ export function RoomNavCategorySections({
     [allowedRoomIds, mx, roomNavCategories, scope]
   );
 
+  const handleRenameCategory: FormEventHandler<HTMLFormElement> = (evt) => {
+    evt.preventDefault();
+
+    const nameInput = evt.currentTarget.elements.namedItem('categoryNameInput');
+    if (!(nameInput instanceof HTMLInputElement)) return;
+
+    const name = nameInput.value.trim();
+    if (!name || !renamingCategoryId) return;
+
+    setRoomNavCategories({
+      type: 'RENAME_CATEGORY',
+      categoryId: renamingCategoryId,
+      name,
+    });
+    setRenamingCategoryId(undefined);
+  };
+
+  const handleRenameCategoryKeyDown: KeyboardEventHandler<HTMLFormElement> = (evt) => {
+    if (evt.key === 'Escape') {
+      evt.stopPropagation();
+      setRenamingCategoryId(undefined);
+    }
+  };
+
   if (sections.length === 0) return null;
 
   return (
@@ -257,19 +308,65 @@ export function RoomNavCategorySections({
         return (
           <NavCategory key={section.id}>
             <NavCategoryHeader>
-              <RoomNavCategoryButton
-                closed={closed}
-                data-category-id={categoryId}
-                onClick={handleCategoryClick}
-              >
-                {section.name}
-              </RoomNavCategoryButton>
-              {section.custom && (
-                <RoomNavCategoryOptions
-                  categoryId={section.id}
-                  canMoveUp={section.canMoveUp}
-                  canMoveDown={section.canMoveDown}
-                />
+              {renamingCategoryId === section.id ? (
+                <Box
+                  as="form"
+                  onSubmit={handleRenameCategory}
+                  onKeyDown={handleRenameCategoryKeyDown}
+                  alignItems="Center"
+                  gap="100"
+                  grow="Yes"
+                >
+                  <Input
+                    name="categoryNameInput"
+                    size="300"
+                    variant="Background"
+                    radii="300"
+                    defaultValue={section.name}
+                    style={{ flexGrow: 1, minWidth: 0 }}
+                    autoFocus
+                    required
+                  />
+                  <IconButton
+                    type="submit"
+                    size="300"
+                    variant="Primary"
+                    fill="Soft"
+                    radii="300"
+                    aria-label="保存分类名称"
+                  >
+                    <Icon size="50" src={Icons.Check} />
+                  </IconButton>
+                  <IconButton
+                    type="button"
+                    onClick={() => setRenamingCategoryId(undefined)}
+                    size="300"
+                    variant="Secondary"
+                    fill="Soft"
+                    radii="300"
+                    aria-label="取消重命名"
+                  >
+                    <Icon size="50" src={Icons.Cross} />
+                  </IconButton>
+                </Box>
+              ) : (
+                <>
+                  <RoomNavCategoryButton
+                    closed={closed}
+                    data-category-id={categoryId}
+                    onClick={handleCategoryClick}
+                  >
+                    {section.name}
+                  </RoomNavCategoryButton>
+                  {section.custom && (
+                    <RoomNavCategoryOptions
+                      categoryId={section.id}
+                      canMoveUp={section.canMoveUp}
+                      canMoveDown={section.canMoveDown}
+                      onRename={() => setRenamingCategoryId(section.id)}
+                    />
+                  )}
+                </>
               )}
             </NavCategoryHeader>
             {visibleRoomIds.map((roomId) => {

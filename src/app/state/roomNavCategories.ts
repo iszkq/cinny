@@ -58,6 +58,11 @@ type RoomNavCategoriesAction =
       categoryId: string;
     }
   | {
+      type: 'RENAME_CATEGORY';
+      categoryId: string;
+      name: string;
+    }
+  | {
       type: 'MOVE_CATEGORY';
       categoryId: string;
       direction: 'UP' | 'DOWN';
@@ -261,6 +266,17 @@ export const makeRoomNavCategoriesAtom = (
           if (categoryIndex !== -1) {
             draft.categories.splice(categoryIndex, 1);
           }
+          return;
+        }
+
+        if (action.type === 'RENAME_CATEGORY') {
+          const name = action.name.trim();
+          if (!name) return;
+
+          const category = draft.categories.find((item) => item.id === action.categoryId);
+          if (!category || category.name === name) return;
+
+          category.name = name;
           return;
         }
 
