@@ -1,4 +1,4 @@
-import React, { FormEventHandler, MouseEventHandler, forwardRef, useState } from 'react';
+import React, { FormEventHandler, MouseEventHandler, forwardRef, useMemo, useState } from 'react';
 import { Room } from 'matrix-js-sdk';
 import {
   Avatar,
@@ -62,18 +62,20 @@ import { useCallPreferencesAtom } from '../../state/hooks/callPreferences';
 import { useAutoDiscoveryInfo } from '../../hooks/useAutoDiscoveryInfo';
 import { livekitSupport } from '../../hooks/useLivekitSupport';
 import { useRoomNavCategoriesAtom } from '../../state/hooks/roomNavCategories';
+import { getRoomNavCustomCategories } from '../../state/roomNavCategories';
 
 type RoomNavItemMenuProps = {
   room: Room;
   requestClose: () => void;
   notificationMode?: RoomNotificationMode;
+  categoryScope: string;
 };
 
 const makeCustomCategoryId = (): string =>
   `category-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
 const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
-  ({ room, requestClose, notificationMode }, ref) => {
+  ({ room, requestClose, notificationMode, categoryScope }, ref) => {
     const mx = useMatrixClient();
     const [hideActivity] = useSetting(settingsAtom, 'hideActivity');
     const unread = useRoomUnread(room.roomId, roomToUnreadAtom);
@@ -91,6 +93,10 @@ const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
     const [invitePrompt, setInvitePrompt] = useState(false);
     const [categoryFormOpen, setCategoryFormOpen] = useState(false);
     const favorite = roomNavCategories.favorites.includes(room.roomId);
+    const customCategories = useMemo(
+      () => getRoomNavCustomCategories(roomNavCategories, categoryScope),
+      [roomNavCategories, categoryScope]
+    );
 
     const handleMarkAsRead = () => {
       markAsRead(mx, room.roomId, hideActivity);
@@ -141,6 +147,7 @@ const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
         type: 'CREATE_CATEGORY',
         category: {
           id: makeCustomCategoryId(),
+          scope: categoryScope,
           name,
         },
         roomId: room.roomId,
@@ -203,11 +210,11 @@ const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
             </Text>
           </MenuItem>
         </Box>
-        {(roomNavCategories.categories.length > 0 || categoryFormOpen) && (
+        {(customCategories.length > 0 || categoryFormOpen) && (
           <>
             <Line variant="Surface" size="300" />
             <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
-              {roomNavCategories.categories.map((category) => {
+              {customCategories.map((category) => {
                 const included = category.roomIds.includes(room.roomId);
 
                 return (
@@ -352,6 +359,7 @@ type RoomNavItemProps = {
   room: Room;
   selected: boolean;
   linkPath: string;
+  categoryScope: string;
   notificationMode?: RoomNotificationMode;
   showAvatar?: boolean;
   direct?: boolean;
@@ -361,6 +369,7 @@ export function RoomNavItem({
   selected,
   showAvatar,
   direct,
+  categoryScope,
   notificationMode,
   linkPath,
 }: RoomNavItemProps) {
@@ -519,6 +528,7 @@ export function RoomNavItem({
                   room={room}
                   requestClose={() => setMenuAnchor(undefined)}
                   notificationMode={notificationMode}
+                  categoryScope={categoryScope}
                 />
               </FocusTrap>
             }

@@ -224,6 +224,7 @@ function HomeEmpty() {
 }
 
 const DEFAULT_CATEGORY_ID = makeNavCategoryId('home', 'room');
+const ROOM_NAV_CATEGORY_SCOPE = 'home';
 export function Home() {
   const mx = useMatrixClient();
   useNavToActivePathMapper('home');
@@ -231,7 +232,7 @@ export function Home() {
   const rooms = useHomeRooms();
   const notificationPreferences = useRoomsNotificationPreferencesContext();
   const roomToUnread = useAtomValue(roomToUnreadAtom);
-  const categorizedRoomIds = useRoomNavCategorizedRoomIds();
+  const categorizedRoomIds = useRoomNavCategorizedRoomIds(ROOM_NAV_CATEGORY_SCOPE);
   const navigate = useNavigate();
 
   const selectedRoomId = useSelectedRoom();
@@ -338,7 +339,7 @@ export function Home() {
               </UseStateProvider>
             </NavCategory>
             <RoomNavCategorySections
-              scope="home"
+              scope={ROOM_NAV_CATEGORY_SCOPE}
               roomIds={rooms}
               selectedRoomId={selectedRoomId}
               getRoom={getRoom}
@@ -378,6 +379,7 @@ export function Home() {
                           room={room}
                           selected={selected}
                           showAvatar
+                          categoryScope={ROOM_NAV_CATEGORY_SCOPE}
                           linkPath={getHomeRoomPath(getCanonicalAliasOrRoomId(mx, roomId))}
                           notificationMode={getRoomNotificationMode(
                             notificationPreferences,

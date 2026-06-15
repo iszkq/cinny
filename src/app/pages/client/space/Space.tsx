@@ -415,7 +415,7 @@ export function Space() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const mDirects = useAtomValue(mDirectAtom);
   const roomToUnread = useAtomValue(roomToUnreadAtom);
-  const categorizedRoomIds = useRoomNavCategorizedRoomIds();
+  const categorizedRoomIds = useRoomNavCategorizedRoomIds(space.roomId);
   const allRooms = useAtomValue(allRoomsAtom);
   const allJoinedRooms = useMemo(() => new Set(allRooms), [allRooms]);
   const notificationPreferences = useRoomsNotificationPreferencesContext();
@@ -591,6 +591,7 @@ export function Space() {
                     selected={selectedRoomId === roomId}
                     showAvatar
                     direct={mDirects.has(roomId)}
+                    categoryScope={space.roomId}
                     linkPath={getToLink(roomId)}
                     notificationMode={getRoomNotificationMode(notificationPreferences, room.roomId)}
                   />

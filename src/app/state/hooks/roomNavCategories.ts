@@ -15,8 +15,11 @@ export const useRoomNavCategoriesAtom = (): RoomNavCategoriesAtom => {
   return anAtom;
 };
 
-export const useRoomNavCategorizedRoomIds = (): Set<string> => {
+export const useRoomNavCategorizedRoomIds = (scope: string): Set<string> => {
   const roomNavCategories = useAtomValue(useRoomNavCategoriesAtom());
 
-  return useMemo(() => getRoomNavCategorizedRoomIds(roomNavCategories), [roomNavCategories]);
+  return useMemo(
+    () => getRoomNavCategorizedRoomIds(roomNavCategories, scope),
+    [roomNavCategories, scope]
+  );
 };

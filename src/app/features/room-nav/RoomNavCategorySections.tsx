@@ -11,6 +11,7 @@ import { useClosedNavCategoriesAtom } from '../../state/hooks/closedNavCategorie
 import { useCategoryHandler } from '../../hooks/useCategoryHandler';
 import {
   FAVORITE_ROOM_NAV_CATEGORY_ID,
+  getRoomNavCustomCategories,
   RoomNavCustomCategory,
 } from '../../state/roomNavCategories';
 import { useRoomNavCategoriesAtom } from '../../state/hooks/roomNavCategories';
@@ -92,13 +93,13 @@ export function RoomNavCategorySections({
     () =>
       makeSectionData(
         roomNavCategories.favorites,
-        roomNavCategories.categories,
+        getRoomNavCustomCategories(roomNavCategories, scope),
         allowedRoomIds
       ).map((section) => ({
         ...section,
         roomIds: Array.from(section.roomIds).sort(factoryRoomIdByActivity(mx)),
       })),
-    [allowedRoomIds, mx, roomNavCategories]
+    [allowedRoomIds, mx, roomNavCategories, scope]
   );
 
   if (sections.length === 0) return null;
@@ -137,6 +138,7 @@ export function RoomNavCategorySections({
                   selected={selectedRoomId === roomId}
                   showAvatar={showAvatar}
                   direct={isDirect}
+                  categoryScope={scope}
                   linkPath={getLinkPath(roomId)}
                   notificationMode={getNotificationMode(roomId)}
                 />

@@ -203,6 +203,7 @@ function DirectEmpty() {
 }
 
 const DEFAULT_CATEGORY_ID = makeNavCategoryId('direct', 'direct');
+const ROOM_NAV_CATEGORY_SCOPE = 'direct';
 export function Direct() {
   const mx = useMatrixClient();
   useNavToActivePathMapper('direct');
@@ -210,7 +211,7 @@ export function Direct() {
   const directs = useDirectRooms();
   const notificationPreferences = useRoomsNotificationPreferencesContext();
   const roomToUnread = useAtomValue(roomToUnreadAtom);
-  const categorizedRoomIds = useRoomNavCategorizedRoomIds();
+  const categorizedRoomIds = useRoomNavCategorizedRoomIds(ROOM_NAV_CATEGORY_SCOPE);
   const navigate = useNavigate();
 
   const createDirectSelected = useDirectCreateSelected();
@@ -280,7 +281,7 @@ export function Direct() {
               </NavItem>
             </NavCategory>
             <RoomNavCategorySections
-              scope="direct"
+              scope={ROOM_NAV_CATEGORY_SCOPE}
               roomIds={directs}
               selectedRoomId={selectedRoomId}
               getRoom={getRoom}
@@ -322,6 +323,7 @@ export function Direct() {
                           selected={selected}
                           showAvatar
                           direct
+                          categoryScope={ROOM_NAV_CATEGORY_SCOPE}
                           linkPath={getDirectRoomPath(getCanonicalAliasOrRoomId(mx, roomId))}
                           notificationMode={getRoomNotificationMode(
                             notificationPreferences,

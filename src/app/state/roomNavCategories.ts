@@ -9,9 +9,11 @@ import {
 const ROOM_NAV_CATEGORIES = 'roomNavCategories';
 
 export const FAVORITE_ROOM_NAV_CATEGORY_ID = 'favorites';
+export const LEGACY_ROOM_NAV_CATEGORY_SCOPE = 'direct';
 
 export type RoomNavCustomCategory = {
   id: string;
+  scope: string;
   name: string;
   roomIds: string[];
 };
@@ -23,6 +25,7 @@ export type RoomNavCategories = {
 
 type RoomNavCategoryPayload = {
   id: string;
+  scope: string;
   name: string;
   roomIds?: string[];
 };
@@ -65,10 +68,22 @@ const DEFAULT_ROOM_NAV_CATEGORIES: RoomNavCategories = {
 
 const unique = (items: string[]): string[] => Array.from(new Set(items));
 
-export const getRoomNavCategorizedRoomIds = (roomNavCategories: RoomNavCategories): Set<string> => {
+const normalizeScope = (scope: unknown): string =>
+  typeof scope === 'string' && scope.trim() ? scope.trim() : LEGACY_ROOM_NAV_CATEGORY_SCOPE;
+
+export const getRoomNavCustomCategories = (
+  roomNavCategories: RoomNavCategories,
+  scope: string
+): RoomNavCustomCategory[] =>
+  roomNavCategories.categories.filter((category) => category.scope === scope);
+
+export const getRoomNavCategorizedRoomIds = (
+  roomNavCategories: RoomNavCategories,
+  scope: string
+): Set<string> => {
   const roomIds = new Set(roomNavCategories.favorites);
 
-  roomNavCategories.categories.forEach((category) => {
+  getRoomNavCustomCategories(roomNavCategories, scope).forEach((category) => {
     category.roomIds.forEach((roomId) => roomIds.add(roomId));
   });
 
@@ -81,6 +96,7 @@ const normalizeRoomNavCategories = (value: Partial<RoomNavCategories>): RoomNavC
     .filter((category) => category && typeof category.id === 'string')
     .map((category) => ({
       id: category.id,
+      scope: normalizeScope(category.scope),
       name:
         typeof category.name === 'string' && category.name.trim()
           ? category.name.trim()
@@ -127,6 +143,7 @@ export const makeRoomNavCategoriesAtom = (userId: string): RoomNavCategoriesAtom
 
             draft.categories.push({
               id: action.category.id,
+              scope: normalizeScope(action.category.scope),
               name,
               roomIds: unique(
                 action.roomId
