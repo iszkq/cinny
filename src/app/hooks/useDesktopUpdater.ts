@@ -213,11 +213,13 @@ export const useDesktopUpdater = () => {
           ]);
           pendingUpdateHandle = update;
           const autoInstallAvailable = canInstallPendingDesktopUpdate(update);
+          const latestReleaseIsCurrentOrOlder =
+            !!latestRelease && !isDesktopUpdateVersionNewer(latestRelease.version, APP_VERSION);
           const resolvedUpdate =
             mergePendingUpdateInfo(update, latestRelease) ??
             latestReleaseToPendingUpdate(latestRelease);
 
-          if (!resolvedUpdate && updateError) {
+          if (!resolvedUpdate && updateError && !latestReleaseIsCurrentOrOlder) {
             throw updateError;
           }
 
