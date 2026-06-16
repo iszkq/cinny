@@ -65,51 +65,33 @@ export const checkForDesktopUpdate = async (): Promise<PendingDesktopUpdateHandl
 export const normalizeDesktopUpdateVersion = (version: string): string =>
   version.replace(/^v/i, '').trim();
 
-const getDesktopUpdateVersionParts = (version: string): number[] | undefined => {
-  const coreVersion = normalizeDesktopUpdateVersion(version).split(/[-+]/, 1)[0];
-  const parts = coreVersion.split('.');
-
-  if (parts.length < 3) {
-    return undefined;
-  }
-
-  const numericParts = parts.slice(0, 3).map((part) => {
-    if (!/^\d+$/.test(part)) {
-      return Number.NaN;
-    }
-
-    return Number.parseInt(part, 10);
-  });
-
-  if (numericParts.some((part) => Number.isNaN(part))) {
-    return undefined;
-  }
-
-  return numericParts;
-};
-
 export const compareDesktopUpdateVersions = (left: string, right: string): number => {
-  const leftParts = getDesktopUpdateVersionParts(left);
-  const rightParts = getDesktopUpdateVersionParts(right);
+  const normalizedLeft = normalizeDesktopUpdateVersion(left);
+  const normalizedRight = normalizeDesktopUpdateVersion(right);
 
-  if (!leftParts || !rightParts) {
-    const normalizedLeft = normalizeDesktopUpdateVersion(left);
-    const normalizedRight = normalizeDesktopUpdateVersion(right);
-    return normalizedLeft.localeCompare(normalizedRight, undefined, { numeric: true });
-  }
+  if (normalizedLeft === normalizedRight) return 0;
 
-  for (let index = 0; index < 3; index += 1) {
-    const diff = leftParts[index] - rightParts[index];
-    if (diff !== 0) {
-      return diff;
+  const leftSegments = normalizedLeft.split(/[.+-]/).slice(0, 3);
+  const rightSegments = normalizedRight.split(/[.+-]/).slice(0, 3);
+  const segmentCount = Math.max(leftSegments.length, rightSegments.length);
+
+  for (let index = 0; index < segmentCount; index += 1) {
+    const leftNumber = Number.parseInt(leftSegments[index] ?? '0', 10);
+    const rightNumber = Number.parseInt(rightSegments[index] ?? '0', 10);
+
+    if (!Number.isNaN(leftNumber) && !Number.isNaN(rightNumber) && leftNumber !== rightNumber) {
+      return leftNumber - rightNumber;
     }
   }
 
-  return 0;
+  return normalizedLeft.localeCompare(normalizedRight, undefined, {
+    numeric: true,
+    sensitivity: 'base',
+  });
 };
 
-export const isDesktopUpdateNewerThan = (version: string, currentVersion: string): boolean =>
-  compareDesktopUpdateVersions(version, currentVersion) > 0;
+export const isDesktopUpdateVersionNewer = (candidate: string, current: string): boolean =>
+  compareDesktopUpdateVersions(candidate, current) > 0;
 
 export const pendingDesktopUpdatesMatch = (
   left?: Pick<PendingDesktopUpdate, 'version'>,
@@ -148,14 +130,14 @@ export const installPendingDesktopUpdate = async (
   update: PendingDesktopUpdateHandle,
   callback?: (event: UpdaterProgressEvent) => void
 ): Promise<void> => {
-  if (typeof update.downloadAndInstall === 'function') {
-    await update.downloadAndInstall(callback);
-    return;
-  }
-
   if (typeof update.download === 'function' && typeof update.install === 'function') {
     await update.download(callback);
     await update.install();
+    return;
+  }
+
+  if (typeof update.downloadAndInstall === 'function') {
+    await update.downloadAndInstall(callback);
     return;
   }
 
@@ -176,7 +158,13 @@ const parseLatestDesktopManifest = (payload: {
     typeof payload.platforms === 'object' && payload.platforms
       ? (payload.platforms as Record<string, { url?: unknown }>)
       : undefined;
-  const windowsPlatform = platforms?.['windows-x86_64'];
+  const fallbackWindowsPlatformKey = platforms
+    ? Object.keys(platforms).find((platform) => platform.startsWith('windows-'))
+    : undefined;
+  const windowsPlatform =
+    platforms?.['windows-x86_64'] ??
+    platforms?.['windows-x86_64-pc-windows-msvc'] ??
+    (fallbackWindowsPlatformKey ? platforms?.[fallbackWindowsPlatformKey] : undefined);
   const downloadUrl =
     windowsPlatform && typeof windowsPlatform.url === 'string' ? windowsPlatform.url : undefined;
 

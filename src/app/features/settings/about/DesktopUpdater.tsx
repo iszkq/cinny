@@ -15,9 +15,9 @@ export function DesktopUpdater() {
     message,
     pendingUpdate,
     latestRelease,
+    autoInstallAvailable,
     progressText,
     lastCheckedAt,
-    canInstallUpdate,
     checkForUpdates,
     downloadAndInstall,
     formatVersionLabel,
@@ -28,16 +28,17 @@ export function DesktopUpdater() {
   const currentVersionLabel = formatVersionLabel(APP_VERSION);
   const nextVersionLabel = pendingUpdate && formatVersionLabel(pendingUpdate.version);
   const latestVersionLabel = latestRelease && formatVersionLabel(latestRelease.version);
-  const latestVersionDescription =
-    latestVersionLabel && latestVersionLabel !== currentVersionLabel
-      ? `${currentVersionLabel} | \u6700\u65b0\u53d1\u5e03 ${latestVersionLabel}`
-      : currentVersionLabel;
-  const currentVersionDescription = nextVersionLabel
-    ? `${currentVersionLabel} -> \u53ef\u66f4\u65b0\u5230 ${nextVersionLabel}`
-    : latestVersionDescription;
   const releaseNotesBody = pendingUpdate?.body ?? latestRelease?.body;
   const statusText = progressText ?? message;
   const manualDownloadUrl = pendingUpdate?.downloadUrl ?? latestRelease?.downloadUrl;
+  const canAutoInstall = Boolean(pendingUpdate && autoInstallAvailable);
+  let versionDescription = currentVersionLabel;
+
+  if (nextVersionLabel) {
+    versionDescription = `${currentVersionLabel} -> \u53ef\u66f4\u65b0\u5230 ${nextVersionLabel}`;
+  } else if (latestVersionLabel && latestVersionLabel !== currentVersionLabel) {
+    versionDescription = `${currentVersionLabel} | \u6700\u65b0\u53d1\u5e03 ${latestVersionLabel}`;
+  }
 
   useEffect(() => {
     if (!desktopSupported || lastCheckedAt || status === 'checking' || status === 'downloading') {
@@ -60,7 +61,7 @@ export function DesktopUpdater() {
         direction="Column"
         gap="400"
       >
-        <SettingTile title={'\u5f53\u524d\u7248\u672c'} description={currentVersionDescription} />
+        <SettingTile title={'\u5f53\u524d\u7248\u672c'} description={versionDescription} />
         <SettingTile
           title={'\u81ea\u52a8\u68c0\u67e5\u66f4\u65b0'}
           description={statusText}
@@ -80,7 +81,7 @@ export function DesktopUpdater() {
                   {checking ? '\u68c0\u67e5\u4e2d...' : '\u68c0\u67e5\u66f4\u65b0'}
                 </Text>
               </Button>
-              {pendingUpdate && canInstallUpdate && (
+              {canAutoInstall && (
                 <Button
                   variant="Primary"
                   size="300"
@@ -100,8 +101,8 @@ export function DesktopUpdater() {
               )}
               {manualDownloadUrl && (
                 <Button
-                  variant={pendingUpdate && !canInstallUpdate ? 'Primary' : 'Secondary'}
-                  fill={pendingUpdate && !canInstallUpdate ? undefined : 'Soft'}
+                  variant="Secondary"
+                  fill="Soft"
                   size="300"
                   radii="300"
                   onClick={() => {

@@ -7,8 +7,8 @@ import {
   checkForDesktopUpdate,
   fetchLatestDesktopRelease,
   installPendingDesktopUpdate,
-  isDesktopUpdateNewerThan,
   isDesktopUpdaterSupported,
+  isDesktopUpdateVersionNewer,
   normalizeDesktopUpdateVersion,
   openDesktopUpdateDownloadUrl,
   PendingDesktopUpdate,
@@ -19,7 +19,7 @@ import {
   UpdaterProgressEvent,
 } from '../utils/desktopUpdater';
 
-let ongoingCheckPromise: Promise<PendingDesktopUpdate | undefined> | undefined;
+let ongoingCheckPromise: Promise<PendingDesktopUpdateHandle | undefined> | undefined;
 let ongoingInstallPromise: Promise<void> | undefined;
 let pendingUpdateHandle: PendingDesktopUpdateHandle | undefined;
 
@@ -52,8 +52,8 @@ export const getDesktopUpdateErrorMessage = (error: unknown): string => {
   if (/Updater download API is unavailable/i.test(message)) {
     return '\u5f53\u524d\u684c\u9762\u7aef\u6784\u5efa\u7f3a\u5c11\u53ef\u7528\u7684\u81ea\u52a8\u66f4\u65b0\u4e0b\u8f7d\u63a5\u53e3\u3002';
   }
-  if (/pubkey/i.test(message) || /signature/i.test(message)) {
-    return '\u81ea\u52a8\u66f4\u65b0\u5df2\u63a5\u5165\uff0c\u4f46\u5f53\u524d\u7f3a\u5c11\u6709\u6548\u7684\u66f4\u65b0\u516c\u94a5\u6216\u7b7e\u540d\u914d\u7f6e\u3002';
+  if (/pubkey|signature|failed to fetch update information|failed to fetch update/i.test(message)) {
+    return '\u81ea\u52a8\u5b89\u88c5\u672a\u80fd\u8bfb\u53d6\u6216\u9a8c\u8bc1 latest.json\uff0c\u8bf7\u68c0\u67e5\u66f4\u65b0\u5730\u5740\u3001\u5b89\u88c5\u5305\u3001\u7b7e\u540d\u548c\u5185\u7f6e\u516c\u94a5\u3002';
   }
   if (/invalid type:\s*sequence,\s*expected a string/i.test(message)) {
     return '\u53d1\u5e03\u7684 latest.json \u683c\u5f0f\u4e0d\u6b63\u786e\uff1anotes \u5b57\u6bb5\u88ab\u751f\u6210\u6210\u4e86\u5217\u8868\uff0c\u9700\u8981\u6539\u56de\u6587\u672c\u540e\u91cd\u65b0\u4e0a\u4f20\u3002';
@@ -61,8 +61,8 @@ export const getDesktopUpdateErrorMessage = (error: unknown): string => {
   if (/parsing major version number|unexpected character|semver/i.test(message)) {
     return '\u53d1\u5e03\u7684 latest.json \u7248\u672c\u53f7\u4e0d\u5408\u6cd5\uff1aversion \u5fc5\u987b\u662f 1.0.1 \u8fd9\u6837\u7684 semver\uff0c\u4e0d\u8981\u5199\u6210 v.1.0.1 \u6216 .1.0.1\u3002';
   }
-  if (/endpoint/i.test(message) || /404|204|json/i.test(message)) {
-    return '\u672a\u80fd\u83b7\u53d6\u66f4\u65b0\u4fe1\u606f\uff0c\u8bf7\u68c0\u67e5\u66f4\u65b0\u5730\u5740\u548c\u53d1\u5e03\u7684 latest.json \u6587\u4ef6\u3002';
+  if (/endpoint|request|network|download|url/i.test(message) || /404|204|json/i.test(message)) {
+    return '\u81ea\u52a8\u5b89\u88c5\u672a\u80fd\u7ee7\u7eed\uff0c\u901a\u5e38\u662f latest.json\u3001\u5b89\u88c5\u5305\u4e0b\u8f7d\u5730\u5740\u6216\u7f51\u7edc\u8bf7\u6c42\u5931\u8d25\u3002';
   }
   if (/Desktop updater/i.test(message)) {
     return '\u5f53\u524d\u73af\u5883\u4e0d\u662f\u684c\u9762\u7aef\uff0c\u65e0\u6cd5\u4f7f\u7528\u81ea\u52a8\u66f4\u65b0\u3002';
@@ -85,7 +85,10 @@ const canFallbackToManualDownload = (
     /downloadAndInstall is not a function/i.test(message) ||
     /Updater download API is unavailable/i.test(message) ||
     /pubkey/i.test(message) ||
-    /signature/i.test(message)
+    /signature/i.test(message) ||
+    /failed to fetch update information|failed to fetch update/i.test(message) ||
+    /endpoint|request|network|download|url/i.test(message) ||
+    /404|204|json/i.test(message)
   );
 };
 
@@ -93,12 +96,16 @@ const mergePendingUpdateInfo = (
   update?: PendingDesktopUpdateHandle,
   latestRelease?: PendingDesktopUpdate
 ): PendingDesktopUpdate | undefined => {
-  const pendingUpdate = toPendingDesktopUpdate(update);
-  if (!pendingUpdate) {
-    return latestRelease;
+  if (!update) {
+    return undefined;
   }
 
-  if (!latestRelease || !pendingDesktopUpdatesMatch(pendingUpdate, latestRelease)) {
+  const pendingUpdate = toPendingDesktopUpdate(update);
+  if (!pendingUpdate) {
+    return undefined;
+  }
+
+  if (!latestRelease || !pendingDesktopUpdatesMatch(update, latestRelease)) {
     return pendingUpdate;
   }
 
@@ -108,6 +115,16 @@ const mergePendingUpdateInfo = (
     date: pendingUpdate.date ?? latestRelease.date,
     downloadUrl: pendingUpdate.downloadUrl ?? latestRelease.downloadUrl,
   };
+};
+
+const latestReleaseToPendingUpdate = (
+  latestRelease?: PendingDesktopUpdate
+): PendingDesktopUpdate | undefined => {
+  if (!latestRelease || !isDesktopUpdateVersionNewer(latestRelease.version, APP_VERSION)) {
+    return undefined;
+  }
+
+  return latestRelease;
 };
 
 const resolveInstallablePendingUpdate = async (
@@ -163,6 +180,7 @@ export const useDesktopUpdater = () => {
             message:
               '\u5f53\u524d\u4e0d\u662f\u684c\u9762\u7aef\u73af\u5883\uff0c\u7f51\u9875\u7aef\u4e0d\u4f1a\u663e\u793a\u81ea\u52a8\u66f4\u65b0\u3002',
             pendingUpdate: undefined,
+            autoInstallAvailable: false,
             downloadedBytes: 0,
             contentLength: 0,
             lastCheckedAt: Date.now(),
@@ -185,84 +203,73 @@ export const useDesktopUpdater = () => {
 
       ongoingCheckPromise = (async () => {
         try {
-          const [nativeUpdateResult, latestRelease] = await Promise.all([
-            checkForDesktopUpdate()
-              .then((update) => ({ update }))
-              .catch((error: unknown) => ({ update: undefined, error })),
+          let updateError: unknown;
+          const [update, latestRelease] = await Promise.all([
+            checkForDesktopUpdate().catch((error) => {
+              updateError = error;
+              return undefined;
+            }),
             fetchLatestDesktopRelease().catch(() => undefined),
           ]);
-          const { update, error: nativeUpdateError } = nativeUpdateResult;
           pendingUpdateHandle = update;
-          const newerLatestRelease =
-            latestRelease && isDesktopUpdateNewerThan(latestRelease.version, APP_VERSION)
-              ? latestRelease
-              : undefined;
-          const resolvedUpdate = mergePendingUpdateInfo(update, newerLatestRelease);
+          const autoInstallAvailable = canInstallPendingDesktopUpdate(update);
+          const resolvedUpdate =
+            mergePendingUpdateInfo(update, latestRelease) ??
+            latestReleaseToPendingUpdate(latestRelease);
+
+          if (!resolvedUpdate && updateError) {
+            throw updateError;
+          }
+
           const sameAsCurrentVersion =
             !!resolvedUpdate &&
             normalizeDesktopUpdateVersion(resolvedUpdate.version) ===
               normalizeDesktopUpdateVersion(APP_VERSION);
-          const canAutoInstallResolvedUpdate =
-            !nativeUpdateError &&
-            !!update &&
-            !!resolvedUpdate &&
-            pendingDesktopUpdatesMatch(update, resolvedUpdate) &&
-            canInstallPendingDesktopUpdate(update);
 
-          if (!resolvedUpdate && nativeUpdateError) {
-            throw nativeUpdateError;
-          }
+          setState((current) => {
+            if (!resolvedUpdate || sameAsCurrentVersion) {
+              pendingUpdateHandle = undefined;
+              return {
+                ...current,
+                status: 'latest',
+                message: silentIfLatest
+                  ? DESKTOP_UPDATER_IDLE_MESSAGE
+                  : `\u5f53\u524d\u5df2\u7ecf\u662f\u6700\u65b0\u7248\u672c ${formatDesktopUpdateVersion(
+                      APP_VERSION
+                    )}\u3002`,
+                pendingUpdate: undefined,
+                latestRelease,
+                autoInstallAvailable: false,
+                downloadedBytes: 0,
+                contentLength: 0,
+                lastCheckedAt: Date.now(),
+              };
+            }
 
-          if (!resolvedUpdate || sameAsCurrentVersion) {
-            pendingUpdateHandle = undefined;
-            setState((current) => ({
+            const versionLabel = formatDesktopUpdateVersion(resolvedUpdate.version);
+            return {
               ...current,
-              status: 'latest',
-              message: silentIfLatest
-                ? DESKTOP_UPDATER_IDLE_MESSAGE
-                : `\u5f53\u524d\u5df2\u7ecf\u662f\u6700\u65b0\u7248\u672c ${formatDesktopUpdateVersion(
-                    APP_VERSION
-                  )}\u3002`,
-              pendingUpdate: undefined,
+              status: 'available',
+              message: autoInstallAvailable
+                ? `\u53d1\u73b0\u65b0\u7248\u672c ${versionLabel}\uff0c\u53ef\u4ee5\u76f4\u63a5\u4e0b\u8f7d\u5e76\u5b89\u88c5\u3002`
+                : `\u53d1\u73b0\u65b0\u7248\u672c ${versionLabel}\uff0c\u4f46\u81ea\u52a8\u5b89\u88c5\u68c0\u67e5\u5931\u8d25\uff0c\u53ef\u4ee5\u5148\u4f7f\u7528\u624b\u52a8\u4e0b\u8f7d\uff0c\u6216\u7a0d\u540e\u91cd\u8bd5\u68c0\u67e5\u66f4\u65b0\u3002`,
+              pendingUpdate: resolvedUpdate,
               latestRelease,
+              autoInstallAvailable,
               downloadedBytes: 0,
               contentLength: 0,
               lastCheckedAt: Date.now(),
-            }));
-            return undefined;
-          }
+            };
+          });
 
-          let availableUpdateMessage = `\u53d1\u73b0\u65b0\u7248\u672c ${formatDesktopUpdateVersion(
-            resolvedUpdate.version
-          )}\uff0c\u53ef\u4ee5\u624b\u52a8\u4e0b\u8f7d\u5b89\u88c5\u3002`;
-          if (canAutoInstallResolvedUpdate) {
-            availableUpdateMessage = `\u53d1\u73b0\u65b0\u7248\u672c ${formatDesktopUpdateVersion(
-              resolvedUpdate.version
-            )}\uff0c\u53ef\u4ee5\u76f4\u63a5\u4e0b\u8f7d\u5e76\u5b89\u88c5\u3002`;
-          } else if (nativeUpdateError) {
-            availableUpdateMessage = `\u53d1\u73b0\u65b0\u7248\u672c ${formatDesktopUpdateVersion(
-              resolvedUpdate.version
-            )}\uff0c\u81ea\u52a8\u5b89\u88c5\u6682\u65f6\u4e0d\u53ef\u7528\uff0c\u53ef\u4ee5\u624b\u52a8\u4e0b\u8f7d\u5b89\u88c5\u3002`;
-          }
-
-          setState((current) => ({
-            ...current,
-            status: 'available',
-            message: availableUpdateMessage,
-            pendingUpdate: resolvedUpdate,
-            latestRelease,
-            downloadedBytes: 0,
-            contentLength: 0,
-            lastCheckedAt: Date.now(),
-          }));
-
-          return resolvedUpdate;
+          return update;
         } catch (error) {
           if (showErrors) {
             setState((current) => ({
               ...current,
               status: 'error',
               message: getDesktopUpdateErrorMessage(error),
+              autoInstallAvailable: false,
               downloadedBytes: 0,
               contentLength: 0,
               lastCheckedAt: Date.now(),
@@ -284,12 +291,6 @@ export const useDesktopUpdater = () => {
     [desktopSupported, setState]
   );
 
-  const canInstallUpdate =
-    !!state.pendingUpdate &&
-    !!pendingUpdateHandle &&
-    pendingDesktopUpdatesMatch(state.pendingUpdate, pendingUpdateHandle) &&
-    canInstallPendingDesktopUpdate(pendingUpdateHandle);
-
   const downloadAndInstall = useCallback(async (): Promise<void> => {
     if (!desktopSupported || !state.pendingUpdate) return;
     if (ongoingInstallPromise) {
@@ -304,6 +305,7 @@ export const useDesktopUpdater = () => {
       message: `\u6b63\u5728\u51c6\u5907\u4e0b\u8f7d\u5e76\u5b89\u88c5 ${formatDesktopUpdateVersion(
         expectedUpdate.version
       )}...`,
+      autoInstallAvailable: true,
       downloadedBytes: 0,
       contentLength: 0,
     }));
@@ -389,6 +391,7 @@ export const useDesktopUpdater = () => {
           message:
             '\u66f4\u65b0\u5df2\u5b89\u88c5\uff0c\u5e94\u7528\u5c06\u5c1d\u8bd5\u91cd\u65b0\u542f\u52a8\u3002Windows \u4e0b\u5b89\u88c5\u524d\u5e94\u7528\u4f1a\u81ea\u52a8\u9000\u51fa\u3002',
           pendingUpdate: undefined,
+          autoInstallAvailable: false,
           downloadedBytes: 0,
           contentLength: 0,
           lastCheckedAt: Date.now(),
@@ -405,6 +408,7 @@ export const useDesktopUpdater = () => {
             message:
               '\u81ea\u52a8\u5b89\u88c5\u672a\u80fd\u7ee7\u7eed\uff0c\u5df2\u4e3a\u4f60\u6253\u5f00\u624b\u52a8\u4e0b\u8f7d\u94fe\u63a5\u3002\u4e0b\u8f7d\u5b8c\u6210\u540e\u53ef\u76f4\u63a5\u5b89\u88c5\u65b0\u7248\u672c\u3002',
             pendingUpdate: expectedUpdate,
+            autoInstallAvailable: false,
             downloadedBytes: 0,
             contentLength: 0,
             lastCheckedAt: Date.now(),
@@ -417,6 +421,7 @@ export const useDesktopUpdater = () => {
           ...current,
           status: 'error',
           message: getDesktopUpdateErrorMessage(error),
+          autoInstallAvailable: false,
           lastCheckedAt: Date.now(),
         }));
       } finally {
@@ -432,7 +437,6 @@ export const useDesktopUpdater = () => {
     ...state,
     desktopSupported,
     progressText,
-    canInstallUpdate,
     checkForUpdates,
     downloadAndInstall,
     formatVersionLabel: formatDesktopUpdateVersion,

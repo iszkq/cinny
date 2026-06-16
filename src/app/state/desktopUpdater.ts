@@ -15,6 +15,7 @@ export type DesktopUpdaterState = {
   message: string;
   pendingUpdate?: PendingDesktopUpdate;
   latestRelease?: DesktopUpdateReleaseInfo;
+  autoInstallAvailable?: boolean;
   downloadedBytes: number;
   contentLength: number;
   lastCheckedAt?: number;

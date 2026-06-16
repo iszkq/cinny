@@ -1,6 +1,6 @@
 {
   "name": "cinny",
-  "version": "1.4.2",
+  "version": "1.4.3",
   "description": "Yet another matrix client",
   "main": "index.js",
   "type": "module",
@@ -53,6 +53,7 @@
             "package.json",
             "package-lock.json",
             "src-tauri/Cargo.toml",
+            "src-tauri/tauri.conf.json",
             "src/app/features/settings/about/About.tsx",
             "src/app/pages/auth/AuthFooter.tsx",
             "src/app/pages/client/WelcomePage.tsx"

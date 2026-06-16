@@ -50,6 +50,7 @@ const actionsStyle = {
 export function DesktopUpdatePrompt({ open, requestClose }: DesktopUpdatePromptProps) {
   const {
     pendingUpdate,
+    autoInstallAvailable,
     status,
     message,
     progressText,
@@ -64,12 +65,16 @@ export function DesktopUpdatePrompt({ open, requestClose }: DesktopUpdatePromptP
   const downloading = status === 'downloading';
   const manualDownloadUrl = pendingUpdate.downloadUrl;
   const versionLabel = formatVersionLabel(pendingUpdate.version);
-  const promptText =
-    status === 'downloading'
-      ? progressText ?? message
-      : status === 'error' || status === 'installed'
-      ? message
-      : `\u53d1\u73b0\u65b0\u7248\u672c ${versionLabel}\uff0c\u53ef\u4ee5\u76f4\u63a5\u4e0b\u8f7d\u5b89\u88c5\u3002`;
+  const canAutoInstall = Boolean(autoInstallAvailable);
+  let promptText = `\u53d1\u73b0\u65b0\u7248\u672c ${versionLabel}\uff0c\u53ef\u4ee5\u76f4\u63a5\u4e0b\u8f7d\u5b89\u88c5\u3002`;
+
+  if (status === 'downloading') {
+    promptText = progressText ?? message;
+  } else if (status === 'error' || status === 'installed') {
+    promptText = message;
+  } else if (!canAutoInstall) {
+    promptText = `\u53d1\u73b0\u65b0\u7248\u672c ${versionLabel}\uff0c\u81ea\u52a8\u5b89\u88c5\u6682\u65f6\u4e0d\u53ef\u7528\uff0c\u53ef\u4ee5\u5148\u624b\u52a8\u4e0b\u8f7d\u5b89\u88c5\u3002`;
+  }
 
   return (
     <Overlay open backdrop={<OverlayBackdrop />}>
@@ -98,13 +103,13 @@ export function DesktopUpdatePrompt({ open, requestClose }: DesktopUpdatePromptP
                 <Box direction="Column" gap="100" shrink="No">
                   <Text size="H4">{'\u53d1\u73b0\u65b0\u7248\u672c'}</Text>
                   <Text size="T300" priority="300">
-                    {`${formatVersionLabel(APP_VERSION)} -> ${formatVersionLabel(pendingUpdate.version)}`}
+                    {`${formatVersionLabel(APP_VERSION)} -> ${formatVersionLabel(
+                      pendingUpdate.version
+                    )}`}
                   </Text>
                 </Box>
 
-                <Text size="T300">
-                  {promptText}
-                </Text>
+                <Text size="T300">{promptText}</Text>
 
                 <div style={actionsStyle}>
                   <Button
@@ -116,24 +121,26 @@ export function DesktopUpdatePrompt({ open, requestClose }: DesktopUpdatePromptP
                   >
                     <Text size="B300">{'\u7a0d\u540e'}</Text>
                   </Button>
-                  <Button
-                    variant="Primary"
-                    size="300"
-                    radii="300"
-                    onClick={() => {
-                      void downloadAndInstall();
-                    }}
-                    disabled={downloading}
-                    before={
-                      downloading ? (
-                        <Spinner size="100" fill="Solid" variant="Primary" />
-                      ) : undefined
-                    }
-                  >
-                    <Text size="B300">
-                      {downloading ? '\u5b89\u88c5\u4e2d...' : '\u4e0b\u8f7d\u5b89\u88c5'}
-                    </Text>
-                  </Button>
+                  {canAutoInstall && (
+                    <Button
+                      variant="Primary"
+                      size="300"
+                      radii="300"
+                      onClick={() => {
+                        downloadAndInstall().catch(() => undefined);
+                      }}
+                      disabled={downloading}
+                      before={
+                        downloading ? (
+                          <Spinner size="100" fill="Solid" variant="Primary" />
+                        ) : undefined
+                      }
+                    >
+                      <Text size="B300">
+                        {downloading ? '\u5b89\u88c5\u4e2d...' : '\u4e0b\u8f7d\u5b89\u88c5'}
+                      </Text>
+                    </Button>
+                  )}
                   {manualDownloadUrl && (
                     <Button
                       variant="Secondary"
@@ -141,7 +148,7 @@ export function DesktopUpdatePrompt({ open, requestClose }: DesktopUpdatePromptP
                       size="300"
                       radii="300"
                       onClick={() => {
-                        void openDesktopUpdateDownloadUrl(manualDownloadUrl);
+                        openDesktopUpdateDownloadUrl(manualDownloadUrl).catch(() => undefined);
                       }}
                     >
                       <Text size="B300">{'\u624b\u52a8\u4e0b\u8f7d'}</Text>

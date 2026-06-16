@@ -98,3 +98,4 @@ npm run desktop:build:nsis
 - The updater `notes` field is generated as a short plain-text summary from the GitHub Release body so older desktop update dialogs stay compact. Keep the full release notes in the GitHub Release body.
 - If a release was already published without `latest.json` or with the wrong desktop version, replace the release assets or publish a new tag such as `v4.12.1`.
 - The GitHub Actions workflow now uses `tauri-action` only to build the Windows bundle. On `v*` tags, a follow-up step creates the GitHub Release if needed and uploads the exact built `.exe`, `.sig`, and generated `latest.json`.
+- Do not rotate the updater signing key after users have installed a build. Existing desktop apps trust the `plugins.updater.pubkey` baked into that build; a release signed with a different private key can still be visible on GitHub, but Tauri will reject automatic installation.
