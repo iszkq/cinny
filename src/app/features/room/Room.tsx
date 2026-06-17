@@ -5,7 +5,11 @@ import { isKeyHotkey } from 'is-hotkey';
 import { useAtomValue } from 'jotai';
 import { RoomView } from './RoomView';
 import { MembersDrawer } from './MembersDrawer';
-import { ScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
+import {
+  ScreenSize,
+  isDesktopLikeScreenSize,
+  useScreenSizeContext,
+} from '../../hooks/useScreenSize';
 import { useSetting } from '../../state/hooks/settings';
 import { settingsAtom } from '../../state/settings';
 import { PowerLevelsContextProvider, usePowerLevels } from '../../hooks/usePowerLevels';
@@ -27,6 +31,7 @@ export function Room() {
   const [isDrawer] = useSetting(settingsAtom, 'isPeopleDrawer');
   const [sendReadReceipts] = useSetting(settingsAtom, 'sendReadReceipts');
   const screenSize = useScreenSizeContext();
+  const desktopLayout = isDesktopLikeScreenSize(screenSize);
   const powerLevels = usePowerLevels(room);
   const members = useRoomMembers(mx, room.roomId);
   const chat = useAtomValue(callChatAtom);
@@ -73,7 +78,7 @@ export function Room() {
             <CallChatView />
           </>
         )}
-        {!callView && screenSize === ScreenSize.Desktop && isDrawer && (
+        {!callView && desktopLayout && isDrawer && (
           <>
             <Line variant="Background" direction="Vertical" size="300" />
             <MembersDrawer key={room.roomId} room={room} members={members} />

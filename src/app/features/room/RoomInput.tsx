@@ -66,6 +66,7 @@ import { useFilePicker } from '../../hooks/useFilePicker';
 import { useFilePasteHandler } from '../../hooks/useFilePasteHandler';
 import { useFileDropZone } from '../../hooks/useFileDrop';
 import {
+  type IReplyDraft,
   TUploadItem,
   TUploadMetadata,
   roomIdToMsgDraftAtomFamily,
@@ -143,6 +144,47 @@ const restoreEditorDraft = (editor: Editor, draft: Descendant[]) => {
   Transforms.insertFragment(editor, draft);
   moveCursor(editor);
   resetEditorHistory(editor);
+};
+
+const getReplyRelation = (replyDraft: IReplyDraft): IContent['m.relates_to'] => {
+  const relation: IContent['m.relates_to'] = {
+    'm.in_reply_to': {
+      event_id: replyDraft.eventId,
+    },
+  };
+
+  if (replyDraft.relation?.rel_type === RelationType.Thread) {
+    relation.event_id = replyDraft.relation.event_id;
+    relation.rel_type = RelationType.Thread;
+    relation.is_falling_back = false;
+  }
+
+  return relation;
+};
+
+const withReplyMetadata = (
+  content: IContent,
+  replyDraft: IReplyDraft | undefined,
+  currentUserId: string | null
+): IContent => {
+  if (!replyDraft) return content;
+
+  const replyContent: IContent = {
+    ...content,
+    'm.relates_to': getReplyRelation(replyDraft),
+  };
+
+  if (replyDraft.userId !== currentUserId) {
+    const mentions = replyContent['m.mentions'] ?? {};
+    const userIds = new Set(mentions.user_ids ?? []);
+    userIds.add(replyDraft.userId);
+    replyContent['m.mentions'] = {
+      ...mentions,
+      user_ids: Array.from(userIds),
+    };
+  }
+
+  return replyContent;
 };
 
 const getSendErrorMessage = (error: unknown): string => {
@@ -562,7 +604,10 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
             content = await getFileMsgContent(fileItem, upload.mxc);
           }
 
-          await mx.sendMessage(roomId, content as never);
+          await mx.sendMessage(
+            roomId,
+            withReplyMetadata(content, replyDraft, mx.getUserId()) as never
+          );
           dispatchRoomFollowLatest(roomId);
           sentUploads.push(upload);
         } catch (error) {
@@ -589,8 +634,10 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const submit = useCallback(async () => {
       if (sendingMessageRef.current) return;
 
+      const hasUploadDraft = selectedFiles.length > 0;
       const uploadSendSuccess = await uploadBoardHandlers.current?.handleSend();
       if (uploadSendSuccess === false) return;
+      const uploadSent = hasUploadDraft && uploadSendSuccess === true;
 
       const commandName = getBeginCommand(editor);
       let plainText = toPlainText(editor.children, isMarkdown).trim();
@@ -631,7 +678,14 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         return;
       }
 
-      if (plainText === '') return;
+      if (plainText === '') {
+        if (uploadSent) {
+          setReplyDraft(undefined);
+          replyDraftRef.current = undefined;
+          sendTypingStatus(false);
+        }
+        return;
+      }
 
       const draftSnapshot = cloneEditorDraft(editor.children);
       const replyDraftSnapshot = replyDraft;
@@ -644,28 +698,13 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         body,
       };
 
-      if (replyDraft && replyDraft.userId !== mx.getUserId()) {
-        mentionData.users.add(replyDraft.userId);
-      }
-
       const mMentions = getMentionContent(Array.from(mentionData.users), mentionData.room);
       content['m.mentions'] = mMentions;
+      const replyContent = withReplyMetadata(content, replyDraft, mx.getUserId());
 
       if (replyDraft || !customHtmlEqualsPlainText(formattedBody, body)) {
-        content.format = 'org.matrix.custom.html';
-        content.formatted_body = formattedBody;
-      }
-      if (replyDraft) {
-        content['m.relates_to'] = {
-          'm.in_reply_to': {
-            event_id: replyDraft.eventId,
-          },
-        };
-        if (replyDraft.relation?.rel_type === RelationType.Thread) {
-          content['m.relates_to'].event_id = replyDraft.relation.event_id;
-          content['m.relates_to'].rel_type = RelationType.Thread;
-          content['m.relates_to'].is_falling_back = false;
-        }
+        replyContent.format = 'org.matrix.custom.html';
+        replyContent.formatted_body = formattedBody;
       }
       setSendError(undefined);
       resetEditor(editor);
@@ -676,7 +715,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       sendingMessageRef.current = true;
 
       try {
-        await mx.sendMessage(roomId, content as never);
+        await mx.sendMessage(roomId, replyContent as never);
         dispatchRoomFollowLatest(roomId);
       } catch (error) {
         if (isEmptyEditor(editor)) {
@@ -701,6 +740,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       roomId,
       sendTypingNotifications,
       sendTypingStatus,
+      selectedFiles.length,
       setReplyDraft,
     ]);
 
@@ -798,11 +838,20 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const handleStickerSelect = async (mxc: string, label: string, info?: IImageInfo) => {
       setSendError(undefined);
       try {
-        await mx.sendEvent(roomId, EventType.Sticker, {
-          body: label,
-          url: mxc,
-          ...(info ? { info } : {}),
-        });
+        const content = withReplyMetadata(
+          {
+            body: label,
+            url: mxc,
+            ...(info ? { info } : {}),
+          },
+          replyDraft,
+          mx.getUserId()
+        );
+        await mx.sendEvent(roomId, EventType.Sticker, content);
+        if (replyDraft) {
+          setReplyDraft(undefined);
+          sendTypingStatus(false);
+        }
         dispatchRoomFollowLatest(roomId);
       } catch (error) {
         setSendError(getSendErrorMessage(error));
@@ -829,21 +878,11 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
 
     const handleCreatePoll = useCallback(
       async (input: CreatePollInput) => {
-        const content = createPollMessageContent(input);
-
-        if (replyDraft) {
-          content['m.relates_to'] = {
-            'm.in_reply_to': {
-              event_id: replyDraft.eventId,
-            },
-          };
-
-          if (replyDraft.relation?.rel_type === RelationType.Thread) {
-            content['m.relates_to'].event_id = replyDraft.relation.event_id;
-            content['m.relates_to'].rel_type = RelationType.Thread;
-            content['m.relates_to'].is_falling_back = false;
-          }
-        }
+        const content = withReplyMetadata(
+          createPollMessageContent(input),
+          replyDraft,
+          mx.getUserId()
+        );
 
         setSendError(undefined);
 
