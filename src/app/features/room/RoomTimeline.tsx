@@ -21,6 +21,7 @@ import {
   MatrixEvent,
   MatrixEventEvent,
   MsgType,
+  RelationType,
   Room,
   RoomEvent,
   RoomEventHandlerMap,
@@ -171,6 +172,36 @@ export const getLiveTimeline = (room: Room): EventTimeline =>
 export const getEventTimeline = (room: Room, eventId: string): EventTimeline | undefined => {
   const timelineSet = room.getUnfilteredTimelineSet();
   return timelineSet.getTimelineForEvent(eventId) ?? undefined;
+};
+
+type TimelineReplyRelation = {
+  replyEventId?: string;
+  threadRootId?: string;
+};
+
+const getContentRelation = (content: IContent): Record<string, unknown> | undefined => {
+  const relation = content['m.relates_to'];
+  return relation && typeof relation === 'object'
+    ? (relation as Record<string, unknown>)
+    : undefined;
+};
+
+const getTimelineReplyRelation = (mEvent: MatrixEvent): TimelineReplyRelation => {
+  const relation = getContentRelation(mEvent.getContent<IContent>());
+  const inReplyTo = relation?.['m.in_reply_to'];
+  const replyEventId =
+    inReplyTo && typeof inReplyTo === 'object'
+      ? (inReplyTo as Record<string, unknown>).event_id
+      : undefined;
+  const threadRootId =
+    relation?.rel_type === RelationType.Thread && typeof relation.event_id === 'string'
+      ? relation.event_id
+      : undefined;
+
+  return {
+    replyEventId: mEvent.replyEventId ?? (typeof replyEventId === 'string' ? replyEventId : undefined),
+    threadRootId: mEvent.threadRootId ?? threadRootId,
+  };
 };
 
 export const getFirstLinkedTimeline = (
@@ -1557,7 +1588,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     const reactionRelations = getEventReactions(timelineSet, mEventId);
     const reactions = reactionRelations && reactionRelations.getSortedAnnotationsByKey();
     const hasReactions = reactions && reactions.length > 0;
-    const { replyEventId, threadRootId } = mEvent;
+    const { replyEventId, threadRootId } = getTimelineReplyRelation(mEvent);
     const highlighted = focusItem?.index === item && focusItem.highlight;
     const senderId = mEvent.getSender() ?? '';
     const senderDisplayName =
@@ -1669,7 +1700,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
         const reactionRelations = getEventReactions(timelineSet, mEventId);
         const reactions = reactionRelations && reactionRelations.getSortedAnnotationsByKey();
         const hasReactions = reactions && reactions.length > 0;
-        const { replyEventId, threadRootId } = mEvent;
+        const { replyEventId, threadRootId } = getTimelineReplyRelation(mEvent);
         const highlighted = focusItem?.index === item && focusItem.highlight;
 
         const editedEvent = getEditedEvent(mEventId, mEvent, timelineSet);
@@ -1781,7 +1812,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
         const reactionRelations = getEventReactions(timelineSet, mEventId);
         const reactions = reactionRelations && reactionRelations.getSortedAnnotationsByKey();
         const hasReactions = reactions && reactions.length > 0;
-        const { replyEventId, threadRootId } = mEvent;
+        const { replyEventId, threadRootId } = getTimelineReplyRelation(mEvent);
         const highlighted = focusItem?.index === item && focusItem.highlight;
         const senderId = mEvent.getSender() ?? '';
         const senderDisplayName =
@@ -1960,6 +1991,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
         const reactionRelations = getEventReactions(timelineSet, mEventId);
         const reactions = reactionRelations && reactionRelations.getSortedAnnotationsByKey();
         const hasReactions = reactions && reactions.length > 0;
+        const { replyEventId, threadRootId } = getTimelineReplyRelation(mEvent);
         const highlighted = focusItem?.index === item && focusItem.highlight;
         const senderId = mEvent.getSender() ?? '';
         const senderDisplayName =
@@ -2000,6 +2032,21 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             onUsernameClick={handleUsernameClick}
             onReplyClick={handleReplyClick}
             onReactionToggle={handleReactionToggle}
+            reply={
+              replyEventId && (
+                <Reply
+                  room={room}
+                  timelineSet={timelineSet}
+                  replyEventId={replyEventId}
+                  threadRootId={threadRootId}
+                  onClick={handleOpenReply}
+                  onThreadClick={handleOpenThread}
+                  getMemberPowerTag={getMemberPowerTag}
+                  accessibleTagColors={accessiblePowerTagColors}
+                  legacyUsernameColor={legacyUsernameColor || direct}
+                />
+              )
+            }
             reactions={
               reactionRelations && (
                 <Reactions
