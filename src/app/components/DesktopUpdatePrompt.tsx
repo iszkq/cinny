@@ -63,7 +63,10 @@ export function DesktopUpdatePrompt({ open, requestClose }: DesktopUpdatePromptP
   }
 
   const downloading = status === 'downloading';
-  const manualDownloadUrl = pendingUpdate.downloadUrl;
+  const manualDownloadUrl = pendingUpdate.downloadUrl ?? pendingUpdate.releasePageUrl;
+  const manualActionLabel = pendingUpdate.downloadUrl
+    ? '\u624b\u52a8\u4e0b\u8f7d'
+    : '\u6253\u5f00\u53d1\u5e03\u9875';
   const versionLabel = formatVersionLabel(pendingUpdate.version);
   const canAutoInstall = Boolean(autoInstallAvailable);
   let promptText = `\u53d1\u73b0\u65b0\u7248\u672c ${versionLabel}\uff0c\u53ef\u4ee5\u76f4\u63a5\u4e0b\u8f7d\u5b89\u88c5\u3002`;
@@ -73,7 +76,9 @@ export function DesktopUpdatePrompt({ open, requestClose }: DesktopUpdatePromptP
   } else if (status === 'error' || status === 'installed') {
     promptText = message;
   } else if (!canAutoInstall) {
-    promptText = `\u53d1\u73b0\u65b0\u7248\u672c ${versionLabel}\uff0c\u81ea\u52a8\u5b89\u88c5\u6682\u65f6\u4e0d\u53ef\u7528\uff0c\u53ef\u4ee5\u5148\u624b\u52a8\u4e0b\u8f7d\u5b89\u88c5\u3002`;
+    promptText = pendingUpdate.downloadUrl
+      ? `\u53d1\u73b0\u65b0\u7248\u672c ${versionLabel}\uff0c\u81ea\u52a8\u5b89\u88c5\u6682\u65f6\u4e0d\u53ef\u7528\uff0c\u53ef\u4ee5\u5148\u624b\u52a8\u4e0b\u8f7d\u5b89\u88c5\u3002`
+      : `\u53d1\u73b0\u65b0\u7248\u672c ${versionLabel}\uff0c\u4f46\u5f53\u524d Release \u8fd8\u6ca1\u6709\u9644\u5e26\u5b89\u88c5\u5305\uff0c\u53ef\u4ee5\u5148\u6253\u5f00\u53d1\u5e03\u9875\u624b\u52a8\u5904\u7406\u3002`;
   }
 
   return (
@@ -151,7 +156,7 @@ export function DesktopUpdatePrompt({ open, requestClose }: DesktopUpdatePromptP
                         openDesktopUpdateDownloadUrl(manualDownloadUrl).catch(() => undefined);
                       }}
                     >
-                      <Text size="B300">{'\u624b\u52a8\u4e0b\u8f7d'}</Text>
+                      <Text size="B300">{manualActionLabel}</Text>
                     </Button>
                   )}
                 </div>

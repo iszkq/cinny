@@ -21,6 +21,35 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - name: Validate release version metadata
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          $packageJson = Get-Content -LiteralPath 'package.json' -Raw | ConvertFrom-Json
+          $tauriConfig = Get-Content -LiteralPath 'src-tauri/tauri.conf.json' -Raw | ConvertFrom-Json
+          $cargoToml = Get-Content -LiteralPath 'src-tauri/Cargo.toml' -Raw
+
+          $packageVersion = [string]$packageJson.version
+          $tauriVersion = [string]$tauriConfig.version
+          $cargoMatch = [regex]::Match($cargoToml, '(?m)^version = "([^"]+)"$')
+          if (-not $cargoMatch.Success) {
+            throw 'Unable to read version from src-tauri/Cargo.toml.'
+          }
+          $cargoVersion = $cargoMatch.Groups[1].Value
+
+          $versions = @($packageVersion, $tauriVersion, $cargoVersion)
+          if (($versions | Select-Object -Unique).Count -ne 1) {
+            throw "Version metadata is out of sync. package.json=$packageVersion, tauri.conf.json=$tauriVersion, Cargo.toml=$cargoVersion"
+          }
+
+          if ($env:RELEASE_TAG -like 'v*') {
+            $tagVersion = $env:RELEASE_TAG -replace '^v', ''
+            if ($tagVersion -ne $packageVersion) {
+              throw "Release tag version '$tagVersion' does not match project version '$packageVersion'."
+            }
+          }
+
       - name: Setup node
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
         with:
@@ -68,6 +97,8 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
           RELEASE_REPOSITORY: ${{ github.repository }}
         run: |
+          [Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)
+          [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
           $version = $env:RELEASE_TAG -replace '^v', ''
           if ($version -notmatch '^\d+\.\d+\.\d+([-.+][0-9A-Za-z.-]+)?$') {
             throw "Invalid release tag '$($env:RELEASE_TAG)'. Use tags like v1.0.1, not v.1.0.1. The updater manifest version must be plain semver like 1.0.1."
@@ -103,7 +134,13 @@ jobs:
             throw "Generated updater signature file '$($signatureFile.Name)' is empty."
           }
           $assetName = [System.Uri]::EscapeDataString($setupFile.Name)
-          $releaseMetadata = gh release view $env:RELEASE_TAG --repo $env:RELEASE_REPOSITORY --json body | ConvertFrom-Json
+          $releaseMetadata = Invoke-RestMethod `
+            -Uri "https://api.github.com/repos/$($env:RELEASE_REPOSITORY)/releases/tags/$($env:RELEASE_TAG)" `
+            -Headers @{
+              Accept = 'application/vnd.github+json'
+              Authorization = "Bearer $env:GH_TOKEN"
+              'X-GitHub-Api-Version' = '2022-11-28'
+            }
           $releaseBody = [string]$releaseMetadata.body
           if ([string]::IsNullOrWhiteSpace($releaseBody)) {
             $releaseBody = "Starfire v$version"

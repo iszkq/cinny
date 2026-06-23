@@ -114,6 +114,7 @@ const mergePendingUpdateInfo = (
     body: pendingUpdate.body ?? latestRelease.body,
     date: pendingUpdate.date ?? latestRelease.date,
     downloadUrl: pendingUpdate.downloadUrl ?? latestRelease.downloadUrl,
+    releasePageUrl: pendingUpdate.releasePageUrl ?? latestRelease.releasePageUrl,
   };
 };
 
@@ -249,12 +250,19 @@ export const useDesktopUpdater = () => {
             }
 
             const versionLabel = formatDesktopUpdateVersion(resolvedUpdate.version);
+            const hasManualDownload = Boolean(
+              resolvedUpdate.downloadUrl || resolvedUpdate.releasePageUrl
+            );
+            let availableMessage = `\u53d1\u73b0\u65b0\u7248\u672c ${versionLabel}\uff0c\u4f46\u5f53\u524d Release \u8fd8\u6ca1\u6709\u9644\u5e26\u53ef\u5b89\u88c5\u6587\u4ef6\uff0c\u8bf7\u6253\u5f00\u53d1\u5e03\u9875\u67e5\u770b\uff0c\u6216\u7a0d\u540e\u518d\u8bd5\u3002`;
+            if (autoInstallAvailable) {
+              availableMessage = `\u53d1\u73b0\u65b0\u7248\u672c ${versionLabel}\uff0c\u53ef\u4ee5\u76f4\u63a5\u4e0b\u8f7d\u5e76\u5b89\u88c5\u3002`;
+            } else if (hasManualDownload) {
+              availableMessage = `\u53d1\u73b0\u65b0\u7248\u672c ${versionLabel}\uff0c\u4f46\u81ea\u52a8\u5b89\u88c5\u68c0\u67e5\u5931\u8d25\uff0c\u53ef\u4ee5\u5148\u624b\u52a8\u4e0b\u8f7d\uff0c\u6216\u7a0d\u540e\u91cd\u8bd5\u68c0\u67e5\u66f4\u65b0\u3002`;
+            }
             return {
               ...current,
               status: 'available',
-              message: autoInstallAvailable
-                ? `\u53d1\u73b0\u65b0\u7248\u672c ${versionLabel}\uff0c\u53ef\u4ee5\u76f4\u63a5\u4e0b\u8f7d\u5e76\u5b89\u88c5\u3002`
-                : `\u53d1\u73b0\u65b0\u7248\u672c ${versionLabel}\uff0c\u4f46\u81ea\u52a8\u5b89\u88c5\u68c0\u67e5\u5931\u8d25\uff0c\u53ef\u4ee5\u5148\u4f7f\u7528\u624b\u52a8\u4e0b\u8f7d\uff0c\u6216\u7a0d\u540e\u91cd\u8bd5\u68c0\u67e5\u66f4\u65b0\u3002`,
+              message: availableMessage,
               pendingUpdate: resolvedUpdate,
               latestRelease,
               autoInstallAvailable,

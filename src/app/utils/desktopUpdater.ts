@@ -21,6 +21,7 @@ export type PendingDesktopUpdate = {
   date?: string;
   body?: string;
   downloadUrl?: string;
+  releasePageUrl?: string;
 };
 
 export type PendingDesktopUpdateHandle = PendingDesktopUpdate & {
@@ -34,6 +35,7 @@ export type DesktopUpdateReleaseInfo = {
   date?: string;
   body?: string;
   downloadUrl?: string;
+  releasePageUrl?: string;
 };
 
 export const DESKTOP_UPDATER_MANIFEST_URL =
@@ -114,6 +116,7 @@ export const toPendingDesktopUpdate = (
     date: update.date,
     body: update.body,
     downloadUrl: update.downloadUrl,
+    releasePageUrl: update.releasePageUrl,
   };
 };
 
@@ -181,6 +184,7 @@ const parseLatestDesktopRelease = (payload: {
   body?: unknown;
   published_at?: unknown;
   assets?: unknown;
+  html_url?: unknown;
 }): DesktopUpdateReleaseInfo | undefined => {
   if (typeof payload.tag_name !== 'string' || payload.tag_name.trim() === '') {
     return undefined;
@@ -202,6 +206,7 @@ const parseLatestDesktopRelease = (payload: {
     body: typeof payload.body === 'string' ? payload.body : undefined,
     date: typeof payload.published_at === 'string' ? payload.published_at : undefined,
     downloadUrl,
+    releasePageUrl: typeof payload.html_url === 'string' ? payload.html_url : undefined,
   };
 };
 
@@ -220,6 +225,7 @@ const mergeLatestDesktopReleaseInfo = (
     return {
       ...githubRelease,
       downloadUrl: githubRelease.downloadUrl ?? manifestRelease.downloadUrl,
+      releasePageUrl: githubRelease.releasePageUrl ?? manifestRelease.releasePageUrl,
     };
   }
 
@@ -228,6 +234,7 @@ const mergeLatestDesktopReleaseInfo = (
     date: githubRelease.date ?? manifestRelease.date,
     body: githubRelease.body ?? manifestRelease.body,
     downloadUrl: manifestRelease.downloadUrl ?? githubRelease.downloadUrl,
+    releasePageUrl: githubRelease.releasePageUrl ?? manifestRelease.releasePageUrl,
   };
 };
 

@@ -30,7 +30,15 @@ export function DesktopUpdater() {
   const latestVersionLabel = latestRelease && formatVersionLabel(latestRelease.version);
   const releaseNotesBody = pendingUpdate?.body ?? latestRelease?.body;
   const statusText = progressText ?? message;
-  const manualDownloadUrl = pendingUpdate?.downloadUrl ?? latestRelease?.downloadUrl;
+  const manualDownloadUrl =
+    pendingUpdate?.downloadUrl ??
+    latestRelease?.downloadUrl ??
+    pendingUpdate?.releasePageUrl ??
+    latestRelease?.releasePageUrl;
+  const manualActionLabel =
+    pendingUpdate?.downloadUrl || latestRelease?.downloadUrl
+      ? '\u624b\u52a8\u4e0b\u8f7d'
+      : '\u6253\u5f00\u53d1\u5e03\u9875';
   const canAutoInstall = Boolean(pendingUpdate && autoInstallAvailable);
   let versionDescription = currentVersionLabel;
 
@@ -109,7 +117,7 @@ export function DesktopUpdater() {
                     openDesktopUpdateDownloadUrl(manualDownloadUrl).catch(() => undefined);
                   }}
                 >
-                  <Text size="B300">{'\u624b\u52a8\u4e0b\u8f7d'}</Text>
+                  <Text size="B300">{manualActionLabel}</Text>
                 </Button>
               )}
             </Box>
