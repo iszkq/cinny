@@ -860,22 +860,10 @@ export function BibleExperienceModal({
       const centeredTop = (window.innerHeight - rect.height) / 2;
       const minVisibleWidth = Math.min(WINDOW_MIN_VISIBLE_WIDTH_PX, rect.width);
       const minVisibleHeight = Math.min(WINDOW_MIN_VISIBLE_HEIGHT_PX, rect.height);
-      const canKeepFullWidthVisible =
-        window.innerWidth - rect.width - WINDOW_EDGE_PADDING_PX * 2 >= 0;
-      const canKeepFullHeightVisible =
-        window.innerHeight - rect.height - WINDOW_EDGE_PADDING_PX * 2 >= 0;
-      const minLeft = canKeepFullWidthVisible
-        ? WINDOW_EDGE_PADDING_PX
-        : -(rect.width - minVisibleWidth);
-      const maxLeft = canKeepFullWidthVisible
-        ? window.innerWidth - rect.width - WINDOW_EDGE_PADDING_PX
-        : window.innerWidth - minVisibleWidth;
-      const minTop = canKeepFullHeightVisible
-        ? WINDOW_EDGE_PADDING_PX
-        : -(rect.height - minVisibleHeight);
-      const maxTop = canKeepFullHeightVisible
-        ? window.innerHeight - rect.height - WINDOW_EDGE_PADDING_PX
-        : window.innerHeight - minVisibleHeight;
+      const minLeft = WINDOW_EDGE_PADDING_PX - (rect.width - minVisibleWidth);
+      const maxLeft = window.innerWidth - minVisibleWidth - WINDOW_EDGE_PADDING_PX;
+      const minTop = WINDOW_EDGE_PADDING_PX - (rect.height - minVisibleHeight);
+      const maxTop = window.innerHeight - minVisibleHeight - WINDOW_EDGE_PADDING_PX;
       const nextLeft = clamp(centeredLeft + nextOffset.x, minLeft, maxLeft);
       const nextTop = clamp(centeredTop + nextOffset.y, minTop, maxTop);
 
