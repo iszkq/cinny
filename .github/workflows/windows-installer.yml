@@ -106,25 +106,32 @@ jobs:
           $setupFile = Get-ChildItem -Path 'src-tauri/target/release/bundle/nsis' -Filter '*-setup.exe' | Select-Object -First 1
           $signatureFile = Get-ChildItem -Path 'src-tauri/target/release/bundle/nsis' -Filter '*-setup.exe.sig' | Select-Object -First 1
           $releaseNotesPath = ".github/release-notes/$($env:RELEASE_TAG).md"
+          $releaseNotes = $null
           if (-not $setupFile) {
             throw 'Missing NSIS installer file under src-tauri/target/release/bundle/nsis.'
           }
           if (-not $signatureFile) {
             throw 'Missing NSIS signature file under src-tauri/target/release/bundle/nsis.'
           }
+          if (Test-Path $releaseNotesPath) {
+            $releaseNotes = [System.IO.File]::ReadAllText(
+              (Resolve-Path $releaseNotesPath),
+              [System.Text.UTF8Encoding]::new($false)
+            )
+          }
 
           gh release view $env:RELEASE_TAG --repo $env:RELEASE_REPOSITORY *> $null
           if ($LASTEXITCODE -ne 0) {
-            if (Test-Path $releaseNotesPath) {
-              gh release create $env:RELEASE_TAG --repo $env:RELEASE_REPOSITORY --title "Starfire $($env:RELEASE_TAG)" --notes-file $releaseNotesPath
+            if (-not [string]::IsNullOrWhiteSpace($releaseNotes)) {
+              gh release create $env:RELEASE_TAG --repo $env:RELEASE_REPOSITORY --title "Starfire $($env:RELEASE_TAG)" --notes $releaseNotes
             } else {
               gh release create $env:RELEASE_TAG --repo $env:RELEASE_REPOSITORY --title "Starfire $($env:RELEASE_TAG)" --generate-notes
             }
             if ($LASTEXITCODE -ne 0) {
               throw "Failed to create GitHub release for $($env:RELEASE_TAG)."
             }
-          } elseif (Test-Path $releaseNotesPath) {
-            gh release edit $env:RELEASE_TAG --repo $env:RELEASE_REPOSITORY --title "Starfire $($env:RELEASE_TAG)" --notes-file $releaseNotesPath
+          } elseif (-not [string]::IsNullOrWhiteSpace($releaseNotes)) {
+            gh release edit $env:RELEASE_TAG --repo $env:RELEASE_REPOSITORY --title "Starfire $($env:RELEASE_TAG)" --notes $releaseNotes
           }
 
           gh release upload $env:RELEASE_TAG $setupFile.FullName $signatureFile.FullName --clobber --repo $env:RELEASE_REPOSITORY

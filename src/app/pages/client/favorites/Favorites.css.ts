@@ -43,7 +43,7 @@ export const StickyFilterCard = style([
     position: 'relative',
     isolation: 'isolate',
     overflow: 'hidden',
-    background: 'rgba(255, 255, 255, 0.96)',
+    background: '#ffffff',
     border: '1px solid rgba(226, 232, 240, 0.96)',
     boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)',
     backdropFilter: 'none',

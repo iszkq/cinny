@@ -192,8 +192,8 @@ const TOOLBAR_SHELL_STYLE: CSSProperties = {
   zIndex: 1,
 };
 const VERSE_SCROLL_STYLE: CSSProperties = {
-  minHeight: toRem(360),
-  maxHeight: '64vh',
+  flex: '1 1 auto',
+  minHeight: 0,
   overflowY: 'auto',
   padding: `${toRem(12)} ${toRem(12)} ${toRem(18)}`,
   scrollPaddingTop: toRem(20),
@@ -1256,6 +1256,19 @@ export function BibleExperienceModal({
     paddingBottom: toRem(16),
     boxSizing: 'border-box',
   };
+  const readerShellStyle: CSSProperties = {
+    flex: 1,
+    minHeight: 0,
+  };
+  const readerCardStyle: CSSProperties = {
+    ...CARD_STYLE,
+    padding: 0,
+    overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column',
+    flex: '1 1 auto',
+    minHeight: 0,
+  };
   const toolbarShellStyle: CSSProperties = compactLayout
     ? {
         ...TOOLBAR_SHELL_STYLE,
@@ -1323,7 +1336,7 @@ export function BibleExperienceModal({
 
       {!loading && !error && data && selectedBook && (
         <div style={{ ...mainModalContentStyle, flex: 1, minHeight: 0 }}>
-          <Box direction="Column" gap="300">
+          <Box direction="Column" gap="300" style={readerShellStyle}>
             <BiblePanelIntro
               title={CN.title}
               description={headerHint}
@@ -1334,7 +1347,7 @@ export function BibleExperienceModal({
               variant="SurfaceVariant"
               direction="Column"
               gap="0"
-              style={{ ...CARD_STYLE, padding: 0, overflow: 'hidden' }}
+              style={readerCardStyle}
             >
               <div style={sectionHeaderStyle}>
                 <div style={SECTION_HEADER_STACK_STYLE}>
@@ -1468,7 +1481,7 @@ export function BibleExperienceModal({
                 gap="250"
                 alignItems="Center"
                 justifyContent="SpaceBetween"
-                style={{ padding: `${toRem(16)} ${toRem(28)}` }}
+                style={{ padding: `${toRem(16)} ${toRem(28)}`, flexShrink: 0 }}
               >
                 <Text size="T300" priority="300">
                   {CN.keyboardHint}
@@ -1486,7 +1499,7 @@ export function BibleExperienceModal({
                     gap="100"
                     alignItems="Center"
                     justifyContent="Center"
-                    style={{ padding: `${toRem(18)} ${toRem(28)} ${toRem(24)}` }}
+                    style={{ padding: `${toRem(18)} ${toRem(28)} ${toRem(24)}`, flexShrink: 0 }}
                   >
                     <BiblePillButton
                       onClick={() => setCurrentPage((page) => Math.max(page - 1, 1))}

@@ -1704,7 +1704,7 @@ export function Favorites() {
       <Box direction="Column" gap="300">
         {encryptedRoomNotice}
         <SequenceCard
-          className={`${css.GlassCard} ${css.StickyFilterCard}`}
+          className={css.StickyFilterCard}
           variant="Background"
           direction="Column"
           gap="300"
