@@ -206,7 +206,11 @@ export function ClientRoot({ children }: ClientRootProps) {
   useSyncState(
     mx,
     useCallback((state) => {
-      if (state === SyncState.Prepared) {
+      if (
+        state === SyncState.Prepared ||
+        state === SyncState.Syncing ||
+        state === SyncState.Catchup
+      ) {
         setLoading(false);
       }
     }, [])
