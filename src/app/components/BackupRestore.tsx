@@ -1,6 +1,7 @@
 import React, { MouseEventHandler, useCallback, useState } from 'react';
 import { useAtom, useSetAtom } from 'jotai';
-import { CryptoApi, KeyBackupInfo } from 'matrix-js-sdk/lib/crypto-api';
+import { CryptoApi } from 'matrix-js-sdk/lib/crypto-api';
+import type { KeyBackupInfo } from 'matrix-js-sdk/lib/crypto-api/keybackup';
 import {
   Badge,
   Box,
@@ -34,6 +35,7 @@ import {
 } from '../hooks/useKeyBackup';
 import { stopPropagation } from '../utils/keyboard';
 import { useRestoreBackupOnVerification } from '../hooks/useRestoreBackupOnVerification';
+import { getBackupRestoreErrorMessage, runKeyBackupRestore } from '../utils/restoreKeyBackup';
 
 type BackupStatusProps = {
   enabled: boolean;
@@ -47,7 +49,7 @@ function BackupStatus({ enabled }: BackupStatusProps) {
         size="L400"
         style={{ color: enabled ? color.Success.Main : color.Critical.Main }}
       >
-        {enabled ? '已连接' : '未连接'}
+        {enabled ? '???' : '???'}
       </Text>
     </Box>
   );
@@ -60,7 +62,7 @@ function BackupSyncing({ count }: BackupSyncingProps) {
     <Box as="span" gap="100" alignItems="Center">
       <Spinner size="50" variant="Primary" fill="Soft" />
       <Text as="span" size="L400" style={{ color: color.Primary.Main }}>
-        同步中 ({count})
+        ??? ({count})
       </Text>
     </Box>
   );
@@ -70,7 +72,7 @@ function BackupProgressFetching() {
   return (
     <Box grow="Yes" gap="200" alignItems="Center" justifyContent="End">
       <Badge variant="Secondary" fill="Solid" radii="300">
-        <Text size="L400">恢复中...</Text>
+        <Text size="L400">???...</Text>
       </Badge>
       <Spinner size="50" variant="Secondary" fill="Soft" />
     </Box>
@@ -85,7 +87,7 @@ function BackupProgress({ total, downloaded }: BackupProgressProps) {
   return (
     <Box grow="Yes" gap="200" alignItems="Center">
       <Badge variant="Secondary" fill="Solid" radii="300">
-        <Text size="L400">恢复中：{`${Math.round(percent(0, total, downloaded))}%`}</Text>
+        <Text size="L400">???:{`${Math.round(percent(0, total, downloaded))}%`}</Text>
       </Badge>
       <Box grow="Yes" direction="Column">
         <ProgressBar variant="Secondary" size="300" min={0} max={total} value={downloaded} />
@@ -96,6 +98,21 @@ function BackupProgress({ total, downloaded }: BackupProgressProps) {
         </Text>
       </Badge>
     </Box>
+  );
+}
+
+type BackupMessageProps = {
+  message: string;
+  tone: 'warning' | 'critical';
+};
+function BackupMessage({ message, tone }: BackupMessageProps) {
+  return (
+    <Text
+      size="T200"
+      style={{ color: tone === 'warning' ? color.Warning.Main : color.Critical.Main }}
+    >
+      <b>{message}</b>
+    </Text>
   );
 }
 
@@ -112,20 +129,20 @@ function BackupTrustInfo({ crypto, backupInfo }: BackupTrustInfoProps) {
     <Box direction="Column">
       {trust.matchesDecryptionKey ? (
         <Text size="T200" style={{ color: color.Success.Main }}>
-          <b>备份包含可信的解密密钥。</b>
+          <b>????????????</b>
         </Text>
       ) : (
         <Text size="T200" style={{ color: color.Critical.Main }}>
-          <b>备份缺少可信的解密密钥。</b>
+          <b>????????????</b>
         </Text>
       )}
       {trust.trusted ? (
         <Text size="T200" style={{ color: color.Success.Main }}>
-          <b>备份签名已受信任。</b>
+          <b>?????????</b>
         </Text>
       ) : (
         <Text size="T200" style={{ color: color.Critical.Main }}>
-          <b>备份签名未受信任。</b>
+          <b>?????????</b>
         </Text>
       )}
     </Box>
@@ -155,12 +172,12 @@ export function BackupRestoreTile({ crypto }: BackupRestoreTileProps) {
   const [restoreState, restoreBackup] = useAsyncCallback<void, Error, []>(
     useCallback(async () => {
       try {
-        await crypto.restoreKeyBackup({
-          progressCallback(progress) {
-            setRestoreProgress(progress);
-          },
+        await runKeyBackupRestore({
+          crypto,
+          setRestoreProgress,
+          setBackupRestoreProgress,
         });
-        setBackupRestoreProgress({ status: BackupProgressStatus.Done });
+        return undefined;
       } catch (error) {
         setBackupRestoreProgress({ status: BackupProgressStatus.Idle });
         throw error;
@@ -176,7 +193,7 @@ export function BackupRestoreTile({ crypto }: BackupRestoreTileProps) {
   return (
     <InfoCard
       variant="Surface"
-      title="加密备份"
+      title="????"
       after={
         <Box alignItems="Center" gap="200">
           {remainingSession === 0 ? (
@@ -220,12 +237,12 @@ export function BackupRestoreTile({ crypto }: BackupRestoreTileProps) {
                     <Box direction="Column" gap="200">
                       <InfoCard
                         variant="SurfaceVariant"
-                        title="备份详情"
+                        title="????"
                         description={
                           <>
-                            <span>版本：{backupInfo?.version ?? 'N/A'}</span>
+                            <span>??:{backupInfo?.version ?? 'N/A'}</span>
                             <br />
-                            <span>密钥：{backupInfo?.count ?? 'N/A'}</span>
+                            <span>??:{backupInfo?.count ?? 'N/A'}</span>
                           </>
                         }
                       />
@@ -242,7 +259,7 @@ export function BackupRestoreTile({ crypto }: BackupRestoreTileProps) {
                       }
                       before={<Icon size="100" src={Icons.Download} />}
                     >
-                      <Text size="B300">恢复备份</Text>
+                      <Text size="B300">????</Text>
                     </Button>
                   </Box>
                 </Menu>
@@ -259,7 +276,7 @@ export function BackupRestoreTile({ crypto }: BackupRestoreTileProps) {
       )}
       {!backupEnabled && backupInfo === null && (
         <Text size="T200" style={{ color: color.Critical.Main }}>
-          <b>服务器上没有可用备份。</b>
+          <b>???????????</b>
         </Text>
       )}
       {!syncFailure && !backupEnabled && backupInfo && (
@@ -273,10 +290,14 @@ export function BackupRestoreTile({ crypto }: BackupRestoreTileProps) {
           downloaded={restoreProgress.data.downloaded}
         />
       )}
+      {restoreProgress.status === BackupProgressStatus.Background && (
+        <BackupMessage message={restoreProgress.message} tone="warning" />
+      )}
+      {restoreProgress.status === BackupProgressStatus.Error && (
+        <BackupMessage message={restoreProgress.message} tone="critical" />
+      )}
       {restoreState.status === AsyncStatus.Error && (
-        <Text size="T200" style={{ color: color.Critical.Main }}>
-          <b>{restoreState.error.message}</b>
-        </Text>
+        <BackupMessage message={getBackupRestoreErrorMessage(restoreState.error)} tone="critical" />
       )}
     </InfoCard>
   );

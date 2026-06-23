@@ -5,6 +5,8 @@ export enum BackupProgressStatus {
   Idle,
   Fetching,
   Loading,
+  Background,
+  Error,
   Done,
 }
 export type ProgressData = {
@@ -25,6 +27,14 @@ export type IBackupProgress =
       data: ProgressData;
     }
   | {
+      status: BackupProgressStatus.Background;
+      message: string;
+    }
+  | {
+      status: BackupProgressStatus.Error;
+      message: string;
+    }
+  | {
       status: BackupProgressStatus.Done;
     };
 
@@ -36,6 +46,7 @@ export const setBackupRestoreProgressAtom = atom(
   null,
   (_get, set, progress: IBackupProgress) => {
     set(baseBackupRestoreProgressAtom, progress);
+    return undefined;
   }
 );
 
@@ -50,7 +61,7 @@ export const backupRestoreProgressAtom = atom<
       set(baseBackupRestoreProgressAtom, {
         status: BackupProgressStatus.Fetching,
       });
-      return;
+      return undefined;
     }
 
     if (progress.stage === ImportRoomKeyStage.LoadKeys) {
@@ -61,7 +72,7 @@ export const backupRestoreProgressAtom = atom<
         set(baseBackupRestoreProgressAtom, {
           status: BackupProgressStatus.Done,
         });
-        return;
+        return undefined;
       }
       set(baseBackupRestoreProgressAtom, {
         status: BackupProgressStatus.Loading,
@@ -73,5 +84,6 @@ export const backupRestoreProgressAtom = atom<
         },
       });
     }
+    return undefined;
   }
 );
