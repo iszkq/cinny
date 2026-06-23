@@ -1330,7 +1330,7 @@ export function BibleExperienceModal({
                 gap="220"
                 style={{
                   padding: sectionPadding,
-                  borderBottom: SOFT_LINE,
+                  paddingBottom: toRem(16),
                 }}
               >
                 <div style={SECTION_HEADER_STACK_STYLE}>
@@ -1428,13 +1428,15 @@ export function BibleExperienceModal({
                 </Text>
               </Box>
 
+              <Line size="300" variant="Surface" />
+
               <div
                 ref={verseScrollRef}
                 style={{
                   minHeight: toRem(360),
                   maxHeight: '64vh',
                   overflowY: 'auto',
-                  padding: `${toRem(16)} ${toRem(12)} ${toRem(18)}`,
+                  padding: `${toRem(8)} ${toRem(12)} ${toRem(18)}`,
                   scrollPaddingTop: toRem(20),
                 }}
               >
