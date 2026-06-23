@@ -1,7 +1,4 @@
-import {
-  CryptoApi,
-  ImportRoomKeyProgressData,
-} from 'matrix-js-sdk/lib/crypto-api';
+import { CryptoApi, ImportRoomKeyProgressData } from 'matrix-js-sdk/lib/crypto-api';
 import type { KeyBackupInfo } from 'matrix-js-sdk/lib/crypto-api/keybackup';
 import { BackupProgressStatus, IBackupProgress } from '../state/backupRestore';
 

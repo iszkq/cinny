@@ -54,6 +54,7 @@ function BackupStatus({ enabled }: BackupStatusProps) {
     </Box>
   );
 }
+
 type BackupSyncingProps = {
   count: number;
 };
