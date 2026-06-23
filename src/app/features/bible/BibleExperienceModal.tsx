@@ -1411,9 +1411,6 @@ export function BibleExperienceModal({
                     </div>
                   </div>
                 </div>
-                <Text size="T300" priority="300" style={SECTION_DESCRIPTION_STYLE}>
-                  {sectionDescription}
-                </Text>
               </Box>
 
               <Line size="300" variant="Surface" />
@@ -1424,7 +1421,7 @@ export function BibleExperienceModal({
                   minHeight: toRem(360),
                   maxHeight: '64vh',
                   overflowY: 'auto',
-                  padding: `${toRem(8)} ${toRem(12)} ${toRem(18)}`,
+                  padding: `${toRem(12)} ${toRem(12)} ${toRem(18)}`,
                   scrollPaddingTop: toRem(20),
                 }}
               >

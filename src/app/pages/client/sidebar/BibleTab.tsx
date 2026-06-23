@@ -15,10 +15,10 @@ import { useAtom } from 'jotai';
 import { SidebarAvatar, SidebarItem, SidebarItemTooltip } from '../../../components/sidebar';
 import { bibleModalAtom } from '../../../state/bibleModal';
 import { ModalWide } from '../../../styles/Modal.css';
+import { loadBibleFeature, warmBibleResources } from '../../../utils/biblePreload';
 import { isDesktopUpdaterSupported } from '../../../utils/desktopUpdater';
 import { openNativeBibleWindow } from '../../../utils/nativeBibleWindow';
 
-const loadBibleFeature = () => import('../../../features/bible');
 const LazyBibleModal = lazy(async () => ({
   default: (await loadBibleFeature()).BibleModal,
 }));
@@ -65,7 +65,7 @@ export function BibleTab() {
   const desktop = isDesktopUpdaterSupported();
 
   const warmBibleFeature = useCallback(() => {
-    void loadBibleFeature();
+    void warmBibleResources().catch(() => undefined);
   }, []);
 
   const handleOpen = useCallback(() => {

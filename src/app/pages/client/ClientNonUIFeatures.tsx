@@ -1,12 +1,7 @@
 import { useAtomValue, useSetAtom } from 'jotai';
 import React, { ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  ClientEvent,
-  MatrixEvent,
-  RoomEvent,
-  RoomEventHandlerMap,
-} from 'matrix-js-sdk';
+import { ClientEvent, MatrixEvent, RoomEvent, RoomEventHandlerMap } from 'matrix-js-sdk';
 import { roomToUnreadAtom, unreadEqual, unreadInfoToUnread } from '../../state/room/roomToUnread';
 import NotificationSound from '../../../../public/sound/notification.ogg';
 import InviteSound from '../../../../public/sound/invite.ogg';
@@ -37,11 +32,7 @@ import {
   CinnyAppearanceSettingsContent,
   CinnyAccountPinPolicyContent,
 } from '../../../types/matrix/accountData';
-import {
-  fetchMediaWithAuth,
-  getMxIdLocalPart,
-  mxcUrlToHttp,
-} from '../../utils/matrix';
+import { fetchMediaWithAuth, getMxIdLocalPart, mxcUrlToHttp } from '../../utils/matrix';
 import { useSelectedRoom } from '../../hooks/router/useSelectedRoom';
 import { useInboxNotificationsSelected } from '../../hooks/router/useInbox';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
@@ -68,6 +59,7 @@ import {
   syncAccountPinPolicy,
 } from '../../utils/pinLock';
 import { blobToDataUrl, dataUrlToFile, isDataUrl } from '../../utils/dataUrl';
+import { warmBibleResources } from '../../utils/biblePreload';
 import { openExternalUrl, shouldOpenHrefExternally } from '../../utils/desktop';
 import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
 import { useDesktopUpdater } from '../../hooks/useDesktopUpdater';
@@ -354,7 +346,10 @@ function DesktopAutoUpdateFeature() {
 
     const triggerCheck = (force = false) => {
       const now = Date.now();
-      if (!force && now - lastAutoCheckAtRef.current < DESKTOP_UPDATE_AUTO_CHECK_FOCUS_COOLDOWN_MS) {
+      if (
+        !force &&
+        now - lastAutoCheckAtRef.current < DESKTOP_UPDATE_AUTO_CHECK_FOCUS_COOLDOWN_MS
+      ) {
         return;
       }
 
@@ -539,10 +534,7 @@ function AppearanceSettingsAccountDataFeature() {
         hydratedRef.current = true;
       }
 
-      if (
-        remoteBackgroundMxc &&
-        (backgroundChanged || !currentSettings.chatBackgroundDataUrl)
-      ) {
+      if (remoteBackgroundMxc && (backgroundChanged || !currentSettings.chatBackgroundDataUrl)) {
         void hydrateBackgroundDataUrl(remoteBackgroundMxc).catch(() => undefined);
       }
     };
@@ -688,9 +680,7 @@ function AISettingsAccountDataFeature() {
 
   useEffect(() => {
     const applyAccountData = (content?: CinnyAISettingsContent) => {
-      const remoteSignature = content
-        ? getAISettingsAccountDataSignature(content)
-        : undefined;
+      const remoteSignature = content ? getAISettingsAccountDataSignature(content) : undefined;
       remoteSignatureRef.current = remoteSignature;
 
       if (
@@ -730,10 +720,7 @@ function AISettingsAccountDataFeature() {
     }
 
     const signature = getAISettingsAccountDataSignature(settings);
-    if (
-      signature === remoteSignatureRef.current ||
-      signature === pendingSaveSignatureRef.current
-    ) {
+    if (signature === remoteSignatureRef.current || signature === pendingSaveSignatureRef.current) {
       return;
     }
 
@@ -776,9 +763,9 @@ function AccountPinPolicyFeature() {
     };
 
     applyPolicy(
-      mx.getAccountData(AccountDataEvent.CinnyAccountPinPolicy)?.getContent<
-        CinnyAccountPinPolicyContent
-      >()
+      mx
+        .getAccountData(AccountDataEvent.CinnyAccountPinPolicy)
+        ?.getContent<CinnyAccountPinPolicyContent>()
     );
     void syncAccountPinPolicy(baseUrl, userId, accessToken).catch(() => undefined);
 
@@ -817,6 +804,25 @@ function ImagePackMediaWarmFeature() {
   ) : (
     <DefaultImagePackMediaWarmFeature />
   );
+}
+
+function BibleResourceWarmFeature() {
+  useEffect(() => {
+    let cancelled = false;
+    const warm = () => {
+      if (cancelled) return;
+      void warmBibleResources().catch(() => undefined);
+    };
+
+    const timerId = window.setTimeout(warm, 1800);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timerId);
+    };
+  }, []);
+
+  return null;
 }
 
 function FaviconUpdater() {
@@ -1077,6 +1083,7 @@ export function ClientNonUIFeatures({ children }: ClientNonUIFeaturesProps) {
       <AppearanceSettingsAccountDataFeature />
       <AISettingsAccountDataFeature />
       <ImagePackMediaWarmFeature />
+      <BibleResourceWarmFeature />
       <FaviconUpdater />
       <DesktopTaskbarUnreadBadgeFeature />
       <InviteNotifications />
