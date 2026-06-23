@@ -186,8 +186,17 @@ const SECTION_ACTION_GROUP_STYLE: CSSProperties = {
 const TOOLBAR_SHELL_STYLE: CSSProperties = {
   borderRadius: toRem(22),
   border: '1px solid rgba(226, 232, 240, 0.9)',
-  background: 'rgba(248, 250, 252, 0.88)',
+  background: 'rgba(248, 250, 252, 0.98)',
   boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.56)',
+  position: 'relative',
+  zIndex: 1,
+};
+const VERSE_SCROLL_STYLE: CSSProperties = {
+  minHeight: toRem(360),
+  maxHeight: '64vh',
+  overflowY: 'auto',
+  padding: `${toRem(12)} ${toRem(12)} ${toRem(18)}`,
+  scrollPaddingTop: toRem(20),
 };
 const NOTICE_STYLE: CSSProperties = {
   borderRadius: toRem(18),
@@ -1232,7 +1241,21 @@ export function BibleExperienceModal({
         textAlign: 'left',
       }
     : SECTION_SUMMARY_STYLE;
-  const sectionPadding = compactLayout ? `${toRem(20)} ${toRem(20)}` : `${toRem(24)} ${toRem(28)}`;
+  const sectionPaddingInline = compactLayout ? toRem(20) : toRem(28);
+  const sectionHeaderStyle: CSSProperties = {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: toRem(12),
+    paddingTop: compactLayout ? toRem(20) : toRem(24),
+    paddingInline: sectionPaddingInline,
+    paddingBottom: toRem(12),
+    boxSizing: 'border-box',
+  };
+  const sectionToolbarWrapStyle: CSSProperties = {
+    paddingInline: sectionPaddingInline,
+    paddingBottom: toRem(16),
+    boxSizing: 'border-box',
+  };
   const toolbarShellStyle: CSSProperties = compactLayout
     ? {
         ...TOOLBAR_SHELL_STYLE,
@@ -1313,14 +1336,7 @@ export function BibleExperienceModal({
               gap="0"
               style={{ ...CARD_STYLE, padding: 0, overflow: 'hidden' }}
             >
-              <Box
-                direction="Column"
-                gap="220"
-                style={{
-                  padding: sectionPadding,
-                  paddingBottom: toRem(16),
-                }}
-              >
+              <div style={sectionHeaderStyle}>
                 <div style={SECTION_HEADER_STACK_STYLE}>
                   <div style={sectionTopRowStyle}>
                     <div style={SECTION_TITLE_COPY_STYLE}>
@@ -1335,7 +1351,9 @@ export function BibleExperienceModal({
                     </div>
                   </div>
                 </div>
+              </div>
 
+              <div style={sectionToolbarWrapStyle}>
                 <div style={toolbarShellStyle}>
                   <div style={actionRowStyle}>
                     <div style={actionLeftGroupStyle}>
@@ -1411,20 +1429,11 @@ export function BibleExperienceModal({
                     </div>
                   </div>
                 </div>
-              </Box>
+              </div>
 
               <Line size="300" variant="Surface" />
 
-              <div
-                ref={verseScrollRef}
-                style={{
-                  minHeight: toRem(360),
-                  maxHeight: '64vh',
-                  overflowY: 'auto',
-                  padding: `${toRem(12)} ${toRem(12)} ${toRem(18)}`,
-                  scrollPaddingTop: toRem(20),
-                }}
-              >
+              <div ref={verseScrollRef} style={VERSE_SCROLL_STYLE}>
                 {pageVerses.length === 0 && (
                   <Box
                     alignItems="Center"
