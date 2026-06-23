@@ -26,7 +26,34 @@ export enum ManualVerificationMethod {
   RecoveryKey = 'key',
 }
 
+const getBackupRestoreNotice = (error: Error): string | undefined => {
+  if (
+    error.message.includes(
+      'loadSessionBackupPrivateKeyFromSecretStorage: missing decryption key in secret storage'
+    ) ||
+    error.message.includes('loadSessionBackupPrivateKeyFromSecretStorage: unable to get backup version') ||
+    error.message.includes('No backup info available')
+  ) {
+    return '设备验证已完成，但当前账号没有可恢复的消息备份。旧的加密消息可能暂时仍无法解密。';
+  }
+
+  if (
+    error.message.includes(
+      'loadSessionBackupPrivateKeyFromSecretStorage: decryption key does not match backup info'
+    ) ||
+    error.message.includes('getBackupDecryptor: key backup on server does not match the decryption key')
+  ) {
+    return '设备验证已完成，但当前服务器上的消息备份与这把恢复密钥不匹配。请在已验证设备上重新开启消息备份后再试。';
+  }
+
+  return undefined;
+};
+
 const getManualVerificationErrorMessage = (error: Error): string => {
+  if (error.message.includes('downloadKeys is not a function')) {
+    return '当前客户端仍在使用旧的设备验证流程，请刷新应用后重试。若问题持续存在，请彻底退出后重新打开应用。';
+  }
+
   if (error.message.includes('importCrossSigningKeys failed to import the keys')) {
     return '恢复密钥导入失败，请稍后重试。若刚重新登录，请等待设备列表同步后再试一次。';
   }
@@ -147,18 +174,51 @@ export function ManualVerificationTile({
 
       storePrivateKey(secretStorageKeyId, recoveryKey);
 
-      await mx.downloadKeys([mx.getSafeUserId()], true);
+      let crossSigningStatus = await crypto.getCrossSigningStatus();
+      if (!crossSigningStatus.publicKeysOnDevice) {
+        const hasCrossSigningKeys = await crypto.userHasCrossSigningKeys(mx.getSafeUserId(), true);
+        if (!hasCrossSigningKeys) {
+          throw new Error(
+            '当前账号没有可恢复的设备验证数据。请先在已验证设备上启用设备验证，或改用其他已验证设备来完成验证。'
+          );
+        }
+        crossSigningStatus = await crypto.getCrossSigningStatus();
+      }
+
+      const hasCrossSigningPrivateKeys =
+        crossSigningStatus.privateKeysInSecretStorage ||
+        Object.values(crossSigningStatus.privateKeysCachedLocally).some(Boolean);
+
+      if (!hasCrossSigningPrivateKeys) {
+        throw new Error(
+          '当前账号没有可恢复的设备验证数据。请先在已验证设备上启用设备验证，或改用其他已验证设备来完成验证。'
+        );
+      }
+
       await crypto.bootstrapCrossSigning({});
       await crypto.bootstrapSecretStorage({});
 
-      await crypto.loadSessionBackupPrivateKeyFromSecretStorage();
+      try {
+        await crypto.loadSessionBackupPrivateKeyFromSecretStorage();
+      } catch (error) {
+        const backupRestoreNotice =
+          error instanceof Error ? getBackupRestoreNotice(error) : undefined;
+        if (backupRestoreNotice) {
+          return backupRestoreNotice;
+        }
+        throw error;
+      }
+
+      return undefined;
     },
     [mx, secretStorageKeyId]
   );
 
-  const [verifyState, handleDecodedRecoveryKey] = useAsyncCallback<void, Error, [Uint8Array]>(
-    verifyAndRestoreBackup
-  );
+  const [verifyState, handleDecodedRecoveryKey] = useAsyncCallback<
+    string | undefined,
+    Error,
+    [Uint8Array]
+  >(verifyAndRestoreBackup);
   const verifying = verifyState.status === AsyncStatus.Loading;
 
   return (
@@ -176,9 +236,16 @@ export function ManualVerificationTile({
         }
       />
       {verifyState.status === AsyncStatus.Success ? (
-        <Text size="T200" style={{ color: color.Success.Main }}>
-          <b>设备验证成功。</b>
-        </Text>
+        <Box direction="Column" gap="100">
+          <Text size="T200" style={{ color: color.Success.Main }}>
+            <b>设备验证成功。</b>
+          </Text>
+          {verifyState.data && (
+            <Text size="T200" style={{ color: color.Warning.Main }}>
+              <b>{verifyState.data}</b>
+            </Text>
+          )}
+        </Box>
       ) : (
         <Box direction="Column" gap="100">
           {method === ManualVerificationMethod.RecoveryKey && (
