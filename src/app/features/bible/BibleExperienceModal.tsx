@@ -22,6 +22,7 @@ import { ScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
 import { ImageViewerWindowLayer, ImageViewerWindowModal } from '../../styles/Modal.css';
 import { copyToClipboard } from '../../utils/dom';
 import { stopPropagation } from '../../utils/keyboard';
+import { isNativeBibleWindow } from '../../utils/nativeBibleWindow';
 import {
   BibleBook,
   BibleData,
@@ -117,12 +118,30 @@ const MAIN_MODAL_CARD_STYLE: CSSProperties = {
   ...MODAL_CARD_STYLE,
   maxHeight: 'calc(var(--app-height, 100dvh) - 12px)',
 };
+const NATIVE_MAIN_MODAL_CARD_STYLE: CSSProperties = {
+  ...MAIN_MODAL_CARD_STYLE,
+  width: '100%',
+  height: '100%',
+  maxHeight: '100%',
+};
 const MODAL_CONTENT_STYLE: CSSProperties = {
   overflowY: 'auto',
   padding: `${toRem(22)} ${toRem(24)} ${toRem(24)}`,
   display: 'flex',
   flexDirection: 'column',
   gap: toRem(18),
+};
+const NATIVE_MODAL_CONTENT_STYLE: CSSProperties = {
+  ...MODAL_CONTENT_STYLE,
+  height: '100%',
+  padding: `${toRem(16)} ${toRem(18)} ${toRem(18)}`,
+};
+const NATIVE_WINDOW_FRAME_STYLE: CSSProperties = {
+  width: '100%',
+  height: '100%',
+  padding: toRem(10),
+  background: 'rgba(248, 250, 252, 0.92)',
+  boxSizing: 'border-box',
 };
 const RESPONSIVE_SECTION_STACK_STYLE: CSSProperties = {
   display: 'grid',
@@ -691,6 +710,7 @@ export function BibleExperienceModal({
   requestClose,
   onInsertSelected,
 }: BibleExperienceModalProps) {
+  const nativeBibleWindow = isNativeBibleWindow();
   const screenSize = useScreenSizeContext();
   const mobile = screenSize === ScreenSize.Mobile;
   const compactLayout = screenSize !== ScreenSize.Desktop;
@@ -1244,11 +1264,21 @@ export function BibleExperienceModal({
         ...SEGMENT_STYLE,
         flexShrink: 0,
       };
+  const mainModalCardStyle = nativeBibleWindow
+    ? NATIVE_MAIN_MODAL_CARD_STYLE
+    : MAIN_MODAL_CARD_STYLE;
+  const mainModalContentStyle = nativeBibleWindow
+    ? NATIVE_MODAL_CONTENT_STYLE
+    : MODAL_CONTENT_STYLE;
 
   const mainWindowContent = (
-    <SequenceCard variant="SurfaceVariant" direction="Column" gap="0" style={MAIN_MODAL_CARD_STYLE}>
+    <SequenceCard variant="SurfaceVariant" direction="Column" gap="0" style={mainModalCardStyle}>
       {loading && (
-        <Box direction="Column" gap="300" style={{ ...MODAL_CONTENT_STYLE, minHeight: toRem(320) }}>
+        <Box
+          direction="Column"
+          gap="300"
+          style={{ ...mainModalContentStyle, minHeight: toRem(320) }}
+        >
           <BiblePanelIntro
             title={CN.title}
             description={headerHint}
@@ -1262,7 +1292,11 @@ export function BibleExperienceModal({
       )}
 
       {!loading && error && (
-        <Box direction="Column" gap="300" style={{ ...MODAL_CONTENT_STYLE, minHeight: toRem(320) }}>
+        <Box
+          direction="Column"
+          gap="300"
+          style={{ ...mainModalContentStyle, minHeight: toRem(320) }}
+        >
           <BiblePanelIntro
             title={CN.title}
             description={headerHint}
@@ -1277,7 +1311,7 @@ export function BibleExperienceModal({
       )}
 
       {!loading && !error && data && selectedBook && (
-        <div style={{ ...MODAL_CONTENT_STYLE, flex: 1, minHeight: 0 }}>
+        <div style={{ ...mainModalContentStyle, flex: 1, minHeight: 0 }}>
           <Box direction="Column" gap="300">
             <BiblePanelIntro
               title={CN.title}
@@ -1758,6 +1792,21 @@ export function BibleExperienceModal({
     ) : null;
 
   if (!mobile) {
+    if (nativeBibleWindow) {
+      return (
+        <>
+          <div
+            data-bible-window="main"
+            style={NATIVE_WINDOW_FRAME_STYLE}
+            onPointerDownCapture={() => focusWindow('main')}
+          >
+            {mainWindowContent}
+          </div>
+          {floatingWindows}
+        </>
+      );
+    }
+
     return (
       <>
         <BibleDesktopWindow
