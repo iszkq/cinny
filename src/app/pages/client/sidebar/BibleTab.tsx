@@ -1,8 +1,9 @@
 import React, { Suspense, lazy, useCallback } from 'react';
-import { Text } from 'folds';
+import { Box, Icon, IconButton, Icons, Modal, Text, config } from 'folds';
 import { useAtom } from 'jotai';
 import { SidebarAvatar, SidebarItem, SidebarItemTooltip } from '../../../components/sidebar';
 import { bibleModalAtom } from '../../../state/bibleModal';
+import { ModalWide } from '../../../styles/Modal.css';
 import { isDesktopUpdaterSupported } from '../../../utils/desktopUpdater';
 import { openNativeBibleWindow } from '../../../utils/nativeBibleWindow';
 
@@ -10,6 +11,39 @@ const loadBibleFeature = () => import('../../../features/bible');
 const LazyBibleModal = lazy(async () => ({
   default: (await loadBibleFeature()).BibleModal,
 }));
+
+function BibleLoadingModal({ requestClose }: { requestClose: () => void }) {
+  return (
+    <Modal
+      className={ModalWide}
+      style={{ display: 'flex', flexDirection: 'column', minHeight: '92vh' }}
+      variant="Background"
+    >
+      <Box
+        alignItems="Start"
+        justifyContent="SpaceBetween"
+        gap="200"
+        style={{
+          padding: config.space.S300,
+          borderBottom: '1px solid rgba(148, 163, 184, 0.18)',
+        }}
+      >
+        <Box grow="Yes" direction="Column" gap="100">
+          <Text size="H4">{'\u5723\u7ecf'}</Text>
+          <Text size="T300" priority="300">
+            {'\u6b63\u5728\u8f7d\u5165\u5723\u7ecf\u5185\u5bb9...'}
+          </Text>
+        </Box>
+        <IconButton onClick={requestClose} size="300" radii="300">
+          <Icon src={Icons.Cross} />
+        </IconButton>
+      </Box>
+      <Box grow="Yes" alignItems="Center" justifyContent="Center">
+        <Text size="L400">{'\u6b63\u5728\u8f7d\u5165...'}</Text>
+      </Box>
+    </Modal>
+  );
+}
 
 export function BibleTab() {
   const [opened, setOpen] = useAtom(bibleModalAtom);
@@ -39,13 +73,14 @@ export function BibleTab() {
             outlined
             onMouseEnter={warmBibleFeature}
             onFocus={warmBibleFeature}
+            onPointerDown={warmBibleFeature}
             onClick={handleOpen}
           >
             <Text size="H5">{'\u7ecf'}</Text>
           </SidebarAvatar>
         )}
       </SidebarItemTooltip>
-      <Suspense fallback={null}>
+      <Suspense fallback={opened ? <BibleLoadingModal requestClose={handleClose} /> : null}>
         {opened && <LazyBibleModal open={opened} requestClose={handleClose} />}
       </Suspense>
     </SidebarItem>
