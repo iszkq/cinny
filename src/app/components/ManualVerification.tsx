@@ -287,6 +287,7 @@ export function ManualVerificationTile({
       try {
         await waitForBackupVersionReady(crypto);
         await crypto.loadSessionBackupPrivateKeyFromSecretStorage();
+        await crypto.checkKeyBackupAndEnable();
       } catch (error) {
         const backupRestoreNotice =
           error instanceof Error ? getBackupRestoreNotice(error) : undefined;

@@ -61,6 +61,9 @@ export const getDesktopUpdateErrorMessage = (error: unknown): string => {
   if (/parsing major version number|unexpected character|semver/i.test(message)) {
     return '\u53d1\u5e03\u7684 latest.json \u7248\u672c\u53f7\u4e0d\u5408\u6cd5\uff1aversion \u5fc5\u987b\u662f 1.0.1 \u8fd9\u6837\u7684 semver\uff0c\u4e0d\u8981\u5199\u6210 v.1.0.1 \u6216 .1.0.1\u3002';
   }
+  if (/error decoding response body/i.test(message)) {
+    return '\u81ea\u52a8\u5b89\u88c5\u5728\u4ece\u53d1\u5e03\u8d44\u4ea7\u8bfb\u53d6\u5b89\u88c5\u5305\u65f6\u4e2d\u65ad\u4e86\uff0c\u901a\u5e38\u662f GitHub \u4e0b\u8f7d\u54cd\u5e94\u5f02\u5e38\u3002\u53ef\u4ee5\u76f4\u63a5\u6539\u7528\u624b\u52a8\u4e0b\u8f7d\u5b89\u88c5\u3002';
+  }
   if (/endpoint|request|network|download|url/i.test(message) || /404|204|json/i.test(message)) {
     return '\u81ea\u52a8\u5b89\u88c5\u672a\u80fd\u7ee7\u7eed\uff0c\u901a\u5e38\u662f latest.json\u3001\u5b89\u88c5\u5305\u4e0b\u8f7d\u5730\u5740\u6216\u7f51\u7edc\u8bf7\u6c42\u5931\u8d25\u3002';
   }
@@ -84,6 +87,7 @@ const canFallbackToManualDownload = (
     /No installable desktop update is available/i.test(message) ||
     /downloadAndInstall is not a function/i.test(message) ||
     /Updater download API is unavailable/i.test(message) ||
+    /error decoding response body/i.test(message) ||
     /pubkey/i.test(message) ||
     /signature/i.test(message) ||
     /failed to fetch update information|failed to fetch update/i.test(message) ||

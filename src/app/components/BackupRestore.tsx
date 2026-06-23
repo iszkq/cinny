@@ -34,7 +34,6 @@ import {
   useKeyBackupTrust,
 } from '../hooks/useKeyBackup';
 import { stopPropagation } from '../utils/keyboard';
-import { useRestoreBackupOnVerification } from '../hooks/useRestoreBackupOnVerification';
 import { getBackupRestoreErrorMessage, runKeyBackupRestore } from '../utils/restoreKeyBackup';
 
 type BackupStatusProps = {
@@ -303,10 +302,4 @@ export function BackupRestoreTile({ crypto }: BackupRestoreTileProps) {
       )}
     </InfoCard>
   );
-}
-
-export function AutoRestoreBackupOnVerification() {
-  useRestoreBackupOnVerification();
-
-  return null;
 }

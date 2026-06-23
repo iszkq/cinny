@@ -76,9 +76,6 @@ type RunKeyBackupRestoreOptions = {
 
 export type KeyBackupRestoreRunResult = 'completed' | 'background';
 
-const shouldShowBackgroundNotice = (): boolean =>
-  typeof document !== 'undefined' && document.visibilityState === 'hidden';
-
 export const runKeyBackupRestore = async ({
   crypto,
   setRestoreProgress,
@@ -121,12 +118,10 @@ export const runKeyBackupRestore = async ({
   return new Promise<KeyBackupRestoreRunResult>((resolve, reject) => {
     const timeoutId = window.setTimeout(() => {
       backgrounded = true;
-      if (shouldShowBackgroundNotice()) {
-        updateRestoreState({
-          status: BackupProgressStatus.Background,
-          message: backgroundMessage,
-        });
-      }
+      updateRestoreState({
+        status: BackupProgressStatus.Background,
+        message: backgroundMessage,
+      });
       resolve('background');
     }, timeoutMs);
 

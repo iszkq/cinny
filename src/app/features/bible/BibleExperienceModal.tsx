@@ -125,6 +125,36 @@ const MODAL_CONTENT_STYLE: CSSProperties = {
   flexDirection: 'column',
   gap: toRem(18),
 };
+const RESPONSIVE_SECTION_STACK_STYLE: CSSProperties = {
+  display: 'grid',
+  gap: toRem(16),
+  minWidth: 0,
+};
+const RESPONSIVE_SECTION_STACK_WIDE_STYLE: CSSProperties = {
+  ...RESPONSIVE_SECTION_STACK_STYLE,
+  gridTemplateColumns: 'minmax(0, 1fr) auto',
+  alignItems: 'start',
+};
+const SECTION_TITLE_COPY_STYLE: CSSProperties = {
+  minWidth: 0,
+  display: 'flex',
+  flexDirection: 'column',
+  gap: toRem(8),
+};
+const SECTION_SUMMARY_STYLE: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'flex-end',
+  minHeight: toRem(38),
+  textAlign: 'right',
+};
+const SECTION_ACTION_GROUP_STYLE: CSSProperties = {
+  display: 'flex',
+  flexWrap: 'wrap',
+  gap: toRem(10),
+  alignItems: 'center',
+  minWidth: 0,
+};
 const NOTICE_STYLE: CSSProperties = {
   borderRadius: toRem(18),
   border: '1px solid rgba(191, 219, 254, 0.98)',
@@ -654,6 +684,7 @@ export function BibleExperienceModal({
 }: BibleExperienceModalProps) {
   const screenSize = useScreenSizeContext();
   const mobile = screenSize === ScreenSize.Mobile;
+  const compactLayout = screenSize !== ScreenSize.Desktop;
   const [data, setData] = useState<BibleData>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
@@ -1123,6 +1154,34 @@ export function BibleExperienceModal({
     ? `共找到 ${activeVerses.length} 节匹配经文，当前范围：${scopeLabel}。${CN.searchHintSuffix}`
     : `本章共 ${chapterVerses.length} 节，支持多选复制，并可通过底部分页继续浏览。`;
   const headerHint = `${CN.keyboardHint} ${CN.selectionHelp}`;
+  const sectionLayoutStyle = compactLayout
+    ? RESPONSIVE_SECTION_STACK_STYLE
+    : RESPONSIVE_SECTION_STACK_WIDE_STYLE;
+  const actionLeftGroupStyle: CSSProperties = {
+    ...SECTION_ACTION_GROUP_STYLE,
+    justifyContent: 'flex-start',
+  };
+  const actionRightGroupStyle: CSSProperties = {
+    ...SECTION_ACTION_GROUP_STYLE,
+    justifyContent: compactLayout ? 'flex-start' : 'flex-end',
+  };
+  const sectionSummaryStyle: CSSProperties = compactLayout
+    ? {
+        ...SECTION_SUMMARY_STYLE,
+        justifyContent: 'flex-start',
+        textAlign: 'left',
+      }
+    : SECTION_SUMMARY_STYLE;
+  const sectionPadding = compactLayout
+    ? `${toRem(20)} ${toRem(20)}`
+    : `${toRem(24)} ${toRem(28)}`;
+  const fontSegmentStyle: CSSProperties = compactLayout
+    ? {
+        ...SEGMENT_STYLE,
+        width: '100%',
+        justifyContent: 'space-between',
+      }
+    : SEGMENT_STYLE;
 
   const mainWindowContent = (
     <SequenceCard variant="SurfaceVariant" direction="Column" gap="0" style={MAIN_MODAL_CARD_STYLE}>
@@ -1170,23 +1229,25 @@ export function BibleExperienceModal({
               gap="0"
               style={{ ...CARD_STYLE, padding: 0, overflow: 'hidden' }}
             >
-              <Box direction="Column" gap="220" style={{ padding: `${toRem(24)} ${toRem(28)}` }}>
-                <Box wrap="Wrap" gap="250" alignItems="Start" justifyContent="SpaceBetween">
-                  <Box grow="Yes" direction="Column" gap="100" style={{ minWidth: 0 }}>
+              <Box direction="Column" gap="220" style={{ padding: sectionPadding }}>
+                <div style={sectionLayoutStyle}>
+                  <div style={SECTION_TITLE_COPY_STYLE}>
                     <Text size="H3">{sectionTitle}</Text>
                     <Text size="T300" priority="300" style={{ lineHeight: 1.8 }}>
                       {sectionDescription}
                     </Text>
-                  </Box>
-                  <Text size="T300" priority="300">
+                  </div>
+                  <div style={sectionSummaryStyle}>
+                    <Text size="T300" priority="300">
                     {isSearchMode
                       ? `${CN.searchSummary} ${activeVerses.length} ${CN.verses} · 第 ${currentPage}/${totalPages} ${CN.page}`
                       : `${CN.chapterSummary} ${chapterVerses.length} ${CN.verses} · 第 ${currentPage}/${totalPages} ${CN.page}`}
-                  </Text>
-                </Box>
+                    </Text>
+                  </div>
+                </div>
 
-                <Box wrap="Wrap" gap="120" alignItems="End" justifyContent="SpaceBetween">
-                  <Box wrap="Wrap" gap="100" alignItems="Center">
+                <div style={sectionLayoutStyle}>
+                  <div style={actionLeftGroupStyle}>
                     <BiblePillButton onClick={() => changeChapter(-1)} disabled={!canGoPrevChapter}>
                       {CN.prevChapter}
                     </BiblePillButton>
@@ -1209,9 +1270,9 @@ export function BibleExperienceModal({
                     >
                       {CN.openSearch}
                     </BiblePillButton>
-                  </Box>
+                  </div>
 
-                  <Box shrink="No" wrap="Wrap" gap="100" alignItems="Center" justifyContent="End">
+                  <div style={actionRightGroupStyle}>
                     {isSearchMode && (
                       <BiblePillButton
                         onClick={() => {
@@ -1225,7 +1286,7 @@ export function BibleExperienceModal({
                     <Text size="T300" priority="300">
                       {CN.fontSizeLabel}
                     </Text>
-                    <Box wrap="Wrap" gap="100" style={SEGMENT_STYLE}>
+                    <Box wrap="Wrap" gap="100" style={fontSegmentStyle}>
                       <BiblePillButton
                         onClick={() =>
                           setFontSize((size) =>
@@ -1250,8 +1311,8 @@ export function BibleExperienceModal({
                         {CN.fontLarger}
                       </BiblePillButton>
                     </Box>
-                  </Box>
-                </Box>
+                  </div>
+                </div>
               </Box>
 
               <Line size="300" variant="Surface" />
