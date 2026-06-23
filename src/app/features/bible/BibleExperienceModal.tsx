@@ -1283,9 +1283,6 @@ export function BibleExperienceModal({
                       </Text>
                     </div>
                   </div>
-                  <Text size="T300" priority="300" style={SECTION_DESCRIPTION_STYLE}>
-                    {sectionDescription}
-                  </Text>
                 </div>
 
                 <div style={toolbarShellStyle}>
@@ -1363,6 +1360,9 @@ export function BibleExperienceModal({
                     </div>
                   </div>
                 </div>
+                <Text size="T300" priority="300" style={SECTION_DESCRIPTION_STYLE}>
+                  {sectionDescription}
+                </Text>
               </Box>
 
               <Line size="300" variant="Surface" />
