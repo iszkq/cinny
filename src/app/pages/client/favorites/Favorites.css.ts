@@ -37,6 +37,20 @@ export const GlassCard = style([
   },
 ]);
 
+export const StickyFilterCard = style([
+  DefaultReset,
+  {
+    position: 'relative',
+    isolation: 'isolate',
+    overflow: 'hidden',
+    background: 'rgba(255, 255, 255, 0.96)',
+    border: '1px solid rgba(226, 232, 240, 0.96)',
+    boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)',
+    backdropFilter: 'none',
+    WebkitBackdropFilter: 'none',
+  },
+]);
+
 export const GlassCardSelected = style([
   DefaultReset,
   {
@@ -131,8 +145,7 @@ export const MediaPreviewOverlay = style([
     position: 'absolute',
     inset: 0,
     pointerEvents: 'none',
-    background:
-      'linear-gradient(180deg, rgba(15, 23, 42, 0.06) 0%, rgba(15, 23, 42, 0.32) 100%)',
+    background: 'linear-gradient(180deg, rgba(15, 23, 42, 0.06) 0%, rgba(15, 23, 42, 0.32) 100%)',
   },
 ]);
 

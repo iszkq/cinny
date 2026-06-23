@@ -154,7 +154,8 @@ const ESCAPED_UNICODE_RE = /\\u[0-9a-f]{4}/i;
 const hasEscapedUnicode = (value: string): boolean => ESCAPED_UNICODE_RE.test(value);
 
 const getDateFilterLabel = (dateFilter: FavoriteDateFilter): string =>
-  DATE_FILTER_OPTIONS.find((option) => option.id === dateFilter)?.label ?? '\u5168\u90e8\u65f6\u95f4';
+  DATE_FILTER_OPTIONS.find((option) => option.id === dateFilter)?.label ??
+  '\u5168\u90e8\u65f6\u95f4';
 
 const getStartOfToday = (): number => {
   const now = new Date();
@@ -288,8 +289,8 @@ const getFavoriteImageViewerItems = (items: FavoriteItem[]): ViewerImageItem[] =
       typeof content?.file?.url === 'string'
         ? content.file.url
         : typeof content?.url === 'string'
-          ? content.url
-          : undefined;
+        ? content.url
+        : undefined;
 
     if (!content || !mediaUrl) return viewerItems;
 
@@ -339,7 +340,9 @@ const getFavoriteDisplayTitle = (item: FavoriteItem): string => {
 const getFavoriteSavedAt = (timestamp: number): string => new Date(timestamp).toLocaleString();
 
 const getFavoriteTimelineText = (item: FavoriteItem): string =>
-  `原消息 ${getFavoriteSavedAt(item.metadata.sourceTimestamp)} · 收藏于 ${getFavoriteSavedAt(item.metadata.favoritedAt)}`;
+  `原消息 ${getFavoriteSavedAt(item.metadata.sourceTimestamp)} · 收藏于 ${getFavoriteSavedAt(
+    item.metadata.favoritedAt
+  )}`;
 
 function getFavoriteImageContent(item: FavoriteItem): IImageContent | undefined {
   const content = item.event.getContent() as Partial<IImageContent>;
@@ -347,8 +350,8 @@ function getFavoriteImageContent(item: FavoriteItem): IImageContent | undefined 
     typeof content.file?.url === 'string'
       ? content.file.url
       : typeof content.url === 'string'
-        ? content.url
-        : undefined;
+      ? content.url
+      : undefined;
 
   if (!mediaUrl) return undefined;
   if (item.event.getType() !== MessageEvent.Sticker && content.msgtype !== MsgType.Image) {
@@ -364,8 +367,8 @@ function getFavoriteVideoContent(item: FavoriteItem): IVideoContent | undefined 
     typeof content.file?.url === 'string'
       ? content.file.url
       : typeof content.url === 'string'
-        ? content.url
-        : undefined;
+      ? content.url
+      : undefined;
 
   if (!mediaUrl || content.msgtype !== MsgType.Video) return undefined;
   return content as IVideoContent;
@@ -391,7 +394,11 @@ function FavoritesEmpty({
               <Icon size="600" src={Icons.Heart} filled />
             )
           }
-          title={hasRoom ? '\u8fd8\u6ca1\u6709\u6536\u85cf\u5185\u5bb9' : '\u5148\u521b\u5efa\u4f60\u7684\u6536\u85cf\u7a7a\u95f4'}
+          title={
+            hasRoom
+              ? '\u8fd8\u6ca1\u6709\u6536\u85cf\u5185\u5bb9'
+              : '\u5148\u521b\u5efa\u4f60\u7684\u6536\u85cf\u7a7a\u95f4'
+          }
           subTitle={
             hasRoom
               ? '\u5728\u6d88\u606f\u4e0a\u6267\u884c\u6536\u85cf\u540e\uff0c\u5185\u5bb9\u4f1a\u540c\u6b65\u51fa\u73b0\u5728\u8fd9\u91cc\u3002'
@@ -483,10 +490,10 @@ function FavoriteNoteEditor({
           onClick={handleSave}
           disabled={saveState.status === AsyncStatus.Loading}
         >
-          {saveState.status === AsyncStatus.Loading && (
-            <Spinner size="200" variant="Secondary" />
-          )}
-          <Text size="B300">{saveState.status === AsyncStatus.Loading ? '保存中...' : '保存备注'}</Text>
+          {saveState.status === AsyncStatus.Loading && <Spinner size="200" variant="Secondary" />}
+          <Text size="B300">
+            {saveState.status === AsyncStatus.Loading ? '保存中...' : '保存备注'}
+          </Text>
         </Button>
         <Button
           size="300"
@@ -551,7 +558,8 @@ function FavoriteMediaDetails({
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
   const sourceRoomAvailable = Boolean(mx.getRoom(item.metadata.sourceRoomId));
-  const senderId = item.metadata.sourceSenderId ?? item.event.getSender() ?? item.metadata.sourceRoomId;
+  const senderId =
+    item.metadata.sourceSenderId ?? item.event.getSender() ?? item.metadata.sourceRoomId;
   const avatarUrl = item.metadata.sourceSenderAvatarMxc
     ? mxcUrlToHttp(mx, item.metadata.sourceSenderAvatarMxc, useAuthentication, 40, 40, 'crop') ??
       undefined
@@ -611,7 +619,9 @@ function FavoriteMediaDetails({
                   fill="Soft"
                   radii="Pill"
                   style={FAVORITE_ACTION_BUTTON_STYLE}
-                  onClick={() => onOpenSource(item.metadata.sourceRoomId, item.metadata.sourceEventId)}
+                  onClick={() =>
+                    onOpenSource(item.metadata.sourceRoomId, item.metadata.sourceEventId)
+                  }
                 >
                   <Text size="B300">原消息</Text>
                 </Button>
@@ -677,8 +687,8 @@ function FavoriteVideoViewerModal({
     typeof content?.file?.url === 'string'
       ? content.file.url
       : typeof content?.url === 'string'
-        ? content.url
-        : undefined;
+      ? content.url
+      : undefined;
   const mimeType = typeof info?.mimetype === 'string' ? info.mimetype : '';
 
   if (!content || !info || !mediaUrl || !mimeType) return null;
@@ -834,10 +844,9 @@ function FavoriteImageCard({
     typeof content?.file?.url === 'string'
       ? content.file.url
       : typeof content?.url === 'string'
-        ? content.url
-        : undefined;
-  const mimeType =
-    typeof content?.info?.mimetype === 'string' ? content.info.mimetype : undefined;
+      ? content.url
+      : undefined;
+  const mimeType = typeof content?.info?.mimetype === 'string' ? content.info.mimetype : undefined;
 
   if (!content || !mediaUrl) return null;
 
@@ -1046,7 +1055,8 @@ function FavoriteCard({
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
   const sourceRoomAvailable = Boolean(mx.getRoom(item.metadata.sourceRoomId));
-  const senderId = item.metadata.sourceSenderId ?? item.event.getSender() ?? item.metadata.sourceRoomId;
+  const senderId =
+    item.metadata.sourceSenderId ?? item.event.getSender() ?? item.metadata.sourceRoomId;
   const avatarUrl = item.metadata.sourceSenderAvatarMxc
     ? mxcUrlToHttp(mx, item.metadata.sourceSenderAvatarMxc, useAuthentication, 48, 48, 'crop') ??
       undefined
@@ -1093,9 +1103,7 @@ function FavoriteCard({
                 </Text>
               </Box>
               <Text size="T200" priority="300">
-                {note
-                  ? `${item.metadata.sourceRoomName} · 已备注`
-                  : item.metadata.sourceRoomName}
+                {note ? `${item.metadata.sourceRoomName} · 已备注` : item.metadata.sourceRoomName}
               </Text>
             </Box>
 
@@ -1292,14 +1300,7 @@ export function Favorites() {
         handleSpoilerClick: spoilerClickHandler,
         handleMentionClick: mentionClickHandler,
       }),
-    [
-      mx,
-      mentionRoomId,
-      linkifyOpts,
-      useAuthentication,
-      mentionClickHandler,
-      spoilerClickHandler,
-    ]
+    [mx, mentionRoomId, linkifyOpts, useAuthentication, mentionClickHandler, spoilerClickHandler]
   );
 
   const filteredBySearchAndDate = useMemo(() => {
@@ -1653,7 +1654,9 @@ export function Favorites() {
       gap="200"
       style={{ padding: config.space.S400 }}
     >
-      <Text size="L400">{'\u5f53\u524d\u6536\u85cf\u623f\u95f4\u662f\u52a0\u5bc6\u623f\u95f4'}</Text>
+      <Text size="L400">
+        {'\u5f53\u524d\u6536\u85cf\u623f\u95f4\u662f\u52a0\u5bc6\u623f\u95f4'}
+      </Text>
       <Text size="T300" priority="300">
         {
           '\u5207\u6362\u540e\u4f1a\u65b0\u5efa\u4e00\u4e2a\u975e\u52a0\u5bc6\u6536\u85cf\u623f\u95f4\uff0c\u540e\u7eed\u6536\u85cf\u4e0d\u518d\u4f9d\u8d56\u5386\u53f2\u89e3\u5bc6\u5bc6\u94a5\uff1b\u65e7\u6536\u85cf\u623f\u95f4\u4f1a\u81ea\u52a8\u79bb\u5f00\uff0c\u907f\u514d\u7ee7\u7eed\u5e72\u6270\u5217\u8868\u548c\u6536\u85cf\u663e\u793a\u3002'
@@ -1701,7 +1704,7 @@ export function Favorites() {
       <Box direction="Column" gap="300">
         {encryptedRoomNotice}
         <SequenceCard
-          className={css.GlassCard}
+          className={`${css.GlassCard} ${css.StickyFilterCard}`}
           variant="Background"
           direction="Column"
           gap="300"
@@ -1880,7 +1883,9 @@ export function Favorites() {
             style={{ padding: config.space.S300 }}
           >
             <Text size="T300">
-              {'\u6279\u91cf\u53d6\u6d88\u6536\u85cf\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5\u3002'}
+              {
+                '\u6279\u91cf\u53d6\u6d88\u6536\u85cf\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5\u3002'
+              }
             </Text>
           </SequenceCard>
         )}
