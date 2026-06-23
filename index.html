@@ -87,10 +87,118 @@
       sizes="180x180"
       href="./public/res/apple/apple-touch-icon-180x180.png"
     />
+    <style>
+      :root {
+        --boot-bg: #f4f7f5;
+        --boot-fg: #17211b;
+        --boot-muted: rgba(23, 33, 27, 0.64);
+        --boot-ring: rgba(23, 33, 27, 0.12);
+        --boot-ring-active: #2f6f53;
+        color-scheme: light;
+        background: var(--boot-bg);
+      }
+
+      html[data-boot-theme='dark'] {
+        --boot-bg: #0f1412;
+        --boot-fg: #eef7f1;
+        --boot-muted: rgba(238, 247, 241, 0.72);
+        --boot-ring: rgba(238, 247, 241, 0.14);
+        --boot-ring-active: #93c5aa;
+        color-scheme: dark;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: var(--boot-bg);
+        color: var(--boot-fg);
+      }
+
+      .boot-shell {
+        min-height: var(--app-height, 100dvh);
+        padding: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--boot-bg);
+      }
+
+      .boot-panel {
+        width: min(100%, 320px);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+        text-align: center;
+      }
+
+      .boot-spinner {
+        width: 36px;
+        height: 36px;
+        border: 3px solid var(--boot-ring);
+        border-top-color: var(--boot-ring-active);
+        border-radius: 999px;
+        animation: boot-spin 0.8s linear infinite;
+      }
+
+      .boot-title {
+        font-family:
+          InterVariable, Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
+          sans-serif;
+        font-size: 17px;
+        font-weight: 600;
+        line-height: 1.4;
+      }
+
+      .boot-subtitle {
+        max-width: 24rem;
+        font-family:
+          InterVariable, Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
+          sans-serif;
+        font-size: 13px;
+        line-height: 1.5;
+        color: var(--boot-muted);
+      }
+
+      @keyframes boot-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .boot-spinner {
+          animation: none;
+        }
+      }
+    </style>
+    <script>
+      (() => {
+        window.global ||= window;
+
+        const darkThemeIds = new Set(['dark-theme', 'butter-theme']);
+        let bootTheme = 'light';
+
+        try {
+          const settings = JSON.parse(window.localStorage.getItem('settings') ?? 'null');
+          if (settings?.useSystemTheme === false) {
+            bootTheme = darkThemeIds.has(settings.themeId) ? 'dark' : 'light';
+          } else if (window.matchMedia?.('(prefers-color-scheme: dark)').matches) {
+            bootTheme = 'dark';
+          }
+        } catch (error) {
+          if (window.matchMedia?.('(prefers-color-scheme: dark)').matches) {
+            bootTheme = 'dark';
+          }
+        }
+
+        document.documentElement.dataset.bootTheme = bootTheme;
+      })();
+    </script>
   </head>
   <body id="appBody">
     <script>
-      window.global ||= window;
       (() => {
         const applyViewportSize = () => {
           const viewport = window.visualViewport;
@@ -109,7 +217,17 @@
         window.visualViewport?.addEventListener('scroll', applyViewportSize, { passive: true });
       })();
     </script>
-    <div id="root"></div>
+    <div id="root">
+      <div class="boot-shell" aria-live="polite">
+        <div class="boot-panel">
+          <div class="boot-spinner" aria-hidden="true"></div>
+          <div class="boot-title">&#27491;&#22312;&#21551;&#21160;</div>
+          <div class="boot-subtitle">
+            &#39029;&#38754;&#24050;&#21152;&#36733;&#65292;&#27491;&#22312;&#36830;&#25509;&#32842;&#22825;&#20250;&#35805;...
+          </div>
+        </div>
+      </div>
+    </div>
     <div id="portalContainer"></div>
     <script type="module" src="./src/index.tsx"></script>
   </body>

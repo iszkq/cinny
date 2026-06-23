@@ -1,5 +1,5 @@
 /* eslint-disable import/first */
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { createRoot } from 'react-dom/client';
 import { enableMapSet } from 'immer';
 import '@fontsource/inter/variable.css';
@@ -12,7 +12,6 @@ import './index.css';
 
 import { trimTrailingSlash } from './app/utils/common';
 import App from './app/pages/App';
-import { NativeImagePreviewWindow } from './app/components/image-viewer/NativeImagePreviewWindow';
 
 // import i18n (needs to be bundled ;))
 import './app/i18n';
@@ -22,9 +21,34 @@ import { isDesktopUpdaterSupported } from './app/utils/desktopUpdater';
 import { applyDesktopStartupPinLock } from './app/utils/pinLock';
 import { isNativeImagePreviewWindow } from './app/utils/nativeImagePreview';
 import { isNativeBibleWindow } from './app/utils/nativeBibleWindow';
-import { NativeBibleWindow } from './app/components/bible/NativeBibleWindow';
 
 document.body.classList.add(configClass, varsClass);
+
+const LazyNativeImagePreviewWindow = lazy(async () => ({
+  default: (await import('./app/components/image-viewer/NativeImagePreviewWindow'))
+    .NativeImagePreviewWindow,
+}));
+const LazyNativeBibleWindow = lazy(async () => ({
+  default: (await import('./app/components/bible/NativeBibleWindow')).NativeBibleWindow,
+}));
+
+function RootStartupFallback() {
+  return (
+    <div
+      style={{
+        width: '100%',
+        height: 'var(--app-height, 100dvh)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '24px',
+      }}
+      aria-busy="true"
+    >
+      Loading...
+    </div>
+  );
+}
 
 const nativeImagePreviewWindow = isDesktopUpdaterSupported() && isNativeImagePreviewWindow();
 const nativeBibleWindow = isDesktopUpdaterSupported() && isNativeBibleWindow();
@@ -79,9 +103,13 @@ const mountApp = () => {
   const root = createRoot(rootContainer);
   root.render(
     nativeImagePreviewWindow ? (
-      <NativeImagePreviewWindow />
+      <Suspense fallback={<RootStartupFallback />}>
+        <LazyNativeImagePreviewWindow />
+      </Suspense>
     ) : nativeBibleWindow ? (
-      <NativeBibleWindow />
+      <Suspense fallback={<RootStartupFallback />}>
+        <LazyNativeBibleWindow />
+      </Suspense>
     ) : (
       <App />
     )

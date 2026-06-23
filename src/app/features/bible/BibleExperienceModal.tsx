@@ -52,8 +52,7 @@ const CARD_STYLE: CSSProperties = {
   borderRadius: toRem(28),
   padding: config.space.S400,
   border: SOFT_LINE,
-  background:
-    'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(247,250,255,0.96) 100%)',
+  background: 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(247,250,255,0.96) 100%)',
   boxShadow: '0 24px 64px rgba(148, 163, 184, 0.12)',
 };
 const INPUT_STYLE: CSSProperties = {
@@ -141,6 +140,16 @@ const SECTION_TITLE_COPY_STYLE: CSSProperties = {
   flexDirection: 'column',
   gap: toRem(8),
 };
+const SECTION_HEADER_STACK_STYLE: CSSProperties = {
+  minWidth: 0,
+  display: 'flex',
+  flexDirection: 'column',
+  gap: toRem(12),
+};
+const SECTION_DESCRIPTION_STYLE: CSSProperties = {
+  minWidth: 0,
+  lineHeight: 1.8,
+};
 const SECTION_SUMMARY_STYLE: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
@@ -154,6 +163,12 @@ const SECTION_ACTION_GROUP_STYLE: CSSProperties = {
   gap: toRem(10),
   alignItems: 'center',
   minWidth: 0,
+};
+const TOOLBAR_SHELL_STYLE: CSSProperties = {
+  borderRadius: toRem(22),
+  border: '1px solid rgba(226, 232, 240, 0.9)',
+  background: 'rgba(248, 250, 252, 0.88)',
+  boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.56)',
 };
 const NOTICE_STYLE: CSSProperties = {
   borderRadius: toRem(18),
@@ -381,9 +396,7 @@ function BiblePillButton({
         minHeight: 38,
         padding: `0 ${toRem(16)}`,
         borderRadius: toRem(999),
-        border: active
-          ? '1px solid rgba(15, 23, 42, 0.96)'
-          : '1px solid rgba(148, 163, 184, 0.24)',
+        border: active ? '1px solid rgba(15, 23, 42, 0.96)' : '1px solid rgba(148, 163, 184, 0.24)',
         background: disabled
           ? 'rgba(226, 232, 240, 0.45)'
           : active
@@ -553,13 +566,7 @@ function BibleFloatingPanel({
     </>
   );
 
-  if (
-    desktopMode &&
-    windowKey &&
-    windowOffset &&
-    onWindowFocus &&
-    onWindowDragStart
-  ) {
+  if (desktopMode && windowKey && windowOffset && onWindowFocus && onWindowDragStart) {
     return (
       <BibleDesktopWindow
         windowKey={windowKey}
@@ -802,7 +809,10 @@ export function BibleExperienceModal({
   );
   const canGoPrevChapter = !!selectedBook && selectedChapter > 1;
   const canGoNextChapter = !!selectedBook && selectedChapter < selectedBook.chapterCount;
-  const pageItems = useMemo(() => buildPageItems(currentPage, totalPages), [currentPage, totalPages]);
+  const pageItems = useMemo(
+    () => buildPageItems(currentPage, totalPages),
+    [currentPage, totalPages]
+  );
 
   const clearDragListeners = React.useCallback(() => {
     dragCleanupRef.current?.();
@@ -975,8 +985,7 @@ export function BibleExperienceModal({
 
       const openWindowKeys = (['main', 'search', 'browse'] as BibleWindowKey[]).filter(
         (windowKey) =>
-          windowKey === 'main' ||
-          (windowKey === 'search' ? searchDialogOpen : browseDialogOpen)
+          windowKey === 'main' || (windowKey === 'search' ? searchDialogOpen : browseDialogOpen)
       );
       const frontWindowKey = openWindowKeys.sort((a, b) => windowZIndex[b] - windowZIndex[a])[0];
       if (!frontWindowKey) return;
@@ -1030,7 +1039,9 @@ export function BibleExperienceModal({
     const targetChapterVerses = getChapterVerses(data, verse.book, verse.chapter);
     const verseIndex = targetChapterVerses.findIndex((item) => item.key === verse.key);
     const page = verseIndex >= 0 ? Math.floor(verseIndex / PAGE_SIZE) + 1 : 1;
-    setSelectedKeys((current) => (current.includes(verse.key) ? current : current.concat(verse.key)));
+    setSelectedKeys((current) =>
+      current.includes(verse.key) ? current : current.concat(verse.key)
+    );
     setPendingFocusVerseKey(verse.key);
     setFocusedVerseKey(verse.key);
     openChapter(verse.book, verse.chapter, page, false);
@@ -1154,7 +1165,7 @@ export function BibleExperienceModal({
     ? `共找到 ${activeVerses.length} 节匹配经文，当前范围：${scopeLabel}。${CN.searchHintSuffix}`
     : `本章共 ${chapterVerses.length} 节，支持多选复制，并可通过底部分页继续浏览。`;
   const headerHint = `${CN.keyboardHint} ${CN.selectionHelp}`;
-  const sectionLayoutStyle = compactLayout
+  const sectionTopRowStyle = compactLayout
     ? RESPONSIVE_SECTION_STACK_STYLE
     : RESPONSIVE_SECTION_STACK_WIDE_STYLE;
   const actionRowStyle: CSSProperties = compactLayout
@@ -1167,9 +1178,9 @@ export function BibleExperienceModal({
     : {
         display: 'flex',
         flexWrap: 'wrap',
-        alignItems: 'flex-start',
+        alignItems: 'center',
         justifyContent: 'space-between',
-        gap: toRem(16),
+        gap: toRem(12),
         minWidth: 0,
       };
   const actionLeftGroupStyle: CSSProperties = {
@@ -1182,6 +1193,7 @@ export function BibleExperienceModal({
     flex: compactLayout ? '1 1 100%' : '0 1 auto',
     justifyContent: compactLayout ? 'flex-start' : 'flex-end',
     marginInlineStart: compactLayout ? 0 : 'auto',
+    alignSelf: compactLayout ? 'stretch' : 'center',
   };
   const sectionSummaryStyle: CSSProperties = compactLayout
     ? {
@@ -1190,9 +1202,16 @@ export function BibleExperienceModal({
         textAlign: 'left',
       }
     : SECTION_SUMMARY_STYLE;
-  const sectionPadding = compactLayout
-    ? `${toRem(20)} ${toRem(20)}`
-    : `${toRem(24)} ${toRem(28)}`;
+  const sectionPadding = compactLayout ? `${toRem(20)} ${toRem(20)}` : `${toRem(24)} ${toRem(28)}`;
+  const toolbarShellStyle: CSSProperties = compactLayout
+    ? {
+        ...TOOLBAR_SHELL_STYLE,
+        padding: `${toRem(12)} ${toRem(14)}`,
+      }
+    : {
+        ...TOOLBAR_SHELL_STYLE,
+        padding: `${toRem(14)} ${toRem(16)}`,
+      };
   const fontSegmentStyle: CSSProperties = compactLayout
     ? {
         ...SEGMENT_STYLE,
@@ -1251,87 +1270,97 @@ export function BibleExperienceModal({
               style={{ ...CARD_STYLE, padding: 0, overflow: 'hidden' }}
             >
               <Box direction="Column" gap="220" style={{ padding: sectionPadding }}>
-                <div style={sectionLayoutStyle}>
-                  <div style={SECTION_TITLE_COPY_STYLE}>
-                    <Text size="H3">{sectionTitle}</Text>
-                    <Text size="T300" priority="300" style={{ lineHeight: 1.8 }}>
-                      {sectionDescription}
-                    </Text>
+                <div style={SECTION_HEADER_STACK_STYLE}>
+                  <div style={sectionTopRowStyle}>
+                    <div style={SECTION_TITLE_COPY_STYLE}>
+                      <Text size="H3">{sectionTitle}</Text>
+                    </div>
+                    <div style={sectionSummaryStyle}>
+                      <Text size="T300" priority="300">
+                        {isSearchMode
+                          ? `${CN.searchSummary} ${activeVerses.length} ${CN.verses} · 第 ${currentPage}/${totalPages} ${CN.page}`
+                          : `${CN.chapterSummary} ${chapterVerses.length} ${CN.verses} · 第 ${currentPage}/${totalPages} ${CN.page}`}
+                      </Text>
+                    </div>
                   </div>
-                  <div style={sectionSummaryStyle}>
-                    <Text size="T300" priority="300">
-                    {isSearchMode
-                      ? `${CN.searchSummary} ${activeVerses.length} ${CN.verses} · 第 ${currentPage}/${totalPages} ${CN.page}`
-                      : `${CN.chapterSummary} ${chapterVerses.length} ${CN.verses} · 第 ${currentPage}/${totalPages} ${CN.page}`}
-                    </Text>
-                  </div>
+                  <Text size="T300" priority="300" style={SECTION_DESCRIPTION_STYLE}>
+                    {sectionDescription}
+                  </Text>
                 </div>
 
-                <div style={actionRowStyle}>
-                  <div style={actionLeftGroupStyle}>
-                    <BiblePillButton onClick={() => changeChapter(-1)} disabled={!canGoPrevChapter}>
-                      {CN.prevChapter}
-                    </BiblePillButton>
-                    <BiblePillButton onClick={() => changeChapter(1)} disabled={!canGoNextChapter}>
-                      {CN.nextChapter}
-                    </BiblePillButton>
-                    <BiblePillButton
-                      onClick={() => {
-                        setBrowseDialogOpen(true);
-                        focusWindow('browse');
-                      }}
-                    >
-                      {CN.openBrowse}
-                    </BiblePillButton>
-                    <BiblePillButton
-                      onClick={() => {
-                        setSearchDialogOpen(true);
-                        focusWindow('search');
-                      }}
-                    >
-                      {CN.openSearch}
-                    </BiblePillButton>
-                  </div>
-
-                  <div style={actionRightGroupStyle}>
-                    {isSearchMode && (
+                <div style={toolbarShellStyle}>
+                  <div style={actionRowStyle}>
+                    <div style={actionLeftGroupStyle}>
+                      <BiblePillButton
+                        onClick={() => changeChapter(-1)}
+                        disabled={!canGoPrevChapter}
+                      >
+                        {CN.prevChapter}
+                      </BiblePillButton>
+                      <BiblePillButton
+                        onClick={() => changeChapter(1)}
+                        disabled={!canGoNextChapter}
+                      >
+                        {CN.nextChapter}
+                      </BiblePillButton>
                       <BiblePillButton
                         onClick={() => {
-                          setSearchInput('');
-                          setCurrentPage(1);
+                          setBrowseDialogOpen(true);
+                          focusWindow('browse');
                         }}
                       >
-                        {CN.backToChapter}
-                      </BiblePillButton>
-                    )}
-                    <Text size="T300" priority="300">
-                      {CN.fontSizeLabel}
-                    </Text>
-                    <Box wrap="Wrap" gap="100" style={fontSegmentStyle}>
-                      <BiblePillButton
-                        onClick={() =>
-                          setFontSize((size) =>
-                            clamp(size - FONT_SIZE_STEP, FONT_SIZE_MIN, FONT_SIZE_MAX)
-                          )
-                        }
-                        disabled={fontSize <= FONT_SIZE_MIN}
-                      >
-                        {CN.fontSmaller}
-                      </BiblePillButton>
-                      <BiblePillButton active={fontSize === 17} onClick={() => setFontSize(17)}>
-                        {CN.fontReset}
+                        {CN.openBrowse}
                       </BiblePillButton>
                       <BiblePillButton
-                        onClick={() =>
-                          setFontSize((size) =>
-                            clamp(size + FONT_SIZE_STEP, FONT_SIZE_MIN, FONT_SIZE_MAX)
-                          )
-                        }
-                        disabled={fontSize >= FONT_SIZE_MAX}
+                        onClick={() => {
+                          setSearchDialogOpen(true);
+                          focusWindow('search');
+                        }}
                       >
-                        {CN.fontLarger}
+                        {CN.openSearch}
                       </BiblePillButton>
-                    </Box>
+                    </div>
+
+                    <div style={actionRightGroupStyle}>
+                      {isSearchMode && (
+                        <BiblePillButton
+                          onClick={() => {
+                            setSearchInput('');
+                            setCurrentPage(1);
+                          }}
+                        >
+                          {CN.backToChapter}
+                        </BiblePillButton>
+                      )}
+                      <Text size="T300" priority="300">
+                        {CN.fontSizeLabel}
+                      </Text>
+                      <Box wrap="Wrap" gap="100" style={fontSegmentStyle}>
+                        <BiblePillButton
+                          onClick={() =>
+                            setFontSize((size) =>
+                              clamp(size - FONT_SIZE_STEP, FONT_SIZE_MIN, FONT_SIZE_MAX)
+                            )
+                          }
+                          disabled={fontSize <= FONT_SIZE_MIN}
+                        >
+                          {CN.fontSmaller}
+                        </BiblePillButton>
+                        <BiblePillButton active={fontSize === 17} onClick={() => setFontSize(17)}>
+                          {CN.fontReset}
+                        </BiblePillButton>
+                        <BiblePillButton
+                          onClick={() =>
+                            setFontSize((size) =>
+                              clamp(size + FONT_SIZE_STEP, FONT_SIZE_MIN, FONT_SIZE_MAX)
+                            )
+                          }
+                          disabled={fontSize >= FONT_SIZE_MAX}
+                        >
+                          {CN.fontLarger}
+                        </BiblePillButton>
+                      </Box>
+                    </div>
                   </div>
                 </div>
               </Box>
@@ -1344,7 +1373,7 @@ export function BibleExperienceModal({
                   minHeight: toRem(360),
                   maxHeight: '64vh',
                   overflowY: 'auto',
-                  padding: `${toRem(10)} ${toRem(10)} ${toRem(14)}`,
+                  padding: `${toRem(16)} ${toRem(12)} ${toRem(18)}`,
                   scrollPaddingTop: toRem(20),
                 }}
               >
@@ -1631,10 +1660,16 @@ export function BibleExperienceModal({
         >
           <Box direction="Column" gap="200" style={PANEL_STYLE}>
             <Box wrap="Wrap" gap="100" style={SEGMENT_STYLE}>
-              <BiblePillButton active={activeTestament === 'old'} onClick={() => setActiveTestament('old')}>
+              <BiblePillButton
+                active={activeTestament === 'old'}
+                onClick={() => setActiveTestament('old')}
+              >
                 {CN.old}
               </BiblePillButton>
-              <BiblePillButton active={activeTestament === 'new'} onClick={() => setActiveTestament('new')}>
+              <BiblePillButton
+                active={activeTestament === 'new'}
+                onClick={() => setActiveTestament('new')}
+              >
                 {CN.new}
               </BiblePillButton>
             </Box>

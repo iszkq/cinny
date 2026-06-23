@@ -1,8 +1,24 @@
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useRef } from 'react';
 import { Box } from 'folds';
 import { ScreenSizeProvider, useScreenSize } from '../../hooks/useScreenSize';
-import { BibleExperienceModal } from '../../features/bible/BibleExperienceModal';
 import { emitNativeBibleWindowClose } from '../../utils/nativeBibleWindow';
+
+const LazyBibleExperienceModal = lazy(async () => ({
+  default: (await import('../../features/bible/BibleExperienceModal')).BibleExperienceModal,
+}));
+
+function BibleWindowFallback() {
+  return (
+    <Box
+      alignItems="Center"
+      justifyContent="Center"
+      style={{ width: '100vw', height: '100vh' }}
+      aria-busy="true"
+    >
+      Loading...
+    </Box>
+  );
+}
 
 function NativeBibleWindowContent() {
   const closeEmittedRef = useRef(false);
@@ -29,7 +45,9 @@ function NativeBibleWindowContent() {
 
   return (
     <Box style={{ width: '100vw', height: '100vh', overflow: 'hidden' }}>
-      <BibleExperienceModal open requestClose={handleClose} />
+      <Suspense fallback={<BibleWindowFallback />}>
+        <LazyBibleExperienceModal open requestClose={handleClose} />
+      </Suspense>
     </Box>
   );
 }
