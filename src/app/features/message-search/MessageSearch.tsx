@@ -157,6 +157,10 @@ export function MessageSearch({
     const mixedHighlights = data?.pages.flatMap((result) => result.highlights) ?? [];
     return Array.from(new Set(mixedHighlights));
   }, [data]);
+  const reachedResultEnd =
+    hasSearchCriteria && status === 'success' && groups.length > 0 && !hasNextPage && !isFetchingNextPage;
+  const waitingForMoreLocalHistory =
+    hasSearchCriteria && status === 'success' && groups.length === 0 && (hasNextPage || isFetchingNextPage);
 
   const virtualizer = useVirtualizer({
     count: groups.length,
@@ -295,6 +299,12 @@ export function MessageSearch({
     }
   }, [lastGroupIndex, lastVItemIndex, fetchNextPage, hasNextPage, isFetchingNextPage]);
 
+  useEffect(() => {
+    if (groups.length === 0 && hasSearchCriteria && hasNextPage && !isFetchingNextPage) {
+      fetchNextPage();
+    }
+  }, [fetchNextPage, groups.length, hasNextPage, hasSearchCriteria, isFetchingNextPage]);
+
   return (
     <Box direction="Column" gap="700">
       <ScrollTopContainer scrollRef={scrollRef} anchorRef={scrollTopAnchorRef}>
@@ -355,7 +365,11 @@ export function MessageSearch({
         </PageHeroEmpty>
       )}
 
-      {hasSearchCriteria && groups.length === 0 && status === 'success' && (
+      {hasSearchCriteria &&
+        groups.length === 0 &&
+        status === 'success' &&
+        !hasNextPage &&
+        !isFetchingNextPage && (
         <Box
           className={ContainerColor({ variant: 'Warning' })}
           style={{ padding: config.space.S300, borderRadius: config.radii.R400 }}
@@ -376,6 +390,7 @@ export function MessageSearch({
       )}
 
       {((hasSearchCriteria && status === 'pending') ||
+        waitingForMoreLocalHistory ||
         (groups.length > 0 && vItems.length === 0)) && (
         <Box direction="Column" gap="100">
           {[...Array(8).keys()].map((key) => (
@@ -439,6 +454,14 @@ export function MessageSearch({
           {isFetchingNextPage && (
             <Box justifyContent="Center" alignItems="Center">
               <Spinner size="600" variant="Secondary" />
+            </Box>
+          )}
+
+          {reachedResultEnd && (
+            <Box justifyContent="Center" alignItems="Center">
+              <Text size="T300" priority="300">
+                {'已显示全部消息'}
+              </Text>
             </Box>
           )}
         </Box>

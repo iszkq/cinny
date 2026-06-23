@@ -73,7 +73,7 @@ function BackupProgressFetching() {
   return (
     <Box grow="Yes" gap="200" alignItems="Center" justifyContent="End">
       <Badge variant="Secondary" fill="Solid" radii="300">
-        <Text size="L400">恢复中...</Text>
+        <Text size="L400">正在准备恢复...</Text>
       </Badge>
       <Spinner size="50" variant="Secondary" fill="Soft" />
     </Box>
@@ -158,7 +158,8 @@ export function BackupRestoreTile({ crypto }: BackupRestoreTileProps) {
   const setBackupRestoreProgress = useSetAtom(setBackupRestoreProgressAtom);
   const restoring =
     restoreProgress.status === BackupProgressStatus.Fetching ||
-    restoreProgress.status === BackupProgressStatus.Loading;
+    restoreProgress.status === BackupProgressStatus.Loading ||
+    restoreProgress.status === BackupProgressStatus.Background;
 
   const backupEnabled = useKeyBackupStatus(crypto);
   const backupInfo = useKeyBackupInfo(crypto);

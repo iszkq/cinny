@@ -1,5 +1,6 @@
 import {
   Direction,
+  EventTimeline,
   EventType,
   IEventWithRoomId,
   IResultContext,
@@ -14,8 +15,8 @@ import {
 } from 'matrix-js-sdk';
 import { useCallback, useRef } from 'react';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
-import { getLinkedTimelines, getLiveTimeline } from '../room/RoomTimeline';
-import { decryptAllTimelineEvent } from '../../utils/room';
+import { getFirstLinkedTimeline, getLinkedTimelines, getLiveTimeline } from '../room/RoomTimeline';
+import { decryptAllTimelineEvent, trimReplyFromBody, trimReplyFromFormattedBody } from '../../utils/room';
 import {
   parsePollData,
   POLL_START_EVENT_TYPE,
@@ -69,10 +70,28 @@ type LocalResultItem = {
   ts: number;
 };
 
-type LocalSearchCache = {
+type LocalRoomSearchState = {
+  exhausted: boolean;
+  loadedPageCount: number;
+  seenEventIds: Set<string>;
+  decryptedEventCounts: WeakMap<EventTimeline, number>;
+};
+
+type LocalSearchState = {
   key: string;
   highlights: string[];
+  terms: string[];
   items: LocalResultItem[];
+  order?: string;
+  targetRooms: Room[];
+  targetSenders?: Set<string>;
+  senderQuery?: string;
+  msgTypes?: SearchMessageType[];
+  dateFrom?: string;
+  dateTo?: string;
+  onlyLinks?: boolean;
+  roomStates: Map<string, LocalRoomSearchState>;
+  fullyLoaded: boolean;
 };
 
 const LOCAL_SEARCH_PAGE_LIMIT = 20;
@@ -172,11 +191,13 @@ const eventMatchesLinkFilter = (
   if (messageType && messageType !== 'text') return false;
 
   const content = 'getContent' in event ? event.getContent() : event.content;
-  const body = typeof content?.body === 'string' ? content.body : undefined;
+  const body = typeof content?.body === 'string' ? trimReplyFromBody(content.body) : undefined;
   const formattedBody =
     typeof content?.formatted_body === 'string' ? content.formatted_body : undefined;
+  const trimmedFormattedBody =
+    typeof formattedBody === 'string' ? trimReplyFromFormattedBody(formattedBody) : undefined;
 
-  return bodyContainsUrl(body, formattedBody);
+  return bodyContainsUrl(body, trimmedFormattedBody);
 };
 
 const getSearchTerms = (term: string): string[] => {
@@ -305,95 +326,17 @@ const resolveTargetRooms = (mx: MatrixClient, roomIds?: string[]): Room[] => {
   return mx.getRooms();
 };
 
-const paginateLocalRoomHistory = async (mx: MatrixClient, room: Room) => {
-  let pageCount = 0;
-
-  const loadTimeline = async (timeline: ReturnType<typeof getLiveTimeline>): Promise<void> => {
-    if (room.hasEncryptionStateEvent()) {
-      await decryptAllTimelineEvent(mx, timeline);
+const sortLocalResults = (results: LocalResultItem[], order?: string) => {
+  results.sort((a, b) => {
+    if (order === SearchOrderBy.Rank) {
+      if (b.rank !== a.rank) return b.rank - a.rank;
+      return b.ts - a.ts;
     }
-
-    if (
-      !timeline.getPaginationToken(Direction.Backward) ||
-      pageCount >= MAX_LOCAL_HISTORY_PAGES_PER_ROOM
-    ) {
-      return;
-    }
-
-    const paginated = await mx.paginateEventTimeline(timeline, {
-      backwards: true,
-      limit: LOCAL_HISTORY_PAGINATION_LIMIT,
-    });
-    if (!paginated) return;
-
-    const previousTimeline = timeline.getNeighbouringTimeline(Direction.Backward);
-    if (!previousTimeline || previousTimeline === timeline) return;
-
-    pageCount += 1;
-    await loadTimeline(previousTimeline);
-  };
-
-  await loadTimeline(getLiveTimeline(room));
-};
-
-const collectRoomLocalResults = async (
-  mx: MatrixClient,
-  room: Room,
-  terms: string[],
-  targetSenders?: Set<string>,
-  senderQuery?: string,
-  msgTypes?: SearchMessageType[],
-  dateFrom?: string,
-  dateTo?: string,
-  onlyLinks?: boolean
-): Promise<LocalResultItem[]> => {
-  await paginateLocalRoomHistory(mx, room);
-
-  const seenEventIds = new Set<string>();
-  const roomResults: LocalResultItem[] = [];
-  const timelines = getLinkedTimelines(getLiveTimeline(room));
-
-  timelines.forEach((timeline) => {
-    timeline.getEvents().forEach((matrixEvent) => {
-      const eventId = matrixEvent.getId();
-      if (!eventId || seenEventIds.has(eventId)) return;
-      seenEventIds.add(eventId);
-
-      const sender = matrixEvent.getSender();
-      if (targetSenders && (!sender || !targetSenders.has(sender))) return;
-      if (!matchesSenderFilter(room, sender ?? undefined, senderQuery)) return;
-
-      const ts = matrixEvent.getTs();
-      if (!matchesDateRange(ts, dateFrom, dateTo)) return;
-
-      const messageType = getMatrixEventMessageType(matrixEvent);
-      if (!matchesMessageType(messageType, msgTypes)) return;
-      if (!eventMatchesLinkFilter(matrixEvent, messageType, onlyLinks)) return;
-
-      const body = eventToSearchBody(matrixEvent);
-      if (!body) return;
-
-      if (terms.length > 0) {
-        const normalizedBody = normalizeSearchText(body);
-        const matched = terms.every((token) => normalizedBody.includes(token));
-        if (!matched) return;
-      }
-
-      roomResults.push({
-        rank: terms.length > 0 ? calculateLocalRank(body, terms) : 0,
-        event: toSearchEvent(matrixEvent, room.roomId),
-        ts,
-      });
-    });
+    return b.ts - a.ts;
   });
-
-  return roomResults;
 };
 
-const searchLocalRoomHistory = async (
-  mx: MatrixClient,
-  params: MessageSearchParams
-): Promise<LocalSearchCache> => {
+const createLocalSearchState = (mx: MatrixClient, params: MessageSearchParams): LocalSearchState => {
   const {
     term,
     order,
@@ -420,7 +363,12 @@ const searchLocalRoomHistory = async (
     return {
       key: searchKey,
       highlights: [],
+      terms: [],
       items: [],
+      order,
+      targetRooms: [],
+      roomStates: new Map(),
+      fullyLoaded: true,
     };
   }
 
@@ -432,44 +380,187 @@ const searchLocalRoomHistory = async (
     return {
       key: searchKey,
       highlights: terms,
+      terms,
       items: [],
+      order,
+      targetRooms,
+      targetSenders,
+      senderQuery,
+      msgTypes,
+      dateFrom,
+      dateTo,
+      onlyLinks,
+      roomStates: new Map(),
+      fullyLoaded: true,
     };
   }
-
-  const roomResults = await targetRooms.reduce<Promise<LocalResultItem[][]>>(
-    async (pendingResults, room) => {
-      const collectedResults = await pendingResults;
-      const nextRoomResults = await collectRoomLocalResults(
-        mx,
-        room,
-        terms,
-        targetSenders,
-        senderQuery,
-        msgTypes,
-        dateFrom,
-        dateTo,
-        onlyLinks
-      );
-      collectedResults.push(nextRoomResults);
-      return collectedResults;
-    },
-    Promise.resolve([])
-  );
-  const results = roomResults.flat();
-
-  results.sort((a, b) => {
-    if (order === SearchOrderBy.Rank) {
-      if (b.rank !== a.rank) return b.rank - a.rank;
-      return b.ts - a.ts;
-    }
-    return b.ts - a.ts;
-  });
 
   return {
     key: searchKey,
     highlights: terms,
-    items: results,
+    terms,
+    items: [],
+    order,
+    targetRooms,
+    targetSenders,
+    senderQuery,
+    msgTypes,
+    dateFrom,
+    dateTo,
+    onlyLinks,
+    roomStates: new Map(
+      targetRooms.map((room) => [
+        room.roomId,
+        {
+          exhausted: false,
+          loadedPageCount: 0,
+          seenEventIds: new Set<string>(),
+          decryptedEventCounts: new WeakMap<EventTimeline, number>(),
+        },
+      ])
+    ),
+    fullyLoaded: false,
   };
+};
+
+const collectLoadedRoomResults = async (
+  mx: MatrixClient,
+  room: Room,
+  state: LocalSearchState,
+  roomState: LocalRoomSearchState
+) => {
+  const timelines = getLinkedTimelines(getLiveTimeline(room));
+
+  if (room.hasEncryptionStateEvent()) {
+    for (const timeline of timelines) {
+      const eventCount = timeline.getEvents().length;
+      if (roomState.decryptedEventCounts.get(timeline) === eventCount) {
+        continue;
+      }
+
+      await decryptAllTimelineEvent(mx, timeline);
+      roomState.decryptedEventCounts.set(timeline, timeline.getEvents().length);
+    }
+  }
+
+  let added = false;
+
+  timelines.forEach((timeline) => {
+    timeline.getEvents().forEach((matrixEvent) => {
+      const eventId = matrixEvent.getId();
+      if (!eventId || roomState.seenEventIds.has(eventId)) return;
+      roomState.seenEventIds.add(eventId);
+
+      const sender = matrixEvent.getSender();
+      if (state.targetSenders && (!sender || !state.targetSenders.has(sender))) return;
+      if (!matchesSenderFilter(room, sender ?? undefined, state.senderQuery)) return;
+
+      const ts = matrixEvent.getTs();
+      if (!matchesDateRange(ts, state.dateFrom, state.dateTo)) return;
+
+      const messageType = getMatrixEventMessageType(matrixEvent);
+      if (!matchesMessageType(messageType, state.msgTypes)) return;
+      if (!eventMatchesLinkFilter(matrixEvent, messageType, state.onlyLinks)) return;
+
+      const body = eventToSearchBody(matrixEvent);
+      if (!body) return;
+
+      if (state.terms.length > 0) {
+        const normalizedBody = normalizeSearchText(body);
+        const matched = state.terms.every((token) => normalizedBody.includes(token));
+        if (!matched) return;
+      }
+
+      state.items.push({
+        rank: state.terms.length > 0 ? calculateLocalRank(body, state.terms) : 0,
+        event: toSearchEvent(matrixEvent, room.roomId),
+        ts,
+      });
+      added = true;
+    });
+  });
+
+  if (added) {
+    sortLocalResults(state.items, state.order);
+  }
+};
+
+const paginateLocalRoomHistoryStep = async (
+  mx: MatrixClient,
+  room: Room,
+  roomState: LocalRoomSearchState
+): Promise<boolean> => {
+  const oldestTimeline = getFirstLinkedTimeline(getLiveTimeline(room), Direction.Backward);
+
+  if (
+    !oldestTimeline.getPaginationToken(Direction.Backward) ||
+    roomState.loadedPageCount >= MAX_LOCAL_HISTORY_PAGES_PER_ROOM
+  ) {
+    roomState.exhausted = true;
+    return false;
+  }
+
+  const paginated = await mx.paginateEventTimeline(oldestTimeline, {
+    backwards: true,
+    limit: LOCAL_HISTORY_PAGINATION_LIMIT,
+  });
+  roomState.loadedPageCount += 1;
+
+  const nextOldestTimeline = getFirstLinkedTimeline(getLiveTimeline(room), Direction.Backward);
+  const hasMoreBackwardPages =
+    !!nextOldestTimeline.getPaginationToken(Direction.Backward) &&
+    roomState.loadedPageCount < MAX_LOCAL_HISTORY_PAGES_PER_ROOM;
+  roomState.exhausted = !paginated || !hasMoreBackwardPages;
+
+  return paginated;
+};
+
+const ensureLocalResultsLoaded = async (
+  mx: MatrixClient,
+  state: LocalSearchState,
+  requiredCount: number
+) => {
+  for (const room of state.targetRooms) {
+    const roomState = state.roomStates.get(room.roomId);
+    if (!roomState) continue;
+    await collectLoadedRoomResults(mx, room, state, roomState);
+  }
+
+  while (!state.fullyLoaded && state.items.length < requiredCount) {
+    const pendingRooms = state.targetRooms.filter((room) => {
+      const roomState = state.roomStates.get(room.roomId);
+      return !!roomState && !roomState.exhausted;
+    });
+
+    if (pendingRooms.length === 0) {
+      state.fullyLoaded = true;
+      break;
+    }
+
+    let paginatedAny = false;
+
+    for (const room of pendingRooms) {
+      const roomState = state.roomStates.get(room.roomId);
+      if (!roomState || roomState.exhausted) continue;
+
+      const paginated = await paginateLocalRoomHistoryStep(mx, room, roomState);
+      await collectLoadedRoomResults(mx, room, state, roomState);
+
+      paginatedAny = paginatedAny || paginated;
+      if (state.items.length >= requiredCount) {
+        break;
+      }
+    }
+
+    if (!paginatedAny) {
+      state.fullyLoaded = true;
+      break;
+    }
+  }
+
+  if (state.targetRooms.every((room) => state.roomStates.get(room.roomId)?.exhausted)) {
+    state.fullyLoaded = true;
+  }
 };
 
 const groupSearchResult = (results: ISearchResult[]): ResultGroup[] => {
@@ -523,7 +614,7 @@ export const useMessageSearch = (params: MessageSearchParams) => {
     onlyLinks,
     includeAllMessages,
   } = params;
-  const localCacheRef = useRef<LocalSearchCache>();
+  const localCacheRef = useRef<LocalSearchState>();
   const hasLocalFilters =
     !!(senders && senders.length > 0) ||
     !!senderQuery ||
@@ -536,17 +627,18 @@ export const useMessageSearch = (params: MessageSearchParams) => {
     async (nextBatch?: string): Promise<SearchResult> => {
       const cacheKey = createCacheKey(params);
       if (localCacheRef.current?.key !== cacheKey) {
-        localCacheRef.current = await searchLocalRoomHistory(mx, params);
+        localCacheRef.current = createLocalSearchState(mx, params);
       }
 
       const offset = nextBatch ? Number(nextBatch) || 0 : 0;
+      await ensureLocalResultsLoaded(mx, localCacheRef.current, offset + LOCAL_SEARCH_PAGE_LIMIT);
       const items = localCacheRef.current.items.slice(offset, offset + LOCAL_SEARCH_PAGE_LIMIT);
+      const hasMoreLocalResults =
+        offset + LOCAL_SEARCH_PAGE_LIMIT < localCacheRef.current.items.length ||
+        !localCacheRef.current.fullyLoaded;
 
       return {
-        nextToken:
-          offset + LOCAL_SEARCH_PAGE_LIMIT < localCacheRef.current.items.length
-            ? String(offset + LOCAL_SEARCH_PAGE_LIMIT)
-            : undefined,
+        nextToken: hasMoreLocalResults ? String(offset + LOCAL_SEARCH_PAGE_LIMIT) : undefined,
         highlights: localCacheRef.current.highlights,
         groups: groupLocalResults(items),
       };

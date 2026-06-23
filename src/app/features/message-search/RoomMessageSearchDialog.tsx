@@ -912,6 +912,8 @@ export function RoomMessageSearchDialog({
     () => groups.reduce((count, group) => count + group.items.length, 0),
     [groups]
   );
+  const reachedResultEnd =
+    hasSearchCriteria && status === 'success' && resultCount > 0 && !hasNextPage && !isFetchingNextPage;
 
   useEffect(() => {
     if (!scrollRef.current) return;
@@ -1192,7 +1194,11 @@ export function RoomMessageSearchDialog({
                           </Box>
                         )}
 
-                        {hasSearchCriteria && status === 'success' && groups.length === 0 && (
+                        {hasSearchCriteria &&
+                          status === 'success' &&
+                          groups.length === 0 &&
+                          !hasNextPage &&
+                          !isFetchingNextPage && (
                           <Box
                             className={ContainerColor({ variant: 'Warning' })}
                             style={{
@@ -1232,6 +1238,14 @@ export function RoomMessageSearchDialog({
                         {isFetchingNextPage && (
                           <Box justifyContent="Center" alignItems="Center">
                             <Spinner size="600" variant="Secondary" />
+                          </Box>
+                        )}
+
+                        {reachedResultEnd && (
+                          <Box justifyContent="Center" alignItems="Center">
+                            <Text size="T300" priority="300">
+                              {'已显示全部消息'}
+                            </Text>
                           </Box>
                         )}
 

@@ -37,6 +37,12 @@ import {
   searchBible,
 } from './data';
 import { BibleExperienceModal } from './BibleExperienceModal';
+import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
+import {
+  closeNativeBibleWindow,
+  listenNativeBibleWindowClose,
+  openNativeBibleWindow,
+} from '../../utils/nativeBibleWindow';
 
 const PAGE_SIZE = 40;
 const SOFT_LINE = '1px solid rgba(148, 163, 184, 0.18)';
@@ -905,6 +911,46 @@ type BibleModalProps = {
 };
 
 export function BibleModal({ open, requestClose, onInsertSelected }: BibleModalProps) {
+  const useNativeWindow = isDesktopUpdaterSupported() && !onInsertSelected;
+
+  useEffect(() => {
+    if (!useNativeWindow) return undefined;
+
+    let mounted = true;
+    let unlistenClose: (() => void) | undefined;
+
+    if (open) {
+      void openNativeBibleWindow().catch(() => {
+        if (mounted) {
+          requestClose();
+        }
+      });
+
+      void listenNativeBibleWindowClose(() => {
+        if (mounted) {
+          requestClose();
+        }
+      }).then((unlisten) => {
+        if (!mounted) {
+          unlisten();
+          return;
+        }
+        unlistenClose = unlisten;
+      });
+    } else {
+      void closeNativeBibleWindow().catch(() => undefined);
+    }
+
+    return () => {
+      mounted = false;
+      unlistenClose?.();
+    };
+  }, [open, requestClose, useNativeWindow]);
+
+  if (useNativeWindow) {
+    return null;
+  }
+
   return (
     <BibleExperienceModal
       open={open}

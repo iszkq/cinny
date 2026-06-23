@@ -1,4 +1,5 @@
 import React, { MouseEventHandler, ReactNode, useCallback, useState } from 'react';
+import type { CryptoApi } from 'matrix-js-sdk/lib/crypto-api';
 import {
   Box,
   Text,
@@ -26,15 +27,72 @@ export enum ManualVerificationMethod {
   RecoveryKey = 'key',
 }
 
+const CROSS_SIGNING_SYNC_RETRY_DELAYS_MS = [0, 600, 1500, 3000] as const;
+const BACKUP_INFO_RETRY_DELAYS_MS = [0, 500, 1200, 2400] as const;
+
+const wait = (ms: number): Promise<void> =>
+  new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+
+const isTransientVerificationError = (error: Error): boolean =>
+  error.message.includes('importCrossSigningKeys failed to import the keys') ||
+  error.message.includes('downloadKeys is not a function');
+
+const waitForCrossSigningKeysReady = async (
+  crypto: CryptoApi,
+  userId: string
+) => {
+  let latestStatus = await crypto.getCrossSigningStatus();
+  if (latestStatus.publicKeysOnDevice) {
+    return latestStatus;
+  }
+
+  for (const delayMs of CROSS_SIGNING_SYNC_RETRY_DELAYS_MS) {
+    if (delayMs > 0) {
+      await wait(delayMs);
+    }
+
+    await crypto.userHasCrossSigningKeys(userId, true);
+    latestStatus = await crypto.getCrossSigningStatus();
+
+    if (latestStatus.publicKeysOnDevice) {
+      return latestStatus;
+    }
+  }
+
+  return latestStatus;
+};
+
+const waitForBackupVersionReady = async (crypto: CryptoApi) => {
+  for (const delayMs of BACKUP_INFO_RETRY_DELAYS_MS) {
+    if (delayMs > 0) {
+      await wait(delayMs);
+    }
+
+    const backupInfo = await crypto.getKeyBackupInfo();
+    if (backupInfo?.version) {
+      return backupInfo;
+    }
+  }
+
+  return undefined;
+};
+
 const getBackupRestoreNotice = (error: Error): string | undefined => {
   if (
     error.message.includes(
       'loadSessionBackupPrivateKeyFromSecretStorage: missing decryption key in secret storage'
-    ) ||
+    )
+  ) {
+    return '设备验证已完成，但当前账号没有可恢复的消息备份。旧的加密消息可能暂时仍无法解密。';
+  }
+
+  if (
     error.message.includes('loadSessionBackupPrivateKeyFromSecretStorage: unable to get backup version') ||
     error.message.includes('No backup info available')
   ) {
-    return '设备验证已完成，但当前账号没有可恢复的消息备份。旧的加密消息可能暂时仍无法解密。';
+    return '设备验证已完成，但当前暂时还没读取到消息备份信息。请稍等片刻，旧消息会在备份信息同步后继续恢复；若长时间没有变化，再重试一次。';
   }
 
   if (
@@ -168,6 +226,7 @@ export function ManualVerificationTile({
   const verifyAndRestoreBackup = useCallback(
     async (recoveryKey: Uint8Array) => {
       const crypto = mx.getCrypto();
+      const userId = mx.getSafeUserId();
       if (!crypto) {
         throw new Error('未找到加密模块，请刷新后重试。');
       }
@@ -176,13 +235,17 @@ export function ManualVerificationTile({
 
       let crossSigningStatus = await crypto.getCrossSigningStatus();
       if (!crossSigningStatus.publicKeysOnDevice) {
-        const hasCrossSigningKeys = await crypto.userHasCrossSigningKeys(mx.getSafeUserId(), true);
+        const hasCrossSigningKeys = await crypto.userHasCrossSigningKeys(userId, true);
         if (!hasCrossSigningKeys) {
           throw new Error(
             '当前账号没有可恢复的设备验证数据。请先在已验证设备上启用设备验证，或改用其他已验证设备来完成验证。'
           );
         }
-        crossSigningStatus = await crypto.getCrossSigningStatus();
+        crossSigningStatus = await waitForCrossSigningKeysReady(crypto, userId);
+      }
+
+      if (!crossSigningStatus.publicKeysOnDevice) {
+        throw new Error('设备验证数据正在同步，请稍等几秒后再试一次。');
       }
 
       const hasCrossSigningPrivateKeys =
@@ -195,10 +258,34 @@ export function ManualVerificationTile({
         );
       }
 
-      await crypto.bootstrapCrossSigning({});
+      let bootstrapCrossSigningError: Error | undefined;
+      for (const delayMs of CROSS_SIGNING_SYNC_RETRY_DELAYS_MS) {
+        if (delayMs > 0) {
+          await wait(delayMs);
+        }
+
+        try {
+          await crypto.bootstrapCrossSigning({});
+          bootstrapCrossSigningError = undefined;
+          break;
+        } catch (error) {
+          if (!(error instanceof Error) || !isTransientVerificationError(error)) {
+            throw error;
+          }
+
+          bootstrapCrossSigningError = error;
+          crossSigningStatus = await waitForCrossSigningKeysReady(crypto, userId);
+        }
+      }
+
+      if (bootstrapCrossSigningError) {
+        throw new Error('设备验证数据正在同步，请稍等几秒后再试一次。');
+      }
+
       await crypto.bootstrapSecretStorage({});
 
       try {
+        await waitForBackupVersionReady(crypto);
         await crypto.loadSessionBackupPrivateKeyFromSecretStorage();
       } catch (error) {
         const backupRestoreNotice =

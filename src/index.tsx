@@ -21,19 +21,23 @@ import { getFallbackSession } from './app/state/sessions';
 import { isDesktopUpdaterSupported } from './app/utils/desktopUpdater';
 import { applyDesktopStartupPinLock } from './app/utils/pinLock';
 import { isNativeImagePreviewWindow } from './app/utils/nativeImagePreview';
+import { isNativeBibleWindow } from './app/utils/nativeBibleWindow';
+import { NativeBibleWindow } from './app/components/bible/NativeBibleWindow';
 
 document.body.classList.add(configClass, varsClass);
 
 const nativeImagePreviewWindow = isDesktopUpdaterSupported() && isNativeImagePreviewWindow();
-const fallbackSession = nativeImagePreviewWindow ? undefined : getFallbackSession();
+const nativeBibleWindow = isDesktopUpdaterSupported() && isNativeBibleWindow();
+const desktopSubWindow = nativeImagePreviewWindow || nativeBibleWindow;
+const fallbackSession = desktopSubWindow ? undefined : getFallbackSession();
 
-if (isDesktopUpdaterSupported() && !nativeImagePreviewWindow) {
+if (isDesktopUpdaterSupported() && !desktopSubWindow) {
   document.documentElement.dataset.cinnyDesktopApp = 'true';
   applyDesktopStartupPinLock(fallbackSession?.baseUrl, fallbackSession?.userId);
 }
 
 // Register Service Worker
-if (!nativeImagePreviewWindow && 'serviceWorker' in navigator) {
+if (!desktopSubWindow && 'serviceWorker' in navigator) {
   const swUrl =
     import.meta.env.MODE === 'production'
       ? `${trimTrailingSlash(import.meta.env.BASE_URL)}/sw.js`
@@ -73,7 +77,15 @@ const mountApp = () => {
   }
 
   const root = createRoot(rootContainer);
-  root.render(nativeImagePreviewWindow ? <NativeImagePreviewWindow /> : <App />);
+  root.render(
+    nativeImagePreviewWindow ? (
+      <NativeImagePreviewWindow />
+    ) : nativeBibleWindow ? (
+      <NativeBibleWindow />
+    ) : (
+      <App />
+    )
+  );
 };
 
 mountApp();

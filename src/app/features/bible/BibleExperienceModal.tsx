@@ -102,7 +102,7 @@ const CHROMELESS_MODAL_STYLE: CSSProperties = {
 };
 const MAIN_MODAL_STYLE: CSSProperties = {
   ...CHROMELESS_MODAL_STYLE,
-  width: 'min(96vw, 1680px)',
+  width: 'min(94vw, 1240px)',
   minHeight: 'auto',
   maxHeight: 'calc(var(--app-height, 100dvh) - 12px)',
 };
@@ -1618,7 +1618,7 @@ export function BibleExperienceModal({
       <>
         <BibleDesktopWindow
           windowKey="main"
-          width="min(96vw, 1680px)"
+          width="min(94vw, 1240px)"
           offset={windowOffsets.main}
           zIndex={windowZIndex.main}
           onFocus={focusWindow}

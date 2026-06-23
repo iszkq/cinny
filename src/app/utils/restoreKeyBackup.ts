@@ -2,9 +2,9 @@ import { CryptoApi, ImportRoomKeyProgressData } from 'matrix-js-sdk/lib/crypto-a
 import type { KeyBackupInfo } from 'matrix-js-sdk/lib/crypto-api/keybackup';
 import { BackupProgressStatus, IBackupProgress } from '../state/backupRestore';
 
-const RESTORE_BACKGROUND_TIMEOUT_MS = 15000;
+const RESTORE_BACKGROUND_TIMEOUT_MS = 45000;
 const RESTORE_BACKGROUND_MESSAGE =
-  '加密备份恢复时间较长，已切换为后台继续恢复。你可以先正常使用，旧消息会在恢复完成后逐步恢复。';
+  '恢复时间较长，仍在继续。你可以先正常使用，旧消息会在恢复完成后逐步恢复。';
 const DEFAULT_RESTORE_ERROR_MESSAGE = '恢复加密备份失败，请稍后重试。';
 
 let latestRestoreJobId = 0;
@@ -76,6 +76,9 @@ type RunKeyBackupRestoreOptions = {
 
 export type KeyBackupRestoreRunResult = 'completed' | 'background';
 
+const shouldShowBackgroundNotice = (): boolean =>
+  typeof document !== 'undefined' && document.visibilityState === 'hidden';
+
 export const runKeyBackupRestore = async ({
   crypto,
   setRestoreProgress,
@@ -118,10 +121,12 @@ export const runKeyBackupRestore = async ({
   return new Promise<KeyBackupRestoreRunResult>((resolve, reject) => {
     const timeoutId = window.setTimeout(() => {
       backgrounded = true;
-      updateRestoreState({
-        status: BackupProgressStatus.Background,
-        message: backgroundMessage,
-      });
+      if (shouldShowBackgroundNotice()) {
+        updateRestoreState({
+          status: BackupProgressStatus.Background,
+          message: backgroundMessage,
+        });
+      }
       resolve('background');
     }, timeoutMs);
 
