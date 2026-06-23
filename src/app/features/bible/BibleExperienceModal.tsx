@@ -1157,13 +1157,31 @@ export function BibleExperienceModal({
   const sectionLayoutStyle = compactLayout
     ? RESPONSIVE_SECTION_STACK_STYLE
     : RESPONSIVE_SECTION_STACK_WIDE_STYLE;
+  const actionRowStyle: CSSProperties = compactLayout
+    ? {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: toRem(12),
+        minWidth: 0,
+      }
+    : {
+        display: 'flex',
+        flexWrap: 'wrap',
+        alignItems: 'flex-start',
+        justifyContent: 'space-between',
+        gap: toRem(16),
+        minWidth: 0,
+      };
   const actionLeftGroupStyle: CSSProperties = {
     ...SECTION_ACTION_GROUP_STYLE,
+    flex: compactLayout ? '1 1 100%' : '1 1 480px',
     justifyContent: 'flex-start',
   };
   const actionRightGroupStyle: CSSProperties = {
     ...SECTION_ACTION_GROUP_STYLE,
+    flex: compactLayout ? '1 1 100%' : '0 1 auto',
     justifyContent: compactLayout ? 'flex-start' : 'flex-end',
+    marginInlineStart: compactLayout ? 0 : 'auto',
   };
   const sectionSummaryStyle: CSSProperties = compactLayout
     ? {
@@ -1181,7 +1199,10 @@ export function BibleExperienceModal({
         width: '100%',
         justifyContent: 'space-between',
       }
-    : SEGMENT_STYLE;
+    : {
+        ...SEGMENT_STYLE,
+        flexShrink: 0,
+      };
 
   const mainWindowContent = (
     <SequenceCard variant="SurfaceVariant" direction="Column" gap="0" style={MAIN_MODAL_CARD_STYLE}>
@@ -1246,7 +1267,7 @@ export function BibleExperienceModal({
                   </div>
                 </div>
 
-                <div style={sectionLayoutStyle}>
+                <div style={actionRowStyle}>
                   <div style={actionLeftGroupStyle}>
                     <BiblePillButton onClick={() => changeChapter(-1)} disabled={!canGoPrevChapter}>
                       {CN.prevChapter}
@@ -1323,7 +1344,7 @@ export function BibleExperienceModal({
                   minHeight: toRem(360),
                   maxHeight: '64vh',
                   overflowY: 'auto',
-                  paddingInline: toRem(10),
+                  padding: `${toRem(10)} ${toRem(10)} ${toRem(14)}`,
                   scrollPaddingTop: toRem(20),
                 }}
               >
