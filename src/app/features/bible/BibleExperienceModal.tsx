@@ -1269,7 +1269,14 @@ export function BibleExperienceModal({
               gap="0"
               style={{ ...CARD_STYLE, padding: 0, overflow: 'hidden' }}
             >
-              <Box direction="Column" gap="220" style={{ padding: sectionPadding }}>
+              <Box
+                direction="Column"
+                gap="220"
+                style={{
+                  padding: sectionPadding,
+                  borderBottom: SOFT_LINE,
+                }}
+              >
                 <div style={SECTION_HEADER_STACK_STYLE}>
                   <div style={sectionTopRowStyle}>
                     <div style={SECTION_TITLE_COPY_STYLE}>
@@ -1364,8 +1371,6 @@ export function BibleExperienceModal({
                   {sectionDescription}
                 </Text>
               </Box>
-
-              <Line size="300" variant="Surface" />
 
               <div
                 ref={verseScrollRef}
