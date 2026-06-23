@@ -32,7 +32,7 @@ jobs:
 
           $packageVersion = [string]$packageJson.version
           $tauriVersion = [string]$tauriConfig.version
-          $cargoMatch = [regex]::Match($cargoToml, '(?m)^version = "([^"]+)"$')
+          $cargoMatch = [regex]::Match($cargoToml, '(?m)^\s*version\s*=\s*"([^"]+)"\s*$')
           if (-not $cargoMatch.Success) {
             throw 'Unable to read version from src-tauri/Cargo.toml.'
           }
