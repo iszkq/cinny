@@ -243,6 +243,8 @@ type WindowOffset = {
 };
 
 const WINDOW_EDGE_PADDING_PX = 16;
+const WINDOW_MIN_VISIBLE_WIDTH_PX = 240;
+const WINDOW_MIN_VISIBLE_HEIGHT_PX = 160;
 const INITIAL_WINDOW_OFFSETS: Record<BibleWindowKey, WindowOffset> = {
   main: { x: 0, y: 0 },
   search: { x: 120, y: 42 },
@@ -834,12 +836,32 @@ export function BibleExperienceModal({
       const rect = windowElement?.getBoundingClientRect();
       if (!rect) return nextOffset;
 
-      const maxX = Math.max(0, (window.innerWidth - rect.width) / 2 - WINDOW_EDGE_PADDING_PX);
-      const maxY = Math.max(0, (window.innerHeight - rect.height) / 2 - WINDOW_EDGE_PADDING_PX);
+      const centeredLeft = (window.innerWidth - rect.width) / 2;
+      const centeredTop = (window.innerHeight - rect.height) / 2;
+      const minVisibleWidth = Math.min(WINDOW_MIN_VISIBLE_WIDTH_PX, rect.width);
+      const minVisibleHeight = Math.min(WINDOW_MIN_VISIBLE_HEIGHT_PX, rect.height);
+      const canKeepFullWidthVisible =
+        window.innerWidth - rect.width - WINDOW_EDGE_PADDING_PX * 2 >= 0;
+      const canKeepFullHeightVisible =
+        window.innerHeight - rect.height - WINDOW_EDGE_PADDING_PX * 2 >= 0;
+      const minLeft = canKeepFullWidthVisible
+        ? WINDOW_EDGE_PADDING_PX
+        : -(rect.width - minVisibleWidth);
+      const maxLeft = canKeepFullWidthVisible
+        ? window.innerWidth - rect.width - WINDOW_EDGE_PADDING_PX
+        : window.innerWidth - minVisibleWidth;
+      const minTop = canKeepFullHeightVisible
+        ? WINDOW_EDGE_PADDING_PX
+        : -(rect.height - minVisibleHeight);
+      const maxTop = canKeepFullHeightVisible
+        ? window.innerHeight - rect.height - WINDOW_EDGE_PADDING_PX
+        : window.innerHeight - minVisibleHeight;
+      const nextLeft = clamp(centeredLeft + nextOffset.x, minLeft, maxLeft);
+      const nextTop = clamp(centeredTop + nextOffset.y, minTop, maxTop);
 
       return {
-        x: clamp(nextOffset.x, -maxX, maxX),
-        y: clamp(nextOffset.y, -maxY, maxY),
+        x: nextLeft - centeredLeft,
+        y: nextTop - centeredTop,
       };
     },
     []
