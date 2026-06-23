@@ -54,7 +54,7 @@ function VerificationUnexpected({ message, onClose }: VerificationUnexpectedProp
     <Box direction="Column" gap="400">
       <Text>{message}</Text>
       <Button variant="Secondary" fill="Soft" onClick={onClose}>
-        <Text size="B400">Close</Text>
+        <Text size="B400">关闭</Text>
       </Button>
     </Box>
   );
@@ -63,8 +63,8 @@ function VerificationUnexpected({ message, onClose }: VerificationUnexpectedProp
 function VerificationWaitAccept() {
   return (
     <Box direction="Column" gap="400">
-      <Text>Please accept the request from other device.</Text>
-      <WaitingMessage message="Waiting for request to be accepted..." />
+      <Text>请在另一台设备上接受验证请求。</Text>
+      <WaitingMessage message="正在等待另一台设备接受验证请求..." />
     </Box>
   );
 }
@@ -78,7 +78,7 @@ function VerificationAccept({ onAccept }: VerificationAcceptProps) {
   const accepting = acceptState.status === AsyncStatus.Loading;
   return (
     <Box direction="Column" gap="400">
-      <Text>Click accept to start the verification process.</Text>
+      <Text>点击“接受”开始设备验证。</Text>
       <Button
         variant="Primary"
         fill="Solid"
@@ -86,7 +86,7 @@ function VerificationAccept({ onAccept }: VerificationAcceptProps) {
         before={accepting && <Spinner size="100" variant="Primary" fill="Solid" />}
         disabled={accepting}
       >
-        <Text size="B400">Accept</Text>
+        <Text size="B400">接受</Text>
       </Button>
     </Box>
   );
@@ -95,8 +95,8 @@ function VerificationAccept({ onAccept }: VerificationAcceptProps) {
 function VerificationWaitStart() {
   return (
     <Box direction="Column" gap="400">
-      <Text>Verification request has been accepted.</Text>
-      <WaitingMessage message="Waiting for the response from other device..." />
+      <Text>验证请求已被接受。</Text>
+      <WaitingMessage message="正在等待另一台设备继续响应..." />
     </Box>
   );
 }
@@ -111,7 +111,7 @@ function AutoVerificationStart({ onStart }: VerificationStartProps) {
 
   return (
     <Box direction="Column" gap="400">
-      <WaitingMessage message="Starting verification using emoji comparison..." />
+      <WaitingMessage message="正在启动表情比对验证..." />
     </Box>
   );
 }
@@ -124,7 +124,7 @@ function CompareEmoji({ sasData }: { sasData: ShowSasCallbacks }) {
 
   return (
     <Box direction="Column" gap="400">
-      <Text>Confirm the emoji below are displayed on both devices, in the same order:</Text>
+      <Text>请确认两台设备上显示的表情和顺序完全一致：</Text>
       <Box
         className={ContainerColor({ variant: 'SurfaceVariant' })}
         style={{
@@ -157,7 +157,7 @@ function CompareEmoji({ sasData }: { sasData: ShowSasCallbacks }) {
           disabled={confirming}
           before={confirming && <Spinner size="100" variant="Primary" />}
         >
-          <Text size="B400">They Match</Text>
+          <Text size="B400">一致</Text>
         </Button>
         <Button
           variant="Primary"
@@ -165,7 +165,7 @@ function CompareEmoji({ sasData }: { sasData: ShowSasCallbacks }) {
           onClick={() => sasData.mismatch()}
           disabled={confirming}
         >
-          <Text size="B400">Do not Match</Text>
+          <Text size="B400">不一致</Text>
         </Button>
       </Box>
     </Box>
@@ -192,7 +192,7 @@ function SasVerification({ verifier, onCancel }: SasVerificationProps) {
 
   return (
     <Box direction="Column" gap="400">
-      <WaitingMessage message="Starting verification using emoji comparison..." />
+      <WaitingMessage message="正在启动表情比对验证..." />
     </Box>
   );
 }
@@ -204,10 +204,10 @@ function VerificationDone({ onExit }: VerificationDoneProps) {
   return (
     <Box direction="Column" gap="400">
       <div>
-        <Text>Your device is verified.</Text>
+        <Text>设备验证已完成。</Text>
       </div>
       <Button variant="Primary" fill="Solid" onClick={onExit}>
-        <Text size="B400">Okay</Text>
+        <Text size="B400">完成</Text>
       </Button>
     </Box>
   );
@@ -219,9 +219,9 @@ type VerificationCanceledProps = {
 function VerificationCanceled({ onClose }: VerificationCanceledProps) {
   return (
     <Box direction="Column" gap="400">
-      <Text>Verification has been canceled.</Text>
+      <Text>设备验证已取消。</Text>
       <Button variant="Secondary" fill="Soft" onClick={onClose}>
-        <Text size="B400">Close</Text>
+        <Text size="B400">关闭</Text>
       </Button>
     </Box>
   );
@@ -259,7 +259,7 @@ export function DeviceVerification({ request, onExit }: DeviceVerificationProps)
           <Dialog variant="Surface">
             <Header style={DialogHeaderStyles} variant="Surface" size="500">
               <Box grow="Yes">
-                <Text size="H4">Device Verification</Text>
+                <Text size="H4">设备验证</Text>
               </Box>
               <IconButton size="300" radii="300" onClick={handleCancel}>
                 <Icon src={Icons.Cross} />
@@ -283,7 +283,7 @@ export function DeviceVerification({ request, onExit }: DeviceVerificationProps)
                   <SasVerification verifier={request.verifier} onCancel={handleCancel} />
                 ) : (
                   <VerificationUnexpected
-                    message="Unexpected Error! Verification is started but verifier is missing."
+                    message="验证流程出现异常：验证已开始，但缺少验证器。"
                     onClose={handleCancel}
                   />
                 ))}

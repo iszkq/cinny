@@ -843,6 +843,21 @@ export function BibleExperienceModal({
     [clearDragListeners, focusWindow, getClampedWindowOffset, mobile, windowOffsets]
   );
 
+  const closeWindow = React.useCallback(
+    (windowKey: BibleWindowKey) => {
+      if (windowKey === 'search') {
+        setSearchDialogOpen(false);
+        return;
+      }
+      if (windowKey === 'browse') {
+        setBrowseDialogOpen(false);
+        return;
+      }
+      requestClose();
+    },
+    [requestClose]
+  );
+
   useEffect(() => {
     setCurrentPage((page) => Math.min(page, totalPages));
   }, [totalPages]);
@@ -918,6 +933,29 @@ export function BibleExperienceModal({
       focusWindow('search');
     }
   }, [focusWindow, searchDialogOpen]);
+
+  useEffect(() => {
+    if (!open || mobile) return undefined;
+
+    const handlePointerDown = (evt: PointerEvent) => {
+      if (evt.pointerType === 'mouse' && evt.button !== 0) return;
+      if (!(evt.target instanceof Element)) return;
+      if (evt.target.closest('[data-bible-window]')) return;
+
+      const openWindowKeys = (['main', 'search', 'browse'] as BibleWindowKey[]).filter(
+        (windowKey) =>
+          windowKey === 'main' ||
+          (windowKey === 'search' ? searchDialogOpen : browseDialogOpen)
+      );
+      const frontWindowKey = openWindowKeys.sort((a, b) => windowZIndex[b] - windowZIndex[a])[0];
+      if (!frontWindowKey) return;
+
+      closeWindow(frontWindowKey);
+    };
+
+    window.addEventListener('pointerdown', handlePointerDown, true);
+    return () => window.removeEventListener('pointerdown', handlePointerDown, true);
+  }, [browseDialogOpen, closeWindow, mobile, open, searchDialogOpen, windowZIndex]);
 
   const openBook = (book: BibleBook) => {
     setSelectedBookName(book.name);

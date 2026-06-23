@@ -4,8 +4,8 @@ import { BackupProgressStatus, IBackupProgress } from '../state/backupRestore';
 
 const RESTORE_BACKGROUND_TIMEOUT_MS = 15000;
 const RESTORE_BACKGROUND_MESSAGE =
-  '??????????,???????????????????,???????????????';
-const DEFAULT_RESTORE_ERROR_MESSAGE = '????????,??????';
+  '加密备份恢复时间较长，已切换为后台继续恢复。你可以先正常使用，旧消息会在恢复完成后逐步恢复。';
+const DEFAULT_RESTORE_ERROR_MESSAGE = '恢复加密备份失败，请稍后重试。';
 
 let latestRestoreJobId = 0;
 
@@ -34,22 +34,22 @@ export const getBackupRestoreErrorMessage = (error: unknown): string => {
   }
 
   if (message.includes('No decryption key found in crypto store')) {
-    return '???????????,??????????????????';
+    return '尚未找到可用的恢复密钥，请先完成设备验证或重新导入恢复密钥。';
   }
 
   if (
     message.includes('No backup info available') ||
     message.includes('Backup version to restore') ||
-    message.includes('???????????????')
+    message.includes('当前账号没有可恢复的消息备份。')
   ) {
-    return '????????????????????????????????';
+    return '服务器上暂时没有可恢复的消息备份。请确认旧设备已经开启消息备份。';
   }
 
   if (
     message.includes('getBackupDecryptor: key backup on server does not match the decryption key') ||
     message.includes('decryption key does not match backup info')
   ) {
-    return '?????????????????????,????????????????????';
+    return '当前服务器上的消息备份与这把恢复密钥不匹配，请在已验证设备上重新开启消息备份后再试。';
   }
 
   if (
@@ -60,7 +60,7 @@ export const getBackupRestoreErrorMessage = (error: unknown): string => {
     message.includes('ERR_CONNECTION') ||
     message.includes('ERR_INTERNET')
   ) {
-    return '???????,??????????,????????????';
+    return '连接服务器失败，暂时无法恢复加密备份，请检查网络或代理后重试。';
   }
 
   return DEFAULT_RESTORE_ERROR_MESSAGE;
@@ -93,7 +93,7 @@ export const runKeyBackupRestore = async ({
   };
 
   const updateRestoreProgress = (progress: ImportRoomKeyProgressData) => {
-    if (!backgrounded && isLatestRestoreJob(jobId)) {
+    if (isLatestRestoreJob(jobId)) {
       setRestoreProgress(progress);
     }
   };
@@ -105,7 +105,7 @@ export const runKeyBackupRestore = async ({
 
     const backupInfo = await crypto.getKeyBackupInfo();
     if (!hasUsableBackup(backupInfo)) {
-      throw new Error('???????????????');
+      throw new Error('当前账号没有可恢复的消息备份。');
     }
 
     await crypto.restoreKeyBackup({

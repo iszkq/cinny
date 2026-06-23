@@ -83,7 +83,8 @@ function LearnStartVerificationFromOtherDevice() {
         <ul style={{ margin: `${config.space.S100} 0` }}>
           <li>{'\u6253\u5f00\u53e6\u4e00\u53f0\u5df2\u9a8c\u8bc1\u7684\u8bbe\u5907\u3002'}</li>
           <li>
-            {'\u6253\u5f00'} <i>{'\u8bbe\u7f6e'}</i>銆?          </li>
+            {'\u6253\u5f00'} <i>{'\u8bbe\u7f6e'}</i>。
+          </li>
           <li>
             {'\u5728'} <i>{'\u8bbe\u5907 / \u4f1a\u8bdd'}</i> {'\u4e2d\u627e\u5230\u8fd9\u53f0\u8bbe\u5907\u3002'}
           </li>
