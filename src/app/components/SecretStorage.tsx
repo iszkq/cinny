@@ -42,7 +42,7 @@ export function SecretStorageRecoveryPassphrase({
         const match = await mx.secretStorage.checkKey(decodedRecoveryKey, keyContent as any);
 
         if (!match) {
-          throw new Error('Invalid recovery passphrase.');
+          throw new Error('恢复口令不正确。');
         }
 
         return decodedRecoveryKey;
@@ -77,7 +77,7 @@ export function SecretStorageRecoveryPassphrase({
     <Box as="form" onSubmit={handleSubmit} direction="Column" gap="100">
       <Box gap="200" alignItems="End">
         <Box grow="Yes" direction="Column" gap="100">
-          <Text size="L400">Recovery Passphrase</Text>
+          <Text size="L400">恢复口令</Text>
           <PasswordInput
             name="recoveryPassphraseInput"
             size="400"
@@ -99,7 +99,7 @@ export function SecretStorageRecoveryPassphrase({
             before={loading && <Spinner size="200" variant="Success" fill="Solid" />}
           >
             <Text as="span" size="B400">
-              Verify
+              验证
             </Text>
           </Button>
         </Box>
@@ -134,7 +134,7 @@ export function SecretStorageRecoveryKey({
         const match = await mx.secretStorage.checkKey(decodedRecoveryKey, keyContent as any);
 
         if (!match) {
-          throw new Error('Invalid recovery key.');
+          throw new Error('恢复密钥不正确。');
         }
 
         return decodedRecoveryKey;
@@ -167,7 +167,7 @@ export function SecretStorageRecoveryKey({
     <Box as="form" onSubmit={handleSubmit} direction="Column" gap="100">
       <Box gap="200" alignItems="End">
         <Box grow="Yes" direction="Column" gap="100">
-          <Text size="L400">Recovery Key</Text>
+          <Text size="L400">恢复密钥</Text>
           <PasswordInput
             name="recoveryKeyInput"
             size="400"
@@ -189,7 +189,7 @@ export function SecretStorageRecoveryKey({
             before={loading && <Spinner size="200" variant="Success" fill="Solid" />}
           >
             <Text as="span" size="B400">
-              Verify
+              验证
             </Text>
           </Button>
         </Box>

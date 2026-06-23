@@ -80,7 +80,7 @@ function SetupVerification({ onComplete }: SetupVerificationProps) {
   const handleAction = useCallback(
     async (authDict: AuthDict) => {
       if (!uiaAction) {
-        throw new Error('Unexpected Error! UIA action is perform without data.');
+        throw new Error('缺少身份验证上下文，请重试。');
       }
       if (alive()) {
         setNextAuthData(null);
@@ -123,7 +123,7 @@ function SetupVerification({ onComplete }: SetupVerificationProps) {
               if (alive()) {
                 setUIAAction(action);
               } else {
-                reject(new Error('Authentication failed! Failed to setup device verification.'));
+                reject(new Error('身份验证失败，无法完成设备验证设置。'));
               }
               return;
             }
@@ -137,11 +137,11 @@ function SetupVerification({ onComplete }: SetupVerificationProps) {
     useCallback(
       async (passphrase) => {
         const crypto = mx.getCrypto();
-        if (!crypto) throw new Error('Unexpected Error! Crypto module not found!');
+        if (!crypto) throw new Error('未找到加密模块，请刷新后重试。');
 
         const recoveryKeyData = await crypto.createRecoveryKeyFromPassphrase(passphrase);
         if (!recoveryKeyData.encodedPrivateKey) {
-          throw new Error('Unexpected Error! Failed to create recovery key.');
+          throw new Error('生成恢复密钥失败，请稍后重试。');
         }
         clearSecretStorageKeys();
 
@@ -182,11 +182,11 @@ function SetupVerification({ onComplete }: SetupVerificationProps) {
   return (
     <Box as="form" onSubmit={handleSubmit} direction="Column" gap="400">
       <Text size="T300">
-        Generate a <b>Recovery Key</b> for verifying identity if you do not have access to other
-        devices. Additionally, setup a passphrase as a memorable alternative.
+        如果暂时无法访问其他已验证设备，请先生成一份<b>恢复密钥</b>用于手动验证。
+        你也可以额外设置一条更容易记住的恢复口令。
       </Text>
       <Box direction="Column" gap="100">
-        <Text size="L400">Passphrase (Optional)</Text>
+        <Text size="L400">恢复口令（可选）</Text>
         <PasswordInput name="passphraseInput" size="400" readOnly={loading} />
       </Box>
       <Button
@@ -194,11 +194,11 @@ function SetupVerification({ onComplete }: SetupVerificationProps) {
         disabled={loading}
         before={loading && <Spinner size="200" variant="Primary" fill="Solid" />}
       >
-        <Text size="B400">Continue</Text>
+        <Text size="B400">继续</Text>
       </Button>
       {setupState.status === AsyncStatus.Error && (
         <Text size="T200" style={{ color: color.Critical.Main }}>
-          <b>{setupState.error ? setupState.error.message : 'Unexpected Error!'}</b>
+          <b>{setupState.error ? setupState.error.message : '发生了意外错误。'}</b>
         </Text>
       )}
       {nextAuthData !== null && uiaAction && (
@@ -206,7 +206,7 @@ function SetupVerification({ onComplete }: SetupVerificationProps) {
           authData={nextAuthData ?? uiaAction.authData}
           unsupported={() => (
             <Text size="T200">
-              Authentication steps to perform this action are not supported by client.
+              当前客户端暂不支持完成这一步身份验证。
             </Text>
           )}
         >
@@ -246,11 +246,10 @@ function RecoveryKeyDisplay({ recoveryKey }: RecoveryKeyDisplayProps) {
   return (
     <Box direction="Column" gap="400">
       <Text size="T300">
-        Store the Recovery Key in a safe place for future use, as you will need it to verify your
-        identity if you do not have access to other devices.
+        请妥善保管恢复密钥。以后如果无法访问其他已验证设备，就需要靠它来恢复身份验证。
       </Text>
       <Box direction="Column" gap="100">
-        <Text size="L400">Recovery Key</Text>
+        <Text size="L400">恢复密钥</Text>
         <Box
           className={ContainerColor({ variant: 'SurfaceVariant' })}
           style={{
@@ -265,16 +264,16 @@ function RecoveryKeyDisplay({ recoveryKey }: RecoveryKeyDisplayProps) {
             {safeToDisplayKey}
           </Text>
           <Chip onClick={() => setShow(!show)} variant="Secondary" radii="Pill">
-            <Text size="B300">{show ? 'Hide' : 'Show'}</Text>
+            <Text size="B300">{show ? '隐藏' : '显示'}</Text>
           </Chip>
         </Box>
       </Box>
       <Box direction="Column" gap="200">
         <Button onClick={handleCopy}>
-          <Text size="B400">Copy</Text>
+          <Text size="B400">复制</Text>
         </Button>
         <Button onClick={handleDownload} fill="Soft">
-          <Text size="B400">Download</Text>
+          <Text size="B400">下载</Text>
         </Button>
       </Box>
     </Box>
@@ -299,7 +298,7 @@ export const DeviceVerificationSetup = forwardRef<HTMLDivElement, DeviceVerifica
           size="500"
         >
           <Box grow="Yes">
-            <Text size="H4">Setup Device Verification</Text>
+            <Text size="H4">启用设备验证</Text>
           </Box>
           <IconButton size="300" radii="300" onClick={onCancel}>
             <Icon src={Icons.Cross} />
@@ -334,7 +333,7 @@ export const DeviceVerificationReset = forwardRef<HTMLDivElement, DeviceVerifica
           size="500"
         >
           <Box grow="Yes">
-            <Text size="H4">Reset Device Verification</Text>
+            <Text size="H4">重置设备验证</Text>
           </Box>
           <IconButton size="300" radii="300" onClick={onCancel}>
             <Icon src={Icons.Cross} />
@@ -355,17 +354,15 @@ export const DeviceVerificationReset = forwardRef<HTMLDivElement, DeviceVerifica
         ) : (
           <Box style={{ padding: config.space.S400 }} direction="Column" gap="400">
             <Box direction="Column" gap="200">
-              <Text size="H1">✋🧑‍🚒🤚</Text>
-              <Text size="T300">Resetting device verification is permanent.</Text>
+              <Text size="H1">请谨慎操作</Text>
+              <Text size="T300">重置设备验证是不可撤销的操作。</Text>
               <Text size="T300">
-                Anyone you have verified with will see security alerts and your encryption backup
-                will be lost. You almost certainly do not want to do this, unless you have lost{' '}
-                <b>Recovery Key</b> or <b>Recovery Passphrase</b> and every device you can verify
-                from.
+                你已验证过的联系人都会看到安全提醒，同时现有的加密备份也会失效。除非你已经丢失
+                <b>恢复密钥</b>、<b>恢复口令</b>，并且也无法使用任何已验证设备，否则通常不建议这样做。
               </Text>
             </Box>
             <Button variant="Critical" onClick={() => setReset(true)}>
-              <Text size="B400">Reset</Text>
+              <Text size="B400">确认重置</Text>
             </Button>
           </Box>
         )}

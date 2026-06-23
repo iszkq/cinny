@@ -25,6 +25,15 @@ export enum ManualVerificationMethod {
   RecoveryPassphrase = 'passphrase',
   RecoveryKey = 'key',
 }
+
+const getManualVerificationErrorMessage = (error: Error): string => {
+  if (error.message.includes('importCrossSigningKeys failed to import the keys')) {
+    return '恢复密钥导入失败，请稍后重试。若刚重新登录，请等待设备列表同步后再试一次。';
+  }
+
+  return error.message;
+};
+
 type ManualVerificationMethodSwitcherProps = {
   value: ManualVerificationMethod;
   onChange: (value: ManualVerificationMethod) => void;
@@ -55,8 +64,8 @@ export function ManualVerificationMethodSwitcher({
         onClick={handleMenu}
       >
         <Text as="span" size="B300">
-          {value === ManualVerificationMethod.RecoveryPassphrase && 'Recovery Passphrase'}
-          {value === ManualVerificationMethod.RecoveryKey && 'Recovery Key'}
+          {value === ManualVerificationMethod.RecoveryPassphrase && '恢复口令'}
+          {value === ManualVerificationMethod.RecoveryKey && '恢复密钥'}
         </Text>
       </Chip>
       <PopOut
@@ -87,7 +96,7 @@ export function ManualVerificationMethodSwitcher({
                   onClick={() => handleSelect(ManualVerificationMethod.RecoveryPassphrase)}
                 >
                   <Box grow="Yes">
-                    <Text size="T300">Recovery Passphrase</Text>
+                    <Text size="T300">恢复口令</Text>
                   </Box>
                 </MenuItem>
                 <MenuItem
@@ -98,7 +107,7 @@ export function ManualVerificationMethodSwitcher({
                   onClick={() => handleSelect(ManualVerificationMethod.RecoveryKey)}
                 >
                   <Box grow="Yes">
-                    <Text size="T300">Recovery Key</Text>
+                    <Text size="T300">恢复密钥</Text>
                   </Box>
                 </MenuItem>
               </Box>
@@ -133,11 +142,12 @@ export function ManualVerificationTile({
     async (recoveryKey: Uint8Array) => {
       const crypto = mx.getCrypto();
       if (!crypto) {
-        throw new Error('Unexpected Error! Crypto object not found.');
+        throw new Error('未找到加密模块，请刷新后重试。');
       }
 
       storePrivateKey(secretStorageKeyId, recoveryKey);
 
+      await mx.downloadKeys([mx.getSafeUserId()], true);
       await crypto.bootstrapCrossSigning({});
       await crypto.bootstrapSecretStorage({});
 
@@ -154,8 +164,8 @@ export function ManualVerificationTile({
   return (
     <Box direction="Column" gap="200">
       <SettingTile
-        title="Verify Manually"
-        description={hasPassphrase ? 'Select a verification method.' : 'Provide recovery key.'}
+        title="手动验证"
+        description={hasPassphrase ? '请选择验证方式。' : '请输入恢复密钥。'}
         after={
           <Box alignItems="Center" gap="200">
             {hasPassphrase && (
@@ -167,7 +177,7 @@ export function ManualVerificationTile({
       />
       {verifyState.status === AsyncStatus.Success ? (
         <Text size="T200" style={{ color: color.Success.Main }}>
-          <b>Device verified!</b>
+          <b>设备验证成功。</b>
         </Text>
       ) : (
         <Box direction="Column" gap="100">
@@ -189,7 +199,7 @@ export function ManualVerificationTile({
             )}
           {verifyState.status === AsyncStatus.Error && (
             <Text size="T200" style={{ color: color.Critical.Main }}>
-              <b>{verifyState.error.message}</b>
+              <b>{getManualVerificationErrorMessage(verifyState.error)}</b>
             </Text>
           )}
         </Box>

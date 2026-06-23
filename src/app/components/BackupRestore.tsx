@@ -47,7 +47,7 @@ function BackupStatus({ enabled }: BackupStatusProps) {
         size="L400"
         style={{ color: enabled ? color.Success.Main : color.Critical.Main }}
       >
-        {enabled ? 'Connected' : 'Disconnected'}
+        {enabled ? '已连接' : '未连接'}
       </Text>
     </Box>
   );
@@ -60,7 +60,7 @@ function BackupSyncing({ count }: BackupSyncingProps) {
     <Box as="span" gap="100" alignItems="Center">
       <Spinner size="50" variant="Primary" fill="Soft" />
       <Text as="span" size="L400" style={{ color: color.Primary.Main }}>
-        Syncing ({count})
+        同步中 ({count})
       </Text>
     </Box>
   );
@@ -70,7 +70,7 @@ function BackupProgressFetching() {
   return (
     <Box grow="Yes" gap="200" alignItems="Center" justifyContent="End">
       <Badge variant="Secondary" fill="Solid" radii="300">
-        <Text size="L400">Restoring...</Text>
+        <Text size="L400">恢复中...</Text>
       </Badge>
       <Spinner size="50" variant="Secondary" fill="Soft" />
     </Box>
@@ -85,7 +85,7 @@ function BackupProgress({ total, downloaded }: BackupProgressProps) {
   return (
     <Box grow="Yes" gap="200" alignItems="Center">
       <Badge variant="Secondary" fill="Solid" radii="300">
-        <Text size="L400">Restoring: {`${Math.round(percent(0, total, downloaded))}%`}</Text>
+        <Text size="L400">恢复中：{`${Math.round(percent(0, total, downloaded))}%`}</Text>
       </Badge>
       <Box grow="Yes" direction="Column">
         <ProgressBar variant="Secondary" size="300" min={0} max={total} value={downloaded} />
@@ -112,20 +112,20 @@ function BackupTrustInfo({ crypto, backupInfo }: BackupTrustInfoProps) {
     <Box direction="Column">
       {trust.matchesDecryptionKey ? (
         <Text size="T200" style={{ color: color.Success.Main }}>
-          <b>Backup has trusted decryption key.</b>
+          <b>备份包含可信的解密密钥。</b>
         </Text>
       ) : (
         <Text size="T200" style={{ color: color.Critical.Main }}>
-          <b>Backup does not have trusted decryption key!</b>
+          <b>备份缺少可信的解密密钥。</b>
         </Text>
       )}
       {trust.trusted ? (
         <Text size="T200" style={{ color: color.Success.Main }}>
-          <b>Backup has trusted by signature.</b>
+          <b>备份签名已受信任。</b>
         </Text>
       ) : (
         <Text size="T200" style={{ color: color.Critical.Main }}>
-          <b>Backup does not have trusted signature!</b>
+          <b>备份签名未受信任。</b>
         </Text>
       )}
     </Box>
@@ -176,7 +176,7 @@ export function BackupRestoreTile({ crypto }: BackupRestoreTileProps) {
   return (
     <InfoCard
       variant="Surface"
-      title="Encryption Backup"
+      title="加密备份"
       after={
         <Box alignItems="Center" gap="200">
           {remainingSession === 0 ? (
@@ -220,12 +220,12 @@ export function BackupRestoreTile({ crypto }: BackupRestoreTileProps) {
                     <Box direction="Column" gap="200">
                       <InfoCard
                         variant="SurfaceVariant"
-                        title="Backup Details"
+                        title="备份详情"
                         description={
                           <>
-                            <span>Version: {backupInfo?.version ?? 'NIL'}</span>
+                            <span>版本：{backupInfo?.version ?? 'N/A'}</span>
                             <br />
-                            <span>Keys: {backupInfo?.count ?? 'NIL'}</span>
+                            <span>密钥：{backupInfo?.count ?? 'N/A'}</span>
                           </>
                         }
                       />
@@ -242,7 +242,7 @@ export function BackupRestoreTile({ crypto }: BackupRestoreTileProps) {
                       }
                       before={<Icon size="100" src={Icons.Download} />}
                     >
-                      <Text size="B300">Restore Backup</Text>
+                      <Text size="B300">恢复备份</Text>
                     </Button>
                   </Box>
                 </Menu>
@@ -259,7 +259,7 @@ export function BackupRestoreTile({ crypto }: BackupRestoreTileProps) {
       )}
       {!backupEnabled && backupInfo === null && (
         <Text size="T200" style={{ color: color.Critical.Main }}>
-          <b>No backup present on server!</b>
+          <b>服务器上没有可用备份。</b>
         </Text>
       )}
       {!syncFailure && !backupEnabled && backupInfo && (

@@ -299,6 +299,9 @@ export function PasswordLoginForm({ defaultUsername, defaultEmail }: PasswordLog
           name="usernameInput"
           variant="Background"
           size="500"
+          autoComplete="username"
+          autoCapitalize="none"
+          spellCheck={false}
           required
           outlined
           after={<UsernameHint server={server} />}
@@ -319,7 +322,14 @@ export function PasswordLoginForm({ defaultUsername, defaultEmail }: PasswordLog
         <Text as="label" size="L400" priority="300">
           {copy.passwordField}
         </Text>
-        <PasswordInput name="passwordInput" variant="Background" size="500" outlined required />
+        <PasswordInput
+          name="passwordInput"
+          variant="Background"
+          size="500"
+          autoComplete="current-password"
+          outlined
+          required
+        />
         <Box alignItems="Start" justifyContent="SpaceBetween" gap="200">
           {loginState.status === AsyncStatus.Error && (
             <>
