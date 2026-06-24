@@ -494,14 +494,21 @@ function BiblePanelIntro({
 }: BiblePanelIntroProps) {
   return (
     <Box direction="Column" gap="220">
-      <Box wrap="Wrap" gap="200" alignItems="Start" justifyContent="SpaceBetween">
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(0, 1fr) auto',
+          gap: toRem(12),
+          alignItems: 'start',
+        }}
+      >
         <Box grow="Yes" direction="Column" gap="100" style={{ minWidth: 0 }}>
           <Text size="H4">{title}</Text>
         </Box>
         <IconButton onClick={onClose} size="300" radii="300">
           <Icon src={Icons.Cross} />
         </IconButton>
-      </Box>
+      </div>
       {description && (
         <Box direction="Column" gap="100" style={NOTICE_STYLE}>
           <Text size="T300" style={{ color: TEXT_MAIN }}>
@@ -1368,18 +1375,26 @@ export function BibleExperienceModal({
     </Box>
   );
   const mainPanelIntroCompact = (
-    <Box wrap="Wrap" gap="200" alignItems="Start" justifyContent="SpaceBetween" style={NOTICE_STYLE}>
+    <div
+      style={{
+        ...NOTICE_STYLE,
+        display: 'grid',
+        gridTemplateColumns: 'minmax(0, 1fr) auto',
+        gap: toRem(12),
+        alignItems: 'start',
+      }}
+    >
       <Text
         size="T300"
         priority="300"
-        style={{ lineHeight: 1.8, color: TEXT_MAIN, flex: '1 1 0', minWidth: 0 }}
+        style={{ lineHeight: 1.8, color: TEXT_MAIN, minWidth: 0, wordBreak: 'break-word' }}
       >
         {headerHint}
       </Text>
       <IconButton onClick={requestClose} size="300" radii="300">
         <Icon src={Icons.Cross} />
       </IconButton>
-    </Box>
+    </div>
   );
   const searchPanelWidth = mobile ? 'min(92vw, 920px)' : 'min(68vw, 780px)';
   const browsePanelWidth = mobile ? 'min(92vw, 1080px)' : 'min(74vw, 920px)';
