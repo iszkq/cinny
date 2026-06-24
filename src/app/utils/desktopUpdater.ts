@@ -61,9 +61,6 @@ type TauriWindow = Window & {
   __TAURI_INTERNALS__?: unknown;
 };
 
-let desktopUpdaterProxyResolved = false;
-let desktopUpdaterProxyUrl: string | undefined;
-
 export const isDesktopUpdaterSupported = (): boolean =>
   typeof window !== 'undefined' &&
   (Boolean((window as TauriWindow).__TAURI__) ||
@@ -75,21 +72,13 @@ export const getDesktopUpdaterProxyUrl = async (): Promise<string | undefined> =
     return undefined;
   }
 
-  if (desktopUpdaterProxyResolved) {
-    return desktopUpdaterProxyUrl;
-  }
-
-  desktopUpdaterProxyResolved = true;
-
   try {
     const { invoke } = await import('@tauri-apps/api/core');
     const proxy = await invoke<string | null>('get_desktop_updater_proxy');
-    desktopUpdaterProxyUrl = typeof proxy === 'string' && proxy.trim() ? proxy.trim() : undefined;
+    return typeof proxy === 'string' && proxy.trim() ? proxy.trim() : undefined;
   } catch {
-    desktopUpdaterProxyUrl = undefined;
+    return undefined;
   }
-
-  return desktopUpdaterProxyUrl;
 };
 
 export const checkForDesktopUpdate = async (): Promise<PendingDesktopUpdateHandle | undefined> => {
