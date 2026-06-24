@@ -114,9 +114,17 @@ const CUSTOM_BOOK_GRID_STYLE: CSSProperties = {
   minWidth: 0,
 };
 const CUSTOM_BOOK_BUTTON_STYLE: CSSProperties = {
-  minWidth: toRem(96),
+  minWidth: toRem(78),
   justifyContent: 'center',
-  padding: `0 ${toRem(12)}`,
+  padding: `0 ${toRem(10)}`,
+};
+const COPY_FEEDBACK_BADGE_STYLE: CSSProperties = {
+  borderRadius: toRem(999),
+  border: '1px solid rgba(59, 130, 246, 0.24)',
+  background: 'rgba(219, 234, 254, 0.94)',
+  color: '#1d4ed8',
+  padding: `${toRem(7)} ${toRem(12)}`,
+  boxShadow: '0 10px 24px rgba(37, 99, 235, 0.16)',
 };
 const SEARCH_SCOPE_SEGMENT_STYLE: CSSProperties = {
   ...SEGMENT_STYLE,
@@ -287,7 +295,7 @@ const CN = {
   selected: '已选',
   verses: '节',
   copySelected: '复制所选经文',
-  copiedSelected: '已复制并清除选择',
+  copiedSelected: '经文已复制',
   insert: '插入聊天框',
   reset: '清除所选经文',
   browseTitle: '卷章浏览',
@@ -323,6 +331,77 @@ const scopeOptions: Array<{ value: BibleSearchScopeMode; label: string }> = [
   { value: 'current', label: CN.current },
   { value: 'custom', label: CN.custom },
 ];
+
+const COMPACT_BOOK_LABELS: Record<string, string> = {
+  创世记: '创',
+  出埃及记: '出',
+  利未记: '利',
+  民数记: '民',
+  申命记: '申',
+  约书亚记: '书',
+  士师记: '士',
+  路得记: '得',
+  撒母耳记上: '撒上',
+  撒母耳记下: '撒下',
+  列王纪上: '王上',
+  列王纪下: '王下',
+  历代志上: '代上',
+  历代志下: '代下',
+  以斯拉记: '拉',
+  尼希米记: '尼',
+  以斯帖记: '斯',
+  约伯记: '伯',
+  诗篇: '诗',
+  箴言: '箴',
+  传道书: '传',
+  雅歌: '歌',
+  以赛亚书: '赛',
+  耶利米书: '耶',
+  耶利米哀歌: '哀',
+  以西结书: '结',
+  但以理书: '但',
+  何西阿书: '何',
+  约珥书: '珥',
+  阿摩司书: '摩',
+  俄巴底亚书: '俄',
+  约拿书: '拿',
+  弥迦书: '弥',
+  那鸿书: '鸿',
+  哈巴谷书: '哈',
+  西番雅书: '番',
+  哈该书: '该',
+  撒迦利亚书: '亚',
+  玛拉基书: '玛',
+  马太福音: '太',
+  马可福音: '可',
+  路加福音: '路',
+  约翰福音: '约',
+  使徒行传: '徒',
+  罗马书: '罗',
+  哥林多前书: '林前',
+  哥林多后书: '林后',
+  加拉太书: '加',
+  以弗所书: '弗',
+  腓立比书: '腓',
+  歌罗西书: '西',
+  帖撒罗尼迦前书: '帖前',
+  帖撒罗尼迦后书: '帖后',
+  提摩太前书: '提前',
+  提摩太后书: '提后',
+  提多书: '多',
+  腓利门书: '门',
+  希伯来书: '来',
+  雅各书: '雅',
+  彼得前书: '彼前',
+  彼得后书: '彼后',
+  约翰一书: '约一',
+  约翰二书: '约二',
+  约翰三书: '约三',
+  犹大书: '犹',
+  启示录: '启',
+};
+
+const getCompactBookLabel = (bookName: string): string => COMPACT_BOOK_LABELS[bookName] ?? bookName;
 
 type TestamentTab = 'old' | 'new';
 type PageItem = number | 'start-ellipsis' | 'end-ellipsis';
@@ -934,7 +1013,6 @@ export function BibleExperienceModal({
     [currentPage, totalPages]
   );
   const showToolPanel = !compactLayout || toolPanelOpen;
-  const activeToolPanelDescription = toolPanelView === 'search' ? undefined : CN.browseHelp;
 
   const handleToolPanelTrigger = React.useCallback(
     (view: ToolPanelView) => {
@@ -1340,7 +1418,7 @@ export function BibleExperienceModal({
     ? `共找到 ${activeVerses.length} 节匹配经文，当前范围：${scopeLabel}。${CN.searchHintSuffix}`
     : `本章共 ${chapterVerses.length} 节，支持多选复制，并可通过底部分页继续浏览。`;
   const headerHint = `${CN.keyboardHint} ${CN.selectionHelp}`;
-  const copySelectedLabel = copyFeedbackVisible ? CN.copiedSelected : CN.copySelected;
+  const copySelectedLabel = CN.copySelected;
   const sectionTopRowStyle = compactLayout
     ? RESPONSIVE_SECTION_STACK_STYLE
     : RESPONSIVE_SECTION_STACK_WIDE_STYLE;
@@ -1551,12 +1629,6 @@ export function BibleExperienceModal({
         overflowY: 'auto',
         paddingRight: toRem(4),
       };
-  const toolPanelMetaStyle: CSSProperties = {
-    lineHeight: 1.75,
-    color: TEXT_MAIN,
-    minWidth: 0,
-    wordBreak: 'break-word',
-  };
   const searchToolPanelContent = (
     <>
       <Input
@@ -1606,14 +1678,17 @@ export function BibleExperienceModal({
               <div style={CUSTOM_BOOK_GRID_STYLE}>
                 {books.map((book) => {
                   const active = customScopeBooks.includes(book.name);
+                  const bookLabel = getCompactBookLabel(book.name);
                   return (
                     <BiblePillButton
                       key={book.bookNumber}
                       active={active}
                       style={CUSTOM_BOOK_BUTTON_STYLE}
+                      title={book.name}
+                      aria-label={book.name}
                       onClick={() => toggleCustomBook(book.name)}
                     >
-                      {book.name}
+                      {bookLabel}
                     </BiblePillButton>
                   );
                 })}
@@ -1711,11 +1786,6 @@ export function BibleExperienceModal({
           </IconButton>
         )}
       </div>
-      {activeToolPanelDescription && (
-        <Text size="T300" priority="300" style={toolPanelMetaStyle}>
-          {activeToolPanelDescription}
-        </Text>
-      )}
       <div style={toolPanelContentStyle}>
         {toolPanelView === 'search' ? searchToolPanelContent : browseToolPanelContent}
       </div>
@@ -1891,7 +1961,7 @@ export function BibleExperienceModal({
                       {`${CN.selected} ${selectedVerses.length} ${CN.verses}`}
                     </Text>
                     {copyFeedbackVisible && (
-                      <Text size="T300" style={{ color: '#1d4ed8' }}>
+                      <Text size="T300" style={COPY_FEEDBACK_BADGE_STYLE}>
                         <b>{CN.copiedSelected}</b>
                       </Text>
                     )}
@@ -2083,14 +2153,17 @@ export function BibleExperienceModal({
                     <div style={CUSTOM_BOOK_GRID_STYLE}>
                       {books.map((book) => {
                         const active = customScopeBooks.includes(book.name);
+                        const bookLabel = getCompactBookLabel(book.name);
                         return (
                           <BiblePillButton
                             key={book.bookNumber}
                             active={active}
                             style={CUSTOM_BOOK_BUTTON_STYLE}
+                            title={book.name}
+                            aria-label={book.name}
                             onClick={() => toggleCustomBook(book.name)}
                           >
-                            {book.name}
+                            {bookLabel}
                           </BiblePillButton>
                         );
                       })}
