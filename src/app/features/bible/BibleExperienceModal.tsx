@@ -1507,12 +1507,9 @@ export function BibleExperienceModal({
                 wrap="Wrap"
                 gap="250"
                 alignItems="Center"
-                justifyContent="SpaceBetween"
+                justifyContent="End"
                 style={{ padding: `${toRem(16)} ${toRem(28)}`, flexShrink: 0 }}
               >
-                <Text size="T300" priority="300">
-                  {CN.keyboardHint}
-                </Text>
                 <Text size="T300" priority="300">
                   {`${CN.selected} ${selectedVerses.length} ${CN.verses}`}
                 </Text>
