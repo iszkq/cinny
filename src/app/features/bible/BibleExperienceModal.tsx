@@ -1548,19 +1548,6 @@ export function BibleExperienceModal({
             ))}
           </Box>
         </Box>
-        <Box shrink="No" wrap="Wrap" gap="100" justifyContent="End">
-          <BiblePillButton onClick={handleCopySelected} disabled={!selectedText}>
-            {copySelectedLabel}
-          </BiblePillButton>
-          {onInsertSelected && (
-            <BiblePillButton onClick={handleInsert} disabled={!selectedText}>
-              {CN.insert}
-            </BiblePillButton>
-          )}
-          <BiblePillButton onClick={handleClearSelected} disabled={selectedKeys.length === 0}>
-            {CN.reset}
-          </BiblePillButton>
-        </Box>
       </Box>
 
       {scopeMode === 'custom' && (
@@ -1591,33 +1578,6 @@ export function BibleExperienceModal({
           ))}
         </Box>
       )}
-
-      <Box
-        direction="Column"
-        gap="100"
-        style={{
-          borderRadius: toRem(20),
-          border: '1px solid rgba(191, 219, 254, 0.96)',
-          background: 'rgba(239, 246, 255, 0.78)',
-          padding: toRem(18),
-        }}
-      >
-        <Text size="T300" style={{ color: TEXT_MAIN }}>
-          <b>{`${CN.selected} ${selectedVerses.length} ${CN.verses}`}</b>
-        </Text>
-        <Text
-          size="T300"
-          priority="300"
-          style={{
-            lineHeight: 1.8,
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-word',
-            color: TEXT_MAIN,
-          }}
-        >
-          {previewText}
-        </Text>
-      </Box>
     </>
   );
   const browseToolPanelContent = selectedBook ? (
