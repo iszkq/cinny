@@ -1709,9 +1709,6 @@ export function Favorites() {
           direction="Column"
           gap="300"
           style={{
-            position: 'sticky',
-            top: config.space.S300,
-            zIndex: 3,
             padding: config.space.S400,
           }}
         >
