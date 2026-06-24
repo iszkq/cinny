@@ -1334,6 +1334,20 @@ export function BibleExperienceModal({
       </Text>
     </Box>
   );
+  const mainPanelIntroCompact = (
+    <Box wrap="Wrap" gap="200" alignItems="Start" justifyContent="SpaceBetween" style={NOTICE_STYLE}>
+      <Text
+        size="T300"
+        priority="300"
+        style={{ lineHeight: 1.8, color: TEXT_MAIN, flex: '1 1 0', minWidth: 0 }}
+      >
+        {headerHint}
+      </Text>
+      <IconButton onClick={requestClose} size="300" radii="300">
+        <Icon src={Icons.Cross} />
+      </IconButton>
+    </Box>
+  );
   const searchPanelWidth = mobile ? 'min(92vw, 920px)' : 'min(68vw, 780px)';
   const browsePanelWidth = mobile ? 'min(92vw, 1080px)' : 'min(74vw, 920px)';
 
@@ -1345,7 +1359,7 @@ export function BibleExperienceModal({
           gap="300"
           style={{ ...mainModalContentStyle, minHeight: toRem(320) }}
         >
-          {mainPanelIntro}
+          {mainPanelIntroCompact}
           <Box grow="Yes" alignItems="Center" justifyContent="Center">
             <Text size="L400">{CN.loading}</Text>
           </Box>
@@ -1358,7 +1372,7 @@ export function BibleExperienceModal({
           gap="300"
           style={{ ...mainModalContentStyle, minHeight: toRem(320) }}
         >
-          {mainPanelIntro}
+          {mainPanelIntroCompact}
           <Box grow="Yes" alignItems="Center" justifyContent="Center" direction="Column" gap="200">
             <Text size="L400">{CN.loadFailed}</Text>
             <Text size="T300">{error}</Text>
@@ -1369,7 +1383,7 @@ export function BibleExperienceModal({
       {!loading && !error && data && selectedBook && (
         <div style={{ ...mainModalContentStyle, flex: 1, minHeight: 0 }}>
           <Box direction="Column" gap="300" style={readerShellStyle}>
-            {mainPanelIntro}
+            {mainPanelIntroCompact}
             <SequenceCard
               variant="SurfaceVariant"
               direction="Column"
