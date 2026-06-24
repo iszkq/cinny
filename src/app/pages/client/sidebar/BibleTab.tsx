@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useCallback } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect } from 'react';
 import {
   Box,
   Icon,
@@ -17,7 +17,11 @@ import { bibleModalAtom } from '../../../state/bibleModal';
 import { ModalWide } from '../../../styles/Modal.css';
 import { loadBibleFeature, warmBibleResources } from '../../../utils/biblePreload';
 import { isDesktopUpdaterSupported } from '../../../utils/desktopUpdater';
-import { openNativeBibleWindow } from '../../../utils/nativeBibleWindow';
+import {
+  closeNativeBibleWindow,
+  listenNativeBibleWindowClose,
+  openNativeBibleWindow,
+} from '../../../utils/nativeBibleWindow';
 
 const LazyBibleModal = lazy(async () => ({
   default: (await loadBibleFeature()).BibleModal,
@@ -72,11 +76,42 @@ export function BibleTab() {
     warmBibleFeature();
     setOpen(true);
     if (desktop) {
-      void openNativeBibleWindow().catch(() => undefined);
+      void openNativeBibleWindow().catch(() => setOpen(false));
     }
   }, [desktop, setOpen, warmBibleFeature]);
 
-  const handleClose = useCallback(() => setOpen(false), [setOpen]);
+  const handleClose = useCallback(() => {
+    setOpen(false);
+    if (desktop) {
+      void closeNativeBibleWindow().catch(() => undefined);
+    }
+  }, [desktop, setOpen]);
+
+  useEffect(() => {
+    if (!desktop) return undefined;
+
+    let mounted = true;
+    let unlistenClose: (() => void) | undefined;
+
+    void listenNativeBibleWindowClose(() => {
+      if (mounted) {
+        setOpen(false);
+      }
+    })
+      .then((unlisten) => {
+        if (!mounted) {
+          unlisten();
+          return;
+        }
+        unlistenClose = unlisten;
+      })
+      .catch(() => undefined);
+
+    return () => {
+      mounted = false;
+      unlistenClose?.();
+    };
+  }, [desktop, setOpen]);
 
   return (
     <SidebarItem active={opened}>

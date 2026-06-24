@@ -42,7 +42,7 @@ export const StickyFilterCard = style([
   {
     position: 'sticky',
     top: config.space.S300,
-    zIndex: 3,
+    zIndex: 10,
     isolation: 'isolate',
     overflow: 'hidden',
     background: '#ffffff',
@@ -50,12 +50,6 @@ export const StickyFilterCard = style([
     boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)',
     backdropFilter: 'none',
     WebkitBackdropFilter: 'none',
-    '@media': {
-      'screen and (max-height: 960px)': {
-        position: 'relative',
-        top: 0,
-      },
-    },
   },
 ]);
 

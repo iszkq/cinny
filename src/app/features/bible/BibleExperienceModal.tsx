@@ -140,9 +140,10 @@ const NATIVE_MODAL_CONTENT_STYLE: CSSProperties = {
 const NATIVE_WINDOW_FRAME_STYLE: CSSProperties = {
   width: '100%',
   height: '100%',
-  padding: toRem(10),
-  background: 'rgba(248, 250, 252, 0.92)',
+  padding: 0,
+  background: 'transparent',
   boxSizing: 'border-box',
+  overflow: 'hidden',
 };
 const RESPONSIVE_SECTION_STACK_STYLE: CSSProperties = {
   display: 'grid',
@@ -202,9 +203,19 @@ const VERSE_SCROLL_STYLE: CSSProperties = {
 };
 const NOTICE_STYLE: CSSProperties = {
   borderRadius: toRem(18),
-  border: '1px solid rgba(191, 219, 254, 0.98)',
-  background: 'rgba(239, 246, 255, 0.9)',
+  border: '1px solid rgba(37, 99, 235, 0.42)',
+  background:
+    'linear-gradient(180deg, rgba(219, 234, 254, 0.98) 0%, rgba(239, 246, 255, 0.96) 100%)',
+  boxShadow: '0 14px 34px rgba(37, 99, 235, 0.14)',
   padding: `${toRem(14)} ${toRem(18)}`,
+};
+const NOTICE_ICON_STYLE: CSSProperties = {
+  width: toRem(36),
+  height: toRem(36),
+  borderRadius: 999,
+  background: '#1d4ed8',
+  color: '#fff',
+  boxShadow: '0 10px 24px rgba(29, 78, 216, 0.24)',
 };
 
 const CN = {
@@ -227,9 +238,9 @@ const CN = {
   fontLarger: 'A+',
   selected: '已选',
   verses: '节',
-  copySelected: '复制已选',
+  copySelected: '复制所选经文',
   insert: '插入聊天框',
-  reset: '清空选择',
+  reset: '清除所选经文',
   browseTitle: '卷章浏览',
   browseHelp: '先选卷名，再选章节；选中章节后浏览区会自动收起。',
   openBrowse: '选择卷章',
@@ -1365,20 +1376,27 @@ export function BibleExperienceModal({
       style={{
         ...NOTICE_STYLE,
         display: 'grid',
-        gridTemplateColumns: 'minmax(0, 1fr) auto',
+        gridTemplateColumns: 'auto minmax(0, 1fr) auto',
         gap: toRem(12),
-        alignItems: 'start',
+        alignItems: 'center',
       }}
     >
-      <Text
-        size="T300"
-        priority="300"
-        style={{ lineHeight: 1.8, color: TEXT_MAIN, minWidth: 0, wordBreak: 'break-word' }}
-      >
-        {headerHint}
-      </Text>
+      <Box alignItems="Center" justifyContent="Center" style={NOTICE_ICON_STYLE}>
+        <Icon size="200" src={Icons.Info} />
+      </Box>
+      <Box direction="Column" gap="100" style={{ minWidth: 0 }}>
+        <Text size="L400" style={{ color: TEXT_MAIN }}>
+          <b>操作提示</b>
+        </Text>
+        <Text
+          size="T300"
+          style={{ lineHeight: 1.75, color: TEXT_MAIN, minWidth: 0, wordBreak: 'break-word' }}
+        >
+          <b>{headerHint}</b>
+        </Text>
+      </Box>
       <IconButton onClick={requestClose} size="300" radii="300">
-      <Icon src={Icons.Cross} />
+        <Icon src={Icons.Cross} />
       </IconButton>
     </div>
   );
@@ -1723,17 +1741,14 @@ export function BibleExperienceModal({
                       >
                         {CN.nextChapter}
                       </BiblePillButton>
-                      <BiblePillButton
-                        active={showToolPanel && toolPanelView === 'browse'}
-                        onClick={() => handleToolPanelTrigger('browse')}
-                      >
-                        {CN.openBrowse}
+                      <BiblePillButton onClick={handleCopySelected} disabled={!selectedText}>
+                        {CN.copySelected}
                       </BiblePillButton>
                       <BiblePillButton
-                        active={showToolPanel && toolPanelView === 'search'}
-                        onClick={() => handleToolPanelTrigger('search')}
+                        onClick={() => setSelectedKeys([])}
+                        disabled={selectedKeys.length === 0}
                       >
-                        {CN.openSearch}
+                        {CN.reset}
                       </BiblePillButton>
                     </div>
 

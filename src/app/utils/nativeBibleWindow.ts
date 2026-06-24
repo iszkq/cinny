@@ -48,12 +48,12 @@ export const openNativeBibleWindow = async (): Promise<void> => {
     const bibleWindow = new WebviewWindow(NATIVE_BIBLE_WINDOW_LABEL, {
       url: getNativeBibleWindowUrl(),
       title: '圣经',
-      width: 1180,
-      height: 820,
+      width: 1320,
+      height: 900,
       minWidth: NATIVE_BIBLE_DESKTOP_MIN_WIDTH,
-      minHeight: 620,
+      minHeight: 720,
       resizable: true,
-      decorations: true,
+      decorations: false,
       center: true,
       focus: true,
       visible: true,
@@ -103,8 +103,9 @@ export const listenNativeBibleWindowClose = async (onClose: () => void): Promise
 };
 
 export const emitNativeBibleWindowClose = async (): Promise<void> => {
-  const { emitTo } = await import('@tauri-apps/api/event');
-  await emitTo('main', NATIVE_BIBLE_CLOSE_EVENT, {});
+  const { emit, emitTo } = await import('@tauri-apps/api/event');
+  await emitTo('main', NATIVE_BIBLE_CLOSE_EVENT, {}).catch(() => undefined);
+  await emit(NATIVE_BIBLE_CLOSE_EVENT, {}).catch(() => undefined);
 };
 
 export const closeNativeBibleWindow = async (): Promise<void> => {
