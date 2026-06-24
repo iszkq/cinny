@@ -93,10 +93,11 @@ const CUSTOM_BOOK_SCOPE_PANEL_STYLE: CSSProperties = {
   ...SOFT_SCROLL_PANEL_STYLE,
   display: 'flex',
   flexDirection: 'column',
-  gap: toRem(14),
-  maxHeight: toRem(420),
+  gap: toRem(12),
+  maxHeight: toRem(456),
   overflowY: 'auto',
   overflowX: 'hidden',
+  padding: toRem(12),
   paddingRight: toRem(10),
 };
 const CUSTOM_BOOK_GROUP_STYLE: CSSProperties = {
@@ -106,16 +107,29 @@ const CUSTOM_BOOK_GROUP_STYLE: CSSProperties = {
   minWidth: 0,
 };
 const CUSTOM_BOOK_GRID_STYLE: CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(132px, 1fr))',
+  display: 'flex',
+  flexWrap: 'wrap',
   gap: toRem(8),
   alignItems: 'start',
   minWidth: 0,
 };
 const CUSTOM_BOOK_BUTTON_STYLE: CSSProperties = {
-  width: '100%',
+  minWidth: toRem(96),
   justifyContent: 'center',
-  padding: `0 ${toRem(10)}`,
+  padding: `0 ${toRem(12)}`,
+};
+const SEARCH_SCOPE_SEGMENT_STYLE: CSSProperties = {
+  ...SEGMENT_STYLE,
+  display: 'flex',
+  flexWrap: 'nowrap',
+  width: '100%',
+  justifyContent: 'space-between',
+  gap: toRem(6),
+  padding: toRem(6),
+  overflowX: 'auto',
+};
+const SEARCH_SCOPE_BUTTON_STYLE: CSSProperties = {
+  padding: `0 ${toRem(12)}`,
 };
 const CHROMELESS_MODAL_STYLE: CSSProperties = {
   maxWidth: 'calc(100vw - 24px)',
@@ -265,7 +279,7 @@ const CN = {
   old: '旧约',
   new: '新约',
   current: '当前卷',
-  custom: '自定义多卷',
+  custom: '多卷',
   customBooks: '选择搜索书卷',
   fontSmaller: 'A-',
   fontReset: '默认',
@@ -475,6 +489,9 @@ function BiblePillButton({
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
         minHeight: 38,
         padding: `0 ${toRem(16)}`,
         borderRadius: toRem(999),
@@ -917,7 +934,7 @@ export function BibleExperienceModal({
     [currentPage, totalPages]
   );
   const showToolPanel = !compactLayout || toolPanelOpen;
-  const activeToolPanelDescription = toolPanelView === 'search' ? CN.searchHelp : CN.browseHelp;
+  const activeToolPanelDescription = toolPanelView === 'search' ? undefined : CN.browseHelp;
 
   const handleToolPanelTrigger = React.useCallback(
     (view: ToolPanelView) => {
@@ -1339,7 +1356,7 @@ export function BibleExperienceModal({
         flexWrap: 'wrap',
         alignItems: 'center',
         justifyContent: 'space-between',
-        gap: toRem(12),
+        gap: toRem(10),
         minWidth: 0,
       };
   const actionLeftGroupStyle: CSSProperties = {
@@ -1365,15 +1382,15 @@ export function BibleExperienceModal({
   const sectionHeaderStyle: CSSProperties = {
     display: 'flex',
     flexDirection: 'column',
-    gap: toRem(12),
-    paddingTop: compactLayout ? toRem(20) : toRem(24),
+    gap: toRem(10),
+    paddingTop: compactLayout ? toRem(16) : toRem(18),
     paddingInline: sectionPaddingInline,
-    paddingBottom: toRem(12),
+    paddingBottom: toRem(8),
     boxSizing: 'border-box',
   };
   const sectionToolbarWrapStyle: CSSProperties = {
     paddingInline: sectionPaddingInline,
-    paddingBottom: toRem(16),
+    paddingBottom: toRem(10),
     boxSizing: 'border-box',
   };
   const readerShellStyle: CSSProperties = {
@@ -1392,11 +1409,11 @@ export function BibleExperienceModal({
   const toolbarShellStyle: CSSProperties = compactLayout
     ? {
         ...TOOLBAR_SHELL_STYLE,
-        padding: `${toRem(12)} ${toRem(14)}`,
+        padding: `${toRem(10)} ${toRem(12)}`,
       }
     : {
         ...TOOLBAR_SHELL_STYLE,
-        padding: `${toRem(14)} ${toRem(16)}`,
+        padding: `${toRem(10)} ${toRem(14)}`,
       };
   const fontSegmentStyle: CSSProperties = mobile
     ? {
@@ -1411,14 +1428,14 @@ export function BibleExperienceModal({
       };
   const fontControlStyle: CSSProperties = mobile
     ? {
-        display: 'grid',
-        gap: toRem(10),
+        display: 'flex',
+        alignItems: 'center',
         width: '100%',
       }
     : {
-        display: 'inline-grid',
-        gap: toRem(10),
-        justifyItems: 'end',
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'flex-end',
         flexShrink: 0,
       };
   const mainModalCardStyle = nativeBibleWindow
@@ -1561,11 +1578,12 @@ export function BibleExperienceModal({
           <Text size="T300" priority="300">
             {CN.rangeTitle}
           </Text>
-          <Box wrap="Wrap" gap="100" style={SEGMENT_STYLE}>
+          <Box gap="100" style={SEARCH_SCOPE_SEGMENT_STYLE}>
             {scopeOptions.map((option) => (
               <BiblePillButton
                 key={option.value}
                 active={scopeMode === option.value}
+                style={SEARCH_SCOPE_BUTTON_STYLE}
                 onClick={() => {
                   setScopeMode(option.value);
                   setCurrentPage(1);
@@ -1580,9 +1598,6 @@ export function BibleExperienceModal({
 
       {scopeMode === 'custom' && (
         <div style={CUSTOM_BOOK_SCOPE_PANEL_STYLE}>
-          <Text size="T300" priority="300">
-            {CN.customBooks}
-          </Text>
           {[oldBooks, newBooks].map((books, index) => (
             <div key={index === 0 ? CN.old : CN.new} style={CUSTOM_BOOK_GROUP_STYLE}>
               <Text size="T300" priority="300">
@@ -1696,9 +1711,11 @@ export function BibleExperienceModal({
           </IconButton>
         )}
       </div>
-      <Text size="T300" priority="300" style={toolPanelMetaStyle}>
-        {activeToolPanelDescription}
-      </Text>
+      {activeToolPanelDescription && (
+        <Text size="T300" priority="300" style={toolPanelMetaStyle}>
+          {activeToolPanelDescription}
+        </Text>
+      )}
       <div style={toolPanelContentStyle}>
         {toolPanelView === 'search' ? searchToolPanelContent : browseToolPanelContent}
       </div>
@@ -1800,9 +1817,6 @@ export function BibleExperienceModal({
                         </BiblePillButton>
                       )}
                       <div style={fontControlStyle}>
-                        <Text size="T300" priority="300">
-                          {CN.fontSizeLabel}
-                        </Text>
                         <Box wrap="Wrap" gap="100" style={fontSegmentStyle}>
                           <BiblePillButton
                             onClick={() =>
@@ -2025,11 +2039,12 @@ export function BibleExperienceModal({
                 <Text size="T300" priority="300">
                   {CN.rangeTitle}
                 </Text>
-                <Box wrap="Wrap" gap="100" style={SEGMENT_STYLE}>
+                <Box gap="100" style={SEARCH_SCOPE_SEGMENT_STYLE}>
                   {scopeOptions.map((option) => (
                     <BiblePillButton
                       key={option.value}
                       active={scopeMode === option.value}
+                      style={SEARCH_SCOPE_BUTTON_STYLE}
                       onClick={() => {
                         setScopeMode(option.value);
                         setCurrentPage(1);
@@ -2060,9 +2075,6 @@ export function BibleExperienceModal({
 
             {scopeMode === 'custom' && (
               <div style={CUSTOM_BOOK_SCOPE_PANEL_STYLE}>
-                <Text size="T300" priority="300">
-                  {CN.customBooks}
-                </Text>
                 {[oldBooks, newBooks].map((books, index) => (
                   <div key={index === 0 ? CN.old : CN.new} style={CUSTOM_BOOK_GROUP_STYLE}>
                     <Text size="T300" priority="300">
