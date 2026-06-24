@@ -24,9 +24,21 @@ export type PendingDesktopUpdate = {
   releasePageUrl?: string;
 };
 
+export type UpdaterDownloadOptions = {
+  timeout?: number;
+  proxy?: string;
+  headers?: Record<string, string>;
+};
+
 export type PendingDesktopUpdateHandle = PendingDesktopUpdate & {
-  downloadAndInstall?: (callback?: (event: UpdaterProgressEvent) => void) => Promise<void>;
-  download?: (callback?: (event: UpdaterProgressEvent) => void) => Promise<void>;
+  downloadAndInstall?: (
+    callback?: (event: UpdaterProgressEvent) => void,
+    options?: UpdaterDownloadOptions
+  ) => Promise<void>;
+  download?: (
+    callback?: (event: UpdaterProgressEvent) => void,
+    options?: UpdaterDownloadOptions
+  ) => Promise<void>;
   install?: () => Promise<void>;
 };
 
@@ -42,11 +54,15 @@ export const DESKTOP_UPDATER_MANIFEST_URL =
   'https://github.com/iszkq/cinny/releases/latest/download/latest.json';
 export const DESKTOP_UPDATER_RELEASE_API_URL =
   'https://api.github.com/repos/iszkq/cinny/releases/latest';
+const DESKTOP_UPDATER_REQUEST_TIMEOUT_MS = 30_000;
 
 type TauriWindow = Window & {
   __TAURI__?: unknown;
   __TAURI_INTERNALS__?: unknown;
 };
+
+let desktopUpdaterProxyResolved = false;
+let desktopUpdaterProxyUrl: string | undefined;
 
 export const isDesktopUpdaterSupported = (): boolean =>
   typeof window !== 'undefined' &&
@@ -54,13 +70,39 @@ export const isDesktopUpdaterSupported = (): boolean =>
     Boolean((window as TauriWindow).__TAURI_INTERNALS__) ||
     /tauri/i.test(window.navigator.userAgent));
 
+export const getDesktopUpdaterProxyUrl = async (): Promise<string | undefined> => {
+  if (!isDesktopUpdaterSupported()) {
+    return undefined;
+  }
+
+  if (desktopUpdaterProxyResolved) {
+    return desktopUpdaterProxyUrl;
+  }
+
+  desktopUpdaterProxyResolved = true;
+
+  try {
+    const { invoke } = await import('@tauri-apps/api/core');
+    const proxy = await invoke<string | null>('get_desktop_updater_proxy');
+    desktopUpdaterProxyUrl = typeof proxy === 'string' && proxy.trim() ? proxy.trim() : undefined;
+  } catch {
+    desktopUpdaterProxyUrl = undefined;
+  }
+
+  return desktopUpdaterProxyUrl;
+};
+
 export const checkForDesktopUpdate = async (): Promise<PendingDesktopUpdateHandle | undefined> => {
   if (!isDesktopUpdaterSupported()) {
     throw new Error('Desktop updater is only available in the Tauri desktop app.');
   }
 
   const { check } = await import('@tauri-apps/plugin-updater');
-  const update = await check();
+  const proxy = await getDesktopUpdaterProxyUrl();
+  const update = await check({
+    timeout: DESKTOP_UPDATER_REQUEST_TIMEOUT_MS,
+    ...(proxy ? { proxy } : {}),
+  });
   return update as PendingDesktopUpdateHandle | undefined;
 };
 
@@ -133,14 +175,20 @@ export const installPendingDesktopUpdate = async (
   update: PendingDesktopUpdateHandle,
   callback?: (event: UpdaterProgressEvent) => void
 ): Promise<void> => {
+  const proxy = await getDesktopUpdaterProxyUrl();
+  const downloadOptions: UpdaterDownloadOptions = {
+    timeout: DESKTOP_UPDATER_REQUEST_TIMEOUT_MS,
+    ...(proxy ? { proxy } : {}),
+  };
+
   if (typeof update.download === 'function' && typeof update.install === 'function') {
-    await update.download(callback);
+    await update.download(callback, downloadOptions);
     await update.install();
     return;
   }
 
   if (typeof update.downloadAndInstall === 'function') {
-    await update.downloadAndInstall(callback);
+    await update.downloadAndInstall(callback, downloadOptions);
     return;
   }
 

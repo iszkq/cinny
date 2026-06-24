@@ -8,6 +8,10 @@ export const NATIVE_BIBLE_QUERY_PARAM = 'cinnyBibleWindow';
 export const NATIVE_BIBLE_WINDOW_LABEL = 'bible-window';
 export const NATIVE_BIBLE_CLOSE_EVENT = 'cinny://bible-window-close';
 
+// Keep the native Bible window above the desktop-layout breakpoint so the
+// reader and tool panel stay in the side-by-side arrangement.
+const NATIVE_BIBLE_DESKTOP_MIN_WIDTH = 1180;
+
 let openNativeBibleWindowPromise: Promise<void> | undefined;
 
 const getNativeBibleWindowUrl = (): string => {
@@ -44,9 +48,9 @@ export const openNativeBibleWindow = async (): Promise<void> => {
     const bibleWindow = new WebviewWindow(NATIVE_BIBLE_WINDOW_LABEL, {
       url: getNativeBibleWindowUrl(),
       title: '圣经',
-      width: 1120,
+      width: 1180,
       height: 820,
-      minWidth: 860,
+      minWidth: NATIVE_BIBLE_DESKTOP_MIN_WIDTH,
       minHeight: 620,
       resizable: true,
       decorations: true,

@@ -4,9 +4,12 @@ mod desktop_media_cache;
 
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine};
 use serde::Deserialize;
-use std::{fs, process::Command};
+use std::{env, fs, process::Command};
 use tauri::{plugin::PermissionState, AppHandle};
 use tauri_plugin_notification::NotificationExt;
+
+#[cfg(target_os = "windows")]
+use winreg::{enums::HKEY_CURRENT_USER, RegKey};
 
 const ALLOWED_EXTERNAL_URL_PREFIXES: [&str; 5] =
     ["http://", "https://", "mailto:", "ftp://", "magnet:"];
@@ -107,9 +110,113 @@ fn open_url_with_system_handler(url: &str) -> Result<(), String> {
     Err("Current desktop platform is not supported.".into())
 }
 
+fn normalize_proxy_url(proxy_value: &str, scheme_hint: &str) -> Option<String> {
+    let trimmed = proxy_value.trim().trim_matches('"');
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    if let Ok(parsed) = reqwest::Url::parse(trimmed) {
+        return Some(parsed.to_string());
+    }
+
+    let scheme_prefix = match scheme_hint {
+        "socks" | "socks4" | "socks5" => "socks5://",
+        _ => "http://",
+    };
+    let candidate = format!("{scheme_prefix}{trimmed}");
+    reqwest::Url::parse(&candidate)
+        .ok()
+        .map(|parsed| parsed.to_string())
+}
+
+fn detect_updater_proxy_from_env() -> Option<String> {
+    [
+        "HTTPS_PROXY",
+        "https_proxy",
+        "ALL_PROXY",
+        "all_proxy",
+        "HTTP_PROXY",
+        "http_proxy",
+    ]
+    .iter()
+    .find_map(|key| env::var(key).ok())
+    .and_then(|value| normalize_proxy_url(&value, "http"))
+}
+
+#[cfg(target_os = "windows")]
+fn parse_windows_proxy_server(proxy_server: &str) -> Option<String> {
+    let mut https_proxy = None;
+    let mut http_proxy = None;
+    let mut socks_proxy = None;
+    let mut fallback_proxy = None;
+
+    for segment in proxy_server.split(';').map(str::trim).filter(|item| !item.is_empty()) {
+        if let Some((raw_kind, raw_value)) = segment.split_once('=') {
+            let kind = raw_kind.trim().to_ascii_lowercase();
+            let value = raw_value.trim();
+            let parsed = match kind.as_str() {
+                "https" => normalize_proxy_url(value, "http"),
+                "http" => normalize_proxy_url(value, "http"),
+                "socks" | "socks4" | "socks5" => normalize_proxy_url(value, "socks5"),
+                _ => normalize_proxy_url(value, "http"),
+            };
+
+            match kind.as_str() {
+                "https" if https_proxy.is_none() => https_proxy = parsed,
+                "http" if http_proxy.is_none() => http_proxy = parsed,
+                "socks" | "socks4" | "socks5" if socks_proxy.is_none() => socks_proxy = parsed,
+                _ if fallback_proxy.is_none() => fallback_proxy = parsed,
+                _ => {}
+            }
+        } else if fallback_proxy.is_none() {
+            fallback_proxy = normalize_proxy_url(segment, "http");
+        }
+    }
+
+    https_proxy
+        .or(http_proxy)
+        .or(socks_proxy)
+        .or(fallback_proxy)
+}
+
+#[cfg(target_os = "windows")]
+fn detect_updater_proxy_from_windows_registry() -> Option<String> {
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    let internet_settings = hkcu
+        .open_subkey("Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings")
+        .ok()?;
+    let proxy_enabled = internet_settings.get_value::<u32, _>("ProxyEnable").unwrap_or(0);
+    if proxy_enabled == 0 {
+        return None;
+    }
+
+    let proxy_server = internet_settings.get_value::<String, _>("ProxyServer").ok()?;
+    parse_windows_proxy_server(&proxy_server)
+}
+
+fn detect_desktop_updater_proxy() -> Option<String> {
+    detect_updater_proxy_from_env().or_else(|| {
+        #[cfg(target_os = "windows")]
+        {
+            detect_updater_proxy_from_windows_registry()
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            None
+        }
+    })
+}
+
 #[tauri::command]
 fn open_external_url(url: String) -> Result<(), String> {
     open_url_with_system_handler(&url)
+}
+
+#[tauri::command]
+fn get_desktop_updater_proxy() -> Option<String> {
+    detect_desktop_updater_proxy()
 }
 
 #[tauri::command]
@@ -180,6 +287,7 @@ fn main() {
             desktop_media_cache::clear_desktop_media_runtime_cache,
             desktop_media_cache::clear_desktop_media_cache,
             open_external_url,
+            get_desktop_updater_proxy,
             save_downloaded_file,
             desktop_notification_permission_state,
             request_desktop_notification_permission,
