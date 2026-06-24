@@ -267,6 +267,7 @@ const scopeOptions: Array<{ value: BibleSearchScopeMode; label: string }> = [
 type TestamentTab = 'old' | 'new';
 type PageItem = number | 'start-ellipsis' | 'end-ellipsis';
 type BibleWindowKey = 'main' | 'search' | 'browse';
+type ToolPanelView = 'browse' | 'search';
 type WindowOffset = {
   x: number;
   y: number;
@@ -756,8 +757,8 @@ export function BibleExperienceModal({
   const [scopeMode, setScopeMode] = useState<BibleSearchScopeMode>('all');
   const [customScopeBooks, setCustomScopeBooks] = useState<string[]>([]);
   const [activeTestament, setActiveTestament] = useState<TestamentTab>('old');
-  const [searchDialogOpen, setSearchDialogOpen] = useState(false);
-  const [browseDialogOpen, setBrowseDialogOpen] = useState(false);
+  const [toolPanelView, setToolPanelView] = useState<ToolPanelView>('browse');
+  const [toolPanelOpen, setToolPanelOpen] = useState(!compactLayout);
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
   const [focusedVerseKey, setFocusedVerseKey] = useState<string>();
   const [pendingFocusVerseKey, setPendingFocusVerseKey] = useState<string>();
@@ -868,6 +869,21 @@ export function BibleExperienceModal({
     () => buildPageItems(currentPage, totalPages),
     [currentPage, totalPages]
   );
+  const showToolPanel = !compactLayout || toolPanelOpen;
+  const activeToolPanelDescription = toolPanelView === 'search' ? CN.searchHelp : CN.browseHelp;
+
+  const handleToolPanelTrigger = React.useCallback(
+    (view: ToolPanelView) => {
+      if (compactLayout && toolPanelOpen && toolPanelView === view) {
+        setToolPanelOpen(false);
+        return;
+      }
+
+      setToolPanelView(view);
+      setToolPanelOpen(true);
+    },
+    [compactLayout, toolPanelOpen, toolPanelView]
+  );
 
   const clearDragListeners = React.useCallback(() => {
     dragCleanupRef.current?.();
@@ -947,21 +963,6 @@ export function BibleExperienceModal({
     [clearDragListeners, focusWindow, getClampedWindowOffset, mobile, windowOffsets]
   );
 
-  const closeWindow = React.useCallback(
-    (windowKey: BibleWindowKey) => {
-      if (windowKey === 'search') {
-        setSearchDialogOpen(false);
-        return;
-      }
-      if (windowKey === 'browse') {
-        setBrowseDialogOpen(false);
-        return;
-      }
-      requestClose();
-    },
-    [requestClose]
-  );
-
   useEffect(() => {
     setCurrentPage((page) => Math.min(page, totalPages));
   }, [totalPages]);
@@ -1027,18 +1028,6 @@ export function BibleExperienceModal({
   }, [getClampedWindowOffset, mobile, open]);
 
   useEffect(() => {
-    if (browseDialogOpen) {
-      focusWindow('browse');
-    }
-  }, [browseDialogOpen, focusWindow]);
-
-  useEffect(() => {
-    if (searchDialogOpen) {
-      focusWindow('search');
-    }
-  }, [focusWindow, searchDialogOpen]);
-
-  useEffect(() => {
     if (!open || typeof document === 'undefined') return undefined;
 
     const activeElement = document.activeElement;
@@ -1056,26 +1045,24 @@ export function BibleExperienceModal({
   }, [open]);
 
   useEffect(() => {
+    if (!compactLayout) {
+      setToolPanelOpen(true);
+    }
+  }, [compactLayout]);
+
+  useEffect(() => {
     if (!open || mobile) return undefined;
 
     const handlePointerDown = (evt: PointerEvent) => {
       if (evt.pointerType === 'mouse' && evt.button !== 0) return;
       if (!(evt.target instanceof Element)) return;
       if (evt.target.closest('[data-bible-window]')) return;
-
-      const openWindowKeys = (['main', 'search', 'browse'] as BibleWindowKey[]).filter(
-        (windowKey) =>
-          windowKey === 'main' || (windowKey === 'search' ? searchDialogOpen : browseDialogOpen)
-      );
-      const frontWindowKey = openWindowKeys.sort((a, b) => windowZIndex[b] - windowZIndex[a])[0];
-      if (!frontWindowKey) return;
-
-      closeWindow(frontWindowKey);
+      requestClose();
     };
 
     window.addEventListener('pointerdown', handlePointerDown, true);
     return () => window.removeEventListener('pointerdown', handlePointerDown, true);
-  }, [browseDialogOpen, closeWindow, mobile, open, searchDialogOpen, windowZIndex]);
+  }, [mobile, open, requestClose]);
 
   const openBook = (book: BibleBook) => {
     setSelectedBookName(book.name);
@@ -1093,8 +1080,8 @@ export function BibleExperienceModal({
     if (targetBook) {
       setActiveTestament(targetBook.testament === CN.new ? 'new' : 'old');
     }
-    if (closeBrowseDialog) {
-      setBrowseDialogOpen(false);
+    if (closeBrowseDialog && compactLayout) {
+      setToolPanelOpen(false);
     }
   };
 
@@ -1124,7 +1111,6 @@ export function BibleExperienceModal({
     );
     setPendingFocusVerseKey(verse.key);
     setFocusedVerseKey(verse.key);
-    setSearchDialogOpen(false);
     openChapter(verse.book, verse.chapter, page, false);
   };
 
@@ -1392,12 +1378,278 @@ export function BibleExperienceModal({
         {headerHint}
       </Text>
       <IconButton onClick={requestClose} size="300" radii="300">
-        <Icon src={Icons.Cross} />
+      <Icon src={Icons.Cross} />
       </IconButton>
     </div>
   );
-  const searchPanelWidth = mobile ? 'min(92vw, 920px)' : 'min(68vw, 780px)';
-  const browsePanelWidth = mobile ? 'min(92vw, 1080px)' : 'min(74vw, 920px)';
+  const readerContentLayoutStyle: CSSProperties = compactLayout
+    ? {
+        display: 'flex',
+        flexDirection: 'column',
+        minHeight: 0,
+        flex: '1 1 auto',
+      }
+    : {
+        display: 'grid',
+        gridTemplateColumns: 'minmax(0, 1fr) minmax(320px, 360px)',
+        minHeight: 0,
+        flex: '1 1 auto',
+      };
+  const verseColumnStyle: CSSProperties = {
+    minWidth: 0,
+    minHeight: 0,
+    display: 'flex',
+    flexDirection: 'column',
+  };
+  const toolPanelShellStyle: CSSProperties = compactLayout
+    ? {
+        display: 'grid',
+        gap: toRem(16),
+        padding: `${toRem(4)} ${sectionPaddingInline} ${toRem(20)}`,
+        borderTop: SOFT_LINE,
+        background: 'rgba(248, 250, 252, 0.72)',
+      }
+    : {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: toRem(16),
+        minWidth: 0,
+        minHeight: 0,
+        padding: `${toRem(18)} ${toRem(20)} ${toRem(20)}`,
+        borderInlineStart: SOFT_LINE,
+        background: 'rgba(248, 250, 252, 0.56)',
+      };
+  const toolPanelHeaderStyle: CSSProperties = {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: toRem(12),
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minWidth: 0,
+  };
+  const toolPanelContentStyle: CSSProperties = compactLayout
+    ? {
+        display: 'grid',
+        gap: toRem(16),
+        minWidth: 0,
+      }
+    : {
+        display: 'grid',
+        gap: toRem(16),
+        minWidth: 0,
+        minHeight: 0,
+        overflowY: 'auto',
+        paddingRight: toRem(4),
+      };
+  const toolPanelMetaStyle: CSSProperties = {
+    lineHeight: 1.75,
+    color: TEXT_MAIN,
+    minWidth: 0,
+    wordBreak: 'break-word',
+  };
+  const searchToolPanelContent = (
+    <>
+      <Input
+        value={searchInput}
+        onChange={(evt) => {
+          setSearchInput(evt.currentTarget.value);
+          setCurrentPage(1);
+          setToolPanelView('search');
+        }}
+        placeholder={CN.searchPlaceholder}
+        variant="Background"
+        outlined
+        size="400"
+        style={{ background: 'rgba(255, 255, 255, 0.88)', borderRadius: toRem(18) }}
+      />
+
+      <Box wrap="Wrap" gap="200" alignItems="Start" justifyContent="SpaceBetween">
+        <Box grow="Yes" direction="Column" gap="100" style={{ minWidth: 0 }}>
+          <Text size="T300" priority="300">
+            {CN.rangeTitle}
+          </Text>
+          <Box wrap="Wrap" gap="100" style={SEGMENT_STYLE}>
+            {scopeOptions.map((option) => (
+              <BiblePillButton
+                key={option.value}
+                active={scopeMode === option.value}
+                onClick={() => {
+                  setScopeMode(option.value);
+                  setCurrentPage(1);
+                }}
+              >
+                {option.label}
+              </BiblePillButton>
+            ))}
+          </Box>
+        </Box>
+        <Box shrink="No" wrap="Wrap" gap="100" justifyContent="End">
+          <BiblePillButton onClick={handleCopySelected} disabled={!selectedText}>
+            {CN.copySelected}
+          </BiblePillButton>
+          {onInsertSelected && (
+            <BiblePillButton onClick={handleInsert} disabled={!selectedText}>
+              {CN.insert}
+            </BiblePillButton>
+          )}
+          <BiblePillButton onClick={() => setSelectedKeys([])} disabled={selectedKeys.length === 0}>
+            {CN.reset}
+          </BiblePillButton>
+        </Box>
+      </Box>
+
+      {scopeMode === 'custom' && (
+        <Box direction="Column" gap="200" style={SOFT_SCROLL_PANEL_STYLE}>
+          <Text size="T300" priority="300">
+            {CN.customBooks}
+          </Text>
+          {[oldBooks, newBooks].map((books, index) => (
+            <Box key={index === 0 ? CN.old : CN.new} direction="Column" gap="100">
+              <Text size="T300" priority="300">
+                {index === 0 ? CN.old : CN.new}
+              </Text>
+              <Box wrap="Wrap" gap="100">
+                {books.map((book) => {
+                  const active = customScopeBooks.includes(book.name);
+                  return (
+                    <BiblePillButton
+                      key={book.bookNumber}
+                      active={active}
+                      onClick={() => toggleCustomBook(book.name)}
+                    >
+                      {book.name}
+                    </BiblePillButton>
+                  );
+                })}
+              </Box>
+            </Box>
+          ))}
+        </Box>
+      )}
+
+      <Box
+        direction="Column"
+        gap="100"
+        style={{
+          borderRadius: toRem(20),
+          border: '1px solid rgba(191, 219, 254, 0.96)',
+          background: 'rgba(239, 246, 255, 0.78)',
+          padding: toRem(18),
+        }}
+      >
+        <Text size="T300" style={{ color: TEXT_MAIN }}>
+          <b>{`${CN.selected} ${selectedVerses.length} ${CN.verses}`}</b>
+        </Text>
+        <Text
+          size="T300"
+          priority="300"
+          style={{
+            lineHeight: 1.8,
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+            color: TEXT_MAIN,
+          }}
+        >
+          {previewText}
+        </Text>
+      </Box>
+    </>
+  );
+  const browseToolPanelContent = selectedBook ? (
+    <>
+      <Box wrap="Wrap" gap="100" style={SEGMENT_STYLE}>
+        <BiblePillButton active={activeTestament === 'old'} onClick={() => setActiveTestament('old')}>
+          {CN.old}
+        </BiblePillButton>
+        <BiblePillButton active={activeTestament === 'new'} onClick={() => setActiveTestament('new')}>
+          {CN.new}
+        </BiblePillButton>
+      </Box>
+
+      <Box direction="Column" gap="120">
+        <Text size="T300" priority="300">
+          {CN.bookLabel}
+        </Text>
+        <Box
+          wrap="Wrap"
+          gap="100"
+          style={{
+            ...SOFT_SCROLL_PANEL_STYLE,
+            maxHeight: toRem(compactLayout ? 208 : 232),
+            overflowY: 'auto',
+            paddingRight: toRem(10),
+          }}
+        >
+          {visibleBooks.map((book) => (
+            <BiblePillButton
+              key={book.bookNumber}
+              active={book.name === selectedBook.name}
+              onClick={() => openBook(book)}
+            >
+              {book.name}
+            </BiblePillButton>
+          ))}
+        </Box>
+      </Box>
+
+      <Box direction="Column" gap="120">
+        <Text size="T300" priority="300">
+          {`${selectedBook.name} ${CN.chapterTitle}`}
+        </Text>
+        <Box
+          wrap="Wrap"
+          gap="100"
+          style={{
+            ...SOFT_SCROLL_PANEL_STYLE,
+            maxHeight: toRem(compactLayout ? 196 : 220),
+            overflowY: 'auto',
+            paddingRight: toRem(10),
+          }}
+        >
+          {selectedBook.chapters.map((chapter) => (
+            <BiblePillButton
+              key={chapter}
+              active={chapter === selectedChapter}
+              onClick={() => openChapter(selectedBook.name, chapter, 1, true)}
+            >
+              {chapter}
+            </BiblePillButton>
+          ))}
+        </Box>
+      </Box>
+    </>
+  ) : null;
+  const toolPanel = showToolPanel && selectedBook ? (
+    <div style={toolPanelShellStyle}>
+      <div style={toolPanelHeaderStyle}>
+        <Box wrap="Wrap" gap="100" style={SEGMENT_STYLE}>
+          <BiblePillButton
+            active={toolPanelView === 'browse'}
+            onClick={() => handleToolPanelTrigger('browse')}
+          >
+            {CN.openBrowse}
+          </BiblePillButton>
+          <BiblePillButton
+            active={toolPanelView === 'search'}
+            onClick={() => handleToolPanelTrigger('search')}
+          >
+            {CN.openSearch}
+          </BiblePillButton>
+        </Box>
+        {compactLayout && (
+          <IconButton onClick={() => setToolPanelOpen(false)} size="300" radii="300">
+            <Icon src={Icons.Cross} />
+          </IconButton>
+        )}
+      </div>
+      <Text size="T300" priority="300" style={toolPanelMetaStyle}>
+        {activeToolPanelDescription}
+      </Text>
+      <div style={toolPanelContentStyle}>
+        {toolPanelView === 'search' ? searchToolPanelContent : browseToolPanelContent}
+      </div>
+    </div>
+  ) : null;
 
   const mainWindowContent = (
     <SequenceCard variant="SurfaceVariant" direction="Column" gap="0" style={mainModalCardStyle}>
@@ -1472,20 +1724,14 @@ export function BibleExperienceModal({
                         {CN.nextChapter}
                       </BiblePillButton>
                       <BiblePillButton
-                        onClick={() => {
-                          setSearchDialogOpen(false);
-                          setBrowseDialogOpen(true);
-                          focusWindow('browse');
-                        }}
+                        active={showToolPanel && toolPanelView === 'browse'}
+                        onClick={() => handleToolPanelTrigger('browse')}
                       >
                         {CN.openBrowse}
                       </BiblePillButton>
                       <BiblePillButton
-                        onClick={() => {
-                          setBrowseDialogOpen(false);
-                          setSearchDialogOpen(true);
-                          focusWindow('search');
-                        }}
+                        active={showToolPanel && toolPanelView === 'search'}
+                        onClick={() => handleToolPanelTrigger('search')}
                       >
                         {CN.openSearch}
                       </BiblePillButton>
@@ -1537,121 +1783,129 @@ export function BibleExperienceModal({
                 </div>
               </div>
 
-              <div ref={verseScrollRef} style={VERSE_SCROLL_STYLE}>
-                {pageVerses.length === 0 && (
-                  <Box
-                    alignItems="Center"
-                    justifyContent="Center"
-                    style={{ minHeight: toRem(240), padding: `${toRem(24)} ${toRem(28)}` }}
-                  >
-                    <Text size="L400">{CN.noResult}</Text>
-                  </Box>
-                )}
+              {compactLayout && toolPanel}
 
-                {pageVerses.map((verse) => (
-                  <VerseRow
-                    key={verse.key}
-                    verse={verse}
-                    selected={selectedSet.has(verse.key)}
-                    focused={focusedVerseKey === verse.key}
-                    fontSize={fontSize}
-                    onToggle={handleToggleVerse}
-                    onJump={isSearchMode ? handleJumpToVerse : undefined}
-                    highlightPattern={isSearchMode ? highlightPattern : undefined}
-                    rowRef={(node) => {
-                      verseRowRefMap.current[verse.key] = node;
-                    }}
-                  />
-                ))}
-              </div>
-
-              <Box
-                wrap="Wrap"
-                gap="250"
-                alignItems="Center"
-                justifyContent="End"
-                style={{ padding: `${toRem(16)} ${toRem(28)}`, flexShrink: 0 }}
-              >
-                <Text size="T300" priority="300">
-                  {`${CN.selected} ${selectedVerses.length} ${CN.verses}`}
-                </Text>
-              </Box>
-
-              {totalPages > 1 && (
-                <>
-                  <Line size="300" variant="Surface" />
-                  <Box
-                    wrap="Wrap"
-                    gap="100"
-                    alignItems="Center"
-                    justifyContent="Center"
-                    style={{ padding: `${toRem(18)} ${toRem(28)} ${toRem(24)}`, flexShrink: 0 }}
-                  >
-                    <BiblePillButton
-                      onClick={() => setCurrentPage((page) => Math.max(page - 1, 1))}
-                      disabled={currentPage <= 1}
-                    >
-                      {CN.prevPage}
-                    </BiblePillButton>
-
-                    {pageItems.map((item) =>
-                      typeof item === 'number' ? (
-                        <BiblePillButton
-                          key={item}
-                          active={item === currentPage}
-                          onClick={() => setCurrentPage(item)}
-                        >
-                          {item}
-                        </BiblePillButton>
-                      ) : pageJumpOpen === item ? (
-                        <input
-                          key={item}
-                          value={pageJumpValue}
-                          onChange={(evt) =>
-                            setPageJumpValue(evt.currentTarget.value.replace(/[^\d]/g, ''))
-                          }
-                          onBlur={handlePageJumpCommit}
-                          onKeyDown={(evt) => {
-                            if (evt.key === 'Enter') {
-                              evt.preventDefault();
-                              handlePageJumpCommit();
-                            }
-                            if (evt.key === 'Escape') {
-                              setPageJumpOpen(undefined);
-                              setPageJumpValue('');
-                            }
-                          }}
-                          placeholder={CN.pageJump}
-                          autoFocus
-                          style={{
-                            ...INPUT_STYLE,
-                            minHeight: 38,
-                            width: toRem(76),
-                            background: 'rgba(255, 255, 255, 0.9)',
-                          }}
-                        />
-                      ) : (
-                        <BiblePillButton
-                          key={item}
-                          onClick={() => {
-                            setPageJumpOpen(item);
-                            setPageJumpValue('');
-                          }}
-                        >
-                          ...
-                        </BiblePillButton>
-                      )
+              <div style={readerContentLayoutStyle}>
+                <div style={verseColumnStyle}>
+                  <div ref={verseScrollRef} style={VERSE_SCROLL_STYLE}>
+                    {pageVerses.length === 0 && (
+                      <Box
+                        alignItems="Center"
+                        justifyContent="Center"
+                        style={{ minHeight: toRem(240), padding: `${toRem(24)} ${toRem(28)}` }}
+                      >
+                        <Text size="L400">{CN.noResult}</Text>
+                      </Box>
                     )}
 
-                    <BiblePillButton
-                      onClick={() => setCurrentPage((page) => Math.min(page + 1, totalPages))}
-                      disabled={currentPage >= totalPages}
-                    >
-                      {CN.nextPage}
-                    </BiblePillButton>
+                    {pageVerses.map((verse) => (
+                      <VerseRow
+                        key={verse.key}
+                        verse={verse}
+                        selected={selectedSet.has(verse.key)}
+                        focused={focusedVerseKey === verse.key}
+                        fontSize={fontSize}
+                        onToggle={handleToggleVerse}
+                        onJump={isSearchMode ? handleJumpToVerse : undefined}
+                        highlightPattern={isSearchMode ? highlightPattern : undefined}
+                        rowRef={(node) => {
+                          verseRowRefMap.current[verse.key] = node;
+                        }}
+                      />
+                    ))}
+                  </div>
+
+                  <Box
+                    wrap="Wrap"
+                    gap="250"
+                    alignItems="Center"
+                    justifyContent="End"
+                    style={{ padding: `${toRem(16)} ${toRem(28)}`, flexShrink: 0 }}
+                  >
+                    <Text size="T300" priority="300">
+                      {`${CN.selected} ${selectedVerses.length} ${CN.verses}`}
+                    </Text>
                   </Box>
-                </>
-              )}
+
+                  {totalPages > 1 && (
+                    <>
+                      <Line size="300" variant="Surface" />
+                      <Box
+                        wrap="Wrap"
+                        gap="100"
+                        alignItems="Center"
+                        justifyContent="Center"
+                        style={{ padding: `${toRem(18)} ${toRem(28)} ${toRem(24)}`, flexShrink: 0 }}
+                      >
+                        <BiblePillButton
+                          onClick={() => setCurrentPage((page) => Math.max(page - 1, 1))}
+                          disabled={currentPage <= 1}
+                        >
+                          {CN.prevPage}
+                        </BiblePillButton>
+
+                        {pageItems.map((item) =>
+                          typeof item === 'number' ? (
+                            <BiblePillButton
+                              key={item}
+                              active={item === currentPage}
+                              onClick={() => setCurrentPage(item)}
+                            >
+                              {item}
+                            </BiblePillButton>
+                          ) : pageJumpOpen === item ? (
+                            <input
+                              key={item}
+                              value={pageJumpValue}
+                              onChange={(evt) =>
+                                setPageJumpValue(evt.currentTarget.value.replace(/[^\d]/g, ''))
+                              }
+                              onBlur={handlePageJumpCommit}
+                              onKeyDown={(evt) => {
+                                if (evt.key === 'Enter') {
+                                  evt.preventDefault();
+                                  handlePageJumpCommit();
+                                }
+                                if (evt.key === 'Escape') {
+                                  setPageJumpOpen(undefined);
+                                  setPageJumpValue('');
+                                }
+                              }}
+                              placeholder={CN.pageJump}
+                              autoFocus
+                              style={{
+                                ...INPUT_STYLE,
+                                minHeight: 38,
+                                width: toRem(76),
+                                background: 'rgba(255, 255, 255, 0.9)',
+                              }}
+                            />
+                          ) : (
+                            <BiblePillButton
+                              key={item}
+                              onClick={() => {
+                                setPageJumpOpen(item);
+                                setPageJumpValue('');
+                              }}
+                            >
+                              ...
+                            </BiblePillButton>
+                          )
+                        )}
+
+                        <BiblePillButton
+                          onClick={() => setCurrentPage((page) => Math.min(page + 1, totalPages))}
+                          disabled={currentPage >= totalPages}
+                        >
+                          {CN.nextPage}
+                        </BiblePillButton>
+                      </Box>
+                    </>
+                  )}
+                </div>
+
+                {!compactLayout && toolPanel}
+              </div>
             </SequenceCard>
           </Box>
         </div>
@@ -1659,6 +1913,12 @@ export function BibleExperienceModal({
     </SequenceCard>
   );
 
+  const searchDialogOpen = false;
+  const browseDialogOpen = false;
+  const searchPanelWidth = mobile ? 'min(92vw, 920px)' : 'min(68vw, 780px)';
+  const browsePanelWidth = mobile ? 'min(92vw, 1080px)' : 'min(74vw, 920px)';
+  const setSearchDialogOpen = (_open: boolean) => undefined;
+  const setBrowseDialogOpen = (_open: boolean) => undefined;
   const floatingWindows =
     data && selectedBook ? (
       <>
