@@ -314,6 +314,9 @@ const isEditableTarget = (target: EventTarget | null): boolean => {
   return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
 };
 
+const isTargetInsideBibleWindow = (target: EventTarget | null): boolean =>
+  target instanceof Element && !!target.closest('[data-bible-window]');
+
 const isInteractiveDragTarget = (target: EventTarget | null): boolean => {
   if (!(target instanceof Element)) return false;
   return Boolean(
@@ -545,6 +548,7 @@ function BibleDesktopWindow({
           transform: `translate3d(${offset.x}px, ${offset.y}px, 0)`,
         }}
         data-bible-window={windowKey}
+        tabIndex={-1}
         onPointerDownCapture={() => onFocus(windowKey)}
         onPointerDown={(evt: React.PointerEvent<HTMLElement>) => onDragStart(windowKey, evt)}
       >
@@ -639,6 +643,8 @@ function BibleFloatingPanel({
               ...CHROMELESS_MODAL_STYLE,
               width: width ?? 'min(92vw, 920px)',
             }}
+            data-bible-window={windowKey ?? 'panel'}
+            tabIndex={-1}
           >
             {content}
           </Modal>
@@ -1026,6 +1032,23 @@ export function BibleExperienceModal({
   }, [focusWindow, searchDialogOpen]);
 
   useEffect(() => {
+    if (!open || typeof document === 'undefined') return undefined;
+
+    const activeElement = document.activeElement;
+    if (isTargetInsideBibleWindow(activeElement)) return undefined;
+
+    if (activeElement instanceof HTMLElement && typeof activeElement.blur === 'function') {
+      activeElement.blur();
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      getBibleWindowElement('main')?.focus();
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
+  }, [open]);
+
+  useEffect(() => {
     if (!open || mobile) return undefined;
 
     const handlePointerDown = (evt: PointerEvent) => {
@@ -1128,57 +1151,66 @@ export function BibleExperienceModal({
   useEffect(() => {
     const handleKeyDown = (evt: KeyboardEvent) => {
       const editable = isEditableTarget(evt.target);
+      const editableInsideBible = editable && isTargetInsideBibleWindow(evt.target);
 
       if (isKeyHotkey('mod+c', evt)) {
-        if (editable || !selectedText) return;
+        if (editableInsideBible || !selectedText) return;
         evt.preventDefault();
+        evt.stopPropagation();
         handleCopySelected();
         return;
       }
 
       if (isKeyHotkey('mod+x', evt)) {
-        if (editable) return;
+        if (editableInsideBible) return;
         evt.preventDefault();
+        evt.stopPropagation();
         setSelectedKeys([]);
         return;
       }
 
-      if (editable) return;
+      if (editableInsideBible) return;
 
       const wantsPrevChapter = isPrevChapterKey(evt);
       const wantsNextChapter = isNextChapterKey(evt);
 
       if ((wantsPrevChapter || wantsNextChapter) && evt.repeat) {
         evt.preventDefault();
+        evt.stopPropagation();
         return;
       }
 
       if (evt.key === 'ArrowDown') {
         evt.preventDefault();
+        evt.stopPropagation();
         verseScrollRef.current?.scrollBy({ top: fontSize * 5.5, behavior: 'smooth' });
         return;
       }
 
       if (evt.key === 'ArrowUp') {
         evt.preventDefault();
+        evt.stopPropagation();
         verseScrollRef.current?.scrollBy({ top: fontSize * -5.5, behavior: 'smooth' });
         return;
       }
 
       if (evt.key === 'ArrowLeft' && currentPage > 1) {
         evt.preventDefault();
+        evt.stopPropagation();
         setCurrentPage((page) => Math.max(page - 1, 1));
         return;
       }
 
       if (evt.key === 'ArrowRight' && currentPage < totalPages) {
         evt.preventDefault();
+        evt.stopPropagation();
         setCurrentPage((page) => Math.min(page + 1, totalPages));
         return;
       }
 
       if (wantsPrevChapter) {
         evt.preventDefault();
+        evt.stopPropagation();
         if (canGoPrevChapter) {
           changeChapter(-1);
         }
@@ -1187,14 +1219,15 @@ export function BibleExperienceModal({
 
       if (wantsNextChapter) {
         evt.preventDefault();
+        evt.stopPropagation();
         if (canGoNextChapter) {
           changeChapter(1);
         }
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
   }, [
     canGoNextChapter,
     canGoPrevChapter,
@@ -1845,6 +1878,7 @@ export function BibleExperienceModal({
         <>
           <div
             data-bible-window="main"
+            tabIndex={-1}
             style={NATIVE_WINDOW_FRAME_STYLE}
             onPointerDownCapture={() => focusWindow('main')}
           >
@@ -1884,7 +1918,12 @@ export function BibleExperienceModal({
               escapeDeactivates: stopPropagation,
             }}
           >
-            <Modal variant="Background" style={MAIN_MODAL_STYLE}>
+            <Modal
+              variant="Background"
+              style={MAIN_MODAL_STYLE}
+              data-bible-window="main"
+              tabIndex={-1}
+            >
               {mainWindowContent}
             </Modal>
           </FocusTrap>
