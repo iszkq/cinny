@@ -1,4 +1,9 @@
-import { EventType, IContent, MatrixClient, MatrixEvent, MsgType, Room } from 'matrix-js-sdk';
+import { Direction, EventType, IContent, MatrixClient, MatrixEvent, MsgType, Room } from 'matrix-js-sdk';
+import {
+  AccountDataEvent,
+  CinnyFavoriteItemRecord,
+  CinnyFavoriteItemsContent,
+} from '../../../types/matrix/accountData';
 import {
   IAudioContent,
   IEncryptedFile,
@@ -30,6 +35,7 @@ import {
   FavoriteMessageMetadata,
   getFavoriteMessageMetadataFromEvent,
 } from './types';
+import { getFavoriteReferenceId } from './favoriteNotes';
 
 type FavoriteMediaKind = 'sticker' | 'image' | 'video' | 'audio' | 'file';
 
@@ -45,6 +51,8 @@ type FavoriteMediaSource = {
   voice?: boolean;
 };
 
+const FAVORITE_ITEMS_VERSION = 1;
+
 const getFallbackMimeType = (kind: FavoriteMediaKind): string => {
   if (kind === 'sticker' || kind === 'image') return 'image/*';
   if (kind === 'video') return 'video/*';
@@ -54,6 +62,191 @@ const getFallbackMimeType = (kind: FavoriteMediaKind): string => {
 };
 
 const cloneContent = (content: IContent): IContent => JSON.parse(JSON.stringify(content));
+
+const getLinkedRoomEvents = (room: Room): MatrixEvent[] => {
+  const firstTimeline = (() => {
+    let timeline = room.getLiveTimeline();
+    let previousTimeline = timeline.getNeighbouringTimeline(Direction.Backward);
+
+    while (previousTimeline) {
+      timeline = previousTimeline;
+      previousTimeline = timeline.getNeighbouringTimeline(Direction.Backward);
+    }
+
+    return timeline;
+  })();
+  const events: MatrixEvent[] = [];
+  const seenEventIds = new Set<string>();
+  let timeline = firstTimeline;
+
+  while (timeline) {
+    timeline.getEvents().forEach((event) => {
+      const eventId = event.getId();
+      if (eventId && seenEventIds.has(eventId)) return;
+      if (eventId) seenEventIds.add(eventId);
+      events.push(event);
+    });
+
+    const nextTimeline = timeline.getNeighbouringTimeline(Direction.Forward);
+    if (!nextTimeline || nextTimeline === timeline) break;
+    timeline = nextTimeline;
+  }
+
+  return events;
+};
+
+const getFavoriteItemsContent = (mx: MatrixClient): CinnyFavoriteItemsContent | undefined =>
+  mx.getAccountData(AccountDataEvent.CinnyFavoriteItems)?.getContent<CinnyFavoriteItemsContent>();
+
+const isFavoriteItemRecord = (value: unknown): value is CinnyFavoriteItemRecord => {
+  if (!value || typeof value !== 'object') return false;
+
+  const record = value as Partial<CinnyFavoriteItemRecord>;
+  return (
+    record.version === FAVORITE_ITEMS_VERSION &&
+    typeof record.id === 'string' &&
+    typeof record.eventType === 'string' &&
+    !!record.content &&
+    typeof record.content === 'object' &&
+    !!record.metadata &&
+    typeof record.metadata === 'object' &&
+    typeof record.metadata.sourceRoomId === 'string' &&
+    typeof record.metadata.sourceEventId === 'string' &&
+    typeof record.metadata.sourceRoomName === 'string' &&
+    typeof record.metadata.sourceSenderName === 'string' &&
+    typeof record.metadata.sourceTimestamp === 'number' &&
+    typeof record.metadata.favoritedAt === 'number' &&
+    typeof record.originServerTs === 'number' &&
+    typeof record.updatedAt === 'number'
+  );
+};
+
+export const getFavoriteItemRecords = (
+  content?: CinnyFavoriteItemsContent
+): Record<string, CinnyFavoriteItemRecord> => {
+  if (!content?.items || typeof content.items !== 'object') return {};
+
+  return Object.entries(content.items).reduce<Record<string, CinnyFavoriteItemRecord>>(
+    (records, [recordId, record]) => {
+      if (!isFavoriteItemRecord(record)) return records;
+      records[recordId] = record;
+      return records;
+    },
+    {}
+  );
+};
+
+const writeFavoriteItemRecords = async (
+  mx: MatrixClient,
+  items: Record<string, CinnyFavoriteItemRecord>
+): Promise<void> => {
+  await mx.setAccountData(AccountDataEvent.CinnyFavoriteItems, {
+    version: FAVORITE_ITEMS_VERSION,
+    updatedAt: Date.now(),
+    items,
+  });
+};
+
+export const getFavoriteItemRecordId = (sourceRoomId: string, sourceEventId: string): string =>
+  getFavoriteReferenceId(sourceRoomId, sourceEventId);
+
+export const createFavoriteItemRecordFromEvent = (
+  event: MatrixEvent,
+  roomId?: string
+): CinnyFavoriteItemRecord | undefined => {
+  const metadata = getFavoriteMessageMetadataFromEvent(event);
+  if (!metadata) return undefined;
+
+  const recordId = getFavoriteItemRecordId(metadata.sourceRoomId, metadata.sourceEventId);
+  const eventId = event.getId() ?? undefined;
+  const eventRoomId = roomId ?? event.getRoomId() ?? undefined;
+
+  return {
+    version: FAVORITE_ITEMS_VERSION,
+    id: recordId,
+    eventType: event.getType(),
+    content: cloneContent(event.getContent()),
+    metadata,
+    roomId: eventRoomId,
+    eventId,
+    sender: event.getSender() ?? metadata.sourceSenderId,
+    originServerTs: event.getTs() || metadata.favoritedAt,
+    updatedAt: Date.now(),
+  };
+};
+
+export const createFavoriteMatrixEventFromRecord = (
+  record: CinnyFavoriteItemRecord
+): MatrixEvent =>
+  new MatrixEvent({
+    event_id: record.eventId ?? `$cinny-favorite-${record.id}`,
+    type: record.eventType,
+    content: cloneContent(record.content as IContent),
+    sender: record.sender ?? record.metadata.sourceSenderId ?? record.metadata.sourceRoomId,
+    room_id: record.roomId,
+    origin_server_ts: record.originServerTs,
+    unsigned: {},
+  });
+
+export const upsertFavoriteItemRecord = async (
+  mx: MatrixClient,
+  record: CinnyFavoriteItemRecord
+): Promise<void> => {
+  const records = getFavoriteItemRecords(getFavoriteItemsContent(mx));
+  records[record.id] = {
+    ...record,
+    updatedAt: Date.now(),
+  };
+
+  await writeFavoriteItemRecords(mx, records);
+};
+
+export const removeFavoriteItemRecord = async (
+  mx: MatrixClient,
+  sourceRoomId: string,
+  sourceEventId: string
+): Promise<void> => {
+  const recordId = getFavoriteItemRecordId(sourceRoomId, sourceEventId);
+  const records = getFavoriteItemRecords(getFavoriteItemsContent(mx));
+
+  if (!records[recordId]) return;
+
+  delete records[recordId];
+  await writeFavoriteItemRecords(mx, records);
+};
+
+export const syncFavoriteRoomEventsToAccountData = async (
+  mx: MatrixClient,
+  rooms: Room[]
+): Promise<void> => {
+  const records = getFavoriteItemRecords(getFavoriteItemsContent(mx));
+  let changed = false;
+
+  rooms.forEach((room) => {
+    getLinkedRoomEvents(room).forEach((event) => {
+      if (event.isRedacted()) return;
+
+      const record = createFavoriteItemRecordFromEvent(event, room.roomId);
+      if (!record) return;
+
+      const existingRecord = records[record.id];
+      if (existingRecord?.eventId === record.eventId && existingRecord.roomId === record.roomId) {
+        return;
+      }
+
+      records[record.id] = {
+        ...existingRecord,
+        ...record,
+        updatedAt: Date.now(),
+      };
+      changed = true;
+    });
+  });
+
+  if (changed) {
+    await writeFavoriteItemRecords(mx, records);
+  }
+};
 
 const sanitizeFavoriteContent = (content: IContent): FavoriteMessageContent => {
   const favoriteContent = cloneContent(content) as FavoriteMessageContent;
@@ -265,17 +458,12 @@ export const getFavoriteEventsBySource = (
 ): MatrixEvent[] => {
   if (!room || !sourceEventId) return [];
 
-  return room
-    .getLiveTimeline()
-    .getEvents()
-    .filter((event) => {
-      if (event.isRedacted()) return false;
+  return getLinkedRoomEvents(room).filter((event) => {
+    if (event.isRedacted()) return false;
 
-      const metadata = getFavoriteMessageMetadataFromEvent(event);
-      return (
-        metadata?.sourceRoomId === sourceRoomId && metadata.sourceEventId === sourceEventId
-      );
-    });
+    const metadata = getFavoriteMessageMetadataFromEvent(event);
+    return metadata?.sourceRoomId === sourceRoomId && metadata.sourceEventId === sourceEventId;
+  });
 };
 
 export const favoriteMessageToRoom = async (
@@ -299,6 +487,10 @@ export const favoriteMessageToRoom = async (
     sourceEventId
   )[0];
   if (existingFavorite) {
+    const record = createFavoriteItemRecordFromEvent(existingFavorite, targetRoomId);
+    if (record) {
+      await upsertFavoriteItemRecord(mx, record);
+    }
     return existingFavorite.getId() ?? undefined;
   }
 
@@ -327,15 +519,51 @@ export const favoriteMessageToRoom = async (
 
   if (eventType === MessageEvent.Sticker) {
     const response = await mx.sendEvent(targetRoomId, EventType.Sticker, favoriteContent);
+    await upsertFavoriteItemRecord(mx, {
+      version: FAVORITE_ITEMS_VERSION,
+      id: getFavoriteItemRecordId(metadata.sourceRoomId, metadata.sourceEventId),
+      eventType: EventType.Sticker,
+      content: cloneContent(favoriteContent),
+      metadata,
+      roomId: targetRoomId,
+      eventId: response?.event_id,
+      sender: mx.getUserId() ?? metadata.sourceSenderId,
+      originServerTs: Date.now(),
+      updatedAt: Date.now(),
+    });
     return response?.event_id;
   }
 
   if (eventType === MessageEvent.PollStart || eventType === UNSTABLE_POLL_START_EVENT_TYPE) {
     const response = await mx.sendEvent(targetRoomId, OUTGOING_POLL_START_EVENT_TYPE, favoriteContent);
+    await upsertFavoriteItemRecord(mx, {
+      version: FAVORITE_ITEMS_VERSION,
+      id: getFavoriteItemRecordId(metadata.sourceRoomId, metadata.sourceEventId),
+      eventType: OUTGOING_POLL_START_EVENT_TYPE,
+      content: cloneContent(favoriteContent),
+      metadata,
+      roomId: targetRoomId,
+      eventId: response?.event_id,
+      sender: mx.getUserId() ?? metadata.sourceSenderId,
+      originServerTs: Date.now(),
+      updatedAt: Date.now(),
+    });
     return response?.event_id;
   }
 
   const response = await mx.sendMessage(targetRoomId, favoriteContent as never);
+  await upsertFavoriteItemRecord(mx, {
+    version: FAVORITE_ITEMS_VERSION,
+    id: getFavoriteItemRecordId(metadata.sourceRoomId, metadata.sourceEventId),
+    eventType: MessageEvent.RoomMessage,
+    content: cloneContent(favoriteContent),
+    metadata,
+    roomId: targetRoomId,
+    eventId: response?.event_id,
+    sender: mx.getUserId() ?? metadata.sourceSenderId,
+    originServerTs: Date.now(),
+    updatedAt: Date.now(),
+  });
   return response?.event_id;
 };
 

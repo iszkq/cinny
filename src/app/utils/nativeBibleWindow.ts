@@ -54,6 +54,8 @@ export const openNativeBibleWindow = async (): Promise<void> => {
       minHeight: 720,
       resizable: true,
       decorations: false,
+      transparent: true,
+      shadow: true,
       center: true,
       focus: true,
       visible: true,

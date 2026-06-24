@@ -30,6 +30,7 @@ import React, {
   ReactNode,
   useEffect,
   useCallback,
+  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -86,7 +87,8 @@ import { getMatrixToRoomEvent } from '../../../plugins/matrix-to';
 import { getViaServers } from '../../../plugins/via-servers';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { useRoomPinnedEvents } from '../../../hooks/useRoomPinnedEvents';
-import { useFavoritesRoom, useFavoritesRoomId } from '../../../hooks/useFavoritesRoom';
+import { useAccountData } from '../../../hooks/useAccountData';
+import { useFavoritesRoomId, useFavoritesRooms } from '../../../hooks/useFavoritesRoom';
 import { MemberPowerTag, StateEvent } from '../../../../types/matrix/room';
 import { PowerIcon } from '../../../components/power';
 import colorMXID from '../../../../util/colorMXID';
@@ -105,12 +107,14 @@ import {
   isDefaultPersonalPackImageSaved,
   PackImage,
 } from '../../../plugins/custom-emoji';
-import { AccountDataEvent } from '../../../../types/matrix/accountData';
+import { AccountDataEvent, CinnyFavoriteItemsContent } from '../../../../types/matrix/accountData';
 import {
   ensureFavoritesRoom,
   favoriteMessageToRoom,
   getFavoriteEventsBySource,
-  getFavoritesRoomId,
+  getFavoriteItemRecordId,
+  getFavoriteItemRecords,
+  removeFavoriteItemRecord,
   removeFavoriteMessage,
   removeFavoriteNote,
 } from '../../favorites';
@@ -718,67 +722,113 @@ export const MessageFavoriteItem = as<
   }
 >(({ room, mEvent, onClose, ...props }, ref) => {
   const mx = useMatrixClient();
-  const favoritesRoom = useFavoritesRoom();
+  const favoritesRooms = useFavoritesRooms();
+  const favoriteItemsEvent = useAccountData(AccountDataEvent.CinnyFavoriteItems);
   const sourceEventId = mEvent.getId() ?? '';
+  const recordId = getFavoriteItemRecordId(room.roomId, sourceEventId);
 
-  const getFavoriteEventIds = useCallback(
+  const favoriteRecord = useMemo(
     () =>
-      getFavoriteEventsBySource(favoritesRoom, room.roomId, sourceEventId)
-        .map((event) => event.getId())
-        .filter((eventId): eventId is string => typeof eventId === 'string'),
-    [favoritesRoom, room.roomId, sourceEventId]
+      getFavoriteItemRecords(favoriteItemsEvent?.getContent<CinnyFavoriteItemsContent>())[recordId],
+    [favoriteItemsEvent, recordId]
   );
 
-  const [favoriteEventIds, setFavoriteEventIds] = useState<string[]>(getFavoriteEventIds);
+  const getFavoriteEventRefs = useCallback(
+    () => {
+      const refs = new Map<string, { roomId: string; eventId: string }>();
+
+      favoritesRooms.forEach((favoritesRoom) => {
+        getFavoriteEventsBySource(favoritesRoom, room.roomId, sourceEventId).forEach((event) => {
+          const eventId = event.getId();
+          if (!eventId) return;
+          refs.set(`${favoritesRoom.roomId}\0${eventId}`, {
+            roomId: favoritesRoom.roomId,
+            eventId,
+          });
+        });
+      });
+
+      if (
+        favoriteRecord?.roomId &&
+        favoriteRecord.eventId &&
+        !favoriteRecord.eventId.startsWith('$cinny-favorite-')
+      ) {
+        refs.set(`${favoriteRecord.roomId}\0${favoriteRecord.eventId}`, {
+          roomId: favoriteRecord.roomId,
+          eventId: favoriteRecord.eventId,
+        });
+      }
+
+      return Array.from(refs.values());
+    },
+    [favoriteRecord, favoritesRooms, room.roomId, sourceEventId]
+  );
+
+  const [favoriteEventRefs, setFavoriteEventRefs] = useState<Array<{ roomId: string; eventId: string }>>(
+    getFavoriteEventRefs
+  );
 
   useEffect(() => {
-    setFavoriteEventIds(getFavoriteEventIds());
-  }, [getFavoriteEventIds]);
+    setFavoriteEventRefs(getFavoriteEventRefs());
+  }, [getFavoriteEventRefs]);
 
   useEffect(() => {
-    if (!favoritesRoom) return undefined;
+    if (favoritesRooms.length === 0) return undefined;
 
-    const refresh = () => setFavoriteEventIds(getFavoriteEventIds());
+    const refresh = () => setFavoriteEventRefs(getFavoriteEventRefs());
 
-    favoritesRoom.on(RoomEvent.Timeline, refresh);
-    favoritesRoom.on(RoomEvent.TimelineRefresh, refresh);
+    favoritesRooms.forEach((favoritesRoom) => {
+      favoritesRoom.on(RoomEvent.Timeline, refresh);
+      favoritesRoom.on(RoomEvent.TimelineRefresh, refresh);
+      favoritesRoom.on(RoomEvent.Redaction, refresh);
+    });
 
     return () => {
-      favoritesRoom.removeListener(RoomEvent.Timeline, refresh);
-      favoritesRoom.removeListener(RoomEvent.TimelineRefresh, refresh);
+      favoritesRooms.forEach((favoritesRoom) => {
+        favoritesRoom.removeListener(RoomEvent.Timeline, refresh);
+        favoritesRoom.removeListener(RoomEvent.TimelineRefresh, refresh);
+        favoritesRoom.removeListener(RoomEvent.Redaction, refresh);
+      });
     };
-  }, [favoritesRoom, getFavoriteEventIds]);
+  }, [favoritesRooms, getFavoriteEventRefs]);
 
-  const favorited = favoriteEventIds.length > 0;
+  const favorited = favoriteEventRefs.length > 0 || !!favoriteRecord;
   const [favoriteState, favorite] = useAsyncCallback(
     useCallback(async () => {
       if (favorited) {
-        const targetFavoritesRoomId = favoritesRoom?.roomId ?? getFavoritesRoomId(mx);
-        if (!targetFavoritesRoomId) {
-          throw new Error('Missing favorites room id.');
-        }
-
         await Promise.all(
-          favoriteEventIds.map((eventId) =>
-            removeFavoriteMessage(mx, targetFavoritesRoomId, eventId)
+          favoriteEventRefs.map(({ roomId, eventId }) =>
+            removeFavoriteMessage(mx, roomId, eventId).catch(() => undefined)
           )
         );
+        await removeFavoriteItemRecord(mx, room.roomId, sourceEventId);
         await removeFavoriteNote(mx, room.roomId, sourceEventId);
 
         return {
-          eventIds: [] as string[],
+          eventRefs: [] as Array<{ roomId: string; eventId: string }>,
           favorited: false,
         };
       }
 
-      const favoritesRoomId = favoritesRoom?.roomId ?? (await ensureFavoritesRoom(mx));
+      const favoritesRoomId = favoritesRooms[0]?.roomId ?? (await ensureFavoritesRoom(mx));
       const favoriteEventId = await favoriteMessageToRoom(mx, favoritesRoomId, room, mEvent);
 
       return {
-        eventIds: favoriteEventId ? [favoriteEventId] : getFavoriteEventIds(),
+        eventRefs: favoriteEventId
+          ? [{ roomId: favoritesRoomId, eventId: favoriteEventId }]
+          : getFavoriteEventRefs(),
         favorited: true,
       };
-    }, [favorited, favoriteEventIds, favoritesRoom, mx, room, mEvent, getFavoriteEventIds])
+    }, [
+      favorited,
+      favoriteEventRefs,
+      favoritesRooms,
+      mx,
+      room,
+      sourceEventId,
+      mEvent,
+      getFavoriteEventRefs,
+    ])
   );
 
   const handleFavorite = () => {
@@ -787,7 +837,7 @@ export const MessageFavoriteItem = as<
     favorite()
       .then((result) => {
         if (!result) return;
-        setFavoriteEventIds(result.eventIds);
+        setFavoriteEventRefs(result.eventRefs);
       })
       .catch(() => {});
   };

@@ -1,13 +1,14 @@
 {
   "identifier": "default",
   "description": "Default desktop capability for the main 星火 window.",
-  "windows": ["main", "image-preview-*"],
+  "windows": ["main", "image-preview-*", "bible-window"],
   "permissions": [
     "core:default",
     "core:event:allow-emit-to",
     "core:event:allow-listen",
     "core:webview:allow-create-webview-window",
     "core:window:allow-close",
+    "core:window:allow-destroy",
     "core:window:allow-minimize",
     "core:window:allow-start-dragging",
     "core:window:allow-toggle-maximize",

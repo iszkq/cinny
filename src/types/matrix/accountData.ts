@@ -6,6 +6,7 @@ export enum AccountDataEvent {
   CinnySpaces = 'in.cinny.spaces',
   CinnyAccountPinPolicy = 'in.cinny.account_pin_policy',
   CinnyFavorites = 'in.cinny.favorites',
+  CinnyFavoriteItems = 'in.cinny.favorite_items',
   CinnyFavoriteNotes = 'in.cinny.favorite_notes',
   CinnyExploreSources = 'in.cinny.explore_sources',
   CinnyAISettings = 'in.cinny.ai_settings',
@@ -33,6 +34,38 @@ export type CinnyFavoritesContent = {
   createdAt?: number;
   version?: number;
   legacyRoomIds?: string[];
+};
+
+export type CinnyFavoriteItemMetadata = {
+  version: 1;
+  sourceRoomId: string;
+  sourceRoomName: string;
+  sourceRoomAvatarMxc?: string;
+  sourceEventId: string;
+  sourceSenderId?: string;
+  sourceSenderName: string;
+  sourceSenderAvatarMxc?: string;
+  sourceTimestamp: number;
+  favoritedAt: number;
+};
+
+export type CinnyFavoriteItemRecord = {
+  version: 1;
+  id: string;
+  eventType: string;
+  content: Record<string, unknown>;
+  metadata: CinnyFavoriteItemMetadata;
+  roomId?: string;
+  eventId?: string;
+  sender?: string;
+  originServerTs: number;
+  updatedAt: number;
+};
+
+export type CinnyFavoriteItemsContent = {
+  version?: number;
+  updatedAt?: number;
+  items?: Record<string, CinnyFavoriteItemRecord>;
 };
 
 export type CinnyAccountPinPolicyContent = {

@@ -2,7 +2,6 @@ import React, { ReactNode, useCallback, useEffect, useMemo, useState } from 'rea
 import FocusTrap from 'focus-trap-react';
 import { HTMLReactParserOptions } from 'html-react-parser';
 import {
-  Direction,
   MatrixClient,
   MatrixEvent,
   MatrixEventEvent,
@@ -54,7 +53,7 @@ import { UserAvatar } from '../../../components/user-avatar';
 import { RenderMessageContent } from '../../../components/RenderMessageContent';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { useAccountData } from '../../../hooks/useAccountData';
-import { useFavoritesRoom } from '../../../hooks/useFavoritesRoom';
+import { useFavoritesRooms } from '../../../hooks/useFavoritesRoom';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { useMatrixEventRenderer } from '../../../hooks/useMatrixEventRenderer';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
@@ -70,7 +69,11 @@ import {
   makeMentionCustomProps,
   renderMatrixMention,
 } from '../../../plugins/react-custom-html-parser';
-import { AccountDataEvent, CinnyFavoriteNotesContent } from '../../../../types/matrix/accountData';
+import {
+  AccountDataEvent,
+  CinnyFavoriteItemsContent,
+  CinnyFavoriteNotesContent,
+} from '../../../../types/matrix/accountData';
 import {
   IImageContent,
   IThumbnailContent,
@@ -90,15 +93,19 @@ import {
   FavoriteCategory,
   FavoriteMessageMetadata,
   FAVORITE_CATEGORIES,
+  createFavoriteMatrixEventFromRecord,
   getFavoriteCategory,
+  getFavoriteItemRecords,
   getFavoriteMessageMetadataFromEvent,
   getFavoriteNotes,
   getFavoriteReferenceId,
   migrateFavoritesRoomToUnencrypted,
+  removeFavoriteItemRecord,
   removeFavoriteMessage,
   removeFavoriteNote,
   removeFavoriteNotes,
   setFavoriteNote,
+  syncFavoriteRoomEventsToAccountData,
 } from '../../../features/favorites';
 import * as css from './Favorites.css';
 import { CompactClientNavButton } from '../CompactClientNavButton';
@@ -113,6 +120,7 @@ type FavoriteItem = {
   category: FavoriteCategory;
   referenceId: string;
   searchBody: string;
+  storageRoomId?: string;
 };
 
 type FavoriteGroup = {
@@ -219,32 +227,24 @@ const getFavoriteTimelineEvents = (room?: Room): MatrixEvent[] => {
 };
 
 const loadFavoriteRoomHistory = async (mx: MatrixClient, room: Room) => {
-  let timeline = getLiveTimeline(room);
   let pageCount = 0;
 
   if (room.hasEncryptionStateEvent()) {
-    await decryptAllTimelineEvent(mx, timeline);
+    await decryptAllTimelineEvent(mx, getLiveTimeline(room));
   }
 
-  while (
-    timeline.getPaginationToken(Direction.Backward) &&
-    pageCount < MAX_FAVORITES_HISTORY_PAGES
-  ) {
-    const paginated = await mx.paginateEventTimeline(timeline, {
-      backwards: true,
-      limit: FAVORITES_HISTORY_PAGINATION_LIMIT,
-    });
-    if (!paginated) break;
+  while (room.oldState.paginationToken && pageCount < MAX_FAVORITES_HISTORY_PAGES) {
+    const beforeCount = getLiveTimeline(room).getEvents().length;
 
-    const previousTimeline = timeline.getNeighbouringTimeline(Direction.Backward);
-    if (!previousTimeline || previousTimeline === timeline) break;
-
-    timeline = previousTimeline;
+    await mx.scrollback(room, FAVORITES_HISTORY_PAGINATION_LIMIT);
     pageCount += 1;
 
     if (room.hasEncryptionStateEvent()) {
-      await decryptAllTimelineEvent(mx, timeline);
+      await decryptAllTimelineEvent(mx, getLiveTimeline(room));
     }
+
+    const afterCount = getLiveTimeline(room).getEvents().length;
+    if (afterCount <= beforeCount && !room.oldState.paginationToken) break;
   }
 };
 
@@ -275,11 +275,47 @@ const getFavoriteEvents = (room?: Room): FavoriteItem[] => {
         category: getFavoriteCategory(event),
         referenceId: getFavoriteReferenceId(metadata.sourceRoomId, metadata.sourceEventId),
         searchBody: getFavoriteItemBody(event),
+        storageRoomId: room.roomId,
       });
 
       return items;
     }, [])
     .sort((a, b) => b.event.getTs() - a.event.getTs());
+};
+
+const getFavoriteEventsFromRecords = (
+  content?: CinnyFavoriteItemsContent
+): FavoriteItem[] =>
+  Object.values(getFavoriteItemRecords(content))
+    .reduce<FavoriteItem[]>((items, record) => {
+      const event = createFavoriteMatrixEventFromRecord(record);
+      const metadata = getFavoriteMessageMetadataFromEvent(event);
+      if (!metadata) return items;
+
+      items.push({
+        event,
+        metadata,
+        category: getFavoriteCategory(event),
+        referenceId: getFavoriteReferenceId(metadata.sourceRoomId, metadata.sourceEventId),
+        searchBody: getFavoriteItemBody(event),
+        storageRoomId: record.roomId,
+      });
+
+      return items;
+    }, [])
+    .sort((a, b) => b.metadata.favoritedAt - a.metadata.favoritedAt);
+
+const mergeFavoriteItems = (accountItems: FavoriteItem[], roomItems: FavoriteItem[]): FavoriteItem[] => {
+  const itemMap = new Map<string, FavoriteItem>();
+
+  roomItems.forEach((item) => {
+    itemMap.set(item.referenceId, item);
+  });
+  accountItems.forEach((item) => {
+    itemMap.set(item.referenceId, item);
+  });
+
+  return Array.from(itemMap.values()).sort((a, b) => b.metadata.favoritedAt - a.metadata.favoritedAt);
 };
 
 const getFavoriteImageViewerItems = (items: FavoriteItem[]): ViewerImageItem[] =>
@@ -1176,7 +1212,9 @@ export function Favorites() {
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
   const { navigateRoom } = useRoomNavigate();
-  const favoritesRoom = useFavoritesRoom();
+  const favoritesRooms = useFavoritesRooms();
+  const primaryFavoritesRoom = favoritesRooms[0];
+  const favoriteItemsEvent = useAccountData(AccountDataEvent.CinnyFavoriteItems);
   const favoriteNotesEvent = useAccountData(AccountDataEvent.CinnyFavoriteNotes);
 
   const [mediaAutoLoad] = useSetting(settingsAtom, 'mediaAutoLoad');
@@ -1189,6 +1227,12 @@ export function Favorites() {
   const [selectedFavoriteIds, setSelectedFavoriteIds] = useState<string[]>([]);
   const [favoriteItems, setFavoriteItems] = useState<FavoriteItem[]>([]);
   const [didInitCategory, setDidInitCategory] = useState(false);
+  const [accountFavoriteItems, setAccountFavoriteItems] = useState<FavoriteItem[]>(() =>
+    getFavoriteEventsFromRecords(favoriteItemsEvent?.getContent<CinnyFavoriteItemsContent>())
+  );
+  const [roomFavoriteItems, setRoomFavoriteItems] = useState<FavoriteItem[]>(() =>
+    favoritesRooms.flatMap(getFavoriteEvents)
+  );
   const [favoriteNotes, setFavoriteNotesState] = useState<Record<string, string>>(() =>
     getFavoriteNotes(favoriteNotesEvent?.getContent<CinnyFavoriteNotesContent>())
   );
@@ -1201,53 +1245,68 @@ export function Favorites() {
   );
 
   useEffect(() => {
+    setAccountFavoriteItems(
+      getFavoriteEventsFromRecords(favoriteItemsEvent?.getContent<CinnyFavoriteItemsContent>())
+    );
+  }, [favoriteItemsEvent]);
+
+  useEffect(() => {
+    setFavoriteItems(mergeFavoriteItems(accountFavoriteItems, roomFavoriteItems));
+  }, [accountFavoriteItems, roomFavoriteItems]);
+
+  useEffect(() => {
     setFavoriteNotesState(
       getFavoriteNotes(favoriteNotesEvent?.getContent<CinnyFavoriteNotesContent>())
     );
   }, [favoriteNotesEvent]);
 
   useEffect(() => {
-    if (!favoritesRoom) {
-      setFavoriteItems([]);
+    if (favoritesRooms.length === 0) {
+      setRoomFavoriteItems([]);
       return undefined;
     }
 
     const refresh = () => {
-      setFavoriteItems(getFavoriteEvents(favoritesRoom));
+      setRoomFavoriteItems(favoritesRooms.flatMap(getFavoriteEvents));
     };
     const handleDecrypted = (event: MatrixEvent) => {
-      if (event.getRoomId() !== favoritesRoom.roomId) return;
+      if (!favoritesRooms.some((room) => room.roomId === event.getRoomId())) return;
       refresh();
     };
 
     refresh();
-    favoritesRoom.on(RoomEvent.Timeline, refresh);
-    favoritesRoom.on(RoomEvent.TimelineRefresh, refresh);
-    favoritesRoom.on(RoomEvent.Redaction, refresh);
+    favoritesRooms.forEach((room) => {
+      room.on(RoomEvent.Timeline, refresh);
+      room.on(RoomEvent.TimelineRefresh, refresh);
+      room.on(RoomEvent.Redaction, refresh);
+    });
     mx.on(MatrixEventEvent.Decrypted, handleDecrypted);
 
     return () => {
-      favoritesRoom.removeListener(RoomEvent.Timeline, refresh);
-      favoritesRoom.removeListener(RoomEvent.TimelineRefresh, refresh);
-      favoritesRoom.removeListener(RoomEvent.Redaction, refresh);
+      favoritesRooms.forEach((room) => {
+        room.removeListener(RoomEvent.Timeline, refresh);
+        room.removeListener(RoomEvent.TimelineRefresh, refresh);
+        room.removeListener(RoomEvent.Redaction, refresh);
+      });
       mx.off(MatrixEventEvent.Decrypted, handleDecrypted);
     };
-  }, [favoritesRoom, mx]);
+  }, [favoritesRooms, mx]);
 
   useEffect(() => {
-    if (!favoritesRoom) return undefined;
+    if (favoritesRooms.length === 0) return undefined;
 
     let cancelled = false;
 
     const hydrateHistory = async () => {
       try {
-        await loadFavoriteRoomHistory(mx, favoritesRoom);
+        await Promise.all(favoritesRooms.map((room) => loadFavoriteRoomHistory(mx, room)));
+        await syncFavoriteRoomEventsToAccountData(mx, favoritesRooms);
       } catch (error) {
         console.error(error);
       }
 
       if (!cancelled) {
-        setFavoriteItems(getFavoriteEvents(favoritesRoom));
+        setRoomFavoriteItems(favoritesRooms.flatMap(getFavoriteEvents));
       }
     };
 
@@ -1256,7 +1315,7 @@ export function Favorites() {
     return () => {
       cancelled = true;
     };
-  }, [favoritesRoom, mx]);
+  }, [favoritesRooms, mx]);
 
   useEffect(() => {
     const availableIds = new Set(favoriteItems.map(getFavoriteItemId));
@@ -1278,7 +1337,7 @@ export function Favorites() {
     setSearchQuery('');
   }, [filtersOpen, searchQuery]);
 
-  const mentionRoomId = favoritesRoom?.roomId ?? '';
+  const mentionRoomId = primaryFavoritesRoom?.roomId ?? '';
   const mentionClickHandler = useMentionClickHandler(mentionRoomId);
   const spoilerClickHandler = useSpoilerClickHandler();
 
@@ -1402,7 +1461,7 @@ export function Favorites() {
       htmlReactParserOptions={htmlReactParserOptions}
       linkifyOpts={linkifyOpts}
       outlineAttachment
-      room={favoritesRoom}
+      room={primaryFavoritesRoom}
       eventId={event.getId() ?? undefined}
       imageViewerItems={imageViewerItems}
     />
@@ -1425,7 +1484,7 @@ export function Favorites() {
           htmlReactParserOptions={htmlReactParserOptions}
           linkifyOpts={linkifyOpts}
           outlineAttachment
-          room={favoritesRoom}
+          room={primaryFavoritesRoom}
           eventId={event.getId() ?? undefined}
           imageViewerItems={imageViewerItems}
         />
@@ -1576,28 +1635,32 @@ export function Favorites() {
 
   const handleRemoveFavorite = useCallback(
     async (item: FavoriteItem) => {
-      if (!favoritesRoom) return;
-
       const eventId = item.event.getId();
-      if (!eventId) return;
+      const storageRoomId = item.storageRoomId;
 
-      await removeFavoriteMessage(mx, favoritesRoom.roomId, eventId);
+      if (eventId && storageRoomId && !eventId.startsWith('$cinny-favorite-')) {
+        await removeFavoriteMessage(mx, storageRoomId, eventId).catch(() => undefined);
+      }
+
+      await removeFavoriteItemRecord(mx, item.metadata.sourceRoomId, item.metadata.sourceEventId);
       await removeFavoriteNote(mx, item.metadata.sourceRoomId, item.metadata.sourceEventId);
       removeItemsFromLocalState([item]);
     },
-    [favoritesRoom, mx, removeItemsFromLocalState]
+    [mx, removeItemsFromLocalState]
   );
 
   const [batchRemoveState, batchRemoveFavorites] = useAsyncCallback(
     useCallback(
       async (itemsToRemove: FavoriteItem[]) => {
-        if (!favoritesRoom || itemsToRemove.length === 0) return;
+        if (itemsToRemove.length === 0) return;
 
         await Promise.all(
           itemsToRemove.map(async (item) => {
             const eventId = item.event.getId();
-            if (!eventId) return;
-            await removeFavoriteMessage(mx, favoritesRoom.roomId, eventId);
+            if (eventId && item.storageRoomId && !eventId.startsWith('$cinny-favorite-')) {
+              await removeFavoriteMessage(mx, item.storageRoomId, eventId).catch(() => undefined);
+            }
+            await removeFavoriteItemRecord(mx, item.metadata.sourceRoomId, item.metadata.sourceEventId);
           })
         );
 
@@ -1609,7 +1672,7 @@ export function Favorites() {
           }))
         );
       },
-      [favoritesRoom, mx]
+      [mx]
     )
   );
 
@@ -1644,7 +1707,8 @@ export function Favorites() {
     .filter(Boolean)
     .join(' \xb7 ');
 
-  const favoritesRoomEncrypted = Boolean(favoritesRoom?.hasEncryptionStateEvent());
+  const encryptedFavoritesRooms = favoritesRooms.filter((room) => room.hasEncryptionStateEvent());
+  const favoritesRoomEncrypted = encryptedFavoritesRooms.length > 0;
 
   const encryptedRoomNotice = favoritesRoomEncrypted ? (
     <SequenceCard
@@ -1659,7 +1723,7 @@ export function Favorites() {
       </Text>
       <Text size="T300" priority="300">
         {
-          '\u5207\u6362\u540e\u4f1a\u65b0\u5efa\u4e00\u4e2a\u975e\u52a0\u5bc6\u6536\u85cf\u623f\u95f4\uff0c\u540e\u7eed\u6536\u85cf\u4e0d\u518d\u4f9d\u8d56\u5386\u53f2\u89e3\u5bc6\u5bc6\u94a5\uff1b\u65e7\u6536\u85cf\u623f\u95f4\u4f1a\u81ea\u52a8\u79bb\u5f00\uff0c\u907f\u514d\u7ee7\u7eed\u5e72\u6270\u5217\u8868\u548c\u6536\u85cf\u663e\u793a\u3002'
+          '\u5207\u6362\u540e\u4f1a\u65b0\u5efa\u4e00\u4e2a\u975e\u52a0\u5bc6\u6536\u85cf\u623f\u95f4\uff0c\u540e\u7eed\u6536\u85cf\u4e0d\u518d\u4f9d\u8d56\u5386\u53f2\u89e3\u5bc6\u5bc6\u94a5\uff1b\u65e7\u6536\u85cf\u623f\u95f4\u4f1a\u4fdd\u7559\u4e3a\u8fc1\u79fb\u6765\u6e90\uff0c\u5df2\u80fd\u8bfb\u5230\u7684\u6536\u85cf\u4f1a\u5199\u5165\u8d26\u53f7\u7d22\u5f15\u9632\u6b62\u4e22\u5931\u3002'
         }
       </Text>
       <Box>
@@ -1679,39 +1743,55 @@ export function Favorites() {
       </Box>
     </SequenceCard>
   ) : undefined;
+  const hasFavoritesStorage = favoritesRooms.length > 0 || favoriteItems.length > 0;
 
   const renderContent = () => {
-    if (!favoritesRoom) {
+    if (!hasFavoritesStorage) {
       return (
-        <FavoritesEmpty
-          loading={createFavoritesState.status === AsyncStatus.Loading}
-          hasRoom={false}
-          onCreate={handleCreateFavorites}
-        />
+        <Scroll hideTrack visibility="Hover">
+          <PageContent>
+            <PageContentCenter>
+              <FavoritesEmpty
+                loading={createFavoritesState.status === AsyncStatus.Loading}
+                hasRoom={false}
+                onCreate={handleCreateFavorites}
+              />
+            </PageContentCenter>
+          </PageContent>
+        </Scroll>
       );
     }
 
     if (favoriteItems.length === 0 && !hasActiveFilters) {
       return (
-        <Box direction="Column" gap="300">
-          {encryptedRoomNotice}
-          <FavoritesEmpty loading={false} hasRoom onCreate={handleCreateFavorites} />
-        </Box>
+        <Scroll hideTrack visibility="Hover">
+          <PageContent>
+            <PageContentCenter>
+              <Box direction="Column" gap="300">
+                {encryptedRoomNotice}
+                <FavoritesEmpty loading={false} hasRoom onCreate={handleCreateFavorites} />
+              </Box>
+            </PageContentCenter>
+          </PageContent>
+        </Scroll>
       );
     }
 
     return (
-      <Box direction="Column" gap="300">
-        {encryptedRoomNotice}
-        <SequenceCard
-          className={css.StickyFilterCard}
-          variant="Background"
-          direction="Column"
-          gap="300"
-          style={{
-            padding: config.space.S400,
-          }}
-        >
+      <Box className={css.FavoritesLayout}>
+        <div className={css.FavoritesPinnedContent}>
+          <div className={css.FavoritesPinnedInner}>
+            <Box direction="Column" gap="300">
+              {encryptedRoomNotice}
+              <SequenceCard
+                className={css.StickyFilterCard}
+                variant="Background"
+                direction="Column"
+                gap="300"
+                style={{
+                  padding: config.space.S400,
+                }}
+              >
           <Box className={css.FilterCardSection} direction="Column">
             <Text className={css.FilterCardLabel} size="T200" priority="300">
               {'\u5185\u5bb9\u5206\u7c7b'}
@@ -1870,9 +1950,17 @@ export function Favorites() {
               </Box>
             </>
           )}
-        </SequenceCard>
+              </SequenceCard>
+            </Box>
+          </div>
+        </div>
 
-        {batchRemoveState.status === AsyncStatus.Error && (
+        <div className={css.FavoritesResultsPane}>
+          <Scroll className={css.FavoritesResultsScroll} hideTrack visibility="Hover">
+            <PageContent>
+              <PageContentCenter>
+                <Box direction="Column" gap="300">
+                  {batchRemoveState.status === AsyncStatus.Error && (
           <SequenceCard
             variant="Critical"
             direction="Column"
@@ -1885,9 +1973,9 @@ export function Favorites() {
               }
             </Text>
           </SequenceCard>
-        )}
+                  )}
 
-        {visibleItems.length === 0 ? (
+                  {visibleItems.length === 0 ? (
           <FavoritesEmptyShell>
             <PageHeroSection>
               <PageHero
@@ -2007,7 +2095,12 @@ export function Favorites() {
               )}
             </Box>
           ))
-        )}
+                  )}
+                </Box>
+              </PageContentCenter>
+            </PageContent>
+          </Scroll>
+        </div>
       </Box>
     );
   };
@@ -2028,12 +2121,8 @@ export function Favorites() {
         </Box>
       </PageHeader>
 
-      <Box grow="Yes" style={{ position: 'relative' }}>
-        <Scroll hideTrack visibility="Hover">
-          <PageContent>
-            <PageContentCenter>{renderContent()}</PageContentCenter>
-          </PageContent>
-        </Scroll>
+      <Box grow="Yes" style={{ position: 'relative', minHeight: 0 }}>
+        {renderContent()}
       </Box>
     </Page>
   );

@@ -123,6 +123,12 @@ const NATIVE_MAIN_MODAL_CARD_STYLE: CSSProperties = {
   width: '100%',
   height: '100%',
   maxHeight: '100%',
+  borderRadius: toRem(12),
+  border: '1px solid rgba(255, 255, 255, 0.74)',
+  background: 'rgba(248, 250, 252, 0.86)',
+  boxShadow: '0 28px 80px rgba(15, 23, 42, 0.22)',
+  backdropFilter: 'blur(22px) saturate(150%)',
+  WebkitBackdropFilter: 'blur(22px) saturate(150%)',
 };
 const MODAL_CONTENT_STYLE: CSSProperties = {
   overflowY: 'auto',
@@ -239,6 +245,7 @@ const CN = {
   selected: '已选',
   verses: '节',
   copySelected: '复制所选经文',
+  copiedSelected: '已复制并清除选择',
   insert: '插入聊天框',
   reset: '清除所选经文',
   browseTitle: '卷章浏览',
@@ -771,6 +778,7 @@ export function BibleExperienceModal({
   const [toolPanelView, setToolPanelView] = useState<ToolPanelView>('browse');
   const [toolPanelOpen, setToolPanelOpen] = useState(!compactLayout);
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
+  const [copyFeedbackVisible, setCopyFeedbackVisible] = useState(false);
   const [focusedVerseKey, setFocusedVerseKey] = useState<string>();
   const [pendingFocusVerseKey, setPendingFocusVerseKey] = useState<string>();
   const [currentPage, setCurrentPage] = useState(1);
@@ -974,6 +982,20 @@ export function BibleExperienceModal({
     [clearDragListeners, focusWindow, getClampedWindowOffset, mobile, windowOffsets]
   );
 
+  const handleNativeWindowDragStart = React.useCallback<React.PointerEventHandler<HTMLElement>>(
+    (evt) => {
+      if (!nativeBibleWindow) return;
+      if (isInteractiveDragTarget(evt.target)) return;
+      if (evt.pointerType === 'mouse' && evt.button !== 0) return;
+
+      evt.preventDefault();
+      import('@tauri-apps/api/window')
+        .then(({ getCurrentWindow }) => getCurrentWindow().startDragging())
+        .catch(() => undefined);
+    },
+    [nativeBibleWindow]
+  );
+
   useEffect(() => {
     setCurrentPage((page) => Math.min(page, totalPages));
   }, [totalPages]);
@@ -1006,6 +1028,16 @@ export function BibleExperienceModal({
 
     return () => window.clearTimeout(timerId);
   }, [focusedVerseKey]);
+
+  useEffect(() => {
+    if (!copyFeedbackVisible) return undefined;
+
+    const timerId = window.setTimeout(() => {
+      setCopyFeedbackVisible(false);
+    }, 1800);
+
+    return () => window.clearTimeout(timerId);
+  }, [copyFeedbackVisible]);
 
   useEffect(() => {
     if (!open) {
@@ -1125,10 +1157,17 @@ export function BibleExperienceModal({
     openChapter(verse.book, verse.chapter, page, false);
   };
 
-  const handleCopySelected = () => {
+  const handleCopySelected = React.useCallback(() => {
     if (!selectedText) return;
     copyToClipboard(selectedText);
-  };
+    setSelectedKeys([]);
+    setCopyFeedbackVisible(true);
+  }, [selectedText]);
+
+  const handleClearSelected = React.useCallback(() => {
+    setSelectedKeys([]);
+    setCopyFeedbackVisible(false);
+  }, []);
 
   const handleInsert = () => {
     if (!selectedText || !onInsertSelected) return;
@@ -1137,6 +1176,7 @@ export function BibleExperienceModal({
   };
 
   const handleToggleVerse = (verse: BibleVerse) => {
+    setCopyFeedbackVisible(false);
     setSelectedKeys((current) =>
       current.includes(verse.key)
         ? current.filter((item) => item !== verse.key)
@@ -1169,7 +1209,7 @@ export function BibleExperienceModal({
         if (editableInsideBible) return;
         evt.preventDefault();
         evt.stopPropagation();
-        setSelectedKeys([]);
+        handleClearSelected();
         return;
       }
 
@@ -1237,6 +1277,8 @@ export function BibleExperienceModal({
     canGoPrevChapter,
     currentPage,
     fontSize,
+    handleClearSelected,
+    handleCopySelected,
     selectedBook?.chapterCount,
     selectedBook?.name,
     selectedChapter,
@@ -1253,6 +1295,7 @@ export function BibleExperienceModal({
     ? `共找到 ${activeVerses.length} 节匹配经文，当前范围：${scopeLabel}。${CN.searchHintSuffix}`
     : `本章共 ${chapterVerses.length} 节，支持多选复制，并可通过底部分页继续浏览。`;
   const headerHint = `${CN.keyboardHint} ${CN.selectionHelp}`;
+  const copySelectedLabel = copyFeedbackVisible ? CN.copiedSelected : CN.copySelected;
   const sectionTopRowStyle = compactLayout
     ? RESPONSIVE_SECTION_STACK_STYLE
     : RESPONSIVE_SECTION_STACK_WIDE_STYLE;
@@ -1373,12 +1416,16 @@ export function BibleExperienceModal({
   );
   const mainPanelIntroCompact = (
     <div
+      onPointerDown={nativeBibleWindow ? handleNativeWindowDragStart : undefined}
       style={{
         ...NOTICE_STYLE,
         display: 'grid',
         gridTemplateColumns: 'auto minmax(0, 1fr) auto',
         gap: toRem(12),
         alignItems: 'center',
+        cursor: nativeBibleWindow ? 'grab' : undefined,
+        touchAction: nativeBibleWindow ? 'none' : undefined,
+        userSelect: nativeBibleWindow ? 'none' : undefined,
       }}
     >
       <Box alignItems="Center" justifyContent="Center" style={NOTICE_ICON_STYLE}>
@@ -1503,14 +1550,14 @@ export function BibleExperienceModal({
         </Box>
         <Box shrink="No" wrap="Wrap" gap="100" justifyContent="End">
           <BiblePillButton onClick={handleCopySelected} disabled={!selectedText}>
-            {CN.copySelected}
+            {copySelectedLabel}
           </BiblePillButton>
           {onInsertSelected && (
             <BiblePillButton onClick={handleInsert} disabled={!selectedText}>
               {CN.insert}
             </BiblePillButton>
           )}
-          <BiblePillButton onClick={() => setSelectedKeys([])} disabled={selectedKeys.length === 0}>
+          <BiblePillButton onClick={handleClearSelected} disabled={selectedKeys.length === 0}>
             {CN.reset}
           </BiblePillButton>
         </Box>
@@ -1742,10 +1789,10 @@ export function BibleExperienceModal({
                         {CN.nextChapter}
                       </BiblePillButton>
                       <BiblePillButton onClick={handleCopySelected} disabled={!selectedText}>
-                        {CN.copySelected}
+                        {copySelectedLabel}
                       </BiblePillButton>
                       <BiblePillButton
-                        onClick={() => setSelectedKeys([])}
+                        onClick={handleClearSelected}
                         disabled={selectedKeys.length === 0}
                       >
                         {CN.reset}
@@ -1840,6 +1887,11 @@ export function BibleExperienceModal({
                     <Text size="T300" priority="300">
                       {`${CN.selected} ${selectedVerses.length} ${CN.verses}`}
                     </Text>
+                    {copyFeedbackVisible && (
+                      <Text size="T300" style={{ color: '#1d4ed8' }}>
+                        <b>{CN.copiedSelected}</b>
+                      </Text>
+                    )}
                   </Box>
 
                   {totalPages > 1 && (
@@ -2001,7 +2053,7 @@ export function BibleExperienceModal({
               </Box>
               <Box shrink="No" wrap="Wrap" gap="100" justifyContent="End">
                 <BiblePillButton onClick={handleCopySelected} disabled={!selectedText}>
-                  {CN.copySelected}
+                  {copySelectedLabel}
                 </BiblePillButton>
                 {onInsertSelected && (
                   <BiblePillButton onClick={handleInsert} disabled={!selectedText}>
@@ -2009,7 +2061,7 @@ export function BibleExperienceModal({
                   </BiblePillButton>
                 )}
                 <BiblePillButton
-                  onClick={() => setSelectedKeys([])}
+                  onClick={handleClearSelected}
                   disabled={selectedKeys.length === 0}
                 >
                   {CN.reset}

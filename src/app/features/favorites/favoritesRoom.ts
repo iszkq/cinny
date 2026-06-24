@@ -6,7 +6,7 @@ import {
   getHiddenFavoritesRoomIdsFromAccountData,
 } from './types';
 
-const FAVORITES_ROOM_NAME = '\u6211\u7684\u6536\u85cf';
+export const FAVORITES_ROOM_NAME = '\u6211\u7684\u6536\u85cf';
 const FAVORITES_ROOM_TOPIC =
   '\u8fd9\u91cc\u4f1a\u4fdd\u5b58\u4f60\u6536\u85cf\u7684\u6d88\u606f\u526f\u672c\uff0c\u4ec5\u7528\u4e8e\u4f60\u81ea\u5df1\u7684\u6536\u85cf\u67e5\u770b\u3002';
 
@@ -38,6 +38,18 @@ const createFavoritesAccountData = (
     legacyRoomIds ?? getHiddenFavoritesRoomIdsFromAccountData(content),
 });
 
+const getJoinedFavoritesRoom = (mx: MatrixClient, roomId?: string) => {
+  if (!roomId) return undefined;
+
+  const room = mx.getRoom(roomId);
+  return room?.getMyMembership() === 'join' ? room : undefined;
+};
+
+const findJoinedFavoritesRoom = (mx: MatrixClient) =>
+  mx
+    .getRooms()
+    .find((room) => room.getMyMembership() === 'join' && room.name === FAVORITES_ROOM_NAME);
+
 const createFavoritesRoomInternal = async (mx: MatrixClient): Promise<string> => {
   const roomVersion = await getDefaultRoomVersion(mx);
 
@@ -58,12 +70,29 @@ export const getFavoritesRoomId = (mx: MatrixClient): string | undefined =>
 export const ensureFavoritesRoom = async (mx: MatrixClient): Promise<string> => {
   const content = getFavoritesAccountData(mx);
   const existingRoomId = getFavoritesRoomIdFromAccountData(content);
+  const legacyRoomIds = getHiddenFavoritesRoomIdsFromAccountData(content);
 
-  if (existingRoomId) {
-    const existingRoom = mx.getRoom(existingRoomId);
-    if (existingRoom?.getMyMembership() === 'join') {
-      return existingRoomId;
-    }
+  if (getJoinedFavoritesRoom(mx, existingRoomId)) {
+    return existingRoomId;
+  }
+
+  const knownJoinedRoom =
+    legacyRoomIds.map((roomId) => getJoinedFavoritesRoom(mx, roomId)).find(Boolean) ??
+    findJoinedFavoritesRoom(mx);
+
+  if (knownJoinedRoom) {
+    await mx.setAccountData(
+      AccountDataEvent.CinnyFavorites,
+      createFavoritesAccountData(
+        knownJoinedRoom.roomId,
+        content,
+        Array.from(new Set([existingRoomId, ...legacyRoomIds])).filter(
+          (roomId): roomId is string => !!roomId && roomId !== knownJoinedRoom.roomId
+        )
+      )
+    );
+
+    return knownJoinedRoom.roomId;
   }
 
   if (creatingFavoritesRoom) return creatingFavoritesRoom;
@@ -73,7 +102,13 @@ export const ensureFavoritesRoom = async (mx: MatrixClient): Promise<string> => 
 
     await mx.setAccountData(
       AccountDataEvent.CinnyFavorites,
-      createFavoritesAccountData(roomId, content)
+      createFavoritesAccountData(
+        roomId,
+        content,
+        Array.from(new Set([existingRoomId, ...legacyRoomIds])).filter(
+          (legacyRoomId): legacyRoomId is string => !!legacyRoomId && legacyRoomId !== roomId
+        )
+      )
     );
 
     return roomId;
@@ -117,10 +152,6 @@ export const migrateFavoritesRoomToUnencrypted = async (mx: MatrixClient): Promi
         Array.from(new Set(nextLegacyRoomIds)).filter((legacyRoomId) => legacyRoomId !== roomId)
       )
     );
-
-    if (currentRoomId && currentRoom?.getMyMembership() === 'join') {
-      await mx.leave(currentRoomId).catch(() => undefined);
-    }
 
     return roomId;
   })();

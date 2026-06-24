@@ -40,16 +40,80 @@ export const GlassCard = style([
 export const StickyFilterCard = style([
   DefaultReset,
   {
-    position: 'sticky',
-    top: config.space.S300,
-    zIndex: 10,
-    isolation: 'isolate',
     overflow: 'hidden',
     background: '#ffffff',
     border: '1px solid rgba(226, 232, 240, 0.96)',
     boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)',
     backdropFilter: 'none',
     WebkitBackdropFilter: 'none',
+  },
+]);
+
+export const FavoritesLayout = style([
+  DefaultReset,
+  {
+    width: '100%',
+    height: '100%',
+    minHeight: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
+  },
+]);
+
+export const FavoritesPinnedContent = style([
+  DefaultReset,
+  {
+    flexShrink: 0,
+    position: 'relative',
+    zIndex: 2,
+    background: 'rgba(241, 245, 249, 0.96)',
+    boxShadow: '0 10px 22px rgba(15, 23, 42, 0.06)',
+  },
+]);
+
+export const FavoritesPinnedInner = style([
+  DefaultReset,
+  {
+    width: '100%',
+    maxWidth: '964px',
+    margin: '0 auto',
+    paddingTop: config.space.S400,
+    paddingLeft: `max(${config.space.S400}, env(safe-area-inset-left))`,
+    paddingRight: `max(${config.space.S200}, env(safe-area-inset-right))`,
+    paddingBottom: config.space.S300,
+    '@media': {
+      'screen and (max-width: 1124px)': {
+        paddingTop: config.space.S300,
+        paddingLeft: `max(${config.space.S200}, env(safe-area-inset-left))`,
+        paddingRight: `max(${config.space.S200}, env(safe-area-inset-right))`,
+      },
+      'screen and (max-width: 750px)': {
+        paddingTop: config.space.S200,
+      },
+    },
+  },
+]);
+
+export const FavoritesResultsPane = style([
+  DefaultReset,
+  {
+    position: 'relative',
+    isolation: 'isolate',
+    flex: '1 1 auto',
+    minHeight: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
+  },
+]);
+
+export const FavoritesResultsScroll = style([
+  DefaultReset,
+  {
+    flex: '1 1 auto',
+    minHeight: 0,
+    overflow: 'hidden',
   },
 ]);
 

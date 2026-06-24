@@ -7,14 +7,6 @@ const LazyBibleExperienceModal = lazy(async () => ({
   default: (await import('../../features/bible/BibleExperienceModal')).BibleExperienceModal,
 }));
 
-const isInteractiveDragTarget = (target: EventTarget | null): boolean => {
-  if (!(target instanceof Element)) return false;
-
-  return Boolean(
-    target.closest('button, a, input, textarea, select, [role="button"], [contenteditable="true"]')
-  );
-};
-
 const isEditableEventTarget = (target: EventTarget | null): boolean => {
   if (!(target instanceof HTMLElement)) return false;
 
@@ -22,21 +14,18 @@ const isEditableEventTarget = (target: EventTarget | null): boolean => {
 };
 
 const closeCurrentNativeWindow = async (): Promise<void> => {
-  try {
-    const { getCurrentWindow } = await import('@tauri-apps/api/window');
-    await getCurrentWindow().close();
-    return;
-  } catch {
-    // Fall through to the webview-window API used by newer Tauri builds.
-  }
+  const { getCurrentWindow } = await import('@tauri-apps/api/window');
+  const currentWindow = getCurrentWindow();
 
-  try {
-    const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow');
-    await getCurrentWebviewWindow().close();
-    return;
-  } catch {
-    window.close();
-  }
+  await currentWindow.close().catch(async () => {
+    await currentWindow.destroy().catch(() => {
+      window.close();
+    });
+  });
+
+  window.setTimeout(() => {
+    void currentWindow.destroy().catch(() => undefined);
+  }, 240);
 };
 
 function BibleWindowFallback() {
@@ -66,20 +55,27 @@ function NativeBibleWindowContent() {
     void closeCurrentNativeWindow();
   }, [emitClose]);
 
-  const handleWindowDragStart = useCallback<React.PointerEventHandler<HTMLElement>>((evt) => {
-    if (isInteractiveDragTarget(evt.target)) return;
-    if (evt.pointerType === 'mouse' && evt.button !== 0) return;
-
-    evt.preventDefault();
-    import('@tauri-apps/api/window')
-      .then(({ getCurrentWindow }) => getCurrentWindow().startDragging())
-      .catch(() => undefined);
-  }, []);
-
   useEffect(() => {
     window.addEventListener('pagehide', emitClose);
     return () => window.removeEventListener('pagehide', emitClose);
   }, [emitClose]);
+
+  useEffect(() => {
+    const { background: htmlBackground } = document.documentElement.style;
+    const { background: bodyBackground } = document.body.style;
+    const root = document.getElementById('root');
+    const rootBackground = root?.style.background;
+
+    document.documentElement.style.background = 'transparent';
+    document.body.style.background = 'transparent';
+    if (root) root.style.background = 'transparent';
+
+    return () => {
+      document.documentElement.style.background = htmlBackground;
+      document.body.style.background = bodyBackground;
+      if (root) root.style.background = rootBackground ?? '';
+    };
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (evt: KeyboardEvent) => {
@@ -93,10 +89,7 @@ function NativeBibleWindowContent() {
   }, [handleClose]);
 
   return (
-    <Box
-      style={{ width: '100vw', height: '100vh', overflow: 'hidden' }}
-      onPointerDown={handleWindowDragStart}
-    >
+    <Box style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: 'transparent' }}>
       <Suspense fallback={<BibleWindowFallback />}>
         <LazyBibleExperienceModal open requestClose={handleClose} />
       </Suspense>
