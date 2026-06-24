@@ -60,6 +60,8 @@ export type CinnyFavoriteItemRecord = {
   sender?: string;
   originServerTs: number;
   updatedAt: number;
+  mediaCopiedAt?: number;
+  mediaCopyFailedAt?: number;
 };
 
 export type CinnyFavoriteItemsContent = {

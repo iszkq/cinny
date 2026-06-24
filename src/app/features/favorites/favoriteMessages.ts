@@ -117,7 +117,9 @@ const isFavoriteItemRecord = (value: unknown): value is CinnyFavoriteItemRecord 
     typeof record.metadata.sourceTimestamp === 'number' &&
     typeof record.metadata.favoritedAt === 'number' &&
     typeof record.originServerTs === 'number' &&
-    typeof record.updatedAt === 'number'
+    typeof record.updatedAt === 'number' &&
+    (record.mediaCopiedAt === undefined || typeof record.mediaCopiedAt === 'number') &&
+    (record.mediaCopyFailedAt === undefined || typeof record.mediaCopyFailedAt === 'number')
   );
 };
 
@@ -150,9 +152,12 @@ const writeFavoriteItemRecords = async (
 export const getFavoriteItemRecordId = (sourceRoomId: string, sourceEventId: string): string =>
   getFavoriteReferenceId(sourceRoomId, sourceEventId);
 
-export const createFavoriteItemRecordFromEvent = (
+const createFavoriteItemRecord = (
   event: MatrixEvent,
-  roomId?: string
+  roomId: string | undefined,
+  content: IContent,
+  mediaCopiedAt?: number,
+  mediaCopyFailedAt?: number
 ): CinnyFavoriteItemRecord | undefined => {
   const metadata = getFavoriteMessageMetadataFromEvent(event);
   if (!metadata) return undefined;
@@ -165,15 +170,23 @@ export const createFavoriteItemRecordFromEvent = (
     version: FAVORITE_ITEMS_VERSION,
     id: recordId,
     eventType: event.getType(),
-    content: cloneContent(event.getContent()),
+    content: cloneContent(content),
     metadata,
     roomId: eventRoomId,
     eventId,
     sender: event.getSender() ?? metadata.sourceSenderId,
     originServerTs: event.getTs() || metadata.favoritedAt,
     updatedAt: Date.now(),
+    mediaCopiedAt,
+    mediaCopyFailedAt,
   };
 };
+
+export const createFavoriteItemRecordFromEvent = (
+  event: MatrixEvent,
+  roomId?: string
+): CinnyFavoriteItemRecord | undefined =>
+  createFavoriteItemRecord(event, roomId, event.getContent());
 
 export const createFavoriteMatrixEventFromRecord = (
   record: CinnyFavoriteItemRecord
@@ -222,17 +235,30 @@ export const syncFavoriteRoomEventsToAccountData = async (
   const records = getFavoriteItemRecords(getFavoriteItemsContent(mx));
   let changed = false;
 
-  rooms.forEach((room) => {
-    getLinkedRoomEvents(room).forEach((event) => {
-      if (event.isRedacted()) return;
+  for (const room of rooms) {
+    for (const event of getLinkedRoomEvents(room)) {
+      if (event.isRedacted()) continue;
 
-      const record = createFavoriteItemRecordFromEvent(event, room.roomId);
-      if (!record) return;
+      const baseRecord = createFavoriteItemRecordFromEvent(event, room.roomId);
+      if (!baseRecord) continue;
 
-      const existingRecord = records[record.id];
-      if (existingRecord?.eventId === record.eventId && existingRecord.roomId === record.roomId) {
-        return;
+      const existingRecord = records[baseRecord.id];
+      const shouldCopyMedia =
+        !!getFavoriteMediaSource(event) &&
+        typeof existingRecord?.mediaCopiedAt !== 'number' &&
+        typeof existingRecord?.mediaCopyFailedAt !== 'number';
+      if (
+        existingRecord?.eventId === baseRecord.eventId &&
+        existingRecord.roomId === baseRecord.roomId &&
+        !shouldCopyMedia
+      ) {
+        continue;
       }
+
+      const record = shouldCopyMedia
+        ? await createDurableFavoriteItemRecordFromEvent(mx, event, room.roomId)
+        : baseRecord;
+      if (!record) continue;
 
       records[record.id] = {
         ...existingRecord,
@@ -240,8 +266,8 @@ export const syncFavoriteRoomEventsToAccountData = async (
         updatedAt: Date.now(),
       };
       changed = true;
-    });
-  });
+    }
+  }
 
   if (changed) {
     await writeFavoriteItemRecords(mx, records);
@@ -451,6 +477,32 @@ const createDurableFavoriteContent = async (
   return stickerContent;
 };
 
+const createDurableFavoriteItemRecordFromEvent = async (
+  mx: MatrixClient,
+  event: MatrixEvent,
+  roomId?: string
+): Promise<CinnyFavoriteItemRecord | undefined> => {
+  if (!getFavoriteMediaSource(event)) {
+    return createFavoriteItemRecordFromEvent(event, roomId);
+  }
+
+  try {
+    const durableContent = await createDurableFavoriteContent(
+      mx,
+      roomId ? mx.getRoom(roomId) ?? undefined : undefined,
+      event
+    );
+    const metadata = getFavoriteMessageMetadataFromEvent(event);
+    if (!metadata) return undefined;
+
+    durableContent[CINNY_FAVORITE_CONTENT_KEY] = metadata;
+    return createFavoriteItemRecord(event, roomId, durableContent, Date.now());
+  } catch (error) {
+    console.error(error);
+    return createFavoriteItemRecord(event, roomId, event.getContent(), undefined, Date.now());
+  }
+};
+
 export const getFavoriteEventsBySource = (
   room: Room | undefined,
   sourceRoomId: string,
@@ -475,6 +527,7 @@ export const favoriteMessageToRoom = async (
   const eventType = mEvent.getType();
   const content = mEvent.getContent();
   const sourceEventId = mEvent.getId() ?? '';
+  const favoriteMediaSource = getFavoriteMediaSource(mEvent);
 
   if (!isForwardableMessage(eventType, content)) {
     throw new Error('Unsupported favorite message type.');
@@ -487,11 +540,33 @@ export const favoriteMessageToRoom = async (
     sourceEventId
   )[0];
   if (existingFavorite) {
-    const record = createFavoriteItemRecordFromEvent(existingFavorite, targetRoomId);
+    const existingRecord =
+      getFavoriteItemRecords(getFavoriteItemsContent(mx))[
+        getFavoriteItemRecordId(sourceRoom.roomId, sourceEventId)
+      ];
+    const shouldCopyMedia =
+      !!getFavoriteMediaSource(existingFavorite) &&
+      typeof existingRecord?.mediaCopiedAt !== 'number' &&
+      typeof existingRecord?.mediaCopyFailedAt !== 'number';
+    const record = shouldCopyMedia
+      ? await createDurableFavoriteItemRecordFromEvent(mx, existingFavorite, targetRoomId)
+      : createFavoriteItemRecordFromEvent(existingFavorite, targetRoomId);
     if (record) {
       await upsertFavoriteItemRecord(mx, record);
     }
     return existingFavorite.getId() ?? undefined;
+  }
+
+  let mediaCopiedAt: number | undefined;
+  let mediaCopyFailedAt: number | undefined;
+  let favoriteContent: FavoriteMessageContent;
+  try {
+    favoriteContent = await createDurableFavoriteContent(mx, targetRoom, mEvent);
+    mediaCopiedAt = favoriteMediaSource ? Date.now() : undefined;
+  } catch (error) {
+    console.error(error);
+    favoriteContent = sanitizeFavoriteContent(content);
+    mediaCopyFailedAt = favoriteMediaSource ? Date.now() : undefined;
   }
 
   const senderId = mEvent.getSender();
@@ -501,7 +576,6 @@ export const favoriteMessageToRoom = async (
     senderId ??
     '\u672a\u77e5\u7528\u6237';
 
-  const favoriteContent = await createDurableFavoriteContent(mx, targetRoom, mEvent);
   const metadata: FavoriteMessageMetadata = {
     version: 1,
     sourceRoomId: sourceRoom.roomId,
@@ -530,6 +604,8 @@ export const favoriteMessageToRoom = async (
       sender: mx.getUserId() ?? metadata.sourceSenderId,
       originServerTs: Date.now(),
       updatedAt: Date.now(),
+      mediaCopiedAt,
+      mediaCopyFailedAt,
     });
     return response?.event_id;
   }
@@ -547,6 +623,8 @@ export const favoriteMessageToRoom = async (
       sender: mx.getUserId() ?? metadata.sourceSenderId,
       originServerTs: Date.now(),
       updatedAt: Date.now(),
+      mediaCopiedAt,
+      mediaCopyFailedAt,
     });
     return response?.event_id;
   }
@@ -563,6 +641,8 @@ export const favoriteMessageToRoom = async (
     sender: mx.getUserId() ?? metadata.sourceSenderId,
     originServerTs: Date.now(),
     updatedAt: Date.now(),
+    mediaCopiedAt,
+    mediaCopyFailedAt,
   });
   return response?.event_id;
 };

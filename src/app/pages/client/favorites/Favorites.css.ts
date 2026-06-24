@@ -67,8 +67,6 @@ export const FavoritesPinnedContent = style([
     flexShrink: 0,
     position: 'relative',
     zIndex: 2,
-    background: 'rgba(241, 245, 249, 0.96)',
-    boxShadow: '0 10px 22px rgba(15, 23, 42, 0.06)',
   },
 ]);
 
@@ -112,8 +110,12 @@ export const FavoritesResultsScroll = style([
   DefaultReset,
   {
     flex: '1 1 auto',
+    height: '100%',
     minHeight: 0,
-    overflow: 'hidden',
+    overflowX: 'hidden',
+    overflowY: 'auto',
+    overscrollBehavior: 'contain',
+    scrollbarGutter: 'stable',
   },
 ]);
 

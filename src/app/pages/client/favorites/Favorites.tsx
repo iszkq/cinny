@@ -348,14 +348,12 @@ const getCategoryCount = (items: FavoriteItem[], category: FavoriteCategory): nu
 const getFavoriteGroups = (
   items: FavoriteItem[],
   activeCategory: FavoriteCategory
-): FavoriteGroup[] => {
-  return [
-    {
-      category: activeCategory,
-      items: items.filter((item) => item.category === activeCategory),
-    },
-  ];
-};
+): FavoriteGroup[] => [
+  {
+    category: activeCategory,
+    items: items.filter((item) => item.category === activeCategory),
+  },
+];
 
 const isGalleryCategory = (
   category: FavoriteCategory
@@ -1956,7 +1954,7 @@ export function Favorites() {
         </div>
 
         <div className={css.FavoritesResultsPane}>
-          <Scroll className={css.FavoritesResultsScroll} hideTrack visibility="Hover">
+          <div className={css.FavoritesResultsScroll}>
             <PageContent>
               <PageContentCenter>
                 <Box direction="Column" gap="300">
@@ -2099,7 +2097,7 @@ export function Favorites() {
                 </Box>
               </PageContentCenter>
             </PageContent>
-          </Scroll>
+          </div>
         </div>
       </Box>
     );
