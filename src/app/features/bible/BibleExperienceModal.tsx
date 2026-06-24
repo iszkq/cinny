@@ -126,6 +126,7 @@ const NATIVE_MAIN_MODAL_CARD_STYLE: CSSProperties = {
 };
 const MODAL_CONTENT_STYLE: CSSProperties = {
   overflowY: 'auto',
+  overflowX: 'hidden',
   padding: `${toRem(22)} ${toRem(24)} ${toRem(24)}`,
   display: 'flex',
   flexDirection: 'column',
@@ -195,6 +196,7 @@ const VERSE_SCROLL_STYLE: CSSProperties = {
   flex: '1 1 auto',
   minHeight: 0,
   overflowY: 'auto',
+  overflowX: 'hidden',
   padding: `${toRem(12)} ${toRem(12)} ${toRem(18)}`,
   scrollPaddingTop: toRem(20),
 };
@@ -275,8 +277,8 @@ const WINDOW_MIN_VISIBLE_WIDTH_PX = 240;
 const WINDOW_MIN_VISIBLE_HEIGHT_PX = 160;
 const INITIAL_WINDOW_OFFSETS: Record<BibleWindowKey, WindowOffset> = {
   main: { x: 0, y: 0 },
-  search: { x: 120, y: 42 },
-  browse: { x: 110, y: -24 },
+  search: { x: 220, y: -24 },
+  browse: { x: 180, y: 40 },
 };
 const INITIAL_WINDOW_Z_INDEX: Record<BibleWindowKey, number> = {
   main: 1,
@@ -574,7 +576,16 @@ function BibleFloatingPanel({
   const content = (
     <>
       {!showIntro && (
-        <Box justifyContent="End" style={{ paddingBottom: toRem(10) }}>
+        <Box
+          wrap="Wrap"
+          gap="200"
+          alignItems="Center"
+          justifyContent="SpaceBetween"
+          style={{ paddingBottom: toRem(10) }}
+        >
+          <Text size="L400" style={{ color: TEXT_MAIN }}>
+            <b>{title}</b>
+          </Text>
           <IconButton onClick={onClose} size="300" radii="300">
             <Icon src={Icons.Cross} />
           </IconButton>
@@ -1083,6 +1094,7 @@ export function BibleExperienceModal({
     );
     setPendingFocusVerseKey(verse.key);
     setFocusedVerseKey(verse.key);
+    setSearchDialogOpen(false);
     openChapter(verse.book, verse.chapter, page, false);
   };
 
@@ -1278,7 +1290,7 @@ export function BibleExperienceModal({
         ...TOOLBAR_SHELL_STYLE,
         padding: `${toRem(14)} ${toRem(16)}`,
       };
-  const fontSegmentStyle: CSSProperties = compactLayout
+  const fontSegmentStyle: CSSProperties = mobile
     ? {
         ...SEGMENT_STYLE,
         width: '100%',
@@ -1286,6 +1298,19 @@ export function BibleExperienceModal({
       }
     : {
         ...SEGMENT_STYLE,
+        width: 'auto',
+        flexShrink: 0,
+      };
+  const fontControlStyle: CSSProperties = mobile
+    ? {
+        display: 'grid',
+        gap: toRem(10),
+        width: '100%',
+      }
+    : {
+        display: 'inline-grid',
+        gap: toRem(10),
+        justifyItems: 'end',
         flexShrink: 0,
       };
   const mainModalCardStyle = nativeBibleWindow
@@ -1294,6 +1319,23 @@ export function BibleExperienceModal({
   const mainModalContentStyle = nativeBibleWindow
     ? NATIVE_MODAL_CONTENT_STYLE
     : MODAL_CONTENT_STYLE;
+  const mainPanelIntro = (
+    <Box direction="Column" gap="100" style={NOTICE_STYLE}>
+      <Box wrap="Wrap" gap="200" alignItems="Center" justifyContent="SpaceBetween">
+        <Text size="T300" style={{ color: TEXT_MAIN }}>
+          <b>阅读说明</b>
+        </Text>
+        <IconButton onClick={requestClose} size="300" radii="300">
+          <Icon src={Icons.Cross} />
+        </IconButton>
+      </Box>
+      <Text size="T300" priority="300" style={{ lineHeight: 1.8, color: TEXT_MAIN }}>
+        {headerHint}
+      </Text>
+    </Box>
+  );
+  const searchPanelWidth = mobile ? 'min(92vw, 920px)' : 'min(68vw, 780px)';
+  const browsePanelWidth = mobile ? 'min(92vw, 1080px)' : 'min(74vw, 920px)';
 
   const mainWindowContent = (
     <SequenceCard variant="SurfaceVariant" direction="Column" gap="0" style={mainModalCardStyle}>
@@ -1303,12 +1345,7 @@ export function BibleExperienceModal({
           gap="300"
           style={{ ...mainModalContentStyle, minHeight: toRem(320) }}
         >
-          <BiblePanelIntro
-            title={CN.title}
-            description={headerHint}
-            onClose={requestClose}
-            noteTitle="阅读说明"
-          />
+          {mainPanelIntro}
           <Box grow="Yes" alignItems="Center" justifyContent="Center">
             <Text size="L400">{CN.loading}</Text>
           </Box>
@@ -1321,12 +1358,7 @@ export function BibleExperienceModal({
           gap="300"
           style={{ ...mainModalContentStyle, minHeight: toRem(320) }}
         >
-          <BiblePanelIntro
-            title={CN.title}
-            description={headerHint}
-            onClose={requestClose}
-            noteTitle="阅读说明"
-          />
+          {mainPanelIntro}
           <Box grow="Yes" alignItems="Center" justifyContent="Center" direction="Column" gap="200">
             <Text size="L400">{CN.loadFailed}</Text>
             <Text size="T300">{error}</Text>
@@ -1337,12 +1369,7 @@ export function BibleExperienceModal({
       {!loading && !error && data && selectedBook && (
         <div style={{ ...mainModalContentStyle, flex: 1, minHeight: 0 }}>
           <Box direction="Column" gap="300" style={readerShellStyle}>
-            <BiblePanelIntro
-              title={CN.title}
-              description={headerHint}
-              onClose={requestClose}
-              noteTitle="阅读说明"
-            />
+            {mainPanelIntro}
             <SequenceCard
               variant="SurfaceVariant"
               direction="Column"
@@ -1384,6 +1411,7 @@ export function BibleExperienceModal({
                       </BiblePillButton>
                       <BiblePillButton
                         onClick={() => {
+                          setSearchDialogOpen(false);
                           setBrowseDialogOpen(true);
                           focusWindow('browse');
                         }}
@@ -1392,6 +1420,7 @@ export function BibleExperienceModal({
                       </BiblePillButton>
                       <BiblePillButton
                         onClick={() => {
+                          setBrowseDialogOpen(false);
                           setSearchDialogOpen(true);
                           focusWindow('search');
                         }}
@@ -1411,40 +1440,40 @@ export function BibleExperienceModal({
                           {CN.backToChapter}
                         </BiblePillButton>
                       )}
-                      <Text size="T300" priority="300">
-                        {CN.fontSizeLabel}
-                      </Text>
-                      <Box wrap="Wrap" gap="100" style={fontSegmentStyle}>
-                        <BiblePillButton
-                          onClick={() =>
-                            setFontSize((size) =>
-                              clamp(size - FONT_SIZE_STEP, FONT_SIZE_MIN, FONT_SIZE_MAX)
-                            )
-                          }
-                          disabled={fontSize <= FONT_SIZE_MIN}
-                        >
-                          {CN.fontSmaller}
-                        </BiblePillButton>
-                        <BiblePillButton active={fontSize === 17} onClick={() => setFontSize(17)}>
-                          {CN.fontReset}
-                        </BiblePillButton>
-                        <BiblePillButton
-                          onClick={() =>
-                            setFontSize((size) =>
-                              clamp(size + FONT_SIZE_STEP, FONT_SIZE_MIN, FONT_SIZE_MAX)
-                            )
-                          }
-                          disabled={fontSize >= FONT_SIZE_MAX}
-                        >
-                          {CN.fontLarger}
-                        </BiblePillButton>
-                      </Box>
+                      <div style={fontControlStyle}>
+                        <Text size="T300" priority="300">
+                          {CN.fontSizeLabel}
+                        </Text>
+                        <Box wrap="Wrap" gap="100" style={fontSegmentStyle}>
+                          <BiblePillButton
+                            onClick={() =>
+                              setFontSize((size) =>
+                                clamp(size - FONT_SIZE_STEP, FONT_SIZE_MIN, FONT_SIZE_MAX)
+                              )
+                            }
+                            disabled={fontSize <= FONT_SIZE_MIN}
+                          >
+                            {CN.fontSmaller}
+                          </BiblePillButton>
+                          <BiblePillButton active={fontSize === 17} onClick={() => setFontSize(17)}>
+                            {CN.fontReset}
+                          </BiblePillButton>
+                          <BiblePillButton
+                            onClick={() =>
+                              setFontSize((size) =>
+                                clamp(size + FONT_SIZE_STEP, FONT_SIZE_MIN, FONT_SIZE_MAX)
+                              )
+                            }
+                            disabled={fontSize >= FONT_SIZE_MAX}
+                          >
+                            {CN.fontLarger}
+                          </BiblePillButton>
+                        </Box>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
-
-              <Line size="300" variant="Surface" />
 
               <div ref={verseScrollRef} style={VERSE_SCROLL_STYLE}>
                 {pageVerses.length === 0 && (
@@ -1473,8 +1502,6 @@ export function BibleExperienceModal({
                   />
                 ))}
               </div>
-
-              <Line size="300" variant="Surface" />
 
               <Box
                 wrap="Wrap"
@@ -1581,6 +1608,7 @@ export function BibleExperienceModal({
           title={CN.searchTitle}
           description={CN.searchHelp}
           onClose={() => setSearchDialogOpen(false)}
+          width={searchPanelWidth}
           noteTitle="搜索说明"
           showIntro={false}
           desktopMode={!mobile}
@@ -1718,7 +1746,7 @@ export function BibleExperienceModal({
           title={CN.browseDialogTitle}
           description={CN.browseHelp}
           onClose={() => setBrowseDialogOpen(false)}
-          width="min(92vw, 1080px)"
+          width={browsePanelWidth}
           noteTitle="选择说明"
           showIntro={false}
           desktopMode={!mobile}
@@ -1788,7 +1816,7 @@ export function BibleExperienceModal({
                   <BiblePillButton
                     key={chapter}
                     active={chapter === selectedChapter}
-                    onClick={() => openChapter(selectedBook.name, chapter, 1, false)}
+                    onClick={() => openChapter(selectedBook.name, chapter, 1, true)}
                   >
                     {chapter}
                   </BiblePillButton>
