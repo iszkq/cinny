@@ -89,6 +89,34 @@ const SOFT_SCROLL_PANEL_STYLE: CSSProperties = {
   background: 'rgba(255, 255, 255, 0.74)',
   padding: toRem(14),
 };
+const CUSTOM_BOOK_SCOPE_PANEL_STYLE: CSSProperties = {
+  ...SOFT_SCROLL_PANEL_STYLE,
+  display: 'flex',
+  flexDirection: 'column',
+  gap: toRem(14),
+  maxHeight: toRem(420),
+  overflowY: 'auto',
+  overflowX: 'hidden',
+  paddingRight: toRem(10),
+};
+const CUSTOM_BOOK_GROUP_STYLE: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: toRem(8),
+  minWidth: 0,
+};
+const CUSTOM_BOOK_GRID_STYLE: CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(132px, 1fr))',
+  gap: toRem(8),
+  alignItems: 'start',
+  minWidth: 0,
+};
+const CUSTOM_BOOK_BUTTON_STYLE: CSSProperties = {
+  width: '100%',
+  justifyContent: 'center',
+  padding: `0 ${toRem(10)}`,
+};
 const CHROMELESS_MODAL_STYLE: CSSProperties = {
   maxWidth: 'calc(100vw - 24px)',
   maxHeight: 'calc(var(--app-height, 100dvh) - 24px)',
@@ -1551,32 +1579,33 @@ export function BibleExperienceModal({
       </Box>
 
       {scopeMode === 'custom' && (
-        <Box direction="Column" gap="200" style={SOFT_SCROLL_PANEL_STYLE}>
+        <div style={CUSTOM_BOOK_SCOPE_PANEL_STYLE}>
           <Text size="T300" priority="300">
             {CN.customBooks}
           </Text>
           {[oldBooks, newBooks].map((books, index) => (
-            <Box key={index === 0 ? CN.old : CN.new} direction="Column" gap="100">
+            <div key={index === 0 ? CN.old : CN.new} style={CUSTOM_BOOK_GROUP_STYLE}>
               <Text size="T300" priority="300">
                 {index === 0 ? CN.old : CN.new}
               </Text>
-              <Box wrap="Wrap" gap="100">
+              <div style={CUSTOM_BOOK_GRID_STYLE}>
                 {books.map((book) => {
                   const active = customScopeBooks.includes(book.name);
                   return (
                     <BiblePillButton
                       key={book.bookNumber}
                       active={active}
+                      style={CUSTOM_BOOK_BUTTON_STYLE}
                       onClick={() => toggleCustomBook(book.name)}
                     >
                       {book.name}
                     </BiblePillButton>
                   );
                 })}
-              </Box>
-            </Box>
+              </div>
+            </div>
           ))}
-        </Box>
+        </div>
       )}
     </>
   );
@@ -2030,32 +2059,33 @@ export function BibleExperienceModal({
             </Box>
 
             {scopeMode === 'custom' && (
-              <Box direction="Column" gap="200" style={SOFT_SCROLL_PANEL_STYLE}>
+              <div style={CUSTOM_BOOK_SCOPE_PANEL_STYLE}>
                 <Text size="T300" priority="300">
                   {CN.customBooks}
                 </Text>
                 {[oldBooks, newBooks].map((books, index) => (
-                  <Box key={index === 0 ? CN.old : CN.new} direction="Column" gap="100">
+                  <div key={index === 0 ? CN.old : CN.new} style={CUSTOM_BOOK_GROUP_STYLE}>
                     <Text size="T300" priority="300">
                       {index === 0 ? CN.old : CN.new}
                     </Text>
-                    <Box wrap="Wrap" gap="100">
+                    <div style={CUSTOM_BOOK_GRID_STYLE}>
                       {books.map((book) => {
                         const active = customScopeBooks.includes(book.name);
                         return (
                           <BiblePillButton
                             key={book.bookNumber}
                             active={active}
+                            style={CUSTOM_BOOK_BUTTON_STYLE}
                             onClick={() => toggleCustomBook(book.name)}
                           >
                             {book.name}
                           </BiblePillButton>
                         );
                       })}
-                    </Box>
-                  </Box>
+                    </div>
+                  </div>
                 ))}
-              </Box>
+              </div>
             )}
 
             <Box
