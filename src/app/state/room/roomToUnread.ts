@@ -19,14 +19,12 @@ import {
   StateEvent,
 } from '../../../types/matrix/room';
 import {
-  getRoomFullyReadEventId,
   getAllParents,
   getNotificationType,
-  getUnreadInfo,
+  getRoomUnreadStatus,
   getUnreadInfos,
   isNotificationEvent,
   roomHaveNotification,
-  roomHaveUnread,
 } from '../../utils/room';
 import { ROOM_MARKED_AS_READ } from '../../utils/notifications';
 import { roomToParentsAtom } from './roomToParents';
@@ -200,8 +198,7 @@ export const useBindRoomToUnreadAtom = (mx: MatrixClient, unreadAtom: typeof roo
         return;
       }
 
-      const hasUnread = roomHaveUnread(mx, room);
-      const unreadInfo = getUnreadInfo(mx, room);
+      const { hasUnread, unreadInfo } = getRoomUnreadStatus(mx, room);
 
       if ((roomHaveNotification(room) || hasUnread) && (unreadInfo.total > 0 || hasUnread)) {
         setUnreadAtom({ type: 'PUT', unreadInfo });
@@ -284,7 +281,7 @@ export const useBindRoomToUnreadAtom = (mx: MatrixClient, unreadAtom: typeof roo
   useEffect(() => {
     const handleRoomAccountData = (_mEvent: MatrixEvent, room: Room) => {
       if (_mEvent.getType() !== FULLY_READ_EVENT_TYPE) return;
-      if (room.isSpaceRoom() || !getRoomFullyReadEventId(room)) return;
+      if (room.isSpaceRoom()) return;
 
       syncRoomUnread(room);
     };
@@ -318,23 +315,61 @@ export const useBindRoomToUnreadAtom = (mx: MatrixClient, unreadAtom: typeof roo
   }, [mx, setUnreadAtom, syncRoomUnread]);
 
   useEffect(() => {
-    resetUnreadState();
-  }, [resetUnreadState, roomsNotificationPreferences]);
+    const roomListeners = new Map<string, () => void>();
 
-  useEffect(() => {
-    const handleMembershipChange = (room: Room, membership: string) => {
-      if (membership !== Membership.Join) {
-        setUnreadAtom({
-          type: 'DELETE',
-          roomId: room.roomId,
-        });
-      }
+    const unbindRoom = (roomId: string) => {
+      const dispose = roomListeners.get(roomId);
+      if (!dispose) return;
+      dispose();
+      roomListeners.delete(roomId);
     };
+
+    const bindRoom = (room: Room) => {
+      if (
+        room.isSpaceRoom() ||
+        room.getMyMembership() !== Membership.Join ||
+        roomListeners.has(room.roomId)
+      ) {
+        return;
+      }
+
+      const handleUnreadNotifications = () => {
+        syncRoomUnread(room);
+      };
+
+      room.on(RoomEvent.UnreadNotifications, handleUnreadNotifications);
+      roomListeners.set(room.roomId, () => {
+        room.removeListener(RoomEvent.UnreadNotifications, handleUnreadNotifications);
+      });
+    };
+
+    mx.getRooms().forEach(bindRoom);
+
+    const handleMembershipChange = (room: Room, membership: string) => {
+      if (membership === Membership.Join) {
+        bindRoom(room);
+        syncRoomUnread(room);
+        return;
+      }
+
+      unbindRoom(room.roomId);
+      setUnreadAtom({
+        type: 'DELETE',
+        roomId: room.roomId,
+      });
+    };
+
     mx.on(RoomEvent.MyMembership, handleMembershipChange);
     return () => {
       mx.removeListener(RoomEvent.MyMembership, handleMembershipChange);
+      roomListeners.forEach((dispose) => dispose());
+      roomListeners.clear();
     };
-  }, [mx, setUnreadAtom]);
+  }, [mx, setUnreadAtom, syncRoomUnread]);
+
+  useEffect(() => {
+    resetUnreadState();
+  }, [resetUnreadState, roomsNotificationPreferences]);
 
   useStateEventCallback(
     mx,

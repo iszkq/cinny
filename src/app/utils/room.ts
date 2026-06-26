@@ -53,6 +53,11 @@ type LiveTimelineUnreadState = {
   total: number;
 };
 
+export type RoomUnreadStatus = {
+  hasUnread: boolean;
+  unreadInfo: UnreadInfo;
+};
+
 type OptimisticRoomReadMarkersByUser = Record<string, Record<string, string>>;
 
 const readOptimisticRoomReadMarkers = (): OptimisticRoomReadMarkersByUser => {
@@ -171,24 +176,46 @@ export const clearOptimisticRoomReadMarker = (
   clearPersistedOptimisticRoomReadMarker(roomId, userId);
 };
 
-const getStoredRoomReadMarkerEventId = (
-  room: Room,
-  userId?: string | null
-): string | undefined => {
-  const fullyReadEventId = getRoomFullyReadEventId(room);
-  if (fullyReadEventId) return fullyReadEventId;
-  if (!userId) return undefined;
-  return room.getEventReadUpTo(userId) ?? undefined;
-};
-
 const getLiveTimelineEventIndex = (room: Room, eventId?: string): number => {
   if (!eventId) return -1;
   return room.getLiveTimeline().getEvents().findIndex((event) => event.getId() === eventId);
 };
 
-const getLiveTimelineUnreadState = (
+const getStoredRoomReceiptEventId = (
   room: Room,
   userId?: string | null
+): string | undefined => {
+  if (!userId) return undefined;
+  return room.getEventReadUpTo(userId) ?? undefined;
+};
+
+const getStoredRoomReadMarkerEventId = (
+  room: Room,
+  userId?: string | null
+): string | undefined => {
+  const fullyReadEventId = getRoomFullyReadEventId(room);
+  const receiptEventId = getStoredRoomReceiptEventId(room, userId);
+  if (!fullyReadEventId) return receiptEventId;
+  if (!receiptEventId) return fullyReadEventId;
+
+  const fullyReadIndex = getLiveTimelineEventIndex(room, fullyReadEventId);
+  const receiptIndex = getLiveTimelineEventIndex(room, receiptEventId);
+
+  if (fullyReadIndex !== -1 && receiptIndex !== -1) {
+    return receiptIndex > fullyReadIndex ? receiptEventId : fullyReadEventId;
+  }
+
+  if (fullyReadIndex === -1 && receiptIndex !== -1) {
+    return receiptEventId;
+  }
+
+  return fullyReadEventId;
+};
+
+const getLiveTimelineUnreadState = (
+  room: Room,
+  userId?: string | null,
+  readUpToId?: string
 ): LiveTimelineUnreadState => {
   if (!userId) {
     return {
@@ -200,12 +227,11 @@ const getLiveTimelineUnreadState = (
   const liveEvents = room.getLiveTimeline().getEvents();
   if (liveEvents.length === 0) {
     return {
-      reliable: true,
+      reliable: false,
       total: 0,
     };
   }
 
-  const { eventId: readUpToId } = getRoomReadMarkerState(room, userId);
   if (!readUpToId) {
     return {
       reliable: false,
@@ -236,8 +262,11 @@ const getLiveTimelineUnreadState = (
   };
 };
 
-const getRoomReadMarkerState = (room: Room, userId?: string | null): RoomReadMarkerState => {
-  const storedReadMarkerEventId = getStoredRoomReadMarkerEventId(room, userId);
+const getRoomEventReadState = (
+  room: Room,
+  userId: string | null | undefined,
+  storedReadEventId: string | undefined
+): RoomReadMarkerState => {
   const optimisticReadMarkerEventId =
     optimisticRoomReadMarkers.get(room.roomId) ??
     getPersistedOptimisticRoomReadMarker(room.roomId, userId);
@@ -248,15 +277,15 @@ const getRoomReadMarkerState = (room: Room, userId?: string | null): RoomReadMar
 
   if (!optimisticReadMarkerEventId) {
     return {
-      eventId: storedReadMarkerEventId,
+      eventId: storedReadEventId,
       optimistic: false,
     };
   }
 
-  if (storedReadMarkerEventId === optimisticReadMarkerEventId) {
+  if (storedReadEventId === optimisticReadMarkerEventId) {
     clearOptimisticRoomReadMarker(room.roomId, optimisticReadMarkerEventId, userId);
     return {
-      eventId: storedReadMarkerEventId,
+      eventId: storedReadEventId,
       optimistic: false,
     };
   }
@@ -265,16 +294,16 @@ const getRoomReadMarkerState = (room: Room, userId?: string | null): RoomReadMar
   if (optimisticIndex === -1) {
     clearOptimisticRoomReadMarker(room.roomId, optimisticReadMarkerEventId, userId);
     return {
-      eventId: storedReadMarkerEventId,
+      eventId: storedReadEventId,
       optimistic: false,
     };
   }
 
-  const storedIndex = getLiveTimelineEventIndex(room, storedReadMarkerEventId);
+  const storedIndex = getLiveTimelineEventIndex(room, storedReadEventId);
   if (storedIndex >= optimisticIndex) {
     clearOptimisticRoomReadMarker(room.roomId, optimisticReadMarkerEventId, userId);
     return {
-      eventId: storedReadMarkerEventId,
+      eventId: storedReadEventId,
       optimistic: false,
     };
   }
@@ -284,6 +313,12 @@ const getRoomReadMarkerState = (room: Room, userId?: string | null): RoomReadMar
     optimistic: true,
   };
 };
+
+const getRoomReadMarkerState = (room: Room, userId?: string | null): RoomReadMarkerState =>
+  getRoomEventReadState(room, userId, getStoredRoomReadMarkerEventId(room, userId));
+
+const getRoomReceiptState = (room: Room, userId?: string | null): RoomReadMarkerState =>
+  getRoomEventReadState(room, userId, getStoredRoomReceiptEventId(room, userId));
 
 export const getRoomReadMarkerEventId = (
   room: Room,
@@ -460,20 +495,20 @@ export const roomHaveNotification = (room: Room): boolean => {
   return total > 0 || highlight > 0;
 };
 
-export const roomHaveUnread = (mx: MatrixClient, room: Room) => {
-  const userId = mx.getUserId();
-  if (!userId) return false;
-  const liveTimelineUnread = getLiveTimelineUnreadState(room, userId);
-  if (liveTimelineUnread.reliable) {
-    return liveTimelineUnread.total > 0;
-  }
-
-  const readUpToId = getRoomReadMarkerEventId(room, userId);
+const roomHaveUnreadFromReadEvent = (
+  room: Room,
+  userId: string,
+  readUpToId?: string
+): boolean => {
   const liveEvents = room.getLiveTimeline().getEvents();
   const readUpToIndex = getLiveTimelineEventIndex(room, readUpToId);
 
   if (readUpToId && readUpToIndex === -1) {
     return roomHaveNotification(room);
+  }
+
+  if (!readUpToId && !roomHaveNotification(room)) {
+    return false;
   }
 
   for (let i = liveEvents.length - 1; i >= 0; i -= 1) {
@@ -486,35 +521,59 @@ export const roomHaveUnread = (mx: MatrixClient, room: Room) => {
   return false;
 };
 
-export const getUnreadInfo = (mx: MatrixClient, room: Room): UnreadInfo => {
+export const getRoomUnreadStatus = (mx: MatrixClient, room: Room): RoomUnreadStatus => {
   const total = room.getUnreadNotificationCount(NotificationCountType.Total);
   const highlight = room.getUnreadNotificationCount(NotificationCountType.Highlight);
-  const userId = mx.getUserId();
-  const readMarkerState = getRoomReadMarkerState(room, userId);
-  const liveTimelineUnread = getLiveTimelineUnreadState(room, userId);
-
-  if (liveTimelineUnread.reliable) {
-    return {
-      roomId: room.roomId,
-      highlight: Math.min(highlight, liveTimelineUnread.total),
-      total: liveTimelineUnread.total,
-    };
-  }
-
-  if (readMarkerState.optimistic && !roomHaveUnread(mx, room)) {
-    return {
-      roomId: room.roomId,
-      highlight: 0,
-      total: 0,
-    };
-  }
-
-  return {
+  const unreadInfo = {
     roomId: room.roomId,
     highlight,
     total: highlight > total ? highlight : total,
   };
+  const userId = mx.getUserId();
+  if (!userId) {
+    return {
+      hasUnread: false,
+      unreadInfo,
+    };
+  }
+
+  const receiptState = getRoomReceiptState(room, userId);
+  const liveTimelineUnread = getLiveTimelineUnreadState(room, userId, receiptState.eventId);
+
+  if (liveTimelineUnread.reliable) {
+    return {
+      hasUnread: liveTimelineUnread.total > 0,
+      unreadInfo: {
+        roomId: room.roomId,
+        highlight: Math.min(highlight, liveTimelineUnread.total),
+        total: liveTimelineUnread.total,
+      },
+    };
+  }
+
+  const hasUnread = roomHaveUnreadFromReadEvent(room, userId, receiptState.eventId);
+  if (receiptState.optimistic && !hasUnread) {
+    return {
+      hasUnread: false,
+      unreadInfo: {
+        roomId: room.roomId,
+        highlight: 0,
+        total: 0,
+      },
+    };
+  }
+
+  return {
+    hasUnread,
+    unreadInfo,
+  };
 };
+
+export const roomHaveUnread = (mx: MatrixClient, room: Room) =>
+  getRoomUnreadStatus(mx, room).hasUnread;
+
+export const getUnreadInfo = (mx: MatrixClient, room: Room): UnreadInfo =>
+  getRoomUnreadStatus(mx, room).unreadInfo;
 
 export const getUnreadInfos = (mx: MatrixClient): UnreadInfo[] => {
   const unreadInfos = mx.getRooms().reduce<UnreadInfo[]>((unread, room) => {
@@ -522,8 +581,7 @@ export const getUnreadInfos = (mx: MatrixClient): UnreadInfo[] => {
     if (room.getMyMembership() !== 'join') return unread;
     if (getNotificationType(mx, room.roomId) === NotificationType.Mute) return unread;
 
-    const hasUnread = roomHaveUnread(mx, room);
-    const unreadInfo = getUnreadInfo(mx, room);
+    const { hasUnread, unreadInfo } = getRoomUnreadStatus(mx, room);
 
     if (roomHaveNotification(room) || hasUnread) {
       if (unreadInfo.total > 0 || hasUnread) {
