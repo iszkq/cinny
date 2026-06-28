@@ -59,7 +59,6 @@ import {
   syncAccountPinPolicy,
 } from '../../utils/pinLock';
 import { blobToDataUrl, dataUrlToFile, isDataUrl } from '../../utils/dataUrl';
-import { warmBibleResources } from '../../utils/biblePreload';
 import { openExternalUrl, shouldOpenHrefExternally } from '../../utils/desktop';
 import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
 import { useDesktopUpdater } from '../../hooks/useDesktopUpdater';
@@ -74,6 +73,7 @@ const APPEARANCE_BACKGROUND_FILE_NAME = 'cinny-chat-background.webp';
 const UNREAD_BADGE_COLOR = '#989898';
 const HIGHLIGHT_BADGE_COLOR = '#45B83B';
 const TASKBAR_BADGE_ICON_SIZE = 64;
+const IMAGE_PACK_MEDIA_WARM_START_DELAY_MS = 15000;
 
 const taskbarBadgeIconCache = new Map<string, Uint8Array>();
 let activeTaskbarBadgeColor: string | undefined;
@@ -806,23 +806,18 @@ function ImagePackMediaWarmFeature() {
   );
 }
 
-function BibleResourceWarmFeature() {
-  useEffect(() => {
-    let cancelled = false;
-    const warm = () => {
-      if (cancelled) return;
-      void warmBibleResources().catch(() => undefined);
-    };
+function DelayedImagePackMediaWarmFeature() {
+  const [ready, setReady] = useState(false);
 
-    const timerId = window.setTimeout(warm, 1800);
+  useEffect(() => {
+    const timerId = window.setTimeout(() => setReady(true), IMAGE_PACK_MEDIA_WARM_START_DELAY_MS);
 
     return () => {
-      cancelled = true;
       window.clearTimeout(timerId);
     };
   }, []);
 
-  return null;
+  return ready ? <ImagePackMediaWarmFeature /> : null;
 }
 
 function FaviconUpdater() {
@@ -1082,8 +1077,7 @@ export function ClientNonUIFeatures({ children }: ClientNonUIFeaturesProps) {
       <PersonalPackSyncFeature />
       <AppearanceSettingsAccountDataFeature />
       <AISettingsAccountDataFeature />
-      <ImagePackMediaWarmFeature />
-      <BibleResourceWarmFeature />
+      <DelayedImagePackMediaWarmFeature />
       <FaviconUpdater />
       <DesktopTaskbarUnreadBadgeFeature />
       <InviteNotifications />
