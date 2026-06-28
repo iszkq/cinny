@@ -152,10 +152,15 @@ type FastMatrixClient = ReturnType<typeof useMatrixClient> & {
   sendEventHttpRequest?: (event: MatrixEvent) => Promise<{ event_id?: string }>;
 };
 
+type SendRoomMessageWithoutQueueOptions = {
+  encrypt?: boolean;
+};
+
 const sendRoomMessageWithoutQueue = (
   mx: ReturnType<typeof useMatrixClient>,
   room: Room,
-  content: IContent
+  content: IContent,
+  options: SendRoomMessageWithoutQueueOptions = {}
 ): Promise<unknown> => {
   const fastMx = mx as FastMatrixClient;
   if (
@@ -187,9 +192,11 @@ const sendRoomMessageWithoutQueue = (
 
   return (async () => {
     try {
-      await fastMx.encryptEventIfNeeded?.(localEvent, room);
-      if (localEvent.status === EventStatus.ENCRYPTING) {
-        room.updatePendingEvent(localEvent, EventStatus.SENDING);
+      if (options.encrypt !== false) {
+        await fastMx.encryptEventIfNeeded?.(localEvent, room);
+        if (localEvent.status === EventStatus.ENCRYPTING) {
+          room.updatePendingEvent(localEvent, EventStatus.SENDING);
+        }
       }
 
       const response = await fastMx.sendEventHttpRequest?.(localEvent);
@@ -212,6 +219,15 @@ const cloneEditorDraft = (draft: Descendant[]): Descendant[] =>
   JSON.parse(JSON.stringify(draft)) as Descendant[];
 
 const EMOJI_BOARD_REOPEN_SUPPRESS_MS = 400;
+const REMOTE_STICKER_FAST_SEND_ORIGIN = 'https://image.527012.xyz';
+
+const shouldSendRemoteStickerWithoutEncryption = (url: string): boolean => {
+  try {
+    return new URL(url).origin === REMOTE_STICKER_FAST_SEND_ORIGIN;
+  } catch {
+    return false;
+  }
+};
 
 const restoreEditorDraft = (editor: Editor, draft: Descendant[]) => {
   if (draft.length === 0) return;
@@ -967,6 +983,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       setSendStatus('正在发送贴纸...');
       closeEmojiBoard();
       try {
+        const fastRemoteSticker = remoteSticker && shouldSendRemoteStickerWithoutEncryption(mxc);
         const content = withReplyMetadata(
           matrixSticker
             ? {
@@ -986,7 +1003,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
 
         const sendPromise = matrixSticker
           ? mx.sendEvent(roomId, EventType.Sticker, content)
-          : sendRoomMessageWithoutQueue(mx, room, content);
+          : sendRoomMessageWithoutQueue(mx, room, content, { encrypt: !fastRemoteSticker });
         if (replyDraft) {
           setReplyDraft(undefined);
           sendTypingStatus(false);
