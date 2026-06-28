@@ -1,9 +1,4 @@
-import {
-  createClient,
-  MatrixClient,
-  IndexedDBStore,
-  IndexedDBCryptoStore,
-} from 'matrix-js-sdk';
+import { createClient, MatrixClient, IndexedDBStore, IndexedDBCryptoStore } from 'matrix-js-sdk';
 
 import { cryptoCallbacks } from './secretStorageKeys';
 import { clearNavToActivePathStore } from '../app/state/navToActivePath';
@@ -43,14 +38,16 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
   await indexedDBStore.startup();
   await mx.initRustCrypto();
 
-  mx.setMaxListeners(50);
+  mx.setMaxListeners(200);
 
   return mx;
 };
 
 export const startClient = async (mx: MatrixClient) => {
   await mx.startClient({
+    initialSyncLimit: 1,
     lazyLoadMembers: true,
+    disablePresence: true,
   });
 };
 

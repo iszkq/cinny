@@ -31,6 +31,10 @@ const copyFiles = {
       dest: '',
     },
     {
+      src: 'public/_headers',
+      dest: '',
+    },
+    {
       src: 'public/manifest.json',
       dest: '',
     },
