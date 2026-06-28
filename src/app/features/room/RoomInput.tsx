@@ -9,7 +9,15 @@ import React, {
 } from 'react';
 import { useAtom, useAtomValue } from 'jotai';
 import { isKeyHotkey } from 'is-hotkey';
-import { EventType, IContent, MsgType, RelationType, Room } from 'matrix-js-sdk';
+import {
+  EventStatus,
+  EventType,
+  IContent,
+  MatrixEvent,
+  MsgType,
+  RelationType,
+  Room,
+} from 'matrix-js-sdk';
 import { ReactEditor } from 'slate-react';
 import { Descendant, Editor, Transforms } from 'slate';
 import {
@@ -138,6 +146,67 @@ interface RoomInputProps {
   roomId: string;
   room: Room;
 }
+
+type FastMatrixClient = ReturnType<typeof useMatrixClient> & {
+  encryptEventIfNeeded?: (event: MatrixEvent, room?: Room) => Promise<void>;
+  sendEventHttpRequest?: (event: MatrixEvent) => Promise<{ event_id?: string }>;
+};
+
+const sendRoomMessageWithoutQueue = (
+  mx: ReturnType<typeof useMatrixClient>,
+  room: Room,
+  content: IContent
+): Promise<unknown> => {
+  const fastMx = mx as FastMatrixClient;
+  if (
+    typeof fastMx.encryptEventIfNeeded !== 'function' ||
+    typeof fastMx.sendEventHttpRequest !== 'function'
+  ) {
+    return mx.sendMessage(room.roomId, content as never);
+  }
+
+  const txnId = mx.makeTxnId();
+  const userId = mx.getUserId() ?? undefined;
+  const localEvent = new MatrixEvent({
+    type: EventType.RoomMessage,
+    content,
+    event_id: `~${room.roomId}:${txnId}`,
+    user_id: userId,
+    sender: userId,
+    room_id: room.roomId,
+    origin_server_ts: Date.now(),
+  });
+
+  localEvent.setTxnId(txnId);
+  localEvent.setStatus(EventStatus.SENDING);
+  room.addPendingEvent(localEvent, txnId);
+
+  if (localEvent.status === EventStatus.NOT_SENT) {
+    return Promise.reject(new Error('Event blocked by other events not yet sent'));
+  }
+
+  return (async () => {
+    try {
+      await fastMx.encryptEventIfNeeded?.(localEvent, room);
+      if (localEvent.status === EventStatus.ENCRYPTING) {
+        room.updatePendingEvent(localEvent, EventStatus.SENDING);
+      }
+
+      const response = await fastMx.sendEventHttpRequest?.(localEvent);
+      const eventId = response?.event_id;
+      if (!eventId) {
+        throw new Error('Missing event id after sending message');
+      }
+
+      room.updatePendingEvent(localEvent, EventStatus.SENT, eventId);
+      return response;
+    } catch (error) {
+      (localEvent as MatrixEvent & { error?: unknown }).error = error;
+      room.updatePendingEvent(localEvent, EventStatus.NOT_SENT);
+      throw error;
+    }
+  })();
+};
 
 const cloneEditorDraft = (draft: Descendant[]): Descendant[] =>
   JSON.parse(JSON.stringify(draft)) as Descendant[];
@@ -917,7 +986,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
 
         const sendPromise = matrixSticker
           ? mx.sendEvent(roomId, EventType.Sticker, content)
-          : mx.sendMessage(roomId, content as never);
+          : sendRoomMessageWithoutQueue(mx, room, content);
         if (replyDraft) {
           setReplyDraft(undefined);
           sendTypingStatus(false);
