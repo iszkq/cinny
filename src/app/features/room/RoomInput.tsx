@@ -60,7 +60,13 @@ import {
 } from '../../components/editor';
 import { EmojiBoard, EmojiBoardTab } from '../../components/emoji-board';
 import { getAudioFileUrl, loadAudioElement, SelectFileOptions } from '../../utils/dom';
-import { getAudioInfo, TUploadContent, encryptFile, getMxIdLocalPart } from '../../utils/matrix';
+import {
+  getAudioInfo,
+  TUploadContent,
+  encryptFile,
+  getMxIdLocalPart,
+  isHttpUrl,
+} from '../../utils/matrix';
 import { useTypingStatusUpdater } from '../../hooks/useTypingStatusUpdater';
 import { useFilePicker } from '../../hooks/useFilePicker';
 import { useFilePasteHandler } from '../../hooks/useFilePasteHandler';
@@ -124,6 +130,59 @@ import {
 } from '../../utils/polls';
 import { ScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
 import { IImageInfo } from '../../../types/matrix/common';
+
+const REMOTE_STICKER_MIME_EXTENSION: Record<string, string> = {
+  'image/gif': 'gif',
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/webp': 'webp',
+  'image/apng': 'png',
+  'image/avif': 'avif',
+};
+
+const getRemoteStickerFileName = (label: string, mimeType: string): string => {
+  const safeLabel = label.replace(/[\\/:*?"<>|]/g, '_').trim() || 'sticker';
+  const extension = REMOTE_STICKER_MIME_EXTENSION[mimeType.toLowerCase()] ?? 'gif';
+  return `${safeLabel}.${extension}`;
+};
+
+const uploadRemoteSticker = async (
+  mx: ReturnType<typeof useMatrixClient>,
+  url: string,
+  label: string,
+  info?: IImageInfo
+): Promise<{ mxc: string; info: IImageInfo }> => {
+  const response = await fetch(url, { cache: 'force-cache' });
+  if (!response.ok) {
+    throw new Error(`Failed to download sticker: ${response.status}`);
+  }
+
+  const blob = await response.blob();
+  const mimeType =
+    response.headers.get('Content-Type')?.split(';')[0].trim() ||
+    blob.type ||
+    info?.mimetype ||
+    'image/gif';
+  const file = new File([blob], getRemoteStickerFileName(label, mimeType), { type: mimeType });
+  const upload = await mx.uploadContent(file, {
+    name: file.name,
+    type: file.type,
+    includeFilename: true,
+  });
+  const mxc = upload.content_uri;
+  if (!mxc) {
+    throw new Error('Failed to upload sticker.');
+  }
+
+  return {
+    mxc,
+    info: {
+      ...info,
+      mimetype: mimeType,
+      size: blob.size,
+    },
+  };
+};
 
 interface RoomInputProps {
   editor: Editor;
@@ -838,11 +897,19 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const handleStickerSelect = async (mxc: string, label: string, info?: IImageInfo) => {
       setSendError(undefined);
       try {
+        let stickerMxc = mxc;
+        let stickerInfo = info;
+        if (isHttpUrl(mxc)) {
+          const uploadedSticker = await uploadRemoteSticker(mx, mxc, label, info);
+          stickerMxc = uploadedSticker.mxc;
+          stickerInfo = uploadedSticker.info;
+        }
+
         const content = withReplyMetadata(
           {
             body: label,
-            url: mxc,
-            ...(info ? { info } : {}),
+            url: stickerMxc,
+            ...(stickerInfo ? { info: stickerInfo } : {}),
           },
           replyDraft,
           mx.getUserId()

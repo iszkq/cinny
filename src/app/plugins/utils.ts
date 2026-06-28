@@ -5,10 +5,16 @@ import { IEmoji } from './emoji';
 export const getEmoticonSearchStr: SearchItemStrGetter<PackImageReader | IEmoji> = (item) => {
   const shortcode = `:${item.shortcode}:`;
   if (item instanceof PackImageReader) {
+    const content = item.content as { 'in.cinny.remote_sticker_keywords'?: string[] };
+    const remoteKeywords = content['in.cinny.remote_sticker_keywords'];
+    const names = [shortcode];
     if (item.body) {
-      return [shortcode, item.body];
+      names.push(item.body);
     }
-    return shortcode;
+    if (Array.isArray(remoteKeywords)) {
+      return names.concat(remoteKeywords);
+    }
+    return names;
   }
 
   const names = [shortcode, item.label];

@@ -46,10 +46,7 @@ import {
   warmDesktopMediaAssetCache,
 } from '../../utils/desktopMediaAssetCache';
 import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
-import {
-  primeCachedMediaObjectUrl,
-  primePersistentMediaUrl,
-} from '../../utils/mediaUrlCache';
+import { primeCachedMediaObjectUrl, primePersistentMediaUrl } from '../../utils/mediaUrlCache';
 import {
   SearchInput,
   EmojiBoardTabs,
@@ -73,6 +70,11 @@ import * as css from './components/styles.css';
 import { EmojiBoardTab, EmojiType } from './types';
 import { VirtualTile } from '../virtualizer';
 import { getEmojiBoardMediaCandidates, getEmojiBoardMediaUrls } from './components/media';
+import {
+  getRemoteStickerPackId,
+  getRemoteStickerPackName,
+  useRemoteStickerIndex,
+} from './useRemoteStickerIndex';
 
 const RECENT_GROUP_ID = 'recent_group';
 const SEARCH_GROUP_ID = 'search_group';
@@ -106,7 +108,8 @@ type PersonalPackDropTarget = {
 
 const useGroups = (
   tab: EmojiBoardTab,
-  imagePacks: ImagePack[]
+  imagePacks: ImagePack[],
+  remoteStickerImages: PackImageReader[]
 ): [EmojiGroupItem[], StickerGroupItem[]] => {
   const mx = useMatrixClient();
 
@@ -160,8 +163,26 @@ const useGroups = (
       });
     });
 
+    const remoteGroups = new Map<string, StickerGroupItem>();
+    remoteStickerImages.forEach((image) => {
+      const packId = getRemoteStickerPackId(image) ?? 'remote';
+      const packName = getRemoteStickerPackName(image) ?? 'Remote';
+      const groupId = `remote:${packId}`;
+      const group = remoteGroups.get(groupId);
+      if (group) {
+        group.items.push(image);
+        return;
+      }
+      remoteGroups.set(groupId, {
+        id: groupId,
+        name: packName,
+        items: [image],
+      });
+    });
+    g.push(...remoteGroups.values());
+
     return g;
-  }, [mx, imagePacks, tab]);
+  }, [mx, imagePacks, remoteStickerImages, tab]);
 
   return [emojiGroupItems, stickerGroupItems];
 };
@@ -251,9 +272,7 @@ function PersonalPackSidebarItem({
       data-dragging={dragging || undefined}
       data-drop-above={dropAbove || undefined}
       data-drop-below={dropBelow || undefined}
-      onDragStart={
-        reorderEnabled && onDragStart ? (evt) => onDragStart(pack.id, evt) : undefined
-      }
+      onDragStart={reorderEnabled && onDragStart ? (evt) => onDragStart(pack.id, evt) : undefined}
       onDragOver={reorderEnabled && onDragOver ? (evt) => onDragOver(pack.id, evt) : undefined}
       onDrop={reorderEnabled && onDrop ? (evt) => onDrop(pack.id, evt) : undefined}
       onDragEnd={reorderEnabled ? onDragEnd : undefined}
@@ -586,16 +605,18 @@ export function EmojiBoard({
   const imagePacks = imagePackMode === 'personal' ? personalImagePacks : contextualImagePacks;
   const [draggingPackId, setDraggingPackId] = useState<string>();
   const [packDropTarget, setPackDropTarget] = useState<PersonalPackDropTarget>();
-  const [emojiGroupItems, stickerGroupItems] = useGroups(tab, imagePacks);
+  const remoteStickerImages = useRemoteStickerIndex(tab === EmojiBoardTab.Sticker);
+  const [emojiGroupItems, stickerGroupItems] = useGroups(tab, imagePacks, remoteStickerImages);
   const groups = emojiTab ? emojiGroupItems : stickerGroupItems;
   const renderItem = useItemRenderer(tab);
 
   const searchList = useMemo(() => {
     let list: Array<PackImageReader | IEmoji> = [];
     list = list.concat(imagePacks.flatMap((pack) => pack.getImages(usage)));
+    if (!emojiTab) list = list.concat(remoteStickerImages);
     if (emojiTab) list = list.concat(emojis);
     return list;
-  }, [emojiTab, usage, imagePacks]);
+  }, [emojiTab, usage, imagePacks, remoteStickerImages]);
 
   const [result, search, resetSearch] = useAsyncSearch(
     searchList,
@@ -795,9 +816,7 @@ export function EmojiBoard({
       const position: PackDropPosition = evt.clientY < top + height / 2 ? 'before' : 'after';
 
       setPackDropTarget((current) =>
-        current?.packId === packId && current.position === position
-          ? current
-          : { packId, position }
+        current?.packId === packId && current.position === position ? current : { packId, position }
       );
     },
     [draggingPackId]
