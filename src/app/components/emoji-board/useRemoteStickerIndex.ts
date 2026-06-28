@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react';
 import { IImageInfo } from '../../../types/matrix/common';
 import { ImageUsage, PackImage, PackImageReader } from '../../plugins/custom-emoji';
+import { isHttpUrl, isMxcUrl } from '../../utils/matrix';
 
 export const REMOTE_STICKER_INDEX_URL = 'https://image.527012.xyz/index.json';
 
 export const REMOTE_STICKER_KEYWORDS = 'in.cinny.remote_sticker_keywords';
 export const REMOTE_STICKER_PACK_ID = 'in.cinny.remote_sticker_pack_id';
 export const REMOTE_STICKER_PACK_NAME = 'in.cinny.remote_sticker_pack_name';
+export const REMOTE_STICKER_PREVIEW_URL = 'in.cinny.remote_sticker_preview_url';
+export const REMOTE_STICKER_THUMB_URL = 'in.cinny.remote_sticker_thumb_url';
 
 type RemoteStickerIndexItem = {
   id?: string;
@@ -16,7 +19,18 @@ type RemoteStickerIndexItem = {
   fileName?: string;
   keywords?: string[];
   url?: string;
+  httpUrl?: string;
+  sourceUrl?: string;
+  previewUrl?: string;
+  thumbUrl?: string;
+  thumbnailUrl?: string;
+  mxc?: string;
+  mxcUrl?: string;
+  matrixUrl?: string;
   mimeType?: string;
+  size?: number;
+  width?: number;
+  height?: number;
 };
 
 type RemoteStickerIndex = {
@@ -27,6 +41,8 @@ type RemoteStickerPackImage = PackImage & {
   [REMOTE_STICKER_KEYWORDS]?: string[];
   [REMOTE_STICKER_PACK_ID]?: string;
   [REMOTE_STICKER_PACK_NAME]?: string;
+  [REMOTE_STICKER_PREVIEW_URL]?: string;
+  [REMOTE_STICKER_THUMB_URL]?: string;
 };
 
 let cachedRemoteStickers: PackImageReader[] | undefined;
@@ -42,26 +58,49 @@ const getDisplayName = (item: RemoteStickerIndexItem): string | undefined => {
   return fileName.replace(/\.[^.]+$/, '').replace(/[_-]\d+$/, '');
 };
 
-const toRemoteSticker = (
-  item: RemoteStickerIndexItem,
-  index: number
-): PackImageReader | undefined => {
+const getFirstValidUrl = (
+  values: Array<string | undefined>,
+  validator: (url: string | undefined | null) => url is string
+): string | undefined => {
+  for (const value of values) {
+    const trimmed = value?.trim();
+    if (validator(trimmed)) {
+      return trimmed;
+    }
+  }
+  return undefined;
+};
+
+const toRemoteSticker = (item: RemoteStickerIndexItem): PackImageReader | undefined => {
   const displayName = getDisplayName(item);
-  if (!item.url || !displayName) {
+  const mxcUrl = getFirstValidUrl([item.mxc, item.mxcUrl, item.matrixUrl, item.url], isMxcUrl);
+  const previewUrl = getFirstValidUrl(
+    [item.previewUrl, item.httpUrl, item.sourceUrl, item.url, item.thumbUrl, item.thumbnailUrl],
+    isHttpUrl
+  );
+  const sendUrl = mxcUrl ?? previewUrl;
+
+  if (!sendUrl || !displayName) {
     return undefined;
   }
 
   const packId = item.packId || 'remote';
   const packName = item.packName || packId;
   const shortcode = displayName;
+  const thumbUrl = getFirstValidUrl([item.thumbUrl, item.thumbnailUrl], isHttpUrl);
   const info: IImageInfo = {
     mimetype: item.mimeType || 'image/gif',
+    size: item.size,
+    w: item.width,
+    h: item.height,
   };
   const image: RemoteStickerPackImage = {
-    url: item.url,
+    url: sendUrl,
     body: displayName,
     usage: [ImageUsage.Emoticon, ImageUsage.Sticker],
     info,
+    ...(previewUrl && previewUrl !== sendUrl ? { [REMOTE_STICKER_PREVIEW_URL]: previewUrl } : {}),
+    ...(thumbUrl ? { [REMOTE_STICKER_THUMB_URL]: thumbUrl } : {}),
     [REMOTE_STICKER_KEYWORDS]: Array.from(
       new Set(
         [displayName, item.fileName?.replace(/\.[^.]+$/, ''), ...(item.keywords ?? [])].filter(
@@ -123,6 +162,11 @@ export const getRemoteStickerPackName = (image: PackImageReader): string | undef
 export const getRemoteStickerKeywords = (image: PackImageReader): string[] | undefined => {
   const content = image.content as RemoteStickerPackImage;
   return content[REMOTE_STICKER_KEYWORDS];
+};
+
+export const getRemoteStickerPreviewUrl = (image: PackImageReader): string | undefined => {
+  const content = image.content as RemoteStickerPackImage;
+  return content[REMOTE_STICKER_PREVIEW_URL] ?? content[REMOTE_STICKER_THUMB_URL];
 };
 
 export const useRemoteStickerIndex = (enabled: boolean): PackImageReader[] => {

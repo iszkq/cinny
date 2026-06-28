@@ -523,7 +523,7 @@ function EmojiGroupHolder({
       if (!emojiInfo) return;
 
       setPreviewData({
-        key: emojiInfo.data,
+        key: emojiInfo.previewUrl ?? emojiInfo.data,
         shortcode: emojiInfo.shortcode,
         info: emojiInfo.info,
         preferOriginal: emojiInfo.type === EmojiType.Sticker,

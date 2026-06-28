@@ -66,6 +66,7 @@ import {
   encryptFile,
   getMxIdLocalPart,
   isHttpUrl,
+  isMxcUrl,
 } from '../../utils/matrix';
 import { useTypingStatusUpdater } from '../../hooks/useTypingStatusUpdater';
 import { useFilePicker } from '../../hooks/useFilePicker';
@@ -130,127 +131,6 @@ import {
 } from '../../utils/polls';
 import { ScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
 import { IImageInfo } from '../../../types/matrix/common';
-
-const REMOTE_STICKER_DOWNLOAD_TIMEOUT_MS = 15000;
-const REMOTE_STICKER_UPLOAD_TIMEOUT_MS = 45000;
-const REMOTE_STICKER_MIME_EXTENSION: Record<string, string> = {
-  'image/gif': 'gif',
-  'image/png': 'png',
-  'image/jpeg': 'jpg',
-  'image/webp': 'webp',
-  'image/apng': 'png',
-  'image/avif': 'avif',
-};
-
-const remoteStickerUploadCache = new Map<string, Promise<{ mxc: string; info: IImageInfo }>>();
-
-const isAbortError = (error: unknown): boolean =>
-  error instanceof DOMException
-    ? error.name === 'AbortError'
-    : error instanceof Error && error.name === 'AbortError';
-
-const getRemoteStickerFileName = (label: string, mimeType: string): string => {
-  const safeLabel = label.replace(/[\\/:*?"<>|]/g, '_').trim() || 'sticker';
-  const extension = REMOTE_STICKER_MIME_EXTENSION[mimeType.toLowerCase()] ?? 'gif';
-  return `${safeLabel}.${extension}`;
-};
-
-const fetchRemoteStickerBlob = async (
-  url: string,
-  info?: IImageInfo
-): Promise<{ blob: Blob; mimeType: string }> => {
-  const abortController = new AbortController();
-  const timeoutId = window.setTimeout(() => {
-    abortController.abort();
-  }, REMOTE_STICKER_DOWNLOAD_TIMEOUT_MS);
-
-  try {
-    const response = await fetch(url, {
-      cache: 'force-cache',
-      signal: abortController.signal,
-    });
-    if (!response.ok) {
-      throw new Error(`远程图片下载失败：${response.status}`);
-    }
-
-    const blob = await response.blob();
-    const mimeType =
-      response.headers.get('Content-Type')?.split(';')[0].trim() ||
-      blob.type ||
-      info?.mimetype ||
-      'image/gif';
-
-    return { blob, mimeType };
-  } catch (error) {
-    if (isAbortError(error)) {
-      throw new Error('远程图片下载超时，请稍后重试。');
-    }
-
-    if (error instanceof TypeError) {
-      throw new Error('浏览器无法读取远程图片，请给 CF/R2 图片文件开启 CORS 后重试。');
-    }
-
-    throw error;
-  } finally {
-    window.clearTimeout(timeoutId);
-  }
-};
-
-const uploadRemoteSticker = async (
-  mx: ReturnType<typeof useMatrixClient>,
-  url: string,
-  label: string,
-  info?: IImageInfo
-): Promise<{ mxc: string; info: IImageInfo }> => {
-  const cachedUpload = remoteStickerUploadCache.get(url);
-  if (cachedUpload) {
-    return cachedUpload;
-  }
-
-  const uploadPromise = (async () => {
-    const { blob, mimeType } = await fetchRemoteStickerBlob(url, info);
-    const file = new File([blob], getRemoteStickerFileName(label, mimeType), { type: mimeType });
-    const abortController = new AbortController();
-    const timeoutId = window.setTimeout(() => {
-      abortController.abort();
-    }, REMOTE_STICKER_UPLOAD_TIMEOUT_MS);
-
-    try {
-      const upload = await mx.uploadContent(file, {
-        name: file.name,
-        type: file.type,
-        includeFilename: true,
-        abortController,
-      });
-      const mxc = upload.content_uri;
-      if (!mxc) {
-        throw new Error('贴纸上传失败。');
-      }
-
-      return {
-        mxc,
-        info: {
-          ...info,
-          mimetype: mimeType,
-          size: blob.size,
-        },
-      };
-    } catch (error) {
-      if (isAbortError(error)) {
-        throw new Error('贴纸上传到聊天服务器超时，请稍后重试。');
-      }
-      throw error;
-    } finally {
-      window.clearTimeout(timeoutId);
-    }
-  })().catch((error) => {
-    remoteStickerUploadCache.delete(url);
-    throw error;
-  });
-
-  remoteStickerUploadCache.set(url, uploadPromise);
-  return uploadPromise;
-};
 
 interface RoomInputProps {
   editor: Editor;
@@ -354,7 +234,7 @@ const getStickerSendErrorMessage = (error: unknown, remoteSticker: boolean): str
 
   if (detail && /abort|aborted|operation was aborted/i.test(detail)) {
     return remoteSticker
-      ? '远程贴纸发送被中止，请确认图片能上传到聊天服务器后重试。'
+      ? '远程贴纸发送被中止，请检查 CF 图片链接，或在表情索引里补充 mxc 地址。'
       : '贴纸发送被中止，请重试。';
   }
 
@@ -363,7 +243,7 @@ const getStickerSendErrorMessage = (error: unknown, remoteSticker: boolean): str
   }
 
   if (remoteSticker) {
-    return '远程贴纸发送失败，请检查聊天服务器连接后重试。';
+    return '远程贴纸发送失败，请检查 CF 图片链接，或在表情索引里补充 mxc 地址。';
   }
 
   return '贴纸发送失败，请重试。';
@@ -1000,36 +880,44 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
 
     const handleStickerSelect = async (mxc: string, label: string, info?: IImageInfo) => {
       const remoteSticker = isHttpUrl(mxc);
+      const matrixSticker = isMxcUrl(mxc);
       if (stickerSendingRef.current) {
-        setSendStatus(remoteSticker ? '贴纸正在加载并上传，请稍候...' : '贴纸正在发送，请稍候...');
+        setSendStatus('贴纸正在发送，请稍候...');
+        closeEmojiBoard();
+        return;
+      }
+
+      if (!remoteSticker && !matrixSticker) {
+        setSendError('贴纸地址无效，请检查远程表情索引。');
         closeEmojiBoard();
         return;
       }
 
       stickerSendingRef.current = true;
       setSendError(undefined);
-      setSendStatus(remoteSticker ? '正在加载并上传贴纸...' : '正在发送贴纸...');
+      setSendStatus('正在发送贴纸...');
       closeEmojiBoard();
       try {
-        let stickerMxc = mxc;
-        let stickerInfo = info;
-        if (remoteSticker) {
-          const uploadedSticker = await uploadRemoteSticker(mx, mxc, label, info);
-          stickerMxc = uploadedSticker.mxc;
-          stickerInfo = uploadedSticker.info;
-        }
-
         const content = withReplyMetadata(
-          {
-            body: label,
-            url: stickerMxc,
-            ...(stickerInfo ? { info: stickerInfo } : {}),
-          },
+          matrixSticker
+            ? {
+                body: label,
+                url: mxc,
+                ...(info ? { info } : {}),
+              }
+            : {
+                msgtype: MsgType.Image,
+                body: label,
+                url: mxc,
+                ...(info ? { info } : {}),
+              },
           replyDraft,
           mx.getUserId()
         );
 
-        const sendPromise = mx.sendEvent(roomId, EventType.Sticker, content);
+        const sendPromise = matrixSticker
+          ? mx.sendEvent(roomId, EventType.Sticker, content)
+          : mx.sendMessage(roomId, content as never);
         if (replyDraft) {
           setReplyDraft(undefined);
           sendTypingStatus(false);

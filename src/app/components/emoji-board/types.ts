@@ -16,5 +16,6 @@ export type EmojiItemInfo = {
   data: string;
   shortcode: string;
   label: string;
+  previewUrl?: string;
   info?: IImageInfo;
 };

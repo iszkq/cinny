@@ -9,6 +9,7 @@ import { PackImageReader } from '../../plugins/custom-emoji';
 import { IEmoji } from '../../plugins/emoji';
 import { useStableMediaUrl } from './useStableMediaUrl';
 import { getEmojiBoardMediaUrls } from './media';
+import { getRemoteStickerPreviewUrl } from './useRemoteStickerIndex';
 import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
 
 export const getEmojiItemInfo = (element: Element): EmojiItemInfo | undefined => {
@@ -16,6 +17,7 @@ export const getEmojiItemInfo = (element: Element): EmojiItemInfo | undefined =>
   const type = element.getAttribute('data-emoji-type') as EmojiType | undefined;
   const data = element.getAttribute('data-emoji-data');
   const shortcode = element.getAttribute('data-emoji-shortcode');
+  const previewUrl = element.getAttribute('data-emoji-preview-url') ?? undefined;
   const infoStr = element.getAttribute('data-emoji-info');
 
   let info: IImageInfo | undefined;
@@ -36,6 +38,7 @@ export const getEmojiItemInfo = (element: Element): EmojiItemInfo | undefined =>
       data,
       shortcode,
       label,
+      previewUrl,
       info,
     };
   return undefined;
@@ -70,9 +73,10 @@ type CustomEmojiItemProps = {
 };
 export function CustomEmojiItem({ mx, useAuthentication, image }: CustomEmojiItemProps) {
   const desktopSupported = isDesktopUpdaterSupported();
+  const previewUrl = getRemoteStickerPreviewUrl(image);
   const { primaryUrl, fallbackUrl } = getEmojiBoardMediaUrls({
     mx,
-    mxc: image.url,
+    mxc: previewUrl ?? image.url,
     useAuthentication,
     info: image.info,
     width: 64,
@@ -96,6 +100,7 @@ export function CustomEmojiItem({ mx, useAuthentication, image }: CustomEmojiIte
       data-emoji-type={EmojiType.CustomEmoji}
       data-emoji-data={image.url}
       data-emoji-shortcode={image.body || image.shortcode}
+      data-emoji-preview-url={previewUrl}
       data-emoji-info={image.info ? JSON.stringify(image.info) : undefined}
     >
       {displayUrl && !hasFailed ? (
@@ -147,9 +152,10 @@ type StickerItemProps = {
 
 export function StickerItem({ mx, useAuthentication, image }: StickerItemProps) {
   const desktopSupported = isDesktopUpdaterSupported();
+  const previewUrl = getRemoteStickerPreviewUrl(image);
   const { primaryUrl, fallbackUrl } = getEmojiBoardMediaUrls({
     mx,
-    mxc: image.url,
+    mxc: previewUrl ?? image.url,
     useAuthentication,
     info: image.info,
     width: 256,
@@ -174,6 +180,7 @@ export function StickerItem({ mx, useAuthentication, image }: StickerItemProps) 
       data-emoji-type={EmojiType.Sticker}
       data-emoji-data={image.url}
       data-emoji-shortcode={image.body || image.shortcode}
+      data-emoji-preview-url={previewUrl}
       data-emoji-info={image.info ? JSON.stringify(image.info) : undefined}
     >
       {displayUrl && !hasFailed ? (
