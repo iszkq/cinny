@@ -11,6 +11,7 @@ import { useStableMediaUrl } from './useStableMediaUrl';
 import { getEmojiBoardMediaUrls } from './media';
 import { getRemoteStickerPreviewUrl } from './useRemoteStickerIndex';
 import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
+import { isHttpUrl } from '../../utils/matrix';
 
 export const getEmojiItemInfo = (element: Element): EmojiItemInfo | undefined => {
   const label = element.getAttribute('title');
@@ -74,6 +75,7 @@ type CustomEmojiItemProps = {
 export function CustomEmojiItem({ mx, useAuthentication, image }: CustomEmojiItemProps) {
   const desktopSupported = isDesktopUpdaterSupported();
   const previewUrl = getRemoteStickerPreviewUrl(image);
+  const noReferrer = isHttpUrl(previewUrl ?? image.url);
   const { primaryUrl, fallbackUrl } = getEmojiBoardMediaUrls({
     mx,
     mxc: previewUrl ?? image.url,
@@ -113,6 +115,7 @@ export function CustomEmojiItem({ mx, useAuthentication, image }: CustomEmojiIte
               className={classNames(css.CustomEmojiImg, !isLoaded && css.MediaImgPending)}
               alt=""
               src={displayUrl}
+              referrerPolicy={noReferrer ? 'no-referrer' : undefined}
               draggable={false}
               onLoad={handleLoad}
               onError={handleError}
@@ -131,6 +134,7 @@ export function CustomEmojiItem({ mx, useAuthentication, image }: CustomEmojiIte
             className={css.CustomEmojiImg}
             alt=""
             src={displayUrl}
+            referrerPolicy={noReferrer ? 'no-referrer' : undefined}
             onLoad={handleLoad}
             onError={handleError}
           />
@@ -153,6 +157,7 @@ type StickerItemProps = {
 export function StickerItem({ mx, useAuthentication, image }: StickerItemProps) {
   const desktopSupported = isDesktopUpdaterSupported();
   const previewUrl = getRemoteStickerPreviewUrl(image);
+  const noReferrer = isHttpUrl(previewUrl ?? image.url);
   const { primaryUrl, fallbackUrl } = getEmojiBoardMediaUrls({
     mx,
     mxc: previewUrl ?? image.url,
@@ -193,6 +198,7 @@ export function StickerItem({ mx, useAuthentication, image }: StickerItemProps) 
               className={classNames(css.StickerImg, !isLoaded && css.MediaImgPending)}
               alt=""
               src={displayUrl}
+              referrerPolicy={noReferrer ? 'no-referrer' : undefined}
               draggable={false}
               onLoad={handleLoad}
               onError={handleError}
@@ -209,6 +215,7 @@ export function StickerItem({ mx, useAuthentication, image }: StickerItemProps) 
             className={css.StickerImg}
             alt=""
             src={displayUrl}
+            referrerPolicy={noReferrer ? 'no-referrer' : undefined}
             onLoad={handleLoad}
             onError={handleError}
           />

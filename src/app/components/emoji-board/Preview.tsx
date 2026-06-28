@@ -30,7 +30,8 @@ export function Preview({ previewAtom }: PreviewProps) {
   const desktopSupported = isDesktopUpdaterSupported();
 
   const { key, shortcode, info, preferOriginal } = useAtomValue(previewAtom) ?? {};
-  const customEmoji = isMxcUrl(key) || isHttpUrl(key);
+  const remoteHttpEmoji = isHttpUrl(key);
+  const customEmoji = isMxcUrl(key) || remoteHttpEmoji;
   const { primaryUrl, fallbackUrl } = getEmojiBoardMediaUrls({
     mx,
     mxc: customEmoji ? key : undefined,
@@ -65,6 +66,7 @@ export function Preview({ previewAtom }: PreviewProps) {
                     key={requestKey}
                     className={classNames(css.PreviewImg, !isLoaded && css.MediaImgPending)}
                     src={displayUrl}
+                    referrerPolicy={remoteHttpEmoji ? 'no-referrer' : undefined}
                     alt=""
                     loading="eager"
                     decoding="async"
@@ -82,6 +84,7 @@ export function Preview({ previewAtom }: PreviewProps) {
                   key={requestKey}
                   className={css.PreviewImg}
                   src={displayUrl}
+                  referrerPolicy={remoteHttpEmoji ? 'no-referrer' : undefined}
                   alt=""
                   loading="eager"
                   decoding="async"

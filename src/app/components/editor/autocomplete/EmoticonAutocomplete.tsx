@@ -18,6 +18,7 @@ import { ImageUsage, PackImageReader } from '../../../plugins/custom-emoji';
 import { getEmoticonSearchStr } from '../../../plugins/utils';
 import { useCachedMediaUrl } from '../../../hooks/useCachedMediaUrl';
 import { getEmojiBoardMediaUrls } from '../../emoji-board/components/media';
+import { isHttpUrl } from '../../../utils/matrix';
 
 type EmoticonCompleteHandler = (key: string, shortcode: string) => void;
 
@@ -37,7 +38,15 @@ const SEARCH_OPTIONS: UseAsyncSearchOptions = {
   },
 };
 
-function CustomEmojiOptionMedia({ src, alt }: { src: string; alt: string }) {
+function CustomEmojiOptionMedia({
+  src,
+  alt,
+  noReferrer,
+}: {
+  src: string;
+  alt: string;
+  noReferrer: boolean;
+}) {
   const cachedMediaUrl = useCachedMediaUrl(src);
 
   return (
@@ -46,6 +55,7 @@ function CustomEmojiOptionMedia({ src, alt }: { src: string; alt: string }) {
       as="img"
       src={cachedMediaUrl ?? src}
       alt={alt}
+      referrerPolicy={noReferrer ? 'no-referrer' : undefined}
       style={{ width: toRem(24), height: toRem(24), objectFit: 'contain' }}
     />
   );
@@ -132,7 +142,11 @@ export function EmoticonAutocomplete({
             onClick={() => handleAutocomplete(key, emoticon.shortcode)}
             before={
               isCustomEmoji && customEmojiUrl ? (
-                <CustomEmojiOptionMedia src={customEmojiUrl} alt={emoticon.shortcode} />
+                <CustomEmojiOptionMedia
+                  src={customEmojiUrl}
+                  alt={emoticon.shortcode}
+                  noReferrer={isHttpUrl(key)}
+                />
               ) : (
                 <Box
                   shrink="No"
