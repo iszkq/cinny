@@ -1440,6 +1440,7 @@ function MessageSendStatus({ room, mEvent }: { room: Room; mEvent: MatrixEvent }
   const mx = useMatrixClient();
   const status = getPendingMessageStatus(mEvent);
   const plainTextPendingMessage = isPlainTextPendingMessage(mEvent);
+  const stickerPendingMessage = mEvent.getType() === EventType.Sticker;
 
   const [retryState, retrySend] = useAsyncCallback<void, Error, []>(
     useCallback(async () => {
@@ -1500,6 +1501,36 @@ function MessageSendStatus({ room, mEvent }: { room: Room; mEvent: MatrixEvent }
         break;
       default:
         statusText = undefined;
+    }
+  }
+
+  if (stickerPendingMessage) {
+    if (retryState.status === AsyncStatus.Loading && status === 'not_sent') {
+      statusText = '正在重新发送贴纸...';
+    } else if (retryState.status === AsyncStatus.Error && status === 'not_sent') {
+      statusText = retryState.error.message || '贴纸重新发送失败，请重试。';
+      statusColor = color.Critical.Main;
+    } else {
+      switch (status) {
+        case 'encrypting':
+          statusText = '正在加密并发送贴纸...';
+          break;
+        case 'queued':
+          statusText = '贴纸已加入发送队列...';
+          break;
+        case 'sending':
+          statusText = '贴纸发送中...';
+          break;
+        case 'not_sent':
+          statusText = '贴纸发送失败，请重试。';
+          statusColor = color.Critical.Main;
+          break;
+        case 'cancelled':
+          statusText = '贴纸已取消发送。';
+          break;
+        default:
+          statusText = undefined;
+      }
     }
   }
 
