@@ -40,8 +40,6 @@ import { AuthMetadataProvider } from '../../hooks/useAuthMetadata';
 import { getFallbackSession } from '../../state/sessions';
 import { AutoDiscovery } from './AutoDiscovery';
 
-const STARTUP_SYNC_FALLBACK_MS = 8000;
-
 function ClientRootLoading() {
   return (
     <SplashScreen>
@@ -217,20 +215,6 @@ export function ClientRoot({ children }: ClientRootProps) {
       }
     }, [])
   );
-
-  useEffect(() => {
-    if (!loading || !mx || startState.status !== AsyncStatus.Success) {
-      return undefined;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      setLoading(false);
-    }, STARTUP_SYNC_FALLBACK_MS);
-
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [loading, mx, startState.status]);
 
   return (
     <AutoDiscovery userId={userId!} baseUrl={baseUrl!}>
