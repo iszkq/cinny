@@ -146,11 +146,13 @@ const scheduleWebImagePackMediaWarm = (
 ) => {
   let disposed = false;
   const timers: number[] = [];
-  const objectUrls = Array.from(getImagePackPrimaryMediaUrls(mx, useAuthentication, packs, usages))
-    .slice(0, options.objectWarmLimit);
+  const objectUrls = Array.from(
+    getImagePackPrimaryMediaUrls(mx, useAuthentication, packs, usages)
+  ).slice(0, options.objectWarmLimit);
   const objectUrlSet = new Set(objectUrls);
-  const persistentUrls = Array.from(getImagePackMediaUrls(mx, useAuthentication, packs, usages))
-    .filter((mediaUrl) => !objectUrlSet.has(mediaUrl));
+  const persistentUrls = Array.from(
+    getImagePackMediaUrls(mx, useAuthentication, packs, usages)
+  ).filter((mediaUrl) => !objectUrlSet.has(mediaUrl));
 
   const scheduleBatch = (
     urls: string[],
@@ -237,8 +239,7 @@ const getImagePackMediaUrls = (
             IMAGE_PACK_AVATAR_SIZE,
             IMAGE_PACK_AVATAR_SIZE,
             'scale'
-          ) ??
-          mxcUrlToHttp(mx, avatarMxc, useAuthentication)
+          ) ?? mxcUrlToHttp(mx, avatarMxc, useAuthentication)
         : null;
 
       if (avatarUrl) {
@@ -255,6 +256,7 @@ const getImagePackMediaUrls = (
           info: image.info,
           width: size,
           height: size,
+          preferOriginal: usage === ImageUsage.Sticker,
         }).forEach((mediaUrl) => {
           mediaUrls.add(mediaUrl);
         });
@@ -284,8 +286,7 @@ const getImagePackPrimaryMediaUrls = (
             IMAGE_PACK_AVATAR_SIZE,
             IMAGE_PACK_AVATAR_SIZE,
             'scale'
-          ) ??
-          mxcUrlToHttp(mx, avatarMxc, useAuthentication)
+          ) ?? mxcUrlToHttp(mx, avatarMxc, useAuthentication)
         : null;
 
       if (avatarUrl) {
@@ -302,6 +303,7 @@ const getImagePackPrimaryMediaUrls = (
           info: image.info,
           width: size,
           height: size,
+          preferOriginal: usage === ImageUsage.Sticker,
         });
 
         if (primaryUrl) {
@@ -340,10 +342,7 @@ const getUniversalPacks = (
   return packs.concat(globalPacks.filter((pack) => !packIds.has(pack.id)));
 };
 
-const getPersonalPacks = (
-  userPack: ImagePack | undefined,
-  customUserPacks: ImagePack[]
-) => {
+const getPersonalPacks = (userPack: ImagePack | undefined, customUserPacks: ImagePack[]) => {
   const packs = userPack ? [userPack, ...customUserPacks] : customUserPacks;
 
   return packs.reduce<ImagePack[]>((list, pack) => {

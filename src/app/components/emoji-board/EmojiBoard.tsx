@@ -122,7 +122,7 @@ const useGroups = (
 
     g.push({
       id: RECENT_GROUP_ID,
-      name: 'Recent',
+      name: '最近',
       items: recentEmojis,
     });
 
@@ -137,6 +137,24 @@ const useGroups = (
       });
     });
 
+    const remoteGroups = new Map<string, EmojiGroupItem>();
+    remoteStickerImages.forEach((image) => {
+      const packId = getRemoteStickerPackId(image) ?? 'remote';
+      const packName = getRemoteStickerPackName(image) ?? '远程表情';
+      const groupId = `remote:${packId}`;
+      const group = remoteGroups.get(groupId);
+      if (group) {
+        group.items.push(image);
+        return;
+      }
+      remoteGroups.set(groupId, {
+        id: groupId,
+        name: packName,
+        items: [image],
+      });
+    });
+    g.push(...remoteGroups.values());
+
     emojiGroups.forEach((group) => {
       g.push({
         id: group.id,
@@ -146,7 +164,7 @@ const useGroups = (
     });
 
     return g;
-  }, [mx, recentEmojis, labels, imagePacks, tab]);
+  }, [mx, recentEmojis, labels, imagePacks, remoteStickerImages, tab]);
 
   const stickerGroupItems = useMemo(() => {
     const g: StickerGroupItem[] = [];
@@ -166,7 +184,7 @@ const useGroups = (
     const remoteGroups = new Map<string, StickerGroupItem>();
     remoteStickerImages.forEach((image) => {
       const packId = getRemoteStickerPackId(image) ?? 'remote';
-      const packName = getRemoteStickerPackName(image) ?? 'Remote';
+      const packName = getRemoteStickerPackName(image) ?? '远程贴纸';
       const groupId = `remote:${packId}`;
       const group = remoteGroups.get(groupId);
       if (group) {
@@ -458,6 +476,7 @@ function StickerSidebar({
               info: firstImage?.info,
               width: 64,
               height: 64,
+              preferOriginal: true,
             });
 
           return (
@@ -507,6 +526,7 @@ function EmojiGroupHolder({
         key: emojiInfo.data,
         shortcode: emojiInfo.shortcode,
         info: emojiInfo.info,
+        preferOriginal: emojiInfo.type === EmojiType.Sticker,
       });
     },
     [setPreviewData]
@@ -605,7 +625,9 @@ export function EmojiBoard({
   const imagePacks = imagePackMode === 'personal' ? personalImagePacks : contextualImagePacks;
   const [draggingPackId, setDraggingPackId] = useState<string>();
   const [packDropTarget, setPackDropTarget] = useState<PersonalPackDropTarget>();
-  const remoteStickerImages = useRemoteStickerIndex(tab === EmojiBoardTab.Sticker);
+  const remoteStickerImages = useRemoteStickerIndex(
+    tab === EmojiBoardTab.Emoji || tab === EmojiBoardTab.Sticker
+  );
   const [emojiGroupItems, stickerGroupItems] = useGroups(tab, imagePacks, remoteStickerImages);
   const groups = emojiTab ? emojiGroupItems : stickerGroupItems;
   const renderItem = useItemRenderer(tab);
@@ -613,7 +635,7 @@ export function EmojiBoard({
   const searchList = useMemo(() => {
     let list: Array<PackImageReader | IEmoji> = [];
     list = list.concat(imagePacks.flatMap((pack) => pack.getImages(usage)));
-    if (!emojiTab) list = list.concat(remoteStickerImages);
+    list = list.concat(remoteStickerImages);
     if (emojiTab) list = list.concat(emojis);
     return list;
   }, [emojiTab, usage, imagePacks, remoteStickerImages]);
@@ -652,6 +674,7 @@ export function EmojiBoard({
           info: image.info,
           width: size,
           height: size,
+          preferOriginal: usage === ImageUsage.Sticker,
         }).forEach((url) => {
           mediaUrls.add(url);
         });
@@ -690,6 +713,7 @@ export function EmojiBoard({
           info: image.info,
           width: size,
           height: size,
+          preferOriginal: usage === ImageUsage.Sticker,
         });
 
         if (primaryUrl) {
@@ -1032,7 +1056,7 @@ export function EmojiBoard({
             {searchedItems && (
               <EmojiGroup
                 id={SEARCH_GROUP_ID}
-                label={searchedItems.length ? 'Search Results' : 'No Results found'}
+                label={searchedItems.length ? '搜索结果' : '没有结果'}
               >
                 {searchedItems.map(renderItem)}
               </EmojiGroup>

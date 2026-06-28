@@ -32,26 +32,43 @@ type RemoteStickerPackImage = PackImage & {
 let cachedRemoteStickers: PackImageReader[] | undefined;
 let pendingRemoteStickers: Promise<PackImageReader[]> | undefined;
 
+const getDisplayName = (item: RemoteStickerIndexItem): string | undefined => {
+  const name = item.name?.trim();
+  if (name) return name;
+
+  const fileName = item.fileName?.trim();
+  if (!fileName) return undefined;
+
+  return fileName.replace(/\.[^.]+$/, '').replace(/[_-]\d+$/, '');
+};
+
 const toRemoteSticker = (
   item: RemoteStickerIndexItem,
   index: number
 ): PackImageReader | undefined => {
-  if (!item.url || !item.name) {
+  const displayName = getDisplayName(item);
+  if (!item.url || !displayName) {
     return undefined;
   }
 
   const packId = item.packId || 'remote';
   const packName = item.packName || packId;
-  const shortcode = item.id || `${packId}-${item.name}-${index}`;
+  const shortcode = displayName;
   const info: IImageInfo = {
     mimetype: item.mimeType || 'image/gif',
   };
   const image: RemoteStickerPackImage = {
     url: item.url,
-    body: item.name,
-    usage: [ImageUsage.Sticker],
+    body: displayName,
+    usage: [ImageUsage.Emoticon, ImageUsage.Sticker],
     info,
-    [REMOTE_STICKER_KEYWORDS]: item.keywords,
+    [REMOTE_STICKER_KEYWORDS]: Array.from(
+      new Set(
+        [displayName, item.fileName?.replace(/\.[^.]+$/, ''), ...(item.keywords ?? [])].filter(
+          Boolean
+        )
+      )
+    ) as string[],
     [REMOTE_STICKER_PACK_ID]: packId,
     [REMOTE_STICKER_PACK_NAME]: packName,
   };

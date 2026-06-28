@@ -15,6 +15,7 @@ export type PreviewData = {
   key: string;
   shortcode: string;
   info?: IImageInfo;
+  preferOriginal?: boolean;
 };
 
 export const createPreviewDataAtom = (initial?: PreviewData) =>
@@ -28,7 +29,7 @@ export function Preview({ previewAtom }: PreviewProps) {
   const useAuthentication = useMediaAuthentication();
   const desktopSupported = isDesktopUpdaterSupported();
 
-  const { key, shortcode, info } = useAtomValue(previewAtom) ?? {};
+  const { key, shortcode, info, preferOriginal } = useAtomValue(previewAtom) ?? {};
   const customEmoji = isMxcUrl(key) || isHttpUrl(key);
   const { primaryUrl, fallbackUrl } = getEmojiBoardMediaUrls({
     mx,
@@ -37,6 +38,7 @@ export function Preview({ previewAtom }: PreviewProps) {
     info,
     width: 256,
     height: 256,
+    preferOriginal,
   });
   const { displayUrl, hasFailed, isLoaded, requestKey, handleLoad, handleError } =
     useStableMediaUrl(primaryUrl, fallbackUrl, {
@@ -70,10 +72,7 @@ export function Preview({ previewAtom }: PreviewProps) {
                     onError={handleError}
                   />
                   <Box
-                    className={classNames(
-                      css.PreviewFallback,
-                      isLoaded && css.MediaFallbackHidden
-                    )}
+                    className={classNames(css.PreviewFallback, isLoaded && css.MediaFallbackHidden)}
                   >
                     <Icon src={Icons.Photo} size="100" />
                   </Box>

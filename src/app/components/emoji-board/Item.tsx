@@ -95,7 +95,7 @@ export function CustomEmojiItem({ mx, useAuthentication, image }: CustomEmojiIte
       aria-label={`${image.body || image.shortcode} emoji`}
       data-emoji-type={EmojiType.CustomEmoji}
       data-emoji-data={image.url}
-      data-emoji-shortcode={image.shortcode}
+      data-emoji-shortcode={image.body || image.shortcode}
       data-emoji-info={image.info ? JSON.stringify(image.info) : undefined}
     >
       {displayUrl && !hasFailed ? (
@@ -154,6 +154,7 @@ export function StickerItem({ mx, useAuthentication, image }: StickerItemProps) 
     info: image.info,
     width: 256,
     height: 256,
+    preferOriginal: true,
   });
   const { displayUrl, hasFailed, isLoaded, requestKey, handleLoad, handleError } =
     useStableMediaUrl(primaryUrl, fallbackUrl, {
@@ -172,7 +173,7 @@ export function StickerItem({ mx, useAuthentication, image }: StickerItemProps) 
       aria-label={`${image.body || image.shortcode} emoji`}
       data-emoji-type={EmojiType.Sticker}
       data-emoji-data={image.url}
-      data-emoji-shortcode={image.shortcode}
+      data-emoji-shortcode={image.body || image.shortcode}
       data-emoji-info={image.info ? JSON.stringify(image.info) : undefined}
     >
       {displayUrl && !hasFailed ? (

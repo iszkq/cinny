@@ -131,59 +131,6 @@ import {
 import { ScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
 import { IImageInfo } from '../../../types/matrix/common';
 
-const REMOTE_STICKER_MIME_EXTENSION: Record<string, string> = {
-  'image/gif': 'gif',
-  'image/png': 'png',
-  'image/jpeg': 'jpg',
-  'image/webp': 'webp',
-  'image/apng': 'png',
-  'image/avif': 'avif',
-};
-
-const getRemoteStickerFileName = (label: string, mimeType: string): string => {
-  const safeLabel = label.replace(/[\\/:*?"<>|]/g, '_').trim() || 'sticker';
-  const extension = REMOTE_STICKER_MIME_EXTENSION[mimeType.toLowerCase()] ?? 'gif';
-  return `${safeLabel}.${extension}`;
-};
-
-const uploadRemoteSticker = async (
-  mx: ReturnType<typeof useMatrixClient>,
-  url: string,
-  label: string,
-  info?: IImageInfo
-): Promise<{ mxc: string; info: IImageInfo }> => {
-  const response = await fetch(url, { cache: 'force-cache' });
-  if (!response.ok) {
-    throw new Error(`Failed to download sticker: ${response.status}`);
-  }
-
-  const blob = await response.blob();
-  const mimeType =
-    response.headers.get('Content-Type')?.split(';')[0].trim() ||
-    blob.type ||
-    info?.mimetype ||
-    'image/gif';
-  const file = new File([blob], getRemoteStickerFileName(label, mimeType), { type: mimeType });
-  const upload = await mx.uploadContent(file, {
-    name: file.name,
-    type: file.type,
-    includeFilename: true,
-  });
-  const mxc = upload.content_uri;
-  if (!mxc) {
-    throw new Error('Failed to upload sticker.');
-  }
-
-  return {
-    mxc,
-    info: {
-      ...info,
-      mimetype: mimeType,
-      size: blob.size,
-    },
-  };
-};
-
 interface RoomInputProps {
   editor: Editor;
   fileDropContainerRef: RefObject<HTMLElement>;
@@ -267,6 +214,34 @@ const getSendErrorMessage = (error: unknown): string => {
   return '发送失败，这条消息目前可能只有你自己可见，请重试。';
 };
 
+const getStickerSendErrorMessage = (error: unknown, remoteSticker: boolean): string => {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    return '当前网络已断开，贴纸还没有发送出去。';
+  }
+
+  const matrixError = error as {
+    data?: { error?: string };
+    message?: string;
+  };
+
+  const detail =
+    typeof matrixError?.data?.error === 'string' && matrixError.data.error.trim()
+      ? matrixError.data.error.trim()
+      : typeof matrixError?.message === 'string' && matrixError.message.trim()
+      ? matrixError.message.trim()
+      : undefined;
+
+  if (detail) {
+    return `贴纸发送失败：${detail}`;
+  }
+
+  if (remoteSticker) {
+    return '远程贴纸发送失败，请检查聊天服务器连接后重试。';
+  }
+
+  return '贴纸发送失败，请重试。';
+};
+
 export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
   ({ editor, fileDropContainerRef, roomId, room }, ref) => {
     const mx = useMatrixClient();
@@ -316,7 +291,9 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const [recordingMs, setRecordingMs] = useState(0);
     const [recordingError, setRecordingError] = useState<string>();
     const [sendError, setSendError] = useState<string>();
+    const [sendStatus, setSendStatus] = useState<string>();
     const sendingMessageRef = useRef(false);
+    const stickerSendingRef = useRef(false);
     const uploadFamilyObserverAtom = createUploadFamilyObserverAtom(
       roomUploadAtomFamily,
       selectedFiles.map((f) => f.file)
@@ -895,21 +872,23 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     );
 
     const handleStickerSelect = async (mxc: string, label: string, info?: IImageInfo) => {
-      setSendError(undefined);
-      try {
-        let stickerMxc = mxc;
-        let stickerInfo = info;
-        if (isHttpUrl(mxc)) {
-          const uploadedSticker = await uploadRemoteSticker(mx, mxc, label, info);
-          stickerMxc = uploadedSticker.mxc;
-          stickerInfo = uploadedSticker.info;
-        }
+      const remoteSticker = isHttpUrl(mxc);
+      if (stickerSendingRef.current) {
+        setSendStatus('贴纸正在发送，请稍候...');
+        closeEmojiBoard();
+        return;
+      }
 
+      stickerSendingRef.current = true;
+      setSendError(undefined);
+      setSendStatus('正在发送贴纸...');
+      closeEmojiBoard();
+      try {
         const content = withReplyMetadata(
           {
             body: label,
-            url: stickerMxc,
-            ...(stickerInfo ? { info: stickerInfo } : {}),
+            url: mxc,
+            ...(info ? { info } : {}),
           },
           replyDraft,
           mx.getUserId()
@@ -921,7 +900,10 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         }
         dispatchRoomFollowLatest(roomId);
       } catch (error) {
-        setSendError(getSendErrorMessage(error));
+        setSendError(getStickerSendErrorMessage(error, remoteSticker));
+      } finally {
+        stickerSendingRef.current = false;
+        setSendStatus(undefined);
       }
     };
 
@@ -1074,7 +1056,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           onChange={handleEditorChange}
           onPaste={handlePaste}
           top={
-            (replyDraft || recording || recordingError || sendError) && (
+            (replyDraft || recording || recordingError || sendError || sendStatus) && (
               <div>
                 {replyDraft && (
                   <Box
@@ -1138,6 +1120,15 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                         {recordingError}
                       </Text>
                     )}
+                  </Box>
+                )}
+                {sendStatus && (
+                  <Box
+                    alignItems="Center"
+                    gap="300"
+                    style={{ padding: `${config.space.S200} ${config.space.S300} 0` }}
+                  >
+                    <Text size="T300">{sendStatus}</Text>
                   </Box>
                 )}
                 {sendError && (

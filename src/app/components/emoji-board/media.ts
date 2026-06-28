@@ -21,6 +21,7 @@ type EmojiBoardMediaUrlsOptions = {
   width: number;
   height: number;
   resizeMethod?: string;
+  preferOriginal?: boolean;
 };
 
 export const getEmojiBoardMediaUrls = ({
@@ -31,6 +32,7 @@ export const getEmojiBoardMediaUrls = ({
   width,
   height,
   resizeMethod = 'scale',
+  preferOriginal = false,
 }: EmojiBoardMediaUrlsOptions): {
   primaryUrl?: string;
   fallbackUrl?: string;
@@ -54,15 +56,16 @@ export const getEmojiBoardMediaUrls = ({
   const originalUrl = mxcUrlToHttp(mx, mxc, useAuthentication) ?? undefined;
   const animated = isAnimatedEmojiBoardMedia(info);
 
-  const primaryUrl = animated ? originalUrl ?? thumbnailUrl : thumbnailUrl ?? originalUrl;
+  const primaryUrl =
+    animated || preferOriginal ? originalUrl ?? thumbnailUrl : thumbnailUrl ?? originalUrl;
   const fallbackUrl =
     primaryUrl === originalUrl
       ? thumbnailUrl !== originalUrl
         ? thumbnailUrl
         : undefined
       : originalUrl !== thumbnailUrl
-        ? originalUrl
-        : undefined;
+      ? originalUrl
+      : undefined;
 
   return {
     primaryUrl,
@@ -70,9 +73,7 @@ export const getEmojiBoardMediaUrls = ({
   };
 };
 
-export const getEmojiBoardMediaCandidates = (
-  options: EmojiBoardMediaUrlsOptions
-): string[] => {
+export const getEmojiBoardMediaCandidates = (options: EmojiBoardMediaUrlsOptions): string[] => {
   const { primaryUrl, fallbackUrl } = getEmojiBoardMediaUrls(options);
   return Array.from(new Set([primaryUrl, fallbackUrl].filter(Boolean) as string[]));
 };

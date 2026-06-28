@@ -189,6 +189,7 @@ type RenderImageContentProps = {
   encInfo?: IEncryptedFile;
   markedAsSpoiler?: boolean;
   spoilerReason?: string;
+  preferOriginalPreview?: boolean;
 };
 type MImageProps = {
   content: IImageContent;
@@ -463,6 +464,7 @@ export function MSticker({ content, renderImageContent }: MStickerProps) {
         mimeType: imgInfo?.mimetype,
         url: mxcUrl,
         encInfo: content.file,
+        preferOriginalPreview: true,
       })}
     </AttachmentBox>
   );

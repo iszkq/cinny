@@ -25,10 +25,7 @@ import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import * as css from './style.css';
 import { bytesToSize } from '../../../utils/common';
 import { FALLBACK_MIMETYPE } from '../../../utils/mimeTypes';
-import {
-  mxcUrlToHttp,
-  shouldUseObjectUrlForMediaDisplay,
-} from '../../../utils/matrix';
+import { isHttpUrl, mxcUrlToHttp, shouldUseObjectUrlForMediaDisplay } from '../../../utils/matrix';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { validBlurHash } from '../../../utils/blurHash';
 import { primeCachedMediaObjectUrl } from '../../../utils/mediaUrlCache';
@@ -82,6 +79,7 @@ export type ImageContentProps = {
   spoilerReason?: string;
   viewerItems?: ViewerImageItem[];
   viewerItemId?: string;
+  preferOriginalPreview?: boolean;
   renderViewer: (props: RenderViewerProps) => ReactNode;
   renderImage: (props: RenderImageProps) => ReactNode;
 };
@@ -100,6 +98,7 @@ export const ImageContent = as<'div', ImageContentProps>(
       spoilerReason,
       viewerItems,
       viewerItemId,
+      preferOriginalPreview = false,
       renderViewer,
       renderImage,
       ...props
@@ -122,20 +121,21 @@ export const ImageContent = as<'div', ImageContentProps>(
     const stableOriginalUrl =
       typeof url === 'string' && !url.startsWith('mxc://')
         ? url
-        : (mxcUrlToHttp(mx, url, useAuthentication) ?? undefined);
-    const stableThumbnailUrl =
-      typeof info?.thumbnail_url === 'string'
-        ? mxcUrlToHttp(mx, info.thumbnail_url, useAuthentication) ?? undefined
-        : !encInfo
-          ? (mxcUrlToHttp(
-              mx,
-              url,
-              useAuthentication,
-              IMAGE_PREVIEW_WIDTH,
-              IMAGE_PREVIEW_HEIGHT,
-              'scale'
-            ) ?? undefined)
-          : undefined;
+        : mxcUrlToHttp(mx, url, useAuthentication) ?? undefined;
+    const stableThumbnailUrl = preferOriginalPreview
+      ? undefined
+      : typeof info?.thumbnail_url === 'string'
+      ? mxcUrlToHttp(mx, info.thumbnail_url, useAuthentication) ?? undefined
+      : !encInfo
+      ? mxcUrlToHttp(
+          mx,
+          url,
+          useAuthentication,
+          IMAGE_PREVIEW_WIDTH,
+          IMAGE_PREVIEW_HEIGHT,
+          'scale'
+        ) ?? undefined
+      : undefined;
     const {
       displayUrl: stablePreviewUrl,
       hasFailed: stablePreviewFailed,
@@ -160,18 +160,17 @@ export const ImageContent = as<'div', ImageContentProps>(
         height?: number,
         resizeMethod?: string
       ) => {
-        const mediaUrl = mxcUrlToHttp(
-          mx,
-          mediaMxcUrl,
-          useAuthentication,
-          width,
-          height,
-          resizeMethod
-        );
+        const mediaUrl = isHttpUrl(mediaMxcUrl)
+          ? mediaMxcUrl
+          : mxcUrlToHttp(mx, mediaMxcUrl, useAuthentication, width, height, resizeMethod);
         if (!mediaUrl) throw new Error('Invalid media URL');
 
         if (mediaEncInfo) {
           return prepareEncryptedMediaObjectUrl(mediaUrl, mediaMimeType, mediaEncInfo);
+        }
+
+        if (isHttpUrl(mediaMxcUrl) && !shouldUseObjectUrlForMediaDisplay(mediaUrl)) {
+          return mediaUrl;
         }
 
         const preparedMediaUrl = await primeCachedMediaObjectUrl(mediaUrl, 'visible');
@@ -194,7 +193,7 @@ export const ImageContent = as<'div', ImageContentProps>(
         const thumbMimeType = info?.thumbnail_info?.mimetype ?? mimeType ?? FALLBACK_MIMETYPE;
         const thumbEncInfo = info?.thumbnail_file;
 
-        if (typeof thumbMxcUrl === 'string') {
+        if (!preferOriginalPreview && typeof thumbMxcUrl === 'string') {
           try {
             const thumbSrc = await prepareMediaSrc(thumbMxcUrl, thumbMimeType, thumbEncInfo);
             return {
@@ -206,7 +205,7 @@ export const ImageContent = as<'div', ImageContentProps>(
           }
         }
 
-        if (!encInfo) {
+        if (!preferOriginalPreview && !encInfo) {
           try {
             const thumbnailSrc = await prepareMediaSrc(
               url,
@@ -225,16 +224,12 @@ export const ImageContent = as<'div', ImageContentProps>(
           }
         }
 
-        const originalSrc = await prepareMediaSrc(
-          url,
-          mimeType ?? FALLBACK_MIMETYPE,
-          encInfo
-        );
+        const originalSrc = await prepareMediaSrc(url, mimeType ?? FALLBACK_MIMETYPE, encInfo);
         return {
           src: originalSrc,
           kind: 'original',
         };
-      }, [encInfo, info, mimeType, prepareMediaSrc, url])
+      }, [encInfo, info, mimeType, preferOriginalPreview, prepareMediaSrc, url])
     );
 
     const [viewerSrcState, loadViewerSrc] = useAsyncCallback(
@@ -311,8 +306,8 @@ export const ImageContent = as<'div', ImageContentProps>(
     const previewSrc = stablePreviewEnabled
       ? stablePreviewUrl
       : srcState.status === AsyncStatus.Success
-        ? srcState.data.src
-        : undefined;
+      ? srcState.data.src
+      : undefined;
     const viewerSrc =
       viewerSrcState.status === AsyncStatus.Success ? viewerSrcState.data : previewSrc;
     const previewRenderKey = stablePreviewEnabled
@@ -376,8 +371,7 @@ export const ImageContent = as<'div', ImageContentProps>(
         ? currentViewerLoading
         : !cachedActiveViewerSrc || loadingViewerItemId === activeViewerItem?.id;
     const viewerItemsCount = viewerItems?.length ?? 0;
-    const viewerNavigationEnabled =
-      !!viewerItems && viewerItemsCount > 1 && activeViewerIndex >= 0;
+    const viewerNavigationEnabled = !!viewerItems && viewerItemsCount > 1 && activeViewerIndex >= 0;
 
     const ensureViewerItemSource = useCallback(
       (item: ViewerImageItem) => {
