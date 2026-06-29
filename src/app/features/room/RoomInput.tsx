@@ -221,7 +221,11 @@ const cloneEditorDraft = (draft: Descendant[]): Descendant[] =>
 const EMOJI_BOARD_REOPEN_SUPPRESS_MS = 400;
 const REMOTE_STICKER_FAST_SEND_ORIGIN = 'https://image.527012.xyz';
 
-const shouldSendRemoteStickerWithoutEncryption = (url: string): boolean => {
+const shouldSendRemoteStickerWithoutEncryption = (room: Room, url: string): boolean => {
+  if (room.hasEncryptionStateEvent()) {
+    return false;
+  }
+
   try {
     return new URL(url).origin === REMOTE_STICKER_FAST_SEND_ORIGIN;
   } catch {
@@ -983,7 +987,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       setSendStatus('正在发送贴纸...');
       closeEmojiBoard();
       try {
-        const fastRemoteSticker = remoteSticker && shouldSendRemoteStickerWithoutEncryption(mxc);
+        const fastRemoteSticker =
+          remoteSticker && shouldSendRemoteStickerWithoutEncryption(room, mxc);
         const content = withReplyMetadata(
           matrixSticker
             ? {
