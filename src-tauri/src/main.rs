@@ -3,8 +3,11 @@
 mod desktop_media_cache;
 
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine};
-use reqwest::{header::ACCEPT, Client, Url};
-use serde::Deserialize;
+use reqwest::{
+    header::{ACCEPT, CONTENT_TYPE},
+    Client, Url,
+};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{env, fs, process::Command, sync::OnceLock};
 use tauri::{plugin::PermissionState, AppHandle};
@@ -18,6 +21,7 @@ const ALLOWED_EXTERNAL_URL_PREFIXES: [&str; 5] =
 const REMOTE_STICKER_INDEX_HOST: &str = "image.527012.xyz";
 const REMOTE_STICKER_INDEX_PATH: &str = "/index.json";
 const REMOTE_STICKER_INDEX_MAX_BYTES: u64 = 25 * 1024 * 1024;
+const REMOTE_STICKER_MEDIA_MAX_BYTES: u64 = 25 * 1024 * 1024;
 static REMOTE_STICKER_HTTP_CLIENT: OnceLock<Client> = OnceLock::new();
 
 #[derive(Deserialize)]
@@ -32,6 +36,13 @@ struct DesktopNotificationPayload {
 struct SaveDownloadedFileRequest {
     file_name: String,
     data_base64: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RemoteStickerMediaResponse {
+    data_base64: String,
+    mime_type: Option<String>,
 }
 
 fn map_notification_permission(state: PermissionState) -> &'static str {
@@ -88,6 +99,22 @@ fn parse_remote_sticker_index_url(url: &str) -> Result<Url, String> {
         Ok(parsed)
     } else {
         Err("unsupported sticker index URL.".into())
+    }
+}
+
+fn parse_remote_sticker_media_url(url: &str) -> Result<Url, String> {
+    let parsed = Url::parse(url.trim())
+        .map_err(|error| format!("invalid sticker media URL: {error}"))?;
+    let valid_origin =
+        parsed.scheme() == "https" && parsed.host_str() == Some(REMOTE_STICKER_INDEX_HOST);
+    let valid_port = parsed.port().is_none() || parsed.port() == Some(443);
+    let no_credentials = parsed.username().is_empty() && parsed.password().is_none();
+    let has_path = !parsed.path().is_empty() && parsed.path() != "/";
+
+    if valid_origin && valid_port && no_credentials && has_path {
+        Ok(parsed)
+    } else {
+        Err("unsupported sticker media URL.".into())
     }
 }
 
@@ -281,6 +308,52 @@ async fn fetch_remote_sticker_index(url: String) -> Result<Value, String> {
 }
 
 #[tauri::command]
+async fn fetch_remote_sticker_media(url: String) -> Result<RemoteStickerMediaResponse, String> {
+    let parsed = parse_remote_sticker_media_url(&url)?;
+    let response = get_remote_sticker_http_client()
+        .get(parsed)
+        .header(ACCEPT, "image/*,*/*;q=0.8")
+        .send()
+        .await
+        .map_err(|error| format!("failed to fetch remote sticker media: {error}"))?;
+
+    let status = response.status();
+    if !status.is_success() {
+        return Err(format!("failed to fetch remote sticker media: HTTP {status}"));
+    }
+
+    if response
+        .content_length()
+        .is_some_and(|size| size > REMOTE_STICKER_MEDIA_MAX_BYTES)
+    {
+        return Err("remote sticker media is too large.".into());
+    }
+
+    let mime_type = response
+        .headers()
+        .get(CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split(';').next())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned);
+
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|error| format!("failed to read remote sticker media: {error}"))?;
+
+    if bytes.len() as u64 > REMOTE_STICKER_MEDIA_MAX_BYTES {
+        return Err("remote sticker media is too large.".into());
+    }
+
+    Ok(RemoteStickerMediaResponse {
+        data_base64: BASE64_STANDARD.encode(&bytes),
+        mime_type,
+    })
+}
+
+#[tauri::command]
 fn save_downloaded_file(request: SaveDownloadedFileRequest) -> Result<bool, String> {
     let file_name = sanitize_download_file_name(&request.file_name);
     let file_bytes = BASE64_STANDARD
@@ -350,6 +423,7 @@ fn main() {
             open_external_url,
             get_desktop_updater_proxy,
             fetch_remote_sticker_index,
+            fetch_remote_sticker_media,
             save_downloaded_file,
             desktop_notification_permission_state,
             request_desktop_notification_permission,

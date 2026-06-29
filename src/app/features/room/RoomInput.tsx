@@ -139,6 +139,7 @@ import {
 } from '../../utils/polls';
 import { ScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
 import { IImageInfo } from '../../../types/matrix/common';
+import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
 
 interface RoomInputProps {
   editor: Editor;
@@ -219,18 +220,207 @@ const cloneEditorDraft = (draft: Descendant[]): Descendant[] =>
   JSON.parse(JSON.stringify(draft)) as Descendant[];
 
 const EMOJI_BOARD_REOPEN_SUPPRESS_MS = 400;
-const REMOTE_STICKER_FAST_SEND_ORIGIN = 'https://image.527012.xyz';
+const REMOTE_STICKER_DOWNLOAD_TIMEOUT_MS = 15000;
 
-const shouldSendRemoteStickerWithoutEncryption = (room: Room, url: string): boolean => {
-  if (room.hasEncryptionStateEvent()) {
-    return false;
+type RemoteStickerMediaResponse = {
+  dataBase64: string;
+  mimeType?: string;
+};
+
+type RemoteStickerMedia = {
+  blob: Blob;
+  mimeType: string;
+};
+
+type RemoteStickerUploadedContent = {
+  content: IContent;
+  fileName: string;
+};
+
+const REMOTE_STICKER_MIME_EXTENSION: Record<string, string> = {
+  'image/apng': 'apng',
+  'image/avif': 'avif',
+  'image/gif': 'gif',
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/svg+xml': 'svg',
+  'image/webp': 'webp',
+};
+
+const remoteStickerUploadCache = new Map<string, Promise<RemoteStickerUploadedContent>>();
+
+const base64ToBlob = (dataBase64: string, mimeType: string): Blob => {
+  const binary = window.atob(dataBase64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
   }
+  return new Blob([bytes], { type: mimeType });
+};
+
+const getRemoteStickerMimeType = (mimeType?: string, info?: IImageInfo): string =>
+  mimeType || info?.mimetype || 'image/gif';
+
+const sanitizeRemoteStickerFileName = (label: string): string => {
+  const safeName = label
+    .trim()
+    .replace(/[\\/:*?"<>|]/g, '_')
+    .replace(/\s+/g, '_')
+    .replace(/^\.+$/, '')
+    .slice(0, 80);
+
+  return safeName || 'sticker';
+};
+
+const getRemoteStickerFileName = (label: string, mimeType: string): string => {
+  const baseName = sanitizeRemoteStickerFileName(label).replace(/\.[a-z0-9]{2,5}$/i, '');
+  const extension = REMOTE_STICKER_MIME_EXTENSION[mimeType.toLowerCase()] ?? 'gif';
+  return `${baseName}.${extension}`;
+};
+
+const cloneMessageContent = (content: IContent): IContent =>
+  JSON.parse(JSON.stringify(content)) as IContent;
+
+const fetchRemoteStickerMediaWithBrowser = async (
+  url: string,
+  info?: IImageInfo
+): Promise<RemoteStickerMedia> => {
+  const abortController = new AbortController();
+  const timeoutId = window.setTimeout(
+    () => abortController.abort(),
+    REMOTE_STICKER_DOWNLOAD_TIMEOUT_MS
+  );
 
   try {
-    return new URL(url).origin === REMOTE_STICKER_FAST_SEND_ORIGIN;
-  } catch {
-    return false;
+    const response = await fetch(url, {
+      cache: 'no-store',
+      signal: abortController.signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to download remote sticker: ${response.status}`);
+    }
+
+    const blob = await response.blob();
+    const mimeType = getRemoteStickerMimeType(blob.type, info);
+    return {
+      blob: blob.type ? blob : new Blob([blob], { type: mimeType }),
+      mimeType,
+    };
+  } catch (error) {
+    if (!isDesktopUpdaterSupported()) {
+      throw new Error(
+        '云端图片缺少跨域访问权限，Web 端无法上传为 Matrix 媒体。请先在 CF/R2 为图片域名开启 CORS。'
+      );
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
   }
+};
+
+const fetchRemoteStickerMediaWithDesktop = async (
+  url: string,
+  info?: IImageInfo
+): Promise<RemoteStickerMedia> => {
+  const { invoke } = await import('@tauri-apps/api/core');
+  const result = await invoke<RemoteStickerMediaResponse>('fetch_remote_sticker_media', { url });
+  const mimeType = getRemoteStickerMimeType(result.mimeType, info);
+
+  return {
+    blob: base64ToBlob(result.dataBase64, mimeType),
+    mimeType,
+  };
+};
+
+const fetchRemoteStickerMedia = async (
+  url: string,
+  info?: IImageInfo
+): Promise<RemoteStickerMedia> => {
+  if (isDesktopUpdaterSupported()) {
+    try {
+      return await fetchRemoteStickerMediaWithDesktop(url, info);
+    } catch (error) {
+      console.warn(error);
+    }
+  }
+
+  return fetchRemoteStickerMediaWithBrowser(url, info);
+};
+
+const getRemoteStickerUploadCacheKey = (room: Room, url: string): string =>
+  room.hasEncryptionStateEvent() ? `encrypted:${room.roomId}:${url}` : `plain:${url}`;
+
+const uploadRemoteStickerContent = async (
+  mx: ReturnType<typeof useMatrixClient>,
+  room: Room,
+  url: string,
+  label: string,
+  info?: IImageInfo
+): Promise<RemoteStickerUploadedContent> => {
+  const { blob, mimeType } = await fetchRemoteStickerMedia(url, info);
+  const fileName = getRemoteStickerFileName(label, mimeType);
+  const sourceFile = new File([blob], fileName, { type: mimeType });
+  const uploadItem: TUploadItem = room.hasEncryptionStateEvent()
+    ? {
+        ...(await encryptFile(sourceFile)),
+        metadata: { markedAsSpoiler: false },
+      }
+    : {
+        file: sourceFile,
+        originalFile: sourceFile,
+        metadata: { markedAsSpoiler: false },
+        encInfo: undefined,
+      };
+
+  const upload = await mx.uploadContent(uploadItem.file, {
+    includeFilename: true,
+    name: fileName,
+    type: uploadItem.file.type || mimeType,
+  });
+  const mxc = upload.content_uri;
+  if (!mxc) {
+    throw new Error('Failed to upload remote sticker.');
+  }
+
+  const content = await getImageMsgContent(mx, uploadItem, mxc);
+  content.body = label;
+  content.filename = fileName;
+
+  if (!content.info && info) {
+    content.info = {
+      ...info,
+      mimetype: mimeType,
+      size: blob.size,
+    };
+  }
+
+  return { content, fileName };
+};
+
+const createRemoteStickerContent = async (
+  mx: ReturnType<typeof useMatrixClient>,
+  room: Room,
+  url: string,
+  label: string,
+  info?: IImageInfo
+): Promise<IContent> => {
+  const cacheKey = getRemoteStickerUploadCacheKey(room, url);
+  let uploadPromise = remoteStickerUploadCache.get(cacheKey);
+
+  if (!uploadPromise) {
+    uploadPromise = uploadRemoteStickerContent(mx, room, url, label, info).catch((error) => {
+      remoteStickerUploadCache.delete(cacheKey);
+      throw error;
+    });
+    remoteStickerUploadCache.set(cacheKey, uploadPromise);
+  }
+
+  const uploaded = await uploadPromise;
+  const content = cloneMessageContent(uploaded.content);
+  content.body = label;
+  content.filename = uploaded.fileName;
+  return content;
 };
 
 const restoreEditorDraft = (editor: Editor, draft: Descendant[]) => {
@@ -984,11 +1174,15 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
 
       stickerSendingRef.current = true;
       setSendError(undefined);
-      setSendStatus('正在发送贴纸...');
+      setSendStatus(
+        remoteSticker
+          ? room.hasEncryptionStateEvent()
+            ? '正在加密并上传贴纸...'
+            : '正在上传贴纸...'
+          : '正在发送贴纸...'
+      );
       closeEmojiBoard();
       try {
-        const fastRemoteSticker =
-          remoteSticker && shouldSendRemoteStickerWithoutEncryption(room, mxc);
         const content = withReplyMetadata(
           matrixSticker
             ? {
@@ -996,19 +1190,14 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                 url: mxc,
                 ...(info ? { info } : {}),
               }
-            : {
-                msgtype: MsgType.Image,
-                body: label,
-                url: mxc,
-                ...(info ? { info } : {}),
-              },
+            : await createRemoteStickerContent(mx, room, mxc, label, info),
           replyDraft,
           mx.getUserId()
         );
 
         const sendPromise = matrixSticker
           ? mx.sendEvent(roomId, EventType.Sticker, content)
-          : sendRoomMessageWithoutQueue(mx, room, content, { encrypt: !fastRemoteSticker });
+          : mx.sendMessage(roomId, content as never);
         if (replyDraft) {
           setReplyDraft(undefined);
           sendTypingStatus(false);
