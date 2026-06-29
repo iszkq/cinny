@@ -442,19 +442,26 @@ type MStickerProps = {
   content: IImageContent;
   renderImageContent: (props: RenderImageContentProps) => ReactNode;
 };
+const STICKER_RENDER_WIDTH = 114;
+const STICKER_RENDER_MIN_HEIGHT = 36;
+
 export function MSticker({ content, renderImageContent }: MStickerProps) {
   const imgInfo = content?.info;
   const mxcUrl = content.file?.url ?? content.url;
   if (typeof mxcUrl !== 'string') {
     return <MessageBrokenContent />;
   }
-  const height = scaleYDimension(imgInfo?.w || 152, 152, imgInfo?.h || 152);
+  const height = scaleYDimension(
+    imgInfo?.w || STICKER_RENDER_WIDTH,
+    STICKER_RENDER_WIDTH,
+    imgInfo?.h || STICKER_RENDER_WIDTH
+  );
 
   return (
     <AttachmentBox
       style={{
-        height: toRem(height < 48 ? 48 : height),
-        width: toRem(152),
+        height: toRem(height < STICKER_RENDER_MIN_HEIGHT ? STICKER_RENDER_MIN_HEIGHT : height),
+        width: toRem(STICKER_RENDER_WIDTH),
         maxWidth: 'min(100%, 45vw)',
       }}
     >

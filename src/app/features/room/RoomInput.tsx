@@ -154,33 +154,34 @@ interface RoomInputProps {
   room: Room;
 }
 
-type FastMatrixClient = ReturnType<typeof useMatrixClient> & {
+type FastMatrixEventSender = {
   encryptEventIfNeeded?: (event: MatrixEvent, room?: Room) => Promise<void>;
   sendEventHttpRequest?: (event: MatrixEvent) => Promise<{ event_id?: string }>;
 };
 
-type SendRoomMessageWithoutQueueOptions = {
+type SendRoomEventWithoutQueueOptions = {
   encrypt?: boolean;
 };
 
-const sendRoomMessageWithoutQueue = (
+type LocalMatrixEvent = MatrixEvent & {
+  event: MatrixEvent['event'] & {
+    content?: IContent;
+  };
+  clearEvent?: {
+    content?: IContent;
+  };
+};
+
+const createLocalRoomEvent = (
   mx: ReturnType<typeof useMatrixClient>,
   room: Room,
-  content: IContent,
-  options: SendRoomMessageWithoutQueueOptions = {}
-): Promise<unknown> => {
-  const fastMx = mx as FastMatrixClient;
-  if (
-    typeof fastMx.encryptEventIfNeeded !== 'function' ||
-    typeof fastMx.sendEventHttpRequest !== 'function'
-  ) {
-    return mx.sendMessage(room.roomId, content as never);
-  }
-
+  eventType: string,
+  content: IContent
+): { localEvent: MatrixEvent; txnId: string } => {
   const txnId = mx.makeTxnId();
   const userId = mx.getUserId() ?? undefined;
   const localEvent = new MatrixEvent({
-    type: EventType.RoomMessage,
+    type: eventType,
     content,
     event_id: `~${room.roomId}:${txnId}`,
     user_id: userId,
@@ -191,7 +192,31 @@ const sendRoomMessageWithoutQueue = (
 
   localEvent.setTxnId(txnId);
   localEvent.setStatus(EventStatus.SENDING);
-  room.addPendingEvent(localEvent, txnId);
+  return { localEvent, txnId };
+};
+
+const setLocalEventContent = (event: MatrixEvent, content: IContent): void => {
+  const localEvent = event as LocalMatrixEvent;
+  localEvent.event.content = content;
+
+  if (localEvent.clearEvent) {
+    localEvent.clearEvent.content = content;
+  }
+};
+
+const sendLocalRoomEvent = (
+  mx: ReturnType<typeof useMatrixClient>,
+  room: Room,
+  localEvent: MatrixEvent,
+  options: SendRoomEventWithoutQueueOptions = {}
+): Promise<unknown> => {
+  const fastMx = mx as unknown as FastMatrixEventSender;
+  if (
+    typeof fastMx.encryptEventIfNeeded !== 'function' ||
+    typeof fastMx.sendEventHttpRequest !== 'function'
+  ) {
+    return mx.sendEvent(room.roomId, localEvent.getType(), localEvent.getContent() as never);
+  }
 
   if (localEvent.status === EventStatus.NOT_SENT) {
     return Promise.reject(new Error('Event blocked by other events not yet sent'));
@@ -222,12 +247,75 @@ const sendRoomMessageWithoutQueue = (
   })();
 };
 
+const sendRoomEventWithoutQueue = (
+  mx: ReturnType<typeof useMatrixClient>,
+  room: Room,
+  eventType: string,
+  content: IContent,
+  options: SendRoomEventWithoutQueueOptions = {}
+): Promise<unknown> => {
+  const fastMx = mx as unknown as FastMatrixEventSender;
+  if (
+    typeof fastMx.encryptEventIfNeeded !== 'function' ||
+    typeof fastMx.sendEventHttpRequest !== 'function'
+  ) {
+    return mx.sendEvent(room.roomId, eventType, content as never);
+  }
+
+  const { localEvent, txnId } = createLocalRoomEvent(mx, room, eventType, content);
+  room.addPendingEvent(localEvent, txnId);
+  return sendLocalRoomEvent(mx, room, localEvent, options);
+};
+
+const sendRoomMessageWithoutQueue = (
+  mx: ReturnType<typeof useMatrixClient>,
+  room: Room,
+  content: IContent,
+  options: SendRoomEventWithoutQueueOptions = {}
+): Promise<unknown> => sendRoomEventWithoutQueue(mx, room, EventType.RoomMessage, content, options);
+
+const sendRoomEventWithPendingContent = (
+  mx: ReturnType<typeof useMatrixClient>,
+  room: Room,
+  eventType: string,
+  pendingContent: IContent,
+  getFinalContent: () => Promise<IContent>,
+  options: SendRoomEventWithoutQueueOptions = {}
+): Promise<unknown> => {
+  const fastMx = mx as unknown as FastMatrixEventSender;
+  if (
+    typeof fastMx.encryptEventIfNeeded !== 'function' ||
+    typeof fastMx.sendEventHttpRequest !== 'function'
+  ) {
+    return getFinalContent().then((content) =>
+      mx.sendEvent(room.roomId, eventType, content as never)
+    );
+  }
+
+  const { localEvent, txnId } = createLocalRoomEvent(mx, room, eventType, pendingContent);
+  room.addPendingEvent(localEvent, txnId);
+
+  if (localEvent.status === EventStatus.NOT_SENT) {
+    return Promise.reject(new Error('Event blocked by other events not yet sent'));
+  }
+
+  return (async () => {
+    try {
+      setLocalEventContent(localEvent, await getFinalContent());
+      return await sendLocalRoomEvent(mx, room, localEvent, options);
+    } catch (error) {
+      (localEvent as MatrixEvent & { error?: unknown }).error = error;
+      room.updatePendingEvent(localEvent, EventStatus.NOT_SENT);
+      throw error;
+    }
+  })();
+};
+
 const cloneEditorDraft = (draft: Descendant[]): Descendant[] =>
   JSON.parse(JSON.stringify(draft)) as Descendant[];
 
 const EMOJI_BOARD_REOPEN_SUPPRESS_MS = 400;
 const REMOTE_STICKER_DOWNLOAD_TIMEOUT_MS = 15000;
-const STICKER_DISPLAY_SCALE = 0.25;
 const STICKER_EVENT_BODY = '';
 
 type RemoteStickerMediaResponse = {
@@ -284,33 +372,6 @@ const getRemoteStickerFileName = (label: string, mimeType: string): string => {
 const cloneMessageContent = (content: IContent): IContent =>
   JSON.parse(JSON.stringify(content)) as IContent;
 
-const getScaledStickerDimension = (dimension: number | undefined): number | undefined =>
-  typeof dimension === 'number' && dimension > 0
-    ? Math.max(1, Math.round(dimension * STICKER_DISPLAY_SCALE))
-    : undefined;
-
-const getScaledStickerInfo = (info?: IImageInfo): IImageInfo | undefined => {
-  if (!info) return undefined;
-
-  const scaledInfo: IImageInfo = { ...info };
-  const width = getScaledStickerDimension(info.w);
-  const height = getScaledStickerDimension(info.h);
-
-  if (width) {
-    scaledInfo.w = width;
-  } else {
-    delete scaledInfo.w;
-  }
-
-  if (height) {
-    scaledInfo.h = height;
-  } else {
-    delete scaledInfo.h;
-  }
-
-  return scaledInfo;
-};
-
 const getRemoteStickerImageInfo = async (
   blob: Blob,
   mimeType: string,
@@ -321,6 +382,10 @@ const getRemoteStickerImageInfo = async (
     mimetype: mimeType,
     size: blob.size,
   };
+
+  if (info.w && info.h) {
+    return info;
+  }
 
   const imageUrl = getImageFileUrl(blob);
   try {
@@ -477,7 +542,6 @@ const createRemoteStickerContent = async (
   const uploadedContent = await uploadPromise;
   const content = cloneMessageContent(uploadedContent);
   content.body = STICKER_EVENT_BODY;
-  content.info = getScaledStickerInfo(content.info as IImageInfo | undefined);
   return content;
 };
 
@@ -1233,21 +1297,25 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       setSendError(undefined);
       closeEmojiBoard();
       try {
-        const content = withReplyMetadata(
-          matrixSticker
-            ? {
-                body: STICKER_EVENT_BODY,
-                url: mxc,
-                ...(info ? { info: getScaledStickerInfo(info) } : {}),
-              }
-            : await createRemoteStickerContent(mx, room, mxc, label, info),
-          replyDraft,
-          mx.getUserId()
-        );
+        const pendingContent: IContent = {
+          body: STICKER_EVENT_BODY,
+          url: mxc,
+          ...(info ? { info } : {}),
+        };
+        const finalContent = matrixSticker
+          ? () => Promise.resolve(cloneMessageContent(pendingContent))
+          : () => createRemoteStickerContent(mx, room, mxc, label, info);
 
-        const sendPromise = mx.sendEvent(roomId, EventType.Sticker, content);
+        const sendPromise = sendRoomEventWithPendingContent(
+          mx,
+          room,
+          EventType.Sticker,
+          withReplyMetadata(pendingContent, replyDraft, mx.getUserId()),
+          async () => withReplyMetadata(await finalContent(), replyDraft, mx.getUserId())
+        );
         if (replyDraft) {
           setReplyDraft(undefined);
+          replyDraftRef.current = undefined;
           sendTypingStatus(false);
         }
         dispatchRoomFollowLatest(roomId);
