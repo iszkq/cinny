@@ -67,7 +67,13 @@ import {
   getMentions,
 } from '../../components/editor';
 import { EmojiBoard, EmojiBoardTab } from '../../components/emoji-board';
-import { getAudioFileUrl, loadAudioElement, SelectFileOptions } from '../../utils/dom';
+import {
+  getAudioFileUrl,
+  getImageFileUrl,
+  loadAudioElement,
+  loadImageElement,
+  SelectFileOptions,
+} from '../../utils/dom';
 import {
   getAudioInfo,
   TUploadContent,
@@ -221,6 +227,8 @@ const cloneEditorDraft = (draft: Descendant[]): Descendant[] =>
 
 const EMOJI_BOARD_REOPEN_SUPPRESS_MS = 400;
 const REMOTE_STICKER_DOWNLOAD_TIMEOUT_MS = 15000;
+const STICKER_DISPLAY_SCALE = 0.25;
+const STICKER_EVENT_BODY = '';
 
 type RemoteStickerMediaResponse = {
   dataBase64: string;
@@ -230,11 +238,6 @@ type RemoteStickerMediaResponse = {
 type RemoteStickerMedia = {
   blob: Blob;
   mimeType: string;
-};
-
-type RemoteStickerUploadedContent = {
-  content: IContent;
-  fileName: string;
 };
 
 const REMOTE_STICKER_MIME_EXTENSION: Record<string, string> = {
@@ -247,7 +250,7 @@ const REMOTE_STICKER_MIME_EXTENSION: Record<string, string> = {
   'image/webp': 'webp',
 };
 
-const remoteStickerUploadCache = new Map<string, Promise<RemoteStickerUploadedContent>>();
+const remoteStickerUploadCache = new Map<string, Promise<IContent>>();
 
 const base64ToBlob = (dataBase64: string, mimeType: string): Blob => {
   const binary = window.atob(dataBase64);
@@ -280,6 +283,58 @@ const getRemoteStickerFileName = (label: string, mimeType: string): string => {
 
 const cloneMessageContent = (content: IContent): IContent =>
   JSON.parse(JSON.stringify(content)) as IContent;
+
+const getScaledStickerDimension = (dimension: number | undefined): number | undefined =>
+  typeof dimension === 'number' && dimension > 0
+    ? Math.max(1, Math.round(dimension * STICKER_DISPLAY_SCALE))
+    : undefined;
+
+const getScaledStickerInfo = (info?: IImageInfo): IImageInfo | undefined => {
+  if (!info) return undefined;
+
+  const scaledInfo: IImageInfo = { ...info };
+  const width = getScaledStickerDimension(info.w);
+  const height = getScaledStickerDimension(info.h);
+
+  if (width) {
+    scaledInfo.w = width;
+  } else {
+    delete scaledInfo.w;
+  }
+
+  if (height) {
+    scaledInfo.h = height;
+  } else {
+    delete scaledInfo.h;
+  }
+
+  return scaledInfo;
+};
+
+const getRemoteStickerImageInfo = async (
+  blob: Blob,
+  mimeType: string,
+  fallbackInfo?: IImageInfo
+): Promise<IImageInfo> => {
+  const info: IImageInfo = {
+    ...fallbackInfo,
+    mimetype: mimeType,
+    size: blob.size,
+  };
+
+  const imageUrl = getImageFileUrl(blob);
+  try {
+    const img = await loadImageElement(imageUrl);
+    info.w = img.naturalWidth || img.width || info.w;
+    info.h = img.naturalHeight || img.height || info.h;
+  } catch (error) {
+    console.warn(error);
+  } finally {
+    URL.revokeObjectURL(imageUrl);
+  }
+
+  return info;
+};
 
 const fetchRemoteStickerMediaWithBrowser = async (
   url: string,
@@ -357,7 +412,7 @@ const uploadRemoteStickerContent = async (
   url: string,
   label: string,
   info?: IImageInfo
-): Promise<RemoteStickerUploadedContent> => {
+): Promise<IContent> => {
   const { blob, mimeType } = await fetchRemoteStickerMedia(url, info);
   const fileName = getRemoteStickerFileName(label, mimeType);
   const sourceFile = new File([blob], fileName, { type: mimeType });
@@ -383,19 +438,22 @@ const uploadRemoteStickerContent = async (
     throw new Error('Failed to upload remote sticker.');
   }
 
-  const content = await getImageMsgContent(mx, uploadItem, mxc);
-  content.body = label;
-  content.filename = fileName;
+  const mediaInfo = await getRemoteStickerImageInfo(blob, mimeType, info);
+  const content: IContent = {
+    body: STICKER_EVENT_BODY,
+    info: mediaInfo,
+  };
 
-  if (!content.info && info) {
-    content.info = {
-      ...info,
-      mimetype: mimeType,
-      size: blob.size,
+  if (uploadItem.encInfo) {
+    content.file = {
+      ...uploadItem.encInfo,
+      url: mxc,
     };
+  } else {
+    content.url = mxc;
   }
 
-  return { content, fileName };
+  return content;
 };
 
 const createRemoteStickerContent = async (
@@ -416,10 +474,10 @@ const createRemoteStickerContent = async (
     remoteStickerUploadCache.set(cacheKey, uploadPromise);
   }
 
-  const uploaded = await uploadPromise;
-  const content = cloneMessageContent(uploaded.content);
-  content.body = label;
-  content.filename = uploaded.fileName;
+  const uploadedContent = await uploadPromise;
+  const content = cloneMessageContent(uploadedContent);
+  content.body = STICKER_EVENT_BODY;
+  content.info = getScaledStickerInfo(content.info as IImageInfo | undefined);
   return content;
 };
 
@@ -1161,7 +1219,6 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       const remoteSticker = isHttpUrl(mxc);
       const matrixSticker = isMxcUrl(mxc);
       if (stickerSendingRef.current) {
-        setSendStatus('贴纸正在发送，请稍候...');
         closeEmojiBoard();
         return;
       }
@@ -1174,30 +1231,21 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
 
       stickerSendingRef.current = true;
       setSendError(undefined);
-      setSendStatus(
-        remoteSticker
-          ? room.hasEncryptionStateEvent()
-            ? '正在加密并上传贴纸...'
-            : '正在上传贴纸...'
-          : '正在发送贴纸...'
-      );
       closeEmojiBoard();
       try {
         const content = withReplyMetadata(
           matrixSticker
             ? {
-                body: label,
+                body: STICKER_EVENT_BODY,
                 url: mxc,
-                ...(info ? { info } : {}),
+                ...(info ? { info: getScaledStickerInfo(info) } : {}),
               }
             : await createRemoteStickerContent(mx, room, mxc, label, info),
           replyDraft,
           mx.getUserId()
         );
 
-        const sendPromise = matrixSticker
-          ? mx.sendEvent(roomId, EventType.Sticker, content)
-          : mx.sendMessage(roomId, content as never);
+        const sendPromise = mx.sendEvent(roomId, EventType.Sticker, content);
         if (replyDraft) {
           setReplyDraft(undefined);
           sendTypingStatus(false);
