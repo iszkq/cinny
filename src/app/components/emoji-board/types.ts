@@ -3,6 +3,7 @@ import { IImageInfo } from '../../../types/matrix/common';
 export enum EmojiBoardTab {
   Emoji = 'Emoji',
   Sticker = 'Sticker',
+  Cloud = 'Cloud',
 }
 
 export enum EmojiType {

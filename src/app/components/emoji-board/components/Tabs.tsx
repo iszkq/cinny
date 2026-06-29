@@ -39,6 +39,18 @@ export function EmojiBoardTabs({
           表情
         </Text>
       </Badge>
+      <Badge
+        style={styles}
+        as="button"
+        variant="Secondary"
+        fill={tab === EmojiBoardTab.Cloud ? 'Solid' : 'None'}
+        size="500"
+        onClick={() => onTabChange(EmojiBoardTab.Cloud)}
+      >
+        <Text as="span" size="L400">
+          {'\u4e91\u7aef'}
+        </Text>
+      </Badge>
     </Box>
   );
 }

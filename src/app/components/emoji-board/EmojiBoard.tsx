@@ -73,6 +73,7 @@ import { getEmojiBoardMediaCandidates, getEmojiBoardMediaUrls } from './componen
 import {
   getRemoteStickerPackId,
   getRemoteStickerPackName,
+  getRemoteStickerPreviewUrl,
   useRemoteStickerIndex,
 } from './useRemoteStickerIndex';
 
@@ -106,11 +107,33 @@ type PersonalPackDropTarget = {
   position: PackDropPosition;
 };
 
+const getRemoteStickerGroups = (remoteStickerImages: PackImageReader[]): StickerGroupItem[] => {
+  const remoteGroups = new Map<string, StickerGroupItem>();
+
+  remoteStickerImages.forEach((image) => {
+    const packId = getRemoteStickerPackId(image) ?? 'remote';
+    const packName = getRemoteStickerPackName(image) ?? '\u4e91\u7aef';
+    const groupId = `remote:${packId}`;
+    const group = remoteGroups.get(groupId);
+    if (group) {
+      group.items.push(image);
+      return;
+    }
+    remoteGroups.set(groupId, {
+      id: groupId,
+      name: packName,
+      items: [image],
+    });
+  });
+
+  return Array.from(remoteGroups.values());
+};
+
 const useGroups = (
   tab: EmojiBoardTab,
   imagePacks: ImagePack[],
   remoteStickerImages: PackImageReader[]
-): [EmojiGroupItem[], StickerGroupItem[]] => {
+): [EmojiGroupItem[], StickerGroupItem[], StickerGroupItem[]] => {
   const mx = useMatrixClient();
 
   const recentEmojis = useRecentEmoji(mx, 21);
@@ -137,24 +160,6 @@ const useGroups = (
       });
     });
 
-    const remoteGroups = new Map<string, EmojiGroupItem>();
-    remoteStickerImages.forEach((image) => {
-      const packId = getRemoteStickerPackId(image) ?? 'remote';
-      const packName = getRemoteStickerPackName(image) ?? '远程表情';
-      const groupId = `remote:${packId}`;
-      const group = remoteGroups.get(groupId);
-      if (group) {
-        group.items.push(image);
-        return;
-      }
-      remoteGroups.set(groupId, {
-        id: groupId,
-        name: packName,
-        items: [image],
-      });
-    });
-    g.push(...remoteGroups.values());
-
     emojiGroups.forEach((group) => {
       g.push({
         id: group.id,
@@ -164,7 +169,7 @@ const useGroups = (
     });
 
     return g;
-  }, [mx, recentEmojis, labels, imagePacks, remoteStickerImages, tab]);
+  }, [mx, recentEmojis, labels, imagePacks, tab]);
 
   const stickerGroupItems = useMemo(() => {
     const g: StickerGroupItem[] = [];
@@ -181,28 +186,15 @@ const useGroups = (
       });
     });
 
-    const remoteGroups = new Map<string, StickerGroupItem>();
-    remoteStickerImages.forEach((image) => {
-      const packId = getRemoteStickerPackId(image) ?? 'remote';
-      const packName = getRemoteStickerPackName(image) ?? '远程贴纸';
-      const groupId = `remote:${packId}`;
-      const group = remoteGroups.get(groupId);
-      if (group) {
-        group.items.push(image);
-        return;
-      }
-      remoteGroups.set(groupId, {
-        id: groupId,
-        name: packName,
-        items: [image],
-      });
-    });
-    g.push(...remoteGroups.values());
-
     return g;
-  }, [mx, imagePacks, remoteStickerImages, tab]);
+  }, [mx, imagePacks, tab]);
 
-  return [emojiGroupItems, stickerGroupItems];
+  const cloudGroupItems = useMemo(
+    () => getRemoteStickerGroups(remoteStickerImages),
+    [remoteStickerImages]
+  );
+
+  return [emojiGroupItems, stickerGroupItems, cloudGroupItems];
 };
 
 const useItemRenderer = (tab: EmojiBoardTab) => {
@@ -213,7 +205,7 @@ const useItemRenderer = (tab: EmojiBoardTab) => {
     if ('unicode' in emoji) {
       return <EmojiItem key={emoji.unicode + index} emoji={emoji} />;
     }
-    if (tab === EmojiBoardTab.Sticker) {
+    if (tab === EmojiBoardTab.Sticker || tab === EmojiBoardTab.Cloud) {
       return (
         <StickerItem
           key={emoji.shortcode + index}
@@ -503,6 +495,48 @@ function StickerSidebar({
   );
 }
 
+type RemoteStickerSidebarProps = {
+  activeGroupAtom: PrimitiveAtom<string | undefined>;
+  groups: StickerGroupItem[];
+  onScrollToGroup: (groupId: string) => void;
+};
+function RemoteStickerSidebar({
+  activeGroupAtom,
+  groups,
+  onScrollToGroup,
+}: RemoteStickerSidebarProps) {
+  const [activeGroupId, setActiveGroupId] = useAtom(activeGroupAtom);
+
+  const handleScrollToGroup = (groupId: string) => {
+    setActiveGroupId(groupId);
+    onScrollToGroup(groupId);
+  };
+
+  return (
+    <Sidebar>
+      <SidebarStack>
+        {groups.map((group) => {
+          const firstImage = group.items[0];
+          const previewUrl = firstImage
+            ? getRemoteStickerPreviewUrl(firstImage) ?? firstImage.url
+            : undefined;
+
+          return (
+            <ImageGroupIcon
+              key={group.id}
+              active={activeGroupId === group.id}
+              id={group.id}
+              label={group.name}
+              url={previewUrl}
+              onClick={handleScrollToGroup}
+            />
+          );
+        })}
+      </SidebarStack>
+    </Sidebar>
+  );
+}
+
 type EmojiGroupHolderProps = {
   contentScrollRef: RefObject<HTMLDivElement>;
   previewAtom: PrimitiveAtom<PreviewData | undefined>;
@@ -605,6 +639,7 @@ export function EmojiBoard({
   const desktopSupported = isDesktopUpdaterSupported();
 
   const emojiTab = tab === EmojiBoardTab.Emoji;
+  const cloudTab = tab === EmojiBoardTab.Cloud;
   const usage = emojiTab ? ImageUsage.Emoticon : ImageUsage.Sticker;
   const priorityPackPreloadCount = desktopSupported
     ? PRIORITY_PACK_PRELOAD_COUNT
@@ -626,19 +661,26 @@ export function EmojiBoard({
   const [draggingPackId, setDraggingPackId] = useState<string>();
   const [packDropTarget, setPackDropTarget] = useState<PersonalPackDropTarget>();
   const remoteStickerImages = useRemoteStickerIndex(
-    tab === EmojiBoardTab.Emoji || tab === EmojiBoardTab.Sticker
+    tab === EmojiBoardTab.Emoji || tab === EmojiBoardTab.Sticker || tab === EmojiBoardTab.Cloud
   );
-  const [emojiGroupItems, stickerGroupItems] = useGroups(tab, imagePacks, remoteStickerImages);
-  const groups = emojiTab ? emojiGroupItems : stickerGroupItems;
+  const [emojiGroupItems, stickerGroupItems, cloudGroupItems] = useGroups(
+    tab,
+    imagePacks,
+    remoteStickerImages
+  );
+  const groups = cloudTab ? cloudGroupItems : emojiTab ? emojiGroupItems : stickerGroupItems;
   const renderItem = useItemRenderer(tab);
 
   const searchList = useMemo(() => {
     let list: Array<PackImageReader | IEmoji> = [];
+    if (cloudTab) {
+      return list.concat(remoteStickerImages);
+    }
     list = list.concat(imagePacks.flatMap((pack) => pack.getImages(usage)));
     list = list.concat(remoteStickerImages);
     if (emojiTab) list = list.concat(emojis);
     return list;
-  }, [emojiTab, usage, imagePacks, remoteStickerImages]);
+  }, [cloudTab, emojiTab, usage, imagePacks, remoteStickerImages]);
 
   const [result, search, resetSearch] = useAsyncSearch(
     searchList,
@@ -727,6 +769,10 @@ export function EmojiBoard({
   );
 
   const priorityPacks = useMemo(() => {
+    if (cloudTab) {
+      return [];
+    }
+
     const packs: ImagePack[] = [];
     const pushPack = (pack: ImagePack | undefined) => {
       if (!pack || packs.find((item) => item.id === pack.id)) {
@@ -739,7 +785,7 @@ export function EmojiBoard({
     imagePacks.slice(0, priorityPackPreloadCount).forEach(pushPack);
 
     return packs;
-  }, [activeGroupId, imagePacks, priorityPackPreloadCount]);
+  }, [activeGroupId, cloudTab, imagePacks, priorityPackPreloadCount]);
 
   const handleOnChange: ChangeEventHandler<HTMLInputElement> = useDebounce(
     useCallback(
@@ -1017,7 +1063,13 @@ export function EmojiBoard({
           </Box>
         }
         sidebar={
-          emojiTab ? (
+          cloudTab ? (
+            <RemoteStickerSidebar
+              activeGroupAtom={activeGroupIdAtom}
+              groups={cloudGroupItems}
+              onScrollToGroup={handleScrollToGroup}
+            />
+          ) : emojiTab ? (
             <EmojiSidebar
               activeGroupAtom={activeGroupIdAtom}
               packs={imagePacks}

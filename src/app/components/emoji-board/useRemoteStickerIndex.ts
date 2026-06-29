@@ -33,7 +33,14 @@ type RemoteStickerIndexItem = {
   height?: number;
 };
 
+type RemoteStickerIndexPack = {
+  id?: string;
+  name?: string;
+  folder?: string;
+};
+
 type RemoteStickerIndex = {
+  packs?: RemoteStickerIndexPack[];
   items?: RemoteStickerIndexItem[];
 };
 
@@ -47,6 +54,16 @@ type RemoteStickerPackImage = PackImage & {
 
 let cachedRemoteStickers: PackImageReader[] | undefined;
 let pendingRemoteStickers: Promise<PackImageReader[]> | undefined;
+
+const getFreshIndexUrl = (): string => {
+  try {
+    const url = new URL(REMOTE_STICKER_INDEX_URL);
+    url.searchParams.set('_', Date.now().toString());
+    return url.toString();
+  } catch {
+    return `${REMOTE_STICKER_INDEX_URL}?_=${Date.now()}`;
+  }
+};
 
 const getDisplayName = (item: RemoteStickerIndexItem): string | undefined => {
   const name = item.name?.trim();
@@ -71,7 +88,10 @@ const getFirstValidUrl = (
   return undefined;
 };
 
-const toRemoteSticker = (item: RemoteStickerIndexItem): PackImageReader | undefined => {
+const toRemoteSticker = (
+  item: RemoteStickerIndexItem,
+  packsById: Map<string, RemoteStickerIndexPack>
+): PackImageReader | undefined => {
   const displayName = getDisplayName(item);
   const mxcUrl = getFirstValidUrl([item.mxc, item.mxcUrl, item.matrixUrl, item.url], isMxcUrl);
   const previewUrl = getFirstValidUrl(
@@ -85,7 +105,7 @@ const toRemoteSticker = (item: RemoteStickerIndexItem): PackImageReader | undefi
   }
 
   const packId = item.packId || 'remote';
-  const packName = item.packName || packId;
+  const packName = item.packName || packsById.get(packId)?.name || packId;
   const shortcode = displayName;
   const thumbUrl = getFirstValidUrl([item.thumbUrl, item.thumbnailUrl], isHttpUrl);
   const info: IImageInfo = {
@@ -123,7 +143,7 @@ const loadRemoteStickers = async (): Promise<PackImageReader[]> => {
     return pendingRemoteStickers;
   }
 
-  pendingRemoteStickers = fetch(REMOTE_STICKER_INDEX_URL)
+  pendingRemoteStickers = fetch(getFreshIndexUrl(), { cache: 'no-store' })
     .then((response) => {
       if (!response.ok) {
         throw new Error(`Failed to load remote sticker index: ${response.status}`);
@@ -132,8 +152,13 @@ const loadRemoteStickers = async (): Promise<PackImageReader[]> => {
     })
     .then((index) => {
       const items = Array.isArray(index.items) ? index.items : [];
+      const packsById = new Map(
+        (Array.isArray(index.packs) ? index.packs : [])
+          .filter((pack): pack is RemoteStickerIndexPack & { id: string } => !!pack.id)
+          .map((pack) => [pack.id, pack])
+      );
       cachedRemoteStickers = items
-        .map(toRemoteSticker)
+        .map((item) => toRemoteSticker(item, packsById))
         .filter((item): item is PackImageReader => item !== undefined);
       return cachedRemoteStickers;
     })
