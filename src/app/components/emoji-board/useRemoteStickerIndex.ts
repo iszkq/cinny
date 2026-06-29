@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { IImageInfo } from '../../../types/matrix/common';
 import { ImageUsage, PackImage, PackImageReader } from '../../plugins/custom-emoji';
+import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
 import { isHttpUrl, isMxcUrl } from '../../utils/matrix';
 
 export const REMOTE_STICKER_INDEX_URL = 'https://image.527012.xyz/index.json';
@@ -63,6 +64,33 @@ const getFreshIndexUrl = (): string => {
   } catch {
     return `${REMOTE_STICKER_INDEX_URL}?_=${Date.now()}`;
   }
+};
+
+const fetchRemoteStickerIndexWithBrowser = async (url: string): Promise<RemoteStickerIndex> => {
+  const response = await fetch(url, { cache: 'no-store' });
+  if (!response.ok) {
+    throw new Error(`Failed to load remote sticker index: ${response.status}`);
+  }
+  return response.json() as Promise<RemoteStickerIndex>;
+};
+
+const fetchRemoteStickerIndexWithDesktop = async (url: string): Promise<RemoteStickerIndex> => {
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<RemoteStickerIndex>('fetch_remote_sticker_index', { url });
+};
+
+const fetchRemoteStickerIndex = async (): Promise<RemoteStickerIndex> => {
+  const url = getFreshIndexUrl();
+
+  if (isDesktopUpdaterSupported()) {
+    try {
+      return await fetchRemoteStickerIndexWithDesktop(url);
+    } catch (error) {
+      console.warn(error);
+    }
+  }
+
+  return fetchRemoteStickerIndexWithBrowser(url);
 };
 
 const getDisplayName = (item: RemoteStickerIndexItem): string | undefined => {
@@ -143,13 +171,7 @@ const loadRemoteStickers = async (): Promise<PackImageReader[]> => {
     return pendingRemoteStickers;
   }
 
-  pendingRemoteStickers = fetch(getFreshIndexUrl(), { cache: 'no-store' })
-    .then((response) => {
-      if (!response.ok) {
-        throw new Error(`Failed to load remote sticker index: ${response.status}`);
-      }
-      return response.json() as Promise<RemoteStickerIndex>;
-    })
+  pendingRemoteStickers = fetchRemoteStickerIndex()
     .then((index) => {
       const items = Array.isArray(index.items) ? index.items : [];
       const packsById = new Map(
@@ -164,8 +186,7 @@ const loadRemoteStickers = async (): Promise<PackImageReader[]> => {
     })
     .catch((error) => {
       console.warn(error);
-      cachedRemoteStickers = [];
-      return cachedRemoteStickers;
+      return [];
     })
     .finally(() => {
       pendingRemoteStickers = undefined;
