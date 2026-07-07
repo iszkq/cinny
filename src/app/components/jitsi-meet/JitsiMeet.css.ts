@@ -21,17 +21,48 @@ export const OverlayCenter = style({
 export const Dialog = style({
   width: 'min(1180px, calc(100vw - 32px))',
   height: 'min(760px, calc(100dvh - 32px))',
+  minWidth: toRem(360),
   minHeight: toRem(480),
+  maxWidth: 'calc(100vw - 32px)',
+  maxHeight: 'calc(100dvh - 32px)',
+  position: 'relative',
+  resize: 'both',
   overflow: 'hidden',
   borderRadius: config.radii.R500,
   boxShadow: '0 24px 80px rgba(0, 0, 0, 0.32)',
+
+  selectors: {
+    '&::after': {
+      content: '""',
+      position: 'absolute',
+      right: toRem(9),
+      bottom: toRem(9),
+      width: toRem(14),
+      height: toRem(14),
+      borderRight: `${config.borderWidth.B400} solid ${color.SurfaceVariant.ContainerLine}`,
+      borderBottom: `${config.borderWidth.B400} solid ${color.SurfaceVariant.ContainerLine}`,
+      borderBottomRightRadius: toRem(2),
+      opacity: 0.85,
+      pointerEvents: 'none',
+    },
+  },
 
   '@media': {
     [mobileBreakpoint]: {
       width: '100vw',
       height: '100dvh',
+      minWidth: '100vw',
       minHeight: '100dvh',
+      maxWidth: '100vw',
+      maxHeight: '100dvh',
+      resize: 'none',
       borderRadius: 0,
+
+      selectors: {
+        '&::after': {
+          display: 'none',
+        },
+      },
     },
   },
 });

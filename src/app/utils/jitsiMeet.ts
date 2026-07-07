@@ -72,6 +72,7 @@ export const getJitsiMeetEmbedUrl = (url: string, userInfo?: JitsiMeetUserInfo):
   }
   if (safeAvatarUrl) {
     hashParams.set('userInfo.avatarURL', JSON.stringify(safeAvatarUrl));
+    hashParams.set('userInfo.avatarUrl', JSON.stringify(safeAvatarUrl));
   }
 
   embedUrl.hash = hashParams.toString();
