@@ -215,6 +215,23 @@ export const ImageViewerOcrGlyph = style([
   },
 ]);
 
+export const ImageViewerOcrButton = style({
+  flexShrink: 0,
+});
+
+export const ImageViewerOcrButtonSuccess = style({
+  color: '#047857',
+  background: 'rgba(236, 253, 245, 0.92)',
+  borderColor: 'rgba(16, 185, 129, 0.48)',
+  boxShadow: '0 0 0 1px rgba(16, 185, 129, 0.18)',
+  selectors: {
+    '&:hover, &:focus-visible': {
+      background: 'rgba(209, 250, 229, 0.96)',
+      borderColor: 'rgba(16, 185, 129, 0.68)',
+    },
+  },
+});
+
 export const ImageViewerOcrPanel = style([
   DefaultReset,
   {

@@ -678,16 +678,14 @@ export const ImageViewer = as<'div', ImageViewerProps>(
 
                   {imageOcrConfig && (
                     <Chip
+                      className={classNames(
+                        css.ImageViewerOcrButton,
+                        ocrState.status === 'success' && css.ImageViewerOcrButtonSuccess
+                      )}
                       variant={ocrState.status === 'success' ? 'Success' : 'SurfaceVariant'}
                       radii="Pill"
                       onClick={handleRecognizeText}
-                      before={
-                        ocrState.status === 'loading' ? (
-                          <Spinner size="100" variant="Secondary" fill="Solid" />
-                        ) : (
-                          <span className={css.ImageViewerOcrGlyph} aria-hidden="true" />
-                        )
-                      }
+                      before={<span className={css.ImageViewerOcrGlyph} aria-hidden="true" />}
                     >
                       <Text size="B300">{'\u8bc6\u522b\u6587\u5b57'}</Text>
                     </Chip>
@@ -771,16 +769,14 @@ export const ImageViewer = as<'div', ImageViewerProps>(
 
                 {imageOcrConfig && (
                   <Chip
+                    className={classNames(
+                      css.ImageViewerOcrButton,
+                      ocrState.status === 'success' && css.ImageViewerOcrButtonSuccess
+                    )}
                     variant={ocrState.status === 'success' ? 'Success' : 'SurfaceVariant'}
                     radii="300"
                     onClick={handleRecognizeText}
-                    before={
-                      ocrState.status === 'loading' ? (
-                        <Spinner size="100" variant="Secondary" fill="Solid" />
-                        ) : (
-                          <span className={css.ImageViewerOcrGlyph} aria-hidden="true" />
-                        )
-                      }
+                    before={<span className={css.ImageViewerOcrGlyph} aria-hidden="true" />}
                     >
                       <Text size="B300">{'\u8bc6\u522b\u6587\u5b57'}</Text>
                   </Chip>
