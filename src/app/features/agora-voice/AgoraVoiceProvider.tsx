@@ -35,7 +35,13 @@ import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useClientConfig } from '../../hooks/useClientConfig';
 import { getMemberDisplayName } from '../../utils/room';
 import { createAgoraUid, buildAgoraRtcToken } from './agoraRtcToken';
-import { AgoraClient, AgoraLocalAudioTrack, loadAgoraRTC, setAgoraArea } from './agoraSdk';
+import {
+  AgoraClient,
+  AgoraLocalAudioTrack,
+  AgoraRemoteUser,
+  loadAgoraRTC,
+  setAgoraArea,
+} from './agoraSdk';
 import {
   DEFAULT_AGORA_VOICE_MONTHLY_FREE_MINUTES,
   addAgoraVoiceUsage,
@@ -49,10 +55,12 @@ const QUOTA_EXHAUSTED_MESSAGE = '本月10000分钟免费额度已用完';
 const RINGBACK_INTERVAL_MS = 3600;
 const INCOMING_RING_INTERVAL_MS = 2600;
 const SIGNAL_DISPATCH_TIMEOUT_MS = 1500;
+const AGORA_TOKEN_TIMEOUT_MS = 10000;
 const AGORA_SDK_LOAD_TIMEOUT_MS = 15000;
 const AGORA_JOIN_TIMEOUT_MS = 20000;
 const AGORA_MIC_TIMEOUT_MS = 20000;
 const AGORA_PUBLISH_TIMEOUT_MS = 15000;
+const AGORA_REMOTE_AUDIO_TIMEOUT_MS = 30000;
 
 type VoiceAction = 'invite' | 'answer' | 'reject' | 'cancel' | 'hangup' | 'busy';
 type RingToneKind = 'incoming' | 'outgoing';
@@ -104,7 +112,13 @@ type Notice = {
   message: string;
 };
 
-type AgoraStepErrorCode = 'sdk_timeout' | 'join_timeout' | 'mic_timeout' | 'publish_timeout';
+type AgoraStepErrorCode =
+  | 'token_timeout'
+  | 'sdk_timeout'
+  | 'join_timeout'
+  | 'mic_timeout'
+  | 'publish_timeout'
+  | 'call_ended';
 
 class AgoraStepError extends Error {
   public readonly code: AgoraStepErrorCode;
@@ -193,6 +207,9 @@ const createChannelName = (roomId: string, callId: string): string => {
   return `sfv-${roomHash}-${callHash}-${getRandomPart()}`;
 };
 
+const isAgoraUserUid = (user: AgoraRemoteUser, uid: number): boolean =>
+  String(user.uid) === String(uid);
+
 const getDirectPeerId = (room: Room, myUserId: string): string | undefined => {
   const joinedPeer = room.getJoinedMembers().find((member) => member.userId !== myUserId);
   if (joinedPeer) return joinedPeer.userId;
@@ -279,6 +296,9 @@ const withTimeout = <T,>(
 
 const getAgoraConnectErrorMessage = (error: unknown): string => {
   if (error instanceof AgoraStepError) {
+    if (error.code === 'token_timeout') {
+      return '声网 token 生成超时，请刷新后重试';
+    }
     if (error.code === 'sdk_timeout') {
       return '声网 SDK 加载超时，请检查网络后重试';
     }
@@ -290,6 +310,9 @@ const getAgoraConnectErrorMessage = (error: unknown): string => {
     }
     if (error.code === 'publish_timeout') {
       return '麦克风音频发布超时，请重试';
+    }
+    if (error.code === 'call_ended') {
+      return '语音通话已结束';
     }
   }
 
@@ -311,6 +334,9 @@ const getAgoraConnectErrorMessage = (error: unknown): string => {
 
   return '语音连接失败，请重试';
 };
+
+const isCallEndedError = (error: unknown): boolean =>
+  error instanceof AgoraStepError && error.code === 'call_ended';
 
 const sendToDeviceSignal = async (
   mx: VoiceMatrixClient,
@@ -731,14 +757,59 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
     [clearCallTimeout, timeoutMs]
   );
 
+  const markCallActive = useCallback(
+    (voiceCall: VoiceCall) => {
+      const currentCall = callRef.current;
+      if (!currentCall || currentCall.callId !== voiceCall.callId) return;
+
+      clearCallTimeout();
+      updateCall({
+        ...currentCall,
+        phase: 'active',
+        connectedAt: currentCall.connectedAt ?? Date.now(),
+      });
+    },
+    [clearCallTimeout, updateCall]
+  );
+
+  const armRemoteAudioTimeout = useCallback(
+    (voiceCall: VoiceCall) => {
+      clearCallTimeout();
+      timeoutRef.current = window.setTimeout(() => {
+        const currentCall = callRef.current;
+        if (
+          !currentCall ||
+          currentCall.callId !== voiceCall.callId ||
+          currentCall.phase !== 'connecting'
+        ) {
+          return;
+        }
+
+        void sendSignal(currentCall.roomId, currentCall.peerId, {
+          action: 'hangup',
+          callId: currentCall.callId,
+          channel: currentCall.channel,
+          reason: 'connect_failed',
+        }).catch(() => undefined);
+        finishCall('语音连接超时，请重试', false);
+      }, AGORA_REMOTE_AUDIO_TIMEOUT_MS);
+    },
+    [clearCallTimeout, finishCall, sendSignal]
+  );
+
   const joinAgora = useCallback(
     async (voiceCall: VoiceCall) => {
       const { appId, appCertificate, area } = agoraVoice ?? {};
       if (!appId) throw new Error('声网 App ID 未配置。');
 
       const uid = createAgoraUid(myUserId);
+      const peerUid = createAgoraUid(voiceCall.peerId);
       const token = appCertificate
-        ? await buildAgoraRtcToken(appId, appCertificate, voiceCall.channel, uid)
+        ? await withTimeout(
+            buildAgoraRtcToken(appId, appCertificate, voiceCall.channel, uid),
+            AGORA_TOKEN_TIMEOUT_MS,
+            () => new AgoraStepError('token_timeout', 'Agora token generation timed out.')
+          )
         : null;
       const AgoraRTC = await withTimeout(
         loadAgoraRTC(),
@@ -750,21 +821,27 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
       const client = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
       let localTrack: AgoraLocalAudioTrack | undefined;
       let joined = false;
+      let remoteAudioReady = false;
 
       try {
         client.on('user-published', (user, mediaType) => {
-          if (mediaType !== 'audio') return;
+          if (mediaType !== 'audio' || !isAgoraUserUid(user, peerUid)) return;
 
           void client
             .subscribe(user, 'audio')
             .then(() => {
+              remoteAudioReady = true;
               user.audioTrack?.play();
+              markCallActive(voiceCall);
             })
             .catch(() => undefined);
         });
-        client.on('user-left', () => {
-          if (callRef.current?.callId === voiceCall.callId) {
-            finishCall(undefined, true);
+        client.on('user-left', (user?: AgoraRemoteUser) => {
+          if (user && !isAgoraUserUid(user, peerUid)) return;
+
+          const currentCall = callRef.current;
+          if (currentCall?.callId === voiceCall.callId) {
+            finishCall(undefined, currentCall.phase === 'active');
           }
         });
 
@@ -784,6 +861,10 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
           AGORA_PUBLISH_TIMEOUT_MS,
           () => new AgoraStepError('publish_timeout', 'Agora audio publish timed out.')
         );
+        if (callRef.current?.callId !== voiceCall.callId) {
+          throw new AgoraStepError('call_ended', 'Call ended before Agora join completed.');
+        }
+
         agoraSessionRef.current = {
           callId: voiceCall.callId,
           client,
@@ -792,11 +873,16 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
           usageRecorded: false,
         };
         setMicEnabled(true);
-        updateCall({
-          ...voiceCall,
-          phase: 'active',
-          connectedAt: Date.now(),
-        });
+        if (remoteAudioReady) {
+          markCallActive(voiceCall);
+        } else {
+          updateCall({
+            ...voiceCall,
+            phase: 'connecting',
+            connectedAt: undefined,
+          });
+          armRemoteAudioTimeout(voiceCall);
+        }
       } catch (error) {
         client.removeAllListeners?.();
         localTrack?.close();
@@ -806,7 +892,7 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
         throw error;
       }
     },
-    [agoraVoice, finishCall, myUserId, updateCall]
+    [agoraVoice, armRemoteAudioTimeout, finishCall, markCallActive, myUserId, updateCall]
   );
 
   const rejectIncomingCall = useCallback(async () => {
@@ -843,6 +929,8 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
         channel: currentCall.channel,
       });
     } catch (error) {
+      if (isCallEndedError(error)) return;
+
       await sendSignal(currentCall.roomId, currentCall.peerId, {
         action: joined ? 'hangup' : 'reject',
         callId: currentCall.callId,
@@ -857,19 +945,25 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
     const currentCall = callRef.current;
     if (!currentCall) return;
 
-    const action =
+    const actions: VoiceAction[] =
       currentCall.phase === 'incoming'
-        ? 'reject'
+        ? ['reject']
         : currentCall.phase === 'outgoing'
-          ? 'cancel'
-          : 'hangup';
+          ? ['cancel', 'hangup']
+          : currentCall.phase === 'connecting'
+            ? ['hangup', 'cancel']
+            : ['hangup'];
 
-    await sendSignal(currentCall.roomId, currentCall.peerId, {
-      action,
-      callId: currentCall.callId,
-      channel: currentCall.channel,
-    }).catch(() => undefined);
-    finishCall(undefined, currentCall.phase === 'active' || currentCall.phase === 'connecting');
+    await Promise.all(
+      actions.map((action) =>
+        sendSignal(currentCall.roomId, currentCall.peerId, {
+          action,
+          callId: currentCall.callId,
+          channel: currentCall.channel,
+        }).catch(() => undefined)
+      )
+    );
+    finishCall(undefined, currentCall.phase === 'active');
   }, [finishCall, sendSignal]);
 
   const toggleMic = useCallback(() => {
@@ -916,7 +1010,10 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
           return;
         }
 
-        if (callRef.current) {
+        const currentCall = callRef.current;
+        if (currentCall && currentCall.peerId === sender && currentCall.phase !== 'active') {
+          finishCall(undefined, false);
+        } else if (currentCall) {
           void sendSignal(room.roomId, sender, {
             action: 'busy',
             callId: signal.callId,
@@ -958,6 +1055,8 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
         };
         updateCall(connectingCall);
         void joinAgora(connectingCall).catch(async (error) => {
+          if (isCallEndedError(error)) return;
+
           await sendSignal(currentCall.roomId, currentCall.peerId, {
             action: 'hangup',
             callId: currentCall.callId,
