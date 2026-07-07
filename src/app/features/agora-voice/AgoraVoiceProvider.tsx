@@ -107,14 +107,32 @@ type AgoraVoiceContextValue = {
 };
 
 type ToDeviceMatrixClient = {
-  queueToDevice?: (batch: {
-    eventType: string;
-    batch: Array<{
-      userId: string;
-      deviceId: string;
-      payload: AgoraVoiceSignal;
-    }>;
-  }) => Promise<void>;
+  queueToDevice?: (batch: ToDeviceBatch) => Promise<void>;
+};
+
+type ToDeviceBatch = {
+  eventType: string;
+  batch: Array<{
+    userId: string;
+    deviceId: string;
+    payload: unknown;
+  }>;
+};
+
+type VoiceCryptoApi = {
+  getUserDeviceInfo?: (
+    userIds: string[],
+    downloadUncached?: boolean
+  ) => Promise<Map<string, Map<string, unknown>>>;
+  encryptToDeviceMessages?: (
+    eventType: string,
+    devices: Array<{ userId: string; deviceId: string }>,
+    payload: AgoraVoiceSignal
+  ) => Promise<ToDeviceBatch>;
+};
+
+type VoiceMatrixClient = ToDeviceMatrixClient & {
+  getCrypto?: () => VoiceCryptoApi | undefined;
 };
 
 const AgoraVoiceContext = createContext<AgoraVoiceContextValue>({
@@ -214,6 +232,44 @@ const waitForSignalDispatch = (signals: Array<Promise<unknown> | undefined>): Pr
         });
     });
   });
+
+const sendToDeviceSignal = async (
+  mx: VoiceMatrixClient,
+  target: string,
+  payload: AgoraVoiceSignal
+): Promise<void> => {
+  if (!mx.queueToDevice) return;
+
+  const crypto = mx.getCrypto?.();
+  const targetDevices = await crypto
+    ?.getUserDeviceInfo?.([target], true)
+    .then((devicesByUser) => devicesByUser.get(target))
+    .catch(() => undefined);
+  const devices = targetDevices
+    ? Array.from(targetDevices.keys()).map((deviceId) => ({ userId: target, deviceId }))
+    : [];
+
+  if (crypto?.encryptToDeviceMessages && devices.length > 0) {
+    const encryptedBatch = await crypto.encryptToDeviceMessages(
+      AGORA_VOICE_EVENT_TYPE,
+      devices,
+      payload
+    );
+    await mx.queueToDevice(encryptedBatch);
+    return;
+  }
+
+  await mx.queueToDevice({
+    eventType: AGORA_VOICE_EVENT_TYPE,
+    batch: [
+      {
+        userId: target,
+        deviceId: '*',
+        payload,
+      },
+    ],
+  });
+};
 
 const playTone = (
   audioContext: AudioContext,
@@ -529,18 +585,9 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
         ...signal,
       };
 
-      const deviceSignal = (mx as ToDeviceMatrixClient).queueToDevice?.({
-        eventType: AGORA_VOICE_EVENT_TYPE,
-        batch: [
-          {
-            userId: target,
-            deviceId: '*',
-            payload: {
-              ...content,
-              roomId,
-            },
-          },
-        ],
+      const deviceSignal = sendToDeviceSignal(mx as VoiceMatrixClient, target, {
+        ...content,
+        roomId,
       });
       void deviceSignal?.catch(() => undefined);
       const roomSignal = mx.sendEvent(roomId, AGORA_VOICE_EVENT_TYPE as never, content as never);
