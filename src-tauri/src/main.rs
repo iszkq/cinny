@@ -10,11 +10,12 @@ use reqwest::{
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
+    collections::{HashMap, HashSet},
     env, fs,
     process::Command,
     sync::{
         atomic::{AtomicU64, Ordering},
-        OnceLock,
+        Mutex, OnceLock,
     },
     thread,
     time::Duration,
@@ -35,9 +36,13 @@ const REMOTE_STICKER_INDEX_MAX_BYTES: u64 = 25 * 1024 * 1024;
 const REMOTE_STICKER_MEDIA_MAX_BYTES: u64 = 25 * 1024 * 1024;
 static REMOTE_STICKER_HTTP_CLIENT: OnceLock<Client> = OnceLock::new();
 static EXTERNAL_POPUP_COUNTER: AtomicU64 = AtomicU64::new(1);
+static JITSI_AUTH_POPUP_LABELS: OnceLock<Mutex<HashMap<String, HashSet<String>>>> =
+    OnceLock::new();
+const JITSI_AUTH_CLOSE_TITLE: &str = "__cinny_close_jitsi_auth_window__";
 
 const JITSI_FIREBASE_AUTH_INIT_SCRIPT: &str = r#"
 (() => {
+  const CLOSE_TITLE = '__cinny_close_jitsi_auth_window__';
   const isJitsiFirebaseAuthPage = () =>
     window.location.hostname === 'web-cdn.jitsi.net' &&
     /\/auth-static\/meet-jit-si\/[^/]+\/signin\.html$/.test(window.location.pathname);
@@ -58,6 +63,7 @@ const JITSI_FIREBASE_AUTH_INIT_SCRIPT: &str = r#"
   };
 
   const closeAfterAuthenticatedRedirect = () => {
+    document.title = CLOSE_TITLE;
     window.setTimeout(() => window.close(), 250);
     window.setTimeout(() => window.close(), 1000);
     window.setTimeout(() => window.close(), 2500);
@@ -72,6 +78,30 @@ const JITSI_FIREBASE_AUTH_INIT_SCRIPT: &str = r#"
   } catch {
     // Some WebView engines expose location.replace as readonly. Native code still handles it.
   }
+
+  let closePollCount = 0;
+  const closeWhenSignedInButStillOnAuthPage = () => {
+    closePollCount += 1;
+    try {
+      const currentUser = window.firebase?.auth?.().currentUser;
+      const authButtons = document.querySelectorAll(
+        '.firebaseui-idp-button, button[data-provider-id], [data-provider-id]'
+      );
+
+      if (currentUser && authButtons.length === 0 && closePollCount >= 12) {
+        document.title = CLOSE_TITLE;
+        closeAfterAuthenticatedRedirect();
+        return true;
+      }
+    } catch {
+      // Firebase may not be initialized yet.
+    }
+    return closePollCount >= 80;
+  };
+
+  const closePoll = window.setInterval(() => {
+    if (closeWhenSignedInButStillOnAuthPage()) window.clearInterval(closePoll);
+  }, 250);
 
   const patchFirebaseUi = () => {
     const AuthUI = window.firebaseui?.auth?.AuthUI;
@@ -203,6 +233,19 @@ fn next_external_popup_label(parent_label: &str) -> String {
     format!("{parent_label}-popup-{next_id}")
 }
 
+fn get_jitsi_auth_popup_labels() -> &'static Mutex<HashMap<String, HashSet<String>>> {
+    JITSI_AUTH_POPUP_LABELS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn register_jitsi_auth_popup_window(parent_label: &str, popup_label: &str) {
+    if let Ok(mut labels) = get_jitsi_auth_popup_labels().lock() {
+        labels
+            .entry(parent_label.to_owned())
+            .or_default()
+            .insert(popup_label.to_owned());
+    }
+}
+
 fn close_external_popup_window(app: &AppHandle, label: &str) {
     let app_handle = app.clone();
     let window_label = label.to_owned();
@@ -230,6 +273,50 @@ fn close_external_popup_window(app: &AppHandle, label: &str) {
             });
         }
     });
+}
+
+fn close_jitsi_auth_popup_windows(app: &AppHandle, parent_label: &str, current_label: &str) {
+    let mut labels_to_close = HashSet::from([current_label.to_owned()]);
+
+    close_registered_jitsi_auth_popup_windows(app, parent_label, &mut labels_to_close);
+}
+
+fn close_registered_jitsi_auth_popup_windows(
+    app: &AppHandle,
+    parent_label: &str,
+    labels_to_close: &mut HashSet<String>,
+) {
+    if let Ok(mut labels) = get_jitsi_auth_popup_labels().lock() {
+        if let Some(registered_labels) = labels.remove(parent_label) {
+            labels_to_close.extend(registered_labels);
+        }
+    }
+
+    let labels = labels_to_close.iter().cloned().collect::<Vec<_>>();
+    labels_to_close.clear();
+
+    for label in labels {
+        close_external_popup_window(app, &label);
+    }
+}
+
+fn close_jitsi_auth_popup_windows_for_parent(app: &AppHandle, parent_label: &str) {
+    let mut labels_to_close = HashSet::new();
+    close_registered_jitsi_auth_popup_windows(app, parent_label, &mut labels_to_close);
+}
+
+fn handle_jitsi_auth_popup_title(
+    app: &AppHandle,
+    parent_label: &str,
+    current_label: &str,
+    window: &tauri::WebviewWindow,
+    title: &str,
+) {
+    if title == JITSI_AUTH_CLOSE_TITLE {
+        close_jitsi_auth_popup_windows(app, parent_label, current_label);
+    } else {
+        let _ = window.set_title(title);
+    }
 }
 
 fn get_jitsi_authenticated_meeting_url(url: &Url) -> Option<Url> {
@@ -271,7 +358,7 @@ fn handle_jitsi_authenticated_meeting_redirect(
     let _ = parent_window.show();
     let _ = parent_window.set_focus();
 
-    close_external_popup_window(app, current_label);
+    close_jitsi_auth_popup_windows(app, parent_label, current_label);
 
     true
 }
@@ -499,6 +586,8 @@ async fn open_external_url_window(
 
     let popup_app = app.clone();
     let popup_parent_label = label.clone();
+    let main_navigation_app = app.clone();
+    let main_navigation_label = label.clone();
 
     WebviewWindowBuilder::new(&app, &label, WebviewUrl::External(parsed))
         .title(&title)
@@ -509,6 +598,16 @@ async fn open_external_url_window(
         .focused(true)
         .visible(true)
         .disable_drag_drop_handler()
+        .on_navigation(move |url| {
+            if get_jitsi_authenticated_meeting_url(url).is_some() {
+                close_jitsi_auth_popup_windows_for_parent(
+                    &main_navigation_app,
+                    &main_navigation_label,
+                );
+            }
+
+            true
+        })
         .on_new_window(move |url, features| {
             if !is_allowed_external_popup_url(&url) {
                 let _ = open_url_with_system_handler(url.as_str());
@@ -516,9 +615,13 @@ async fn open_external_url_window(
             }
 
             let popup_label = next_external_popup_label(&popup_parent_label);
+            register_jitsi_auth_popup_window(&popup_parent_label, &popup_label);
             let popup_navigation_app = popup_app.clone();
             let popup_navigation_parent_label = popup_parent_label.clone();
             let popup_navigation_label = popup_label.clone();
+            let popup_title_app = popup_app.clone();
+            let popup_title_parent_label = popup_parent_label.clone();
+            let popup_title_label = popup_label.clone();
             let nested_popup_app = popup_app.clone();
             let nested_popup_parent_label = popup_label.clone();
             let nested_meeting_parent_label = popup_parent_label.clone();
@@ -550,9 +653,16 @@ async fn open_external_url_window(
                 }
 
                 let nested_popup_label = next_external_popup_label(&nested_popup_parent_label);
+                register_jitsi_auth_popup_window(
+                    &nested_meeting_parent_label,
+                    &nested_popup_label,
+                );
                 let nested_navigation_app = nested_popup_app.clone();
                 let nested_navigation_parent_label = nested_meeting_parent_label.clone();
                 let nested_navigation_label = nested_popup_label.clone();
+                let nested_title_app = nested_popup_app.clone();
+                let nested_title_parent_label = nested_meeting_parent_label.clone();
+                let nested_title_label = nested_popup_label.clone();
                 let nested_popup_url =
                     Url::parse("about:blank").expect("about:blank is a valid URL");
                 let nested_popup_builder = WebviewWindowBuilder::new(
@@ -575,8 +685,14 @@ async fn open_external_url_window(
                         url,
                     )
                 })
-                .on_document_title_changed(|window, title| {
-                    let _ = window.set_title(&title);
+                .on_document_title_changed(move |window, title| {
+                    handle_jitsi_auth_popup_title(
+                        &nested_title_app,
+                        &nested_title_parent_label,
+                        &nested_title_label,
+                        window,
+                        &title,
+                    );
                 });
 
                 match nested_popup_builder.build() {
@@ -587,8 +703,14 @@ async fn open_external_url_window(
                     }
                 }
             })
-            .on_document_title_changed(|window, title| {
-                let _ = window.set_title(&title);
+            .on_document_title_changed(move |window, title| {
+                handle_jitsi_auth_popup_title(
+                    &popup_title_app,
+                    &popup_title_parent_label,
+                    &popup_title_label,
+                    window,
+                    &title,
+                );
             });
 
             match popup_builder.build() {
