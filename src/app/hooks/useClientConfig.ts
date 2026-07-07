@@ -5,6 +5,27 @@ export type HashRouterConfig = {
   basename?: string;
 };
 
+export type AgoraVoiceConfig = {
+  appId?: string;
+  appCertificate?: string;
+  area?:
+    | 'GLOBAL'
+    | 'ASIA'
+    | 'CHINA'
+    | 'EUROPE'
+    | 'NORTH_AMERICA'
+    | 'JAPAN'
+    | 'INDIA'
+    | 'KOREA'
+    | 'HKMC'
+    | 'US'
+    | 'OCEANIA'
+    | 'SOUTH_AMERICA'
+    | 'AFRICA';
+  timeoutSeconds?: number;
+  monthlyFreeMinutes?: number;
+};
+
 export type ClientConfig = {
   defaultHomeserver?: number;
   homeserverList?: string[];
@@ -26,6 +47,8 @@ export type ClientConfig = {
     rooms?: string[];
     servers?: string[];
   };
+
+  agoraVoice?: AgoraVoiceConfig;
 
   hashRouter?: HashRouterConfig;
 };

@@ -71,6 +71,7 @@ import { RoomMessageSearchDialog } from '../message-search';
 import { StartJitsiMeetButton, StartJitsiMeetPrompt } from '../../components/jitsi-meet';
 import { createJitsiMeetInfo, makeJitsiMeetMessageContent } from '../../utils/jitsiMeet';
 import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
+import { useAgoraVoice } from '../agora-voice';
 
 type RoomMenuProps = {
   room: Room;
@@ -266,6 +267,7 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
   const [messageSearch, setMessageSearch] = useState(false);
   const [meetingPrompt, setMeetingPrompt] = useState(false);
   const direct = useIsDirectRoom();
+  const agoraVoice = useAgoraVoice();
 
   const pinnedEvents = useRoomPinnedEvents(room);
   const avatarMxc = useRoomAvatar(room, direct);
@@ -291,6 +293,7 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
   const permissions = useRoomPermissions(creators, powerLevels);
   const myUserId = mx.getSafeUserId();
   const canStartMeeting = permissions.event(EventType.RoomMessage, myUserId);
+  const canStartVoice = direct && canStartMeeting && agoraVoice.available;
   const [meetingState, startMeeting] = useAsyncCallback<undefined, MatrixError | Error, [string]>(
     async (title) => {
       const nextMeeting = createJitsiMeetInfo(title);
@@ -304,6 +307,10 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
 
   const handleStartMeeting = () => {
     setMeetingPrompt(true);
+  };
+
+  const handleStartVoice = () => {
+    void agoraVoice.startCall(room);
   };
 
   const handleSubmitMeeting = (title: string) => {
@@ -418,6 +425,39 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
           </Box>
 
           <Box shrink="No">
+            {!callView && direct && (
+              <TooltipProvider
+                position="Bottom"
+                offset={4}
+                tooltip={
+                  <Tooltip>
+                    <Text>
+                      {canStartVoice
+                        ? '\u8bed\u97f3\u901a\u8bdd'
+                        : agoraVoice.available
+                          ? '\u65e0\u6743\u9650\u53d1\u8d77\u8bed\u97f3\u901a\u8bdd'
+                          : '\u8bed\u97f3\u901a\u8bdd\u672a\u914d\u7f6e'}
+                    </Text>
+                  </Tooltip>
+                }
+              >
+                {(triggerRef) => (
+                  <IconButton
+                    fill="None"
+                    ref={triggerRef}
+                    onClick={handleStartVoice}
+                    disabled={!canStartVoice}
+                    aria-pressed={agoraVoice.activeRoomId === room.roomId}
+                  >
+                    <Icon
+                      size="400"
+                      src={Icons.Phone}
+                      filled={agoraVoice.activeRoomId === room.roomId}
+                    />
+                  </IconButton>
+                )}
+              </TooltipProvider>
+            )}
             {!callView && (
               <TooltipProvider
                 position="Bottom"

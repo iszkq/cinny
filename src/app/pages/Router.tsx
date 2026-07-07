@@ -86,6 +86,7 @@ import { getFallbackSession } from '../state/sessions';
 import { CallStatusRenderer } from './CallStatusRenderer';
 import { CallEmbedProvider } from '../components/CallEmbedProvider';
 import { ScreenPinLockGate } from '../components/pin-lock';
+import { AgoraVoiceProvider } from '../features/agora-voice';
 
 export const createRouter = (clientConfig: ClientConfig, screenSize: ScreenSize) => {
   const { hashRouter } = clientConfig;
@@ -144,16 +145,18 @@ export const createRouter = (clientConfig: ClientConfig, screenSize: ScreenSize)
                     <ClientNonUIFeatures>
                       <ScreenPinLockGate>
                         <CallEmbedProvider>
-                          <ClientLayout
-                            nav={
-                              <MobileFriendlyClientNav>
-                                <SidebarNav />
-                              </MobileFriendlyClientNav>
-                            }
-                          >
-                            <Outlet />
-                          </ClientLayout>
-                          <CallStatusRenderer />
+                          <AgoraVoiceProvider>
+                            <ClientLayout
+                              nav={
+                                <MobileFriendlyClientNav>
+                                  <SidebarNav />
+                                </MobileFriendlyClientNav>
+                              }
+                            >
+                              <Outlet />
+                            </ClientLayout>
+                            <CallStatusRenderer />
+                          </AgoraVoiceProvider>
                         </CallEmbedProvider>
                         <SearchModalRenderer />
                         <UserRoomProfileRenderer />
