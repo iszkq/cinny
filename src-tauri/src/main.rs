@@ -9,8 +9,18 @@ use reqwest::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{env, fs, process::Command, sync::OnceLock, time::Duration};
-use tauri::{plugin::PermissionState, AppHandle};
+use std::{
+    env, fs,
+    process::Command,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        OnceLock,
+    },
+    time::Duration,
+};
+use tauri::{
+    plugin::PermissionState, AppHandle, Manager, WebviewUrl, WebviewWindowBuilder,
+};
 use tauri_plugin_notification::NotificationExt;
 
 #[cfg(target_os = "windows")]
@@ -23,6 +33,7 @@ const REMOTE_STICKER_INDEX_PATH: &str = "/index.json";
 const REMOTE_STICKER_INDEX_MAX_BYTES: u64 = 25 * 1024 * 1024;
 const REMOTE_STICKER_MEDIA_MAX_BYTES: u64 = 25 * 1024 * 1024;
 static REMOTE_STICKER_HTTP_CLIENT: OnceLock<Client> = OnceLock::new();
+static EXTERNAL_POPUP_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Deserialize)]
 struct DesktopNotificationPayload {
@@ -80,6 +91,47 @@ fn is_allowed_external_url(url: &str) -> bool {
     ALLOWED_EXTERNAL_URL_PREFIXES
         .iter()
         .any(|prefix| normalized.starts_with(prefix))
+}
+
+fn is_allowed_external_window_label(label: &str) -> bool {
+    label.starts_with("cinny-external-")
+        && label.len() <= 96
+        && label
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == '-')
+}
+
+fn sanitize_window_title(title: &str) -> String {
+    let sanitized = title
+        .trim()
+        .chars()
+        .filter(|ch| !ch.is_control())
+        .take(120)
+        .collect::<String>();
+
+    if sanitized.is_empty() {
+        "Meeting".to_owned()
+    } else {
+        sanitized
+    }
+}
+
+fn parse_external_webview_url(url: &str) -> Result<Url, String> {
+    let parsed = Url::parse(url.trim()).map_err(|error| format!("invalid URL: {error}"))?;
+
+    match parsed.scheme() {
+        "http" | "https" => Ok(parsed),
+        _ => Err("Unsupported URL scheme.".into()),
+    }
+}
+
+fn is_allowed_external_popup_url(url: &Url) -> bool {
+    matches!(url.scheme(), "http" | "https" | "about")
+}
+
+fn next_external_popup_label(parent_label: &str) -> String {
+    let next_id = EXTERNAL_POPUP_COUNTER.fetch_add(1, Ordering::Relaxed);
+    format!("{parent_label}-popup-{next_id}")
 }
 
 fn get_remote_sticker_http_client() -> &'static Client {
@@ -280,6 +332,81 @@ fn open_external_url(url: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+async fn open_external_url_window(
+    app: AppHandle,
+    url: String,
+    label: String,
+    title: String,
+) -> Result<(), String> {
+    if !is_allowed_external_window_label(&label) {
+        return Err("Unsupported window label.".into());
+    }
+
+    let parsed = parse_external_webview_url(&url)?;
+    let title = sanitize_window_title(&title);
+
+    if let Some(existing_window) = app.get_webview_window(&label) {
+        existing_window
+            .set_title(&title)
+            .map_err(|error| format!("failed to update window title: {error}"))?;
+        let _ = existing_window.unminimize();
+        let _ = existing_window.show();
+        let _ = existing_window.set_focus();
+        return Ok(());
+    }
+
+    let popup_app = app.clone();
+    let popup_parent_label = label.clone();
+
+    WebviewWindowBuilder::new(&app, &label, WebviewUrl::External(parsed))
+        .title(&title)
+        .inner_size(1180.0, 820.0)
+        .min_inner_size(720.0, 520.0)
+        .resizable(true)
+        .center()
+        .focused(true)
+        .visible(true)
+        .disable_drag_drop_handler()
+        .on_new_window(move |url, features| {
+            if !is_allowed_external_popup_url(&url) {
+                let _ = open_url_with_system_handler(url.as_str());
+                return tauri::webview::NewWindowResponse::Deny;
+            }
+
+            let popup_label = next_external_popup_label(&popup_parent_label);
+            let popup_url = Url::parse("about:blank").expect("about:blank is a valid URL");
+            let popup_builder = WebviewWindowBuilder::new(
+                &popup_app,
+                popup_label,
+                WebviewUrl::External(popup_url),
+            )
+            .window_features(features)
+            .title(url.as_str())
+            .resizable(true)
+            .focused(true)
+            .visible(true)
+            .disable_drag_drop_handler()
+            .on_document_title_changed(|window, title| {
+                let _ = window.set_title(&title);
+            });
+
+            match popup_builder.build() {
+                Ok(window) => tauri::webview::NewWindowResponse::Create { window },
+                Err(_) => {
+                    let _ = open_url_with_system_handler(url.as_str());
+                    tauri::webview::NewWindowResponse::Deny
+                }
+            }
+        })
+        .on_document_title_changed(|window, title| {
+            let _ = window.set_title(&title);
+        })
+        .build()
+        .map(|_| ())
+        .map_err(|error| format!("failed to create external window: {error}"))
+}
+
+#[tauri::command]
 fn get_desktop_updater_proxy() -> Option<String> {
     detect_desktop_updater_proxy()
 }
@@ -433,6 +560,7 @@ fn main() {
             desktop_media_cache::clear_desktop_media_runtime_cache,
             desktop_media_cache::clear_desktop_media_cache,
             open_external_url,
+            open_external_url_window,
             get_desktop_updater_proxy,
             fetch_remote_sticker_index,
             fetch_remote_sticker_media,
