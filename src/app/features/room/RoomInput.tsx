@@ -1,4 +1,5 @@
 import React, {
+  FormEventHandler,
   KeyboardEventHandler,
   RefObject,
   forwardRef,
@@ -22,10 +23,12 @@ import { ReactEditor } from 'slate-react';
 import { Descendant, Editor, Transforms } from 'slate';
 import {
   Box,
+  Button,
   Dialog,
   Icon,
   IconButton,
   Icons,
+  Input,
   Line,
   Menu,
   MenuItem,
@@ -123,7 +126,6 @@ import { getMemberDisplayName, getMentionContent, trimReplyFromBody } from '../.
 import { CommandAutocomplete } from './CommandAutocomplete';
 import { Command, SHRUG, TABLEFLIP, UNFLIP, useCommands } from '../../hooks/useCommands';
 import { mobileOrTablet } from '../../utils/user-agent';
-import { useElementSizeObserver } from '../../hooks/useElementSizeObserver';
 import { ReplyLayout, ThreadIndicator } from '../../components/message';
 import { roomToParentsAtom } from '../../state/room/roomToParents';
 import { useImagePackRooms } from '../../hooks/useImagePackRooms';
@@ -317,6 +319,38 @@ const cloneEditorDraft = (draft: Descendant[]): Descendant[] =>
 const EMOJI_BOARD_REOPEN_SUPPRESS_MS = 400;
 const REMOTE_STICKER_DOWNLOAD_TIMEOUT_MS = 15000;
 const STICKER_EVENT_BODY = '';
+const NOTE_TEXT_MIME_TYPE = 'text/plain;charset=utf-8';
+const NOTE_DEFAULT_BASENAME = 'note';
+
+const NOTE_CN = {
+  title: '\u4fbf\u7b7e\u8bb0\u4e8b\u672c',
+  hint: '\u8f93\u5165\u7684\u5185\u5bb9\u4f1a\u4f5c\u4e3a txt \u6587\u4ef6\u53d1\u9001\uff0c\u6362\u884c\u3001\u7a7a\u683c\u548c\u7f29\u8fdb\u4f1a\u4fdd\u7559\u3002',
+  fileName: '\u6587\u4ef6\u540d',
+  fileNamePlaceholder: '\u7559\u7a7a\u5219\u4f7f\u7528 note.txt',
+  content: '\u5185\u5bb9',
+  contentPlaceholder: '\u5728\u8fd9\u91cc\u7c98\u8d34\u6216\u8f93\u5165\u9700\u8981\u53d1\u9001\u7684\u957f\u6587\u672c',
+  cancel: '\u53d6\u6d88',
+  send: '\u53d1\u9001',
+  sending: '\u53d1\u9001\u4e2d...',
+  needContent: '\u8bf7\u5148\u8f93\u5165\u8981\u53d1\u9001\u7684\u6587\u672c\u5185\u5bb9\u3002',
+  sendFailed: '\u53d1\u9001 txt \u6587\u4ef6\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5\u3002',
+} as const;
+
+const sanitizeNoteFileBaseName = (name: string): string => {
+  const baseName = name
+    .trim()
+    .replace(/\.txt$/i, '')
+    .replace(/[\\/:*?"<>|]/g, '_')
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/^\.+/, '')
+    .replace(/[.\s]+$/g, '')
+    .slice(0, 80);
+
+  return baseName || NOTE_DEFAULT_BASENAME;
+};
+
+const getNoteFileName = (name: string): string => `${sanitizeNoteFileBaseName(name)}.txt`;
 
 type RemoteStickerMediaResponse = {
   dataBase64: string;
@@ -691,6 +725,11 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
 
     const [uploadBoard, setUploadBoard] = useState(true);
     const [pollDialog, setPollDialog] = useState(false);
+    const [noteDialogOpen, setNoteDialogOpen] = useState(false);
+    const [noteFileName, setNoteFileName] = useState('');
+    const [noteText, setNoteText] = useState('');
+    const [noteStatus, setNoteStatus] = useState<string>();
+    const [noteSubmitting, setNoteSubmitting] = useState(false);
     const mediaRecorderRef = useRef<MediaRecorder>();
     const mediaStreamRef = useRef<MediaStream>();
     const recordingChunksRef = useRef<Blob[]>([]);
@@ -720,13 +759,11 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const suppressEditorRealtimeUpdatesRef = useRef(false);
     const attachmentBtnRef = useRef<HTMLButtonElement>(null);
     const emojiBoardOpenRef = useRef(emojiBoardOpen);
-    const emojiBoardTabRef = useRef(emojiBoardTab);
     const emojiBoardTouchTriggerRef = useRef(0);
     const emojiBoardSuppressOpenUntilRef = useRef(0);
     const emojiBoardSkipClickUntilRef = useRef(0);
     const emojiBoardFocusTimerRef = useRef<number>();
     emojiBoardOpenRef.current = emojiBoardOpen;
-    emojiBoardTabRef.current = emojiBoardTab;
 
     const sendTypingStatus = useTypingStatusUpdater(mx, roomId);
     const mobileAttachmentMenuEnabled = compactScreen && mobileOrTablet();
@@ -817,14 +854,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const pickSingleFile = useFilePicker((file) => handleFiles([file]), false);
     const handlePaste = useFilePasteHandler(handleFiles);
     const dropZoneVisible = useFileDropZone(fileDropContainerRef, handleFiles);
-    const [hideStickerBtn, setHideStickerBtn] = useState(document.body.clientWidth < 500);
 
     const isComposing = useComposingCheck();
-
-    useElementSizeObserver(
-      useCallback(() => fileDropContainerRef.current, [fileDropContainerRef]),
-      useCallback((width) => setHideStickerBtn(width < 500), [])
-    );
 
     useEffect(() => {
       suppressEditorRealtimeUpdatesRef.current = true;
@@ -1243,40 +1274,113 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       [editor]
     );
 
-    const toggleEmojiBoardTab = useCallback(
-      (nextTab: EmojiBoardTab) => {
-        const now = Date.now();
-        const currentOpen = emojiBoardOpenRef.current;
-        const currentTab = emojiBoardTabRef.current;
+    const toggleEmojiBoard = useCallback(() => {
+      const now = Date.now();
+      const currentOpen = emojiBoardOpenRef.current;
 
-        if (!currentOpen && now < emojiBoardSuppressOpenUntilRef.current) {
+      if (!currentOpen && now < emojiBoardSuppressOpenUntilRef.current) {
+        return;
+      }
+
+      if (currentOpen) {
+        emojiBoardSuppressOpenUntilRef.current = now + EMOJI_BOARD_REOPEN_SUPPRESS_MS;
+        closeEmojiBoard();
+        return;
+      }
+
+      emojiBoardSuppressOpenUntilRef.current = 0;
+      setEmojiBoardTab(EmojiBoardTab.Emoji);
+      setEmojiBoardOpen(true);
+    }, [closeEmojiBoard]);
+
+    const closeNoteDialog = useCallback(() => {
+      if (noteSubmitting) return;
+      setNoteDialogOpen(false);
+      setNoteStatus(undefined);
+      setTimeout(() => ReactEditor.focus(editor), 100);
+    }, [editor, noteSubmitting]);
+
+    const handleOpenNoteDialog = useCallback(() => {
+      if (emojiBoardFocusTimerRef.current) {
+        window.clearTimeout(emojiBoardFocusTimerRef.current);
+      }
+      setEmojiBoardOpen(false);
+      setNoteFileName('');
+      setNoteText('');
+      setNoteStatus(undefined);
+      setNoteSubmitting(false);
+      setNoteDialogOpen(true);
+    }, []);
+
+    const handleNoteSubmit: FormEventHandler<HTMLFormElement> = useCallback(
+      async (evt) => {
+        evt.preventDefault();
+
+        const nativeSubmitEvent = evt.nativeEvent as SubmitEvent;
+        const submitter = nativeSubmitEvent.submitter as HTMLElement | null;
+        if (submitter?.getAttribute('data-note-submit') !== 'true') {
           return;
         }
 
-        if (hideStickerBtn) {
-          if (currentOpen) {
-            emojiBoardSuppressOpenUntilRef.current = now + EMOJI_BOARD_REOPEN_SUPPRESS_MS;
-            closeEmojiBoard();
-            return;
+        if (noteText.length === 0) {
+          setNoteStatus(NOTE_CN.needContent);
+          return;
+        }
+
+        const file = safeFile(new File([noteText], getNoteFileName(noteFileName), {
+          type: NOTE_TEXT_MIME_TYPE,
+        }));
+
+        try {
+          setNoteSubmitting(true);
+          const fileItem: TUploadItem = room.hasEncryptionStateEvent()
+            ? {
+                ...(await encryptFile(file)),
+                metadata: { markedAsSpoiler: false },
+              }
+            : {
+                file,
+                originalFile: file,
+                encInfo: undefined,
+                metadata: { markedAsSpoiler: false },
+              };
+
+          const upload = await mx.uploadContent(fileItem.file, {
+            includeFilename: !fileItem.encInfo,
+            name: file.name,
+            type: file.type || 'text/plain',
+          });
+          const mxc = upload.content_uri;
+          if (!mxc) {
+            throw new Error('Missing MXC URI after note upload.');
           }
 
-          emojiBoardSuppressOpenUntilRef.current = 0;
-          setEmojiBoardTab(EmojiBoardTab.Emoji);
-          setEmojiBoardOpen(true);
-          return;
-        }
+          const content = withReplyMetadata(
+            getFileMsgContent(fileItem, mxc),
+            replyDraft,
+            mx.getUserId()
+          );
 
-        if (currentOpen && currentTab === nextTab) {
-          emojiBoardSuppressOpenUntilRef.current = now + EMOJI_BOARD_REOPEN_SUPPRESS_MS;
-          closeEmojiBoard();
-          return;
-        }
+          await mx.sendMessage(roomId, content as never);
+          dispatchRoomFollowLatest(roomId);
+          if (replyDraft) {
+            setReplyDraft(undefined);
+            replyDraftRef.current = undefined;
+            sendTypingStatus(false);
+          }
 
-        emojiBoardSuppressOpenUntilRef.current = 0;
-        setEmojiBoardTab(nextTab);
-        setEmojiBoardOpen(true);
+          setNoteDialogOpen(false);
+          setNoteFileName('');
+          setNoteText('');
+          setNoteStatus(undefined);
+          setNoteSubmitting(false);
+          setTimeout(() => ReactEditor.focus(editor), 100);
+        } catch {
+          setNoteStatus(NOTE_CN.sendFailed);
+          setNoteSubmitting(false);
+        }
       },
-      [closeEmojiBoard, hideStickerBtn]
+      [editor, mx, noteFileName, noteText, replyDraft, room, roomId, sendTypingStatus, setReplyDraft]
     );
 
     const handleStickerSelect = async (mxc: string, label: string, info?: IImageInfo) => {
@@ -1382,6 +1486,136 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           requestClose={closePollDialog}
           onCreate={handleCreatePoll}
         />
+        <Overlay open={noteDialogOpen} backdrop={<OverlayBackdrop />}>
+          <OverlayCenter>
+            <FocusTrap
+              focusTrapOptions={{
+                initialFocus: false,
+                returnFocusOnDeactivate: false,
+                onDeactivate: closeNoteDialog,
+                clickOutsideDeactivates: true,
+              }}
+            >
+              <Dialog
+                variant="Surface"
+                style={{
+                  width: 'calc(100vw - 32px)',
+                  maxWidth: toRem(640),
+                  maxHeight: '85vh',
+                }}
+              >
+                <Box
+                  as="form"
+                  direction="Column"
+                  style={{ maxHeight: '85vh' }}
+                  onSubmit={handleNoteSubmit}
+                >
+                  <Box alignItems="Center" gap="200" style={{ padding: config.space.S400 }}>
+                    <Box grow="Yes" direction="Column" gap="100">
+                      <Text size="H4">{NOTE_CN.title}</Text>
+                      <Text size="T300" priority="300">
+                        {NOTE_CN.hint}
+                      </Text>
+                    </Box>
+                    <Box shrink="No">
+                      <IconButton
+                        type="button"
+                        onClick={closeNoteDialog}
+                        variant="SurfaceVariant"
+                        size="300"
+                        radii="300"
+                        disabled={noteSubmitting}
+                        aria-disabled={noteSubmitting}
+                      >
+                        <Icon src={Icons.Cross} />
+                      </IconButton>
+                    </Box>
+                  </Box>
+
+                  <Line variant="SurfaceVariant" size="300" />
+
+                  <Scroll size="300" hideTrack visibility="Hover">
+                    <Box direction="Column" gap="400" style={{ padding: config.space.S400 }}>
+                      <Box direction="Column" gap="100">
+                        <Text size="L400">{NOTE_CN.fileName}</Text>
+                        <Input
+                          size="500"
+                          value={noteFileName}
+                          onChange={(evt) => {
+                            setNoteFileName(evt.currentTarget.value);
+                            setNoteStatus(undefined);
+                          }}
+                          placeholder={NOTE_CN.fileNamePlaceholder}
+                          variant="Background"
+                          outlined
+                          style={{ width: '100%', minWidth: 0 }}
+                        />
+                      </Box>
+
+                      <Box direction="Column" gap="100">
+                        <Text size="L400">{NOTE_CN.content}</Text>
+                        <textarea
+                          value={noteText}
+                          onChange={(evt) => {
+                            setNoteText(evt.currentTarget.value);
+                            setNoteStatus(undefined);
+                          }}
+                          rows={14}
+                          placeholder={NOTE_CN.contentPlaceholder}
+                          style={{
+                            width: '100%',
+                            minWidth: 0,
+                            minHeight: toRem(240),
+                            resize: 'vertical',
+                            borderRadius: 8,
+                            border: '1px solid rgba(120, 120, 120, 0.22)',
+                            padding: config.space.S300,
+                            fontFamily: 'inherit',
+                            whiteSpace: 'pre-wrap',
+                            background: 'transparent',
+                            color: 'inherit',
+                          }}
+                        />
+                      </Box>
+
+                      {noteStatus && (
+                        <Text size="T300" style={{ color: color.Critical.Main }}>
+                          {noteStatus}
+                        </Text>
+                      )}
+
+                      <Box justifyContent="End" gap="200">
+                        <Button
+                          type="button"
+                          variant="Secondary"
+                          fill="Soft"
+                          size="300"
+                          radii="300"
+                          outlined
+                          onClick={closeNoteDialog}
+                          disabled={noteSubmitting}
+                        >
+                          <Text size="B300">{NOTE_CN.cancel}</Text>
+                        </Button>
+                        <Button
+                          type="submit"
+                          data-note-submit="true"
+                          variant="Primary"
+                          size="300"
+                          radii="300"
+                          disabled={noteSubmitting}
+                        >
+                          <Text size="B300">{noteSubmitting ? NOTE_CN.sending : NOTE_CN.send}</Text>
+                          <Icon src={Icons.Send} size="50" filled />
+                        </Button>
+                      </Box>
+                    </Box>
+                  </Scroll>
+                </Box>
+              </Dialog>
+            </FocusTrap>
+          </OverlayCenter>
+        </Overlay>
         {selectedFiles.length > 0 && (
           <UploadBoard
             header={
@@ -1687,6 +1921,17 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
               >
                 <Icon src={toolbar ? Icons.AlphabetUnderline : Icons.Alphabet} />
               </IconButton>
+              <IconButton
+                onClick={handleOpenNoteDialog}
+                variant="SurfaceVariant"
+                size="300"
+                radii="300"
+                disabled={recording}
+                aria-disabled={recording}
+                title={NOTE_CN.title}
+              >
+                <Icon src={Icons.File} />
+              </IconButton>
               <PopOut
                 offset={16}
                 alignOffset={-44}
@@ -1707,47 +1952,12 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                   />
                 }
               >
-                {!hideStickerBtn && (
-                  <IconButton
-                    aria-pressed={emojiBoardOpen && emojiBoardTab === EmojiBoardTab.Sticker}
-                    onPointerDown={(evt) => {
-                      emojiBoardTouchTriggerRef.current = Date.now();
-                      if (emojiBoardOpen && emojiBoardTab === EmojiBoardTab.Sticker) {
-                        evt.preventDefault();
-                        evt.stopPropagation();
-                        closeEmojiBoard(true);
-                      }
-                    }}
-                    onClick={() => {
-                      if (Date.now() < emojiBoardSkipClickUntilRef.current) {
-                        return;
-                      }
-                      toggleEmojiBoardTab(EmojiBoardTab.Sticker);
-                    }}
-                    variant="SurfaceVariant"
-                    size="300"
-                    radii="300"
-                  >
-                    <Icon
-                      src={Icons.Sticker}
-                      filled={emojiBoardOpen && emojiBoardTab === EmojiBoardTab.Sticker}
-                    />
-                  </IconButton>
-                )}
                 <IconButton
                   ref={emojiBtnRef}
-                  aria-pressed={
-                    hideStickerBtn
-                      ? emojiBoardOpen
-                      : emojiBoardOpen && emojiBoardTab === EmojiBoardTab.Emoji
-                  }
-                  onPointerDown={(evt) => {
+                  aria-pressed={emojiBoardOpen}
+                  onPointerDown={(evt: React.PointerEvent<HTMLButtonElement>) => {
                     emojiBoardTouchTriggerRef.current = Date.now();
-                    if (
-                      hideStickerBtn
-                        ? emojiBoardOpen
-                        : emojiBoardOpen && emojiBoardTab === EmojiBoardTab.Emoji
-                    ) {
+                    if (emojiBoardOpen) {
                       evt.preventDefault();
                       evt.stopPropagation();
                       closeEmojiBoard(true);
@@ -1757,20 +1967,13 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                     if (Date.now() < emojiBoardSkipClickUntilRef.current) {
                       return;
                     }
-                    toggleEmojiBoardTab(EmojiBoardTab.Emoji);
+                    toggleEmojiBoard();
                   }}
                   variant="SurfaceVariant"
                   size="300"
                   radii="300"
                 >
-                  <Icon
-                    src={Icons.Smile}
-                    filled={
-                      hideStickerBtn
-                        ? emojiBoardOpen
-                        : emojiBoardOpen && emojiBoardTab === EmojiBoardTab.Emoji
-                    }
-                  />
+                  <Icon src={Icons.Smile} filled={emojiBoardOpen} />
                 </IconButton>
               </PopOut>
               <IconButton

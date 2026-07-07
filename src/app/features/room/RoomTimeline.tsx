@@ -765,8 +765,20 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     typeof timeline.linkedTimelines[0]?.getPaginationToken(Direction.Backward) === 'string';
   const rangeAtStart = timeline.range.start === 0;
   const rangeAtEnd = timeline.range.end === eventsLength;
+  const getScrollElement = useCallback(() => scrollRef.current, []);
   const atLiveEndRef = useRef(liveTimelineLinked && rangeAtEnd);
   atLiveEndRef.current = liveTimelineLinked && rangeAtEnd;
+
+  const isScrolledToLiveBottom = useCallback((): boolean => {
+    const scrollElement = getScrollElement();
+    return Boolean(scrollElement && atLiveEndRef.current && isScrollAtBottom(scrollElement));
+  }, [getScrollElement]);
+
+  const syncAtBottomState = useCallback((): boolean => {
+    const nextAtBottom = isScrolledToLiveBottom();
+    setAtBottom((current) => (current === nextAtBottom ? current : nextAtBottom));
+    return nextAtBottom;
+  }, [isScrolledToLiveBottom]);
 
   const handleTimelinePagination = useTimelinePagination(
     mx,
@@ -774,8 +786,6 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     setTimeline,
     PAGINATION_LIMIT
   );
-
-  const getScrollElement = useCallback(() => scrollRef.current, []);
 
   const { getItems, scrollToItem, scrollToElement, observeBackAnchor, observeFrontAnchor } =
     useVirtualPaginator({
@@ -962,6 +972,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
           }
 
           setUnreadInfo(undefined);
+          setAtBottom(true);
           scrollToBottomRef.current.count += 1;
           scrollToBottomRef.current.smooth = true;
           setTimeline(getInitialTimeline(room));
@@ -1157,10 +1168,38 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     tryAutoMarkAsRead,
   ]);
 
-  const debounceSetAtBottom = useDebounce(
-    useCallback((entry: IntersectionObserverEntry) => {
-      if (!entry.isIntersecting) setAtBottom(false);
-    }, []),
+  useEffect(() => {
+    const scrollElement = getScrollElement();
+    if (!scrollElement) return undefined;
+
+    let animationFrame = 0;
+    const handleScroll = () => {
+      if (animationFrame) return;
+
+      animationFrame = window.requestAnimationFrame(() => {
+        animationFrame = 0;
+        const nextAtBottom = syncAtBottomState();
+        if (nextAtBottom && document.hasFocus()) {
+          tryAutoMarkAsRead();
+        }
+      });
+    };
+
+    scrollElement.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll();
+
+    return () => {
+      if (animationFrame) {
+        window.cancelAnimationFrame(animationFrame);
+      }
+      scrollElement.removeEventListener('scroll', handleScroll);
+    };
+  }, [getScrollElement, syncAtBottomState, tryAutoMarkAsRead]);
+
+  const debounceSyncAtBottom = useDebounce(
+    useCallback(() => {
+      syncAtBottomState();
+    }, [syncAtBottomState]),
     { wait: 1000 }
   );
   useIntersectionObserver(
@@ -1169,15 +1208,17 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
         const target = atBottomAnchorRef.current;
         if (!target) return;
         const targetEntry = getIntersectionObserverEntry(target, entries);
-        if (targetEntry) debounceSetAtBottom(targetEntry);
+        if (!targetEntry) return;
         if (targetEntry?.isIntersecting && atLiveEndRef.current) {
           setAtBottom(true);
           if (document.hasFocus()) {
             tryAutoMarkAsRead();
           }
+          return;
         }
+        debounceSyncAtBottom();
       },
-      [debounceSetAtBottom, tryAutoMarkAsRead]
+      [debounceSyncAtBottom, tryAutoMarkAsRead]
     ),
     useCallback(
       () => ({
@@ -1304,8 +1345,9 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     const scrollEl = scrollRef.current;
     if (scrollEl) {
       scrollToBottom(scrollEl);
+      window.requestAnimationFrame(syncAtBottomState);
     }
-  }, []);
+  }, [syncAtBottomState]);
 
   // if live timeline is linked and unreadInfo change
   // Scroll to last read message
@@ -1350,10 +1392,12 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
   useLayoutEffect(() => {
     if (scrollToBottomCount > 0) {
       const scrollEl = scrollRef.current;
-      if (scrollEl)
+      if (scrollEl) {
         scrollToBottom(scrollEl, scrollToBottomRef.current.smooth ? 'smooth' : 'instant');
+        window.requestAnimationFrame(syncAtBottomState);
+      }
     }
-  }, [scrollToBottomCount]);
+  }, [scrollToBottomCount, syncAtBottomState]);
 
   useEffect(() => {
     syncUnreadInfo();
@@ -1390,6 +1434,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
       }
 
       setUnreadInfo(undefined);
+      setAtBottom(true);
       setTimeline(getInitialTimeline(room));
       scrollToBottomRef.current.count += 1;
       scrollToBottomRef.current.smooth = true;
@@ -1422,6 +1467,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
       navigateRoom(room.roomId, undefined, { replace: true });
     }
     setUnreadInfo(undefined);
+    setAtBottom(true);
     setTimeline(getInitialTimeline(room));
     scrollToBottomRef.current.count += 1;
     scrollToBottomRef.current.smooth = false;
