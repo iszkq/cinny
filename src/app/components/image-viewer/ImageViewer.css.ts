@@ -168,6 +168,43 @@ export const ImageViewerLoading = style([
   },
 ]);
 
+export const ImageViewerOcrPanel = style([
+  DefaultReset,
+  {
+    flexShrink: 0,
+    maxHeight: 'min(28vh, 220px)',
+    overflow: 'hidden',
+    padding: config.space.S300,
+    borderRadius: config.radii.R300,
+    background: 'rgba(255, 255, 255, 0.68)',
+    border: '1px solid rgba(148, 163, 184, 0.24)',
+    boxShadow: '0 14px 36px rgba(15, 23, 42, 0.1)',
+    '@media': {
+      'screen and (max-width: 750px)': {
+        maxHeight: '32dvh',
+        padding: config.space.S200,
+        borderRadius: config.radii.R300,
+      },
+    },
+  },
+]);
+
+export const ImageViewerOcrText = style([
+  DefaultReset,
+  {
+    margin: 0,
+    minHeight: 0,
+    overflow: 'auto',
+    whiteSpace: 'pre-wrap',
+    wordBreak: 'break-word',
+    color: '#111827',
+    fontFamily: 'inherit',
+    fontSize: '0.875rem',
+    lineHeight: 1.6,
+    userSelect: 'text',
+  },
+]);
+
 export const ImageViewerWindowControls = style([
   DefaultReset,
   {

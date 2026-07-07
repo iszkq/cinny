@@ -1,4 +1,5 @@
 import { isDesktopUpdaterSupported } from './desktopUpdater';
+import type { AihubmixImageOcrConfig } from './ai';
 
 export type NativeImagePreviewPayload = {
   previewId: string;
@@ -7,6 +8,7 @@ export type NativeImagePreviewPayload = {
   loading?: boolean;
   canPrev?: boolean;
   canNext?: boolean;
+  imageOcrConfig?: AihubmixImageOcrConfig;
 };
 
 export type NativeImagePreviewAction = {

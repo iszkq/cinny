@@ -5,6 +5,11 @@
   "audioTranscription": {
     "defaultAihubmixApiKey": "sk-ORD4wbVuj5ThPB0x52633eCc417c43A39b94D49123A7F719"
   },
+  "imageOcr": {
+    "defaultAihubmixApiKey": "sk-ORD4wbVuj5ThPB0x52633eCc417c43A39b94D49123A7F719",
+    "baseUrl": "https://aihubmix.com/v1",
+    "model": "glm-ocr"
+  },
 
   "featuredCommunities": {
     "openAsDefault": false,

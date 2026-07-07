@@ -151,6 +151,7 @@ function NativeImagePreviewWindowContent() {
         src={payload.src}
         alt={payload.alt}
         loading={payload.loading}
+        imageOcrConfig={payload.imageOcrConfig}
         requestClose={handleClose}
         canPrev={payload.canPrev}
         canNext={payload.canNext}

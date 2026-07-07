@@ -63,6 +63,7 @@ type LatestNativePreviewInput = {
   loading?: boolean;
   canPrev?: boolean;
   canNext?: boolean;
+  imageOcrConfig?: ImageViewerProps['imageOcrConfig'];
   onPrev?: () => void;
   onNext?: () => void;
   requestClose: () => void;
@@ -115,6 +116,7 @@ export function ImageViewerDialog({
     loading,
     canPrev: viewerProps.canPrev,
     canNext: viewerProps.canNext,
+    imageOcrConfig: viewerProps.imageOcrConfig,
     onPrev: viewerProps.onPrev,
     onNext: viewerProps.onNext,
     requestClose,
@@ -213,6 +215,7 @@ export function ImageViewerDialog({
       loading: input.loading,
       canPrev: input.canPrev,
       canNext: input.canNext,
+      imageOcrConfig: input.imageOcrConfig,
     };
   }, []);
 
@@ -223,6 +226,7 @@ export function ImageViewerDialog({
       loading,
       canPrev: viewerProps.canPrev,
       canNext: viewerProps.canNext,
+      imageOcrConfig: viewerProps.imageOcrConfig,
       onPrev: viewerProps.onPrev,
       onNext: viewerProps.onNext,
       requestClose,
@@ -234,6 +238,7 @@ export function ImageViewerDialog({
     src,
     viewerProps.canNext,
     viewerProps.canPrev,
+    viewerProps.imageOcrConfig,
     viewerProps.onNext,
     viewerProps.onPrev,
   ]);
@@ -364,6 +369,7 @@ export function ImageViewerDialog({
     src,
     viewerProps.canNext,
     viewerProps.canPrev,
+    viewerProps.imageOcrConfig,
   ]);
 
   useEffect(() => {

@@ -14,6 +14,12 @@ export type ClientConfig = {
     defaultAihubmixApiKey?: string;
   };
 
+  imageOcr?: {
+    defaultAihubmixApiKey?: string;
+    baseUrl?: string;
+    model?: string;
+  };
+
   featuredCommunities?: {
     openAsDefault?: boolean;
     spaces?: string[];

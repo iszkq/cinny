@@ -27,6 +27,17 @@ type OpenAIAudioTranscriptionResponse = {
 
 export const AIHUBMIX_AUDIO_TRANSCRIPTION_MODEL = 'whisper-large-v3-turbo';
 export const AIHUBMIX_AUDIO_TRANSCRIPTION_MAX_FILE_SIZE = 25 * 1024 * 1024;
+export const AIHUBMIX_IMAGE_OCR_MODEL = 'glm-ocr';
+
+export type AihubmixImageOcrConfig = {
+  apiKey?: string;
+  baseUrl?: string;
+  model?: string;
+};
+
+const DEFAULT_AIHUBMIX_BASE_URL = 'https://aihubmix.com/v1';
+const DATA_URL_RE = /^data:/i;
+const HTTP_URL_RE = /^https?:/i;
 
 const uniqById = (models: AIModel[]): AIModel[] => {
   const seen = new Set<string>();
@@ -381,6 +392,36 @@ const normalizeAihubmixText = (value: unknown): string | undefined => {
   return decodeEscapedText(trimmedValue);
 };
 
+const blobToDataUrl = (blob: Blob): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result);
+        return;
+      }
+      reject(new Error('Failed to serialize image.'));
+    };
+    reader.onerror = () => reject(reader.error ?? new Error('Failed to read image.'));
+    reader.readAsDataURL(blob);
+  });
+
+const getAihubmixImageOcrUrl = async (src: string): Promise<string> => {
+  if (DATA_URL_RE.test(src)) return src;
+
+  try {
+    const response = await fetch(src);
+    if (!response.ok) {
+      throw new Error(`Failed to load image for OCR: ${response.status}`);
+    }
+
+    return blobToDataUrl(await response.blob());
+  } catch (error) {
+    if (HTTP_URL_RE.test(src)) return src;
+    throw error;
+  }
+};
+
 export const getAihubmixAudioTranscriptionApiKey = (
   settings: Pick<AISettings, 'apiKey'>,
   defaultApiKey?: string
@@ -462,6 +503,78 @@ export const transcribeAudioWithAihubmix = async (
   }
 
   return transcriptionText;
+};
+
+export const recognizeImageTextWithAihubmix = async (
+  imageSrc: string,
+  config?: AihubmixImageOcrConfig
+): Promise<string> => {
+  const apiKey = config?.apiKey?.trim();
+
+  if (!apiKey) {
+    throw new Error(
+      '\u8bf7\u5148\u5728 config.json \u7684 imageOcr.defaultAihubmixApiKey \u914d\u7f6e AIHubMix API Key\u3002'
+    );
+  }
+
+  const endpoint = `${trimTrailingSlash(
+    config?.baseUrl?.trim() || DEFAULT_AIHUBMIX_BASE_URL
+  )}/chat/completions`;
+  const imageUrl = await getAihubmixImageOcrUrl(imageSrc);
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: config?.model?.trim() || AIHUBMIX_IMAGE_OCR_MODEL,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text:
+                '\u8bf7\u8bc6\u522b\u56fe\u7247\u4e2d\u7684\u6240\u6709\u6587\u5b57\uff0c\u5c3d\u91cf\u4fdd\u7559\u539f\u6709\u6362\u884c\u548c\u9605\u8bfb\u987a\u5e8f\uff0c\u53ea\u8f93\u51fa\u8bc6\u522b\u5230\u7684\u6587\u5b57\u3002',
+            },
+            {
+              type: 'image_url',
+              image_url: {
+                url: imageUrl,
+              },
+            },
+          ],
+        },
+      ],
+    }),
+  });
+
+  const rawText = await response.text();
+  let payload: OpenAIChatResponse | undefined;
+  try {
+    payload = rawText ? (JSON.parse(rawText) as OpenAIChatResponse) : undefined;
+  } catch {
+    payload = undefined;
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      normalizeAihubmixText(extractOpenAICompatibleError(payload)) ??
+        `\u56fe\u7247\u6587\u5b57\u8bc6\u522b\u5931\u8d25\uff1a${response.status}`
+    );
+  }
+
+  if (!payload) {
+    throw new Error('OCR \u54cd\u5e94\u91cc\u6ca1\u6709\u6587\u672c\u3002');
+  }
+
+  const recognizedText = normalizeAihubmixText(extractChatText(payload));
+  if (!recognizedText) {
+    throw new Error('\u6ca1\u6709\u8bc6\u522b\u5230\u6587\u5b57\u3002');
+  }
+
+  return recognizedText;
 };
 
 export const runAISkill = async (

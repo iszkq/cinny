@@ -1,19 +1,25 @@
 /* eslint-disable jsx-a11y/no-noninteractive-element-interactions */
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import classNames from 'classnames';
-import { Box, Chip, Header, Icon, IconButton, Icons, Text, as } from 'folds';
+import { Box, Button, Chip, Header, Icon, IconButton, Icons, Spinner, Text, as } from 'folds';
 import * as css from './ImageViewer.css';
 import { usePan } from '../../hooks/usePan';
 import { useZoom } from '../../hooks/useZoom';
 import { fetchMediaWithAuth } from '../../utils/matrix';
 import { ScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
 import { saveDownloadedFile } from '../../utils/saveDownloadedFile';
+import {
+  recognizeImageTextWithAihubmix,
+  type AihubmixImageOcrConfig,
+} from '../../utils/ai';
+import { copyToClipboard } from '../../utils/dom';
 
 export type ImageViewerProps = {
   alt: string;
   src: string;
   loading?: boolean;
   requestClose: () => void;
+  imageOcrConfig?: AihubmixImageOcrConfig;
   onMinimize?: () => void;
   maximized?: boolean;
   onToggleMaximized?: () => void;
@@ -30,6 +36,21 @@ type TouchPoint = {
   x: number;
   y: number;
 };
+type OcrState =
+  | {
+      status: 'idle';
+    }
+  | {
+      status: 'loading';
+    }
+  | {
+      status: 'success';
+      text: string;
+    }
+  | {
+      status: 'error';
+      error: string;
+    };
 type TouchGesture =
   | {
       mode: 'pan';
@@ -111,6 +132,7 @@ export const ImageViewer = as<'div', ImageViewerProps>(
       src,
       loading,
       requestClose,
+      imageOcrConfig,
       onMinimize,
       maximized,
       onToggleMaximized,
@@ -158,11 +180,45 @@ export const ImageViewer = as<'div', ImageViewerProps>(
       useState<ImageOrientation>('landscape');
     const [transitionImageOrientation, setTransitionImageOrientation] =
       useState<ImageOrientation>('landscape');
+    const [ocrPanelOpen, setOcrPanelOpen] = useState(false);
+    const [ocrState, setOcrState] = useState<OcrState>({ status: 'idle' });
+    const [ocrCopied, setOcrCopied] = useState(false);
 
     const handleDownload = async () => {
       const response = await fetchMediaWithAuth(src);
       const fileContent = await response.blob();
       await saveDownloadedFile(fileContent, alt);
+    };
+
+    const handleRecognizeText = useCallback(() => {
+      if (ocrState.status === 'loading') return;
+
+      setOcrPanelOpen(true);
+      setOcrCopied(false);
+      setOcrState({ status: 'loading' });
+
+      recognizeImageTextWithAihubmix(src, imageOcrConfig)
+        .then((text) => {
+          setOcrState({
+            status: 'success',
+            text,
+          });
+        })
+        .catch((error) => {
+          setOcrState({
+            status: 'error',
+            error:
+              error instanceof Error
+                ? error.message
+                : '\u56fe\u7247\u6587\u5b57\u8bc6\u522b\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5\u3002',
+          });
+        });
+    }, [imageOcrConfig, ocrState.status, src]);
+
+    const handleCopyOcrText = () => {
+      if (ocrState.status !== 'success') return;
+      copyToClipboard(ocrState.text);
+      setOcrCopied(true);
     };
 
     const rotateLeft = () => setRotation((angle) => angle - 90);
@@ -462,6 +518,19 @@ export const ImageViewer = as<'div', ImageViewerProps>(
       }
     }, [panEnabled]);
 
+    useEffect(() => {
+      setOcrPanelOpen(false);
+      setOcrCopied(false);
+      setOcrState({ status: 'idle' });
+    }, [src]);
+
+    useEffect(() => {
+      if (!ocrCopied) return undefined;
+
+      const timer = window.setTimeout(() => setOcrCopied(false), 1800);
+      return () => window.clearTimeout(timer);
+    }, [ocrCopied]);
+
     const getFitImageSizeStyle = (orientation: ImageOrientation) => {
       if (viewMode !== 'fit') {
         return {
@@ -597,6 +666,23 @@ export const ImageViewer = as<'div', ImageViewerProps>(
                   <Chip variant="SurfaceVariant" radii="Pill" onClick={rotateRight}>
                     <Text size="B300">{'\u53f3\u8f6c'}</Text>
                   </Chip>
+
+                  {imageOcrConfig && (
+                    <Chip
+                      variant={ocrState.status === 'success' ? 'Success' : 'SurfaceVariant'}
+                      radii="Pill"
+                      onClick={handleRecognizeText}
+                      before={
+                        ocrState.status === 'loading' ? (
+                          <Spinner size="100" variant="Secondary" fill="Solid" />
+                        ) : (
+                          <Icon size="50" src={Icons.Alphabet} />
+                        )
+                      }
+                    >
+                      <Text size="B300">{'\u8bc6\u522b\u6587\u5b57'}</Text>
+                    </Chip>
+                  )}
                 </Box>
               </Box>
             </Box>
@@ -673,6 +759,23 @@ export const ImageViewer = as<'div', ImageViewerProps>(
                 <Chip variant="SurfaceVariant" radii="Pill" onClick={rotateRight}>
                   <Text size="B300">{'\u53f3\u8f6c'}</Text>
                 </Chip>
+
+                {imageOcrConfig && (
+                  <Chip
+                    variant={ocrState.status === 'success' ? 'Success' : 'SurfaceVariant'}
+                    radii="300"
+                    onClick={handleRecognizeText}
+                    before={
+                      ocrState.status === 'loading' ? (
+                        <Spinner size="100" variant="Secondary" fill="Solid" />
+                      ) : (
+                        <Icon size="50" src={Icons.Alphabet} />
+                      )
+                    }
+                  >
+                    <Text size="B300">{'\u8bc6\u522b\u6587\u5b57'}</Text>
+                  </Chip>
+                )}
 
                 {!loading && (
                   <Chip
@@ -854,6 +957,69 @@ export const ImageViewer = as<'div', ImageViewerProps>(
               </IconButton>
             )}
           </Box>
+
+          {imageOcrConfig && ocrPanelOpen && (
+            <Box className={css.ImageViewerOcrPanel} direction="Column" gap="200">
+              <Box alignItems="Center" gap="200">
+                <Text size="L400" truncate>
+                  {'\u6587\u5b57\u8bc6\u522b'}
+                </Text>
+                <Box grow="Yes" />
+                {ocrState.status === 'success' && (
+                  <Button
+                    variant="Secondary"
+                    fill="Soft"
+                    size="300"
+                    radii="300"
+                    onClick={handleCopyOcrText}
+                  >
+                    <Text size="B300">
+                      {ocrCopied ? '\u5df2\u590d\u5236' : '\u590d\u5236'}
+                    </Text>
+                  </Button>
+                )}
+                {ocrState.status === 'error' && (
+                  <Button
+                    variant="Secondary"
+                    fill="Soft"
+                    size="300"
+                    radii="300"
+                    onClick={handleRecognizeText}
+                  >
+                    <Text size="B300">{'\u91cd\u65b0\u8bc6\u522b'}</Text>
+                  </Button>
+                )}
+                <IconButton
+                  variant="SurfaceVariant"
+                  size="300"
+                  radii="300"
+                  onClick={() => setOcrPanelOpen(false)}
+                  aria-label={'\u5173\u95ed\u6587\u5b57\u8bc6\u522b'}
+                >
+                  <Icon size="50" src={Icons.Cross} />
+                </IconButton>
+              </Box>
+
+              {ocrState.status === 'loading' && (
+                <Box alignItems="Center" gap="200">
+                  <Spinner size="200" variant="Secondary" fill="Solid" />
+                  <Text size="T300" priority="300">
+                    {'\u6b63\u5728\u8bc6\u522b\u56fe\u7247\u4e2d\u7684\u6587\u5b57...'}
+                  </Text>
+                </Box>
+              )}
+
+              {ocrState.status === 'error' && (
+                <Text size="T300" priority="300">
+                  {ocrState.error}
+                </Text>
+              )}
+
+              {ocrState.status === 'success' && (
+                <pre className={css.ImageViewerOcrText}>{ocrState.text}</pre>
+              )}
+            </Box>
+          )}
         </Box>
       </Box>
     );

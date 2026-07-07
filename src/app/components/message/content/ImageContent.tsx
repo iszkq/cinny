@@ -1,4 +1,4 @@
-import React, { ReactNode, useCallback, useEffect, useState } from 'react';
+import React, { ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Badge,
   Box,
@@ -32,6 +32,8 @@ import { primeCachedMediaObjectUrl } from '../../../utils/mediaUrlCache';
 import { useStableMediaUrl } from '../../emoji-board/useStableMediaUrl';
 import { prepareEncryptedMediaObjectUrl } from '../../../utils/encryptedMediaCache';
 import { ImageViewerDialog } from '../../image-viewer';
+import { useClientConfig } from '../../../hooks/useClientConfig';
+import type { AihubmixImageOcrConfig } from '../../../utils/ai';
 
 const IMAGE_PREVIEW_WIDTH = 230;
 const IMAGE_PREVIEW_HEIGHT = 460;
@@ -41,6 +43,7 @@ type RenderViewerProps = {
   alt: string;
   loading?: boolean;
   requestClose: () => void;
+  imageOcrConfig?: AihubmixImageOcrConfig;
   canPrev?: boolean;
   canNext?: boolean;
   onPrev?: () => void;
@@ -106,8 +109,23 @@ export const ImageContent = as<'div', ImageContentProps>(
     ref
   ) => {
     const mx = useMatrixClient();
+    const clientConfig = useClientConfig();
     const useAuthentication = useMediaAuthentication();
     const blurHash = validBlurHash(info?.[MATRIX_BLUR_HASH_PROPERTY_NAME]);
+    const imageOcrConfig = useMemo<AihubmixImageOcrConfig | undefined>(() => {
+      const config = clientConfig.imageOcr;
+      if (!config) return undefined;
+
+      return {
+        apiKey: config.defaultAihubmixApiKey,
+        baseUrl: config.baseUrl,
+        model: config.model,
+      };
+    }, [
+      clientConfig.imageOcr?.baseUrl,
+      clientConfig.imageOcr?.defaultAihubmixApiKey,
+      clientConfig.imageOcr?.model,
+    ]);
 
     const [load, setLoad] = useState(false);
     const [error, setError] = useState(false);
@@ -424,6 +442,7 @@ export const ImageContent = as<'div', ImageContentProps>(
             canNext={viewerNavigationEnabled && activeViewerIndex < viewerItemsCount - 1}
             onPrev={viewerNavigationEnabled ? handlePrevViewerItem : undefined}
             onNext={viewerNavigationEnabled ? handleNextViewerItem : undefined}
+            imageOcrConfig={imageOcrConfig}
             requestClose={handleCloseViewer}
             renderViewer={renderViewer}
           />
