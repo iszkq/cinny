@@ -94,7 +94,9 @@ export function RenderMessageContent({
   const myAvatarMxc =
     (room && getMemberAvatarMxc(room, myUserId)) ?? mx.getUser(myUserId)?.avatarUrl;
   const myAvatarUrl = myAvatarMxc
-    ? mxcUrlToHttp(mx, myAvatarMxc, useAuthentication, 128, 128, 'crop') ?? undefined
+    ? mxcUrlToHttp(mx, myAvatarMxc, false, 128, 128, 'crop') ??
+      mxcUrlToHttp(mx, myAvatarMxc, useAuthentication, 128, 128, 'crop') ??
+      undefined
     : undefined;
 
   const renderUrlsPreview = (urls: string[]) => {

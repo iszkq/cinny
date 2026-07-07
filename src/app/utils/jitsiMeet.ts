@@ -9,6 +9,7 @@ export type CinnyJitsiMeetInfo = {
   roomName: string;
   url: string;
   domain: string;
+  title?: string;
   createdAt: number;
 };
 
@@ -65,6 +66,7 @@ export const getJitsiMeetJoinUrl = (url: string, userInfo?: JitsiMeetUserInfo): 
   const safeAvatarUrl = getSafeAvatarUrl(userInfo?.avatarUrl);
 
   hashParams.set('config.disableDeepLinking', 'true');
+  hashParams.set('config.disableThirdPartyRequests', 'false');
   hashParams.set('config.prejoinConfig.enabled', 'false');
   hashParams.set('config.prejoinPageEnabled', 'false');
   if (safeDisplayName) {
@@ -79,13 +81,15 @@ export const getJitsiMeetJoinUrl = (url: string, userInfo?: JitsiMeetUserInfo): 
   return joinUrl.toString();
 };
 
-export const createJitsiMeetInfo = (): CinnyJitsiMeetInfo => {
+export const createJitsiMeetInfo = (title?: string): CinnyJitsiMeetInfo => {
   const roomName = makeJitsiMeetRoomName();
+  const meetingTitle = getSafeText(title, 120);
   return {
     version: 1,
     roomName,
     url: getJitsiMeetUrl(roomName),
     domain: JITSI_MEET_DOMAIN,
+    ...(meetingTitle ? { title: meetingTitle } : undefined),
     createdAt: Date.now(),
   };
 };
@@ -116,7 +120,7 @@ export const getJitsiMeetInfo = (
   const data = content[CINNY_JITSI_MEET_CONTENT_KEY];
   if (!isRecord(data)) return undefined;
 
-  const { version, roomName, url, domain, createdAt } = data;
+  const { version, roomName, url, domain, title, createdAt } = data;
   if (
     version !== 1 ||
     typeof roomName !== 'string' ||
@@ -134,6 +138,7 @@ export const getJitsiMeetInfo = (
     roomName,
     url,
     domain,
+    title: typeof title === 'string' ? getSafeText(title, 120) : undefined,
     createdAt: typeof createdAt === 'number' && Number.isFinite(createdAt) ? createdAt : 0,
   };
 };
@@ -141,14 +146,18 @@ export const getJitsiMeetInfo = (
 export const makeJitsiMeetMessageContent = (meeting: CinnyJitsiMeetInfo): IContent => {
   const label = '\u52a0\u5165\u4f1a\u8bae';
   const joinUrl = getJitsiMeetJoinUrl(meeting.url);
-  const body = `\u53d1\u8d77\u4e86\u4f1a\u8bae\uff1a${joinUrl}`;
+  const title = meeting.title ?? '\u4f1a\u8bae';
+  const body = `\u53d1\u8d77\u4e86\u4f1a\u8bae\u201c${title}\u201d\uff1a${joinUrl}`;
+  const safeTitle = sanitizeText(title);
   const safeUrl = sanitizeText(joinUrl);
 
   return {
     msgtype: MsgType.Text,
     body,
     format: 'org.matrix.custom.html',
-    formatted_body: `\u53d1\u8d77\u4e86\u4f1a\u8bae\uff1a<a href="${safeUrl}">${label}</a>`,
+    formatted_body:
+      `\u53d1\u8d77\u4e86\u4f1a\u8bae\u201c${safeTitle}\u201d\uff1a` +
+      `<a href="${safeUrl}">${label}</a>`,
     [CINNY_JITSI_MEET_CONTENT_KEY]: meeting,
   };
 };

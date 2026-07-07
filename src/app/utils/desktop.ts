@@ -2,6 +2,7 @@ import { isDesktopUpdaterSupported } from './desktopUpdater';
 
 const ALLOWED_EXTERNAL_PROTOCOLS = new Set(['http:', 'https:', 'ftp:', 'mailto:', 'magnet:']);
 const ORIGIN_BASED_PROTOCOLS = new Set(['http:', 'https:', 'ftp:']);
+const externalUrlWindows = new Map<string, Window>();
 
 const parseExternalUrl = (href: string): URL | undefined => {
   if (typeof window === 'undefined') return undefined;
@@ -43,7 +44,18 @@ export const openExternalUrl = async (href: string): Promise<void> => {
   }
 };
 
-export const openExternalUrlInNewWindow = async (href: string): Promise<void> => {
+const getExternalWindowName = (windowKey: string): string => {
+  let hash = 0;
+  for (let i = 0; i < windowKey.length; i += 1) {
+    hash = (hash * 31 + windowKey.charCodeAt(i)) >>> 0;
+  }
+  return `cinny_external_${hash.toString(36)}`;
+};
+
+export const openExternalUrlInNewWindow = async (
+  href: string,
+  windowKey = href
+): Promise<void> => {
   const url = parseExternalUrl(href);
   if (!url) {
     return;
@@ -57,5 +69,16 @@ export const openExternalUrlInNewWindow = async (href: string): Promise<void> =>
     return;
   }
 
-  window.open(resolvedUrl, '_blank', 'noopener,noreferrer');
+  const existingWindow = externalUrlWindows.get(windowKey);
+  if (existingWindow && !existingWindow.closed) {
+    existingWindow.focus();
+    return;
+  }
+
+  const popup = window.open(resolvedUrl, getExternalWindowName(windowKey));
+  if (popup) {
+    popup.opener = null;
+    popup.focus();
+    externalUrlWindows.set(windowKey, popup);
+  }
 };

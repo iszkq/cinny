@@ -41,7 +41,3 @@ export const JoinButton = style({
   width: '100%',
   justifyContent: 'center',
 });
-
-export const CardExternalButton = style({
-  flexShrink: 0,
-});

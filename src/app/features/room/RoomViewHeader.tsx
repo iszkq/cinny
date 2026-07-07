@@ -68,7 +68,7 @@ import { InviteUserPrompt } from '../../components/invite-user-prompt';
 import { ContainerColor } from '../../styles/ContainerColor.css';
 import { RoomSettingsPage } from '../../state/roomSettings';
 import { RoomMessageSearchDialog } from '../message-search';
-import { StartJitsiMeetButton } from '../../components/jitsi-meet';
+import { StartJitsiMeetButton, StartJitsiMeetPrompt } from '../../components/jitsi-meet';
 import { createJitsiMeetInfo, makeJitsiMeetMessageContent } from '../../utils/jitsiMeet';
 import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
 
@@ -264,6 +264,7 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
   const [menuAnchor, setMenuAnchor] = useState<RectCords>();
   const [pinMenuAnchor, setPinMenuAnchor] = useState<RectCords>();
   const [messageSearch, setMessageSearch] = useState(false);
+  const [meetingPrompt, setMeetingPrompt] = useState(false);
   const direct = useIsDirectRoom();
 
   const pinnedEvents = useRoomPinnedEvents(room);
@@ -290,9 +291,9 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
   const permissions = useRoomPermissions(creators, powerLevels);
   const myUserId = mx.getSafeUserId();
   const canStartMeeting = permissions.event(EventType.RoomMessage, myUserId);
-  const [meetingState, startMeeting] = useAsyncCallback<undefined, MatrixError | Error, []>(
-    async () => {
-      const nextMeeting = createJitsiMeetInfo();
+  const [meetingState, startMeeting] = useAsyncCallback<undefined, MatrixError | Error, [string]>(
+    async (title) => {
+      const nextMeeting = createJitsiMeetInfo(title);
       const content = makeJitsiMeetMessageContent(nextMeeting);
       await mx.sendMessage(room.roomId, content as never);
       return undefined;
@@ -302,7 +303,13 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
   const meetingError = meetingState.status === AsyncStatus.Error;
 
   const handleStartMeeting = () => {
-    startMeeting().catch(() => undefined);
+    setMeetingPrompt(true);
+  };
+
+  const handleSubmitMeeting = (title: string) => {
+    startMeeting(title)
+      .then(() => setMeetingPrompt(false))
+      .catch(() => undefined);
   };
 
   const handleOpenMenu: MouseEventHandler<HTMLButtonElement> = (evt) => {
@@ -330,6 +337,14 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
           room={room}
           direct={direct}
           requestClose={() => setMessageSearch(false)}
+        />
+      )}
+      {meetingPrompt && (
+        <StartJitsiMeetPrompt
+          submitting={meetingSending}
+          error={meetingError ? '\u53d1\u8d77\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5' : undefined}
+          requestClose={() => setMeetingPrompt(false)}
+          onSubmit={handleSubmitMeeting}
         />
       )}
       <PageHeader className={ContainerColor({ variant: 'Surface' })} balance={compact}>
