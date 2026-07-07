@@ -1,5 +1,6 @@
 import { isDesktopUpdaterSupported } from './desktopUpdater';
 import type { AihubmixImageOcrConfig } from './ai';
+import { fetchMediaWithAuth, shouldUseObjectUrlForMediaDisplay } from './matrix';
 
 export type NativeImagePreviewPayload = {
   previewId: string;
@@ -72,9 +73,12 @@ export const getNativeImagePreviewId = (): string | undefined => {
 
 export const getTransferableImagePreviewSrc = async (src: string): Promise<string> => {
   if (DATA_URL_RE.test(src)) return src;
-  if (!BLOB_URL_RE.test(src)) return src;
+  if (!BLOB_URL_RE.test(src) && !shouldUseObjectUrlForMediaDisplay(src)) return src;
 
-  const response = await fetch(src);
+  const response = BLOB_URL_RE.test(src) ? await fetch(src) : await fetchMediaWithAuth(src);
+  if (!response.ok) {
+    throw new Error(`Failed to load image preview media: ${response.status}`);
+  }
   const blob = await response.blob();
   return blobToDataUrl(blob);
 };
