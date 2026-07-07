@@ -120,7 +120,11 @@ export function StartJitsiMeetPrompt({
                 </IconButton>
               </Header>
               <Box
-                style={{ padding: config.space.S400, width: 'min(420px, calc(100vw - 32px))' }}
+                style={{
+                  boxSizing: 'border-box',
+                  padding: config.space.S400,
+                  width: 'min(420px, calc(100vw - 32px))',
+                }}
                 direction="Column"
                 gap="400"
               >
@@ -142,7 +146,7 @@ export function StartJitsiMeetPrompt({
                     </Text>
                   )}
                 </Box>
-                <Box justifyContent="End" gap="200">
+                <Box justifyContent="End" gap="200" style={{ flexWrap: 'wrap' }}>
                   <Button
                     type="button"
                     variant="Secondary"
