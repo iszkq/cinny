@@ -44,6 +44,35 @@ const JITSI_FIREBASE_AUTH_INIT_SCRIPT: &str = r#"
 
   if (!isJitsiFirebaseAuthPage()) return;
 
+  const isAuthenticatedMeetingUrl = (value) => {
+    try {
+      const url = new URL(value, window.location.href);
+      return (
+        (url.protocol === 'https:' || url.protocol === 'jitsi-meet:') &&
+        url.hostname === 'meet.jit.si' &&
+        Boolean(url.searchParams.get('jwt'))
+      );
+    } catch {
+      return false;
+    }
+  };
+
+  const closeAfterAuthenticatedRedirect = () => {
+    window.setTimeout(() => window.close(), 250);
+    window.setTimeout(() => window.close(), 1000);
+    window.setTimeout(() => window.close(), 2500);
+  };
+
+  try {
+    const originalReplace = window.location.replace.bind(window.location);
+    window.location.replace = (value) => {
+      if (isAuthenticatedMeetingUrl(value)) closeAfterAuthenticatedRedirect();
+      return originalReplace(value);
+    };
+  } catch {
+    // Some WebView engines expose location.replace as readonly. Native code still handles it.
+  }
+
   const patchFirebaseUi = () => {
     const AuthUI = window.firebaseui?.auth?.AuthUI;
     if (!AuthUI?.prototype?.start || AuthUI.prototype.__cinnyJitsiRedirectPatch) {
@@ -174,15 +203,32 @@ fn next_external_popup_label(parent_label: &str) -> String {
     format!("{parent_label}-popup-{next_id}")
 }
 
-fn close_external_popup_window(window: tauri::WebviewWindow) {
-    let _ = window.hide();
-    let _ = window.close();
+fn close_external_popup_window(app: &AppHandle, label: &str) {
+    let app_handle = app.clone();
+    let window_label = label.to_owned();
+    let _ = app.run_on_main_thread(move || {
+        if let Some(window) = app_handle.get_webview_window(&window_label) {
+            let _ = window.hide();
+            let _ = window.close();
+        }
+    });
 
+    let delayed_app = app.clone();
+    let delayed_label = label.to_owned();
     thread::spawn(move || {
-        thread::sleep(Duration::from_millis(250));
-        let _ = window.close();
-        thread::sleep(Duration::from_millis(250));
-        let _ = window.destroy();
+        for delay_ms in [250_u64, 750, 1500] {
+            thread::sleep(Duration::from_millis(delay_ms));
+
+            let ui_app = delayed_app.clone();
+            let ui_label = delayed_label.clone();
+            let _ = delayed_app.run_on_main_thread(move || {
+                if let Some(window) = ui_app.get_webview_window(&ui_label) {
+                    let _ = window.hide();
+                    let _ = window.close();
+                    let _ = window.destroy();
+                }
+            });
+        }
     });
 }
 
@@ -225,9 +271,7 @@ fn handle_jitsi_authenticated_meeting_redirect(
     let _ = parent_window.show();
     let _ = parent_window.set_focus();
 
-    if let Some(current_window) = app.get_webview_window(current_label) {
-        close_external_popup_window(current_window);
-    }
+    close_external_popup_window(app, current_label);
 
     true
 }
