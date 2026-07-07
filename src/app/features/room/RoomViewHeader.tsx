@@ -22,7 +22,7 @@ import {
   Badge,
   Spinner,
 } from 'folds';
-import { Room } from 'matrix-js-sdk';
+import { EventType, MatrixError, Room } from 'matrix-js-sdk';
 import { PageHeader } from '../../components/page';
 import { RoomAvatar, RoomIcon } from '../../components/room-avatar';
 import { UseStateProvider } from '../../components/UseStateProvider';
@@ -32,7 +32,12 @@ import { useIsDirectRoom, useRoom } from '../../hooks/useRoom';
 import { useSetting } from '../../state/hooks/settings';
 import { settingsAtom } from '../../state/settings';
 import { useSpaceOptionally } from '../../hooks/useSpace';
-import { getCanonicalAliasOrRoomId, isRoomAlias, mxcUrlToHttp } from '../../utils/matrix';
+import {
+  getCanonicalAliasOrRoomId,
+  getMxIdLocalPart,
+  isRoomAlias,
+  mxcUrlToHttp,
+} from '../../utils/matrix';
 import * as css from './RoomViewHeader.css';
 import { useRoomUnread } from '../../state/hooks/unread';
 import { usePowerLevelsContext } from '../../hooks/usePowerLevels';
@@ -68,6 +73,14 @@ import { InviteUserPrompt } from '../../components/invite-user-prompt';
 import { ContainerColor } from '../../styles/ContainerColor.css';
 import { RoomSettingsPage } from '../../state/roomSettings';
 import { RoomMessageSearchDialog } from '../message-search';
+import { JitsiMeetDialog, StartJitsiMeetButton } from '../../components/jitsi-meet';
+import {
+  CinnyJitsiMeetInfo,
+  createJitsiMeetInfo,
+  makeJitsiMeetMessageContent,
+} from '../../utils/jitsiMeet';
+import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
+import { getMemberAvatarMxc, getMemberDisplayName } from '../../utils/room';
 
 type RoomMenuProps = {
   room: Room;
@@ -261,6 +274,7 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
   const [menuAnchor, setMenuAnchor] = useState<RectCords>();
   const [pinMenuAnchor, setPinMenuAnchor] = useState<RectCords>();
   const [messageSearch, setMessageSearch] = useState(false);
+  const [meeting, setMeeting] = useState<CinnyJitsiMeetInfo>();
   const direct = useIsDirectRoom();
 
   const pinnedEvents = useRoomPinnedEvents(room);
@@ -280,6 +294,36 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
 
   const handleSearchClick = () => {
     setMessageSearch(true);
+  };
+
+  const powerLevels = usePowerLevelsContext();
+  const creators = useRoomCreators(room);
+  const permissions = useRoomPermissions(creators, powerLevels);
+  const myUserId = mx.getSafeUserId();
+  const myDisplayName =
+    getMemberDisplayName(room, myUserId) ??
+    mx.getUser(myUserId)?.displayName ??
+    getMxIdLocalPart(myUserId) ??
+    myUserId;
+  const myAvatarMxc = getMemberAvatarMxc(room, myUserId) ?? mx.getUser(myUserId)?.avatarUrl;
+  const myAvatarUrl = myAvatarMxc
+    ? mxcUrlToHttp(mx, myAvatarMxc, useAuthentication, 128, 128, 'crop') ?? undefined
+    : undefined;
+  const canStartMeeting = permissions.event(EventType.RoomMessage, myUserId);
+  const [meetingState, startMeeting] = useAsyncCallback<undefined, MatrixError | Error, []>(
+    async () => {
+      const nextMeeting = createJitsiMeetInfo();
+      const content = makeJitsiMeetMessageContent(nextMeeting);
+      await mx.sendMessage(room.roomId, content as never);
+      setMeeting(nextMeeting);
+      return undefined;
+    }
+  );
+  const meetingSending = meetingState.status === AsyncStatus.Loading;
+  const meetingError = meetingState.status === AsyncStatus.Error;
+
+  const handleStartMeeting = () => {
+    startMeeting().catch(() => undefined);
   };
 
   const handleOpenMenu: MouseEventHandler<HTMLButtonElement> = (evt) => {
@@ -307,6 +351,14 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
           room={room}
           direct={direct}
           requestClose={() => setMessageSearch(false)}
+        />
+      )}
+      {meeting && (
+        <JitsiMeetDialog
+          meeting={meeting}
+          displayName={myDisplayName}
+          avatarUrl={myAvatarUrl}
+          requestClose={() => setMeeting(undefined)}
         />
       )}
       <PageHeader className={ContainerColor({ variant: 'Surface' })} balance={compact}>
@@ -380,6 +432,32 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
           </Box>
 
           <Box shrink="No">
+            {!callView && (
+              <TooltipProvider
+                position="Bottom"
+                offset={4}
+                tooltip={
+                  <Tooltip>
+                    <Text>
+                      {meetingError
+                        ? '\u53d1\u8d77\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5'
+                        : canStartMeeting
+                          ? '\u89c6\u9891\u4f1a\u8bae'
+                          : '\u65e0\u6743\u9650\u53d1\u8d77\u4f1a\u8bae'}
+                    </Text>
+                  </Tooltip>
+                }
+              >
+                {(triggerRef) => (
+                  <StartJitsiMeetButton
+                    ref={triggerRef}
+                    sending={meetingSending}
+                    disabled={!canStartMeeting}
+                    onStart={handleStartMeeting}
+                  />
+                )}
+              </TooltipProvider>
+            )}
             <TooltipProvider
               position="Bottom"
               offset={4}

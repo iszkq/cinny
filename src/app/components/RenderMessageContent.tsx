@@ -33,7 +33,10 @@ import { ImageViewer } from './image-viewer';
 import { PdfViewer } from './Pdf-viewer';
 import { DocxViewer, SpreadsheetViewer } from './file-viewer';
 import { TextViewer } from './text-viewer';
+import { JitsiMeetCard } from './jitsi-meet';
 import { testMatrixTo } from '../plugins/matrix-to';
+import { useMatrixClient } from '../hooks/useMatrixClient';
+import { useMediaAuthentication } from '../hooks/useMediaAuthentication';
 import { IImageContent } from '../../types/matrix/common';
 import {
   isPollMessage,
@@ -41,6 +44,9 @@ import {
   POLL_START_EVENT_TYPE,
   UNSTABLE_POLL_START_EVENT_TYPE,
 } from '../utils/polls';
+import { getJitsiMeetInfo } from '../utils/jitsiMeet';
+import { getMxIdLocalPart, mxcUrlToHttp } from '../utils/matrix';
+import { getMemberAvatarMxc, getMemberDisplayName } from '../utils/room';
 import type { ViewerImageItem } from './message/content/ImageContent';
 
 type RenderMessageContentProps = {
@@ -77,6 +83,20 @@ export function RenderMessageContent({
   eventId,
   imageViewerItems,
 }: RenderMessageContentProps) {
+  const mx = useMatrixClient();
+  const useAuthentication = useMediaAuthentication();
+  const myUserId = mx.getSafeUserId();
+  const myDisplayName =
+    (room && getMemberDisplayName(room, myUserId)) ??
+    mx.getUser(myUserId)?.displayName ??
+    getMxIdLocalPart(myUserId) ??
+    myUserId;
+  const myAvatarMxc =
+    (room && getMemberAvatarMxc(room, myUserId)) ?? mx.getUser(myUserId)?.avatarUrl;
+  const myAvatarUrl = myAvatarMxc
+    ? mxcUrlToHttp(mx, myAvatarMxc, useAuthentication, 128, 128, 'crop') ?? undefined
+    : undefined;
+
   const renderUrlsPreview = (urls: string[]) => {
     const filteredUrls = urls.filter((url) => !testMatrixTo(url));
     if (filteredUrls.length === 0) return undefined;
@@ -166,10 +186,18 @@ export function RenderMessageContent({
   );
 
   if (msgType === MsgType.Text) {
+    const content = getContent<Record<string, unknown>>();
+    const meeting = getJitsiMeetInfo(content);
+    if (meeting) {
+      return (
+        <JitsiMeetCard meeting={meeting} displayName={myDisplayName} avatarUrl={myAvatarUrl} />
+      );
+    }
+
     return (
       <MText
         edited={edited}
-        content={getContent()}
+        content={content}
         renderBody={(props) => (
           <RenderBody
             {...props}
