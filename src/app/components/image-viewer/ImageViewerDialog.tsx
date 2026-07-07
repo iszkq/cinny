@@ -39,7 +39,11 @@ import {
 
 type ImageViewerDialogProps = Omit<
   ImageViewerProps,
-  'maximized' | 'onMinimize' | 'onToggleMaximized' | 'onWindowDragStart'
+  | 'maximized'
+  | 'onMinimize'
+  | 'onOcrPanelOpenChange'
+  | 'onToggleMaximized'
+  | 'onWindowDragStart'
 > & {
   open: boolean;
   renderViewer: (props: ImageViewerProps) => ReactNode;
@@ -70,6 +74,7 @@ type LatestNativePreviewInput = {
 };
 
 const WINDOW_EDGE_PADDING_PX = 16;
+const OCR_PANEL_MODAL_EXTRA_WIDTH_PX = 252;
 
 const isEditableEventTarget = (target: EventTarget | null): boolean => {
   if (!(target instanceof HTMLElement)) return false;
@@ -106,6 +111,7 @@ export function ImageViewerDialog({
   const [imageSize, setImageSize] = useState<{ width?: number; height?: number }>({});
   const [maximized, setMaximized] = useState(false);
   const [minimized, setMinimized] = useState(false);
+  const [ocrPanelOpen, setOcrPanelOpen] = useState(false);
   const [windowOffset, setWindowOffset] = useState<WindowOffset>({ x: 0, y: 0 });
   const dragCleanupRef = useRef<(() => void) | null>(null);
   const nativePreviewRef = useRef<NativePreviewRef>();
@@ -248,6 +254,7 @@ export function ImageViewerDialog({
       setImageSize({});
       setMaximized(false);
       setMinimized(false);
+      setOcrPanelOpen(false);
       setWindowOffset({ x: 0, y: 0 });
       setNativePreviewFailed(false);
       clearDragListeners();
@@ -408,7 +415,12 @@ export function ImageViewerDialog({
   if (desktopNativePreview && !nativePreviewFailed) return null;
   if (nativePreviewActive) return null;
 
-  const modalStyle = getImageViewerModalStyle(imageSize.width, imageSize.height);
+  const modalStyle = {
+    ...getImageViewerModalStyle(imageSize.width, imageSize.height),
+    ...(ocrPanelOpen && !mobile
+      ? { '--image-viewer-ocr-width': `${OCR_PANEL_MODAL_EXTRA_WIDTH_PX}px` }
+      : {}),
+  };
   const windowModalStyle = maximized
     ? undefined
     : {
@@ -423,6 +435,7 @@ export function ImageViewerDialog({
     requestClose,
     maximized,
     onMinimize: mobile ? undefined : () => setMinimized(true),
+    onOcrPanelOpenChange: setOcrPanelOpen,
     onToggleMaximized: mobile ? undefined : () => setMaximized((current) => !current),
     onWindowDragStart: mobile || maximized ? undefined : handleWindowDragStart,
   });

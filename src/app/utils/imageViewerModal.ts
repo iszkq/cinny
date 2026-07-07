@@ -3,6 +3,7 @@ import type { CSSProperties } from 'react';
 type ImageViewerModalStyle = CSSProperties & {
   '--image-viewer-modal-width'?: string;
   '--image-viewer-modal-height'?: string;
+  '--image-viewer-ocr-width'?: string;
 };
 
 type ImageOrientation = 'landscape' | 'portrait' | 'square';

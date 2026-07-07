@@ -20,6 +20,7 @@ export type ImageViewerProps = {
   loading?: boolean;
   requestClose: () => void;
   imageOcrConfig?: AihubmixImageOcrConfig;
+  onOcrPanelOpenChange?: (open: boolean) => void;
   onMinimize?: () => void;
   maximized?: boolean;
   onToggleMaximized?: () => void;
@@ -133,6 +134,7 @@ export const ImageViewer = as<'div', ImageViewerProps>(
       loading,
       requestClose,
       imageOcrConfig,
+      onOcrPanelOpenChange,
       onMinimize,
       maximized,
       onToggleMaximized,
@@ -523,6 +525,13 @@ export const ImageViewer = as<'div', ImageViewerProps>(
       setOcrCopied(false);
       setOcrState({ status: 'idle' });
     }, [src]);
+
+    useEffect(() => {
+      onOcrPanelOpenChange?.(Boolean(imageOcrConfig && ocrPanelOpen));
+      return () => {
+        onOcrPanelOpenChange?.(false);
+      };
+    }, [imageOcrConfig, ocrPanelOpen, onOcrPanelOpenChange]);
 
     useEffect(() => {
       if (!ocrCopied) return undefined;

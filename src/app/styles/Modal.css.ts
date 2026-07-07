@@ -14,9 +14,11 @@ export const ImageViewerBackdrop = style({
 });
 
 export const ImageViewerModal = style({
-  width: 'var(--image-viewer-modal-width, min(76vw, 1120px))',
+  width:
+    'calc(var(--image-viewer-modal-width, min(76vw, 1120px)) + var(--image-viewer-ocr-width, 0px))',
   height: 'var(--image-viewer-modal-height, min(78vh, 780px))',
-  minWidth: 'var(--image-viewer-modal-width, min(76vw, 1120px))',
+  minWidth:
+    'calc(var(--image-viewer-modal-width, min(76vw, 1120px)) + var(--image-viewer-ocr-width, 0px))',
   minHeight: 'var(--image-viewer-modal-height, min(78vh, 780px))',
   maxWidth: 'calc(100vw - 40px)',
   maxHeight: 'calc(var(--app-height, 100dvh) - 40px)',

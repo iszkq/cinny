@@ -28,9 +28,13 @@ const isEditableEventTarget = (target: EventTarget | null): boolean => {
   return Boolean(target.closest('input, textarea, [contenteditable="true"]'));
 };
 
+const OCR_PANEL_WINDOW_EXTRA_WIDTH_PX = 252;
+
 function NativeImagePreviewWindowContent() {
   const previewId = getNativeImagePreviewId();
   const closeEmittedRef = useRef(false);
+  const ocrExpandedRef = useRef(false);
+  const baseWindowSizeRef = useRef<{ width: number; height: number }>();
   const [payload, setPayload] = useState<NativeImagePreviewPayload>();
   const [maximized, setMaximized] = useState(false);
 
@@ -63,6 +67,42 @@ function NativeImagePreviewWindowContent() {
       })
       .catch(() => undefined);
   }, []);
+
+  const handleOcrPanelOpenChange = useCallback(
+    (open: boolean) => {
+      if (maximized && open) return;
+
+      import('@tauri-apps/api/window')
+        .then(async ({ getCurrentWindow }) => {
+          const { PhysicalSize } = await import('@tauri-apps/api/dpi');
+          const currentWindow = getCurrentWindow();
+
+          if (open) {
+            if (ocrExpandedRef.current) return;
+
+            const size = await currentWindow.innerSize();
+            baseWindowSizeRef.current = {
+              width: size.width,
+              height: size.height,
+            };
+            await currentWindow.setSize(
+              new PhysicalSize(size.width + OCR_PANEL_WINDOW_EXTRA_WIDTH_PX, size.height)
+            );
+            ocrExpandedRef.current = true;
+            return;
+          }
+
+          const baseSize = baseWindowSizeRef.current;
+          if (!ocrExpandedRef.current || !baseSize) return;
+
+          await currentWindow.setSize(new PhysicalSize(baseSize.width, baseSize.height));
+          ocrExpandedRef.current = false;
+          baseWindowSizeRef.current = undefined;
+        })
+        .catch(() => undefined);
+    },
+    [maximized]
+  );
 
   const handleWindowDragStart = useCallback<React.PointerEventHandler<HTMLElement>>((evt) => {
     if (maximized) return;
@@ -152,6 +192,7 @@ function NativeImagePreviewWindowContent() {
         alt={payload.alt}
         loading={payload.loading}
         imageOcrConfig={payload.imageOcrConfig}
+        onOcrPanelOpenChange={handleOcrPanelOpenChange}
         requestClose={handleClose}
         canPrev={payload.canPrev}
         canNext={payload.canNext}

@@ -218,10 +218,11 @@ export const ImageViewerOcrGlyph = style([
 export const ImageViewerOcrPanel = style([
   DefaultReset,
   {
+    flex: '0 0 240px',
     flexShrink: 0,
-    width: 'min(34vw, 360px)',
-    minWidth: '280px',
-    maxWidth: '380px',
+    width: '240px',
+    minWidth: '240px',
+    maxWidth: '240px',
     height: '100%',
     maxHeight: 'none',
     overflow: 'hidden',
@@ -232,6 +233,7 @@ export const ImageViewerOcrPanel = style([
     boxShadow: '0 14px 36px rgba(15, 23, 42, 0.1)',
     '@media': {
       'screen and (max-width: 750px)': {
+        flex: '0 0 auto',
         width: '100%',
         minWidth: 0,
         maxWidth: 'none',
