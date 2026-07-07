@@ -157,14 +157,14 @@ export const getJitsiMeetInfo = (
 export const makeJitsiMeetMessageContent = (meeting: CinnyJitsiMeetInfo): IContent => {
   const label = '\u52a0\u5165\u4f1a\u8bae';
   const joinUrl = getJitsiMeetJoinUrl(meeting.url);
-  const body = `\u53d1\u8d77\u4e86\u89c6\u9891\u4f1a\u8bae\uff1a${joinUrl}`;
+  const body = `\u53d1\u8d77\u4e86\u4f1a\u8bae\uff1a${joinUrl}`;
   const safeUrl = sanitizeText(joinUrl);
 
   return {
     msgtype: MsgType.Text,
     body,
     format: 'org.matrix.custom.html',
-    formatted_body: `\u53d1\u8d77\u4e86\u89c6\u9891\u4f1a\u8bae\uff1a<a href="${safeUrl}">${label}</a>`,
+    formatted_body: `\u53d1\u8d77\u4e86\u4f1a\u8bae\uff1a<a href="${safeUrl}">${label}</a>`,
     [CINNY_JITSI_MEET_CONTENT_KEY]: meeting,
   };
 };

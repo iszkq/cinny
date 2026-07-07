@@ -42,3 +42,43 @@ export const openExternalUrl = async (href: string): Promise<void> => {
     window.location.assign(resolvedUrl);
   }
 };
+
+export const reserveExternalUrlWindow = (): Window | undefined => {
+  if (typeof window === 'undefined' || isDesktopUpdaterSupported()) {
+    return undefined;
+  }
+
+  const popup = window.open('about:blank', '_blank');
+  if (popup) {
+    popup.opener = null;
+  }
+
+  return popup ?? undefined;
+};
+
+export const openExternalUrlInNewWindow = async (
+  href: string,
+  targetWindow?: Window
+): Promise<void> => {
+  const url = parseExternalUrl(href);
+  if (!url) {
+    targetWindow?.close();
+    return;
+  }
+
+  const resolvedUrl = url.toString();
+
+  if (isDesktopUpdaterSupported()) {
+    targetWindow?.close();
+    const { invoke } = await import('@tauri-apps/api/core');
+    await invoke('open_external_url', { url: resolvedUrl });
+    return;
+  }
+
+  if (targetWindow && !targetWindow.closed) {
+    targetWindow.location.assign(resolvedUrl);
+    return;
+  }
+
+  window.open(resolvedUrl, '_blank', 'noopener,noreferrer');
+};

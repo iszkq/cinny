@@ -11,7 +11,7 @@ import {
   TooltipProvider,
 } from 'folds';
 import { CinnyJitsiMeetInfo, getJitsiMeetJoinUrl } from '../../utils/jitsiMeet';
-import { openExternalUrl } from '../../utils/desktop';
+import { openExternalUrlInNewWindow } from '../../utils/desktop';
 import * as css from './JitsiMeet.css';
 
 type JitsiMeetCardProps = {
@@ -22,7 +22,7 @@ type JitsiMeetCardProps = {
 export function JitsiMeetCard({ meeting, displayName, avatarUrl }: JitsiMeetCardProps) {
   const joinUrl = getJitsiMeetJoinUrl(meeting.url, { displayName, avatarUrl });
   const handleJoin = () => {
-    void openExternalUrl(joinUrl).catch(() => undefined);
+    void openExternalUrlInNewWindow(joinUrl).catch(() => undefined);
   };
 
   return (
@@ -33,7 +33,7 @@ export function JitsiMeetCard({ meeting, displayName, avatarUrl }: JitsiMeetCard
         </Box>
         <Box grow="Yes" direction="Column" gap="100" style={{ minWidth: 0 }}>
           <Text size="B400" truncate>
-            {'\u89c6\u9891\u4f1a\u8bae'}
+            {'\u4f1a\u8bae'}
           </Text>
           <Text size="T200" priority="300" truncate>
             {meeting.domain}

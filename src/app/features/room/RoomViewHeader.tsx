@@ -81,7 +81,7 @@ import {
 } from '../../utils/jitsiMeet';
 import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
 import { getMemberAvatarMxc, getMemberDisplayName } from '../../utils/room';
-import { openExternalUrl } from '../../utils/desktop';
+import { openExternalUrlInNewWindow, reserveExternalUrlWindow } from '../../utils/desktop';
 
 type RoomMenuProps = {
   room: Room;
@@ -310,8 +310,12 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
     ? mxcUrlToHttp(mx, myAvatarMxc, useAuthentication, 128, 128, 'crop') ?? undefined
     : undefined;
   const canStartMeeting = permissions.event(EventType.RoomMessage, myUserId);
-  const [meetingState, startMeeting] = useAsyncCallback<undefined, MatrixError | Error, []>(
-    async () => {
+  const [meetingState, startMeeting] = useAsyncCallback<
+    undefined,
+    MatrixError | Error,
+    [Window | undefined]
+  >(
+    async (targetWindow) => {
       const nextMeeting = createJitsiMeetInfo();
       const content = makeJitsiMeetMessageContent(nextMeeting);
       await mx.sendMessage(room.roomId, content as never);
@@ -319,7 +323,7 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
         displayName: myDisplayName,
         avatarUrl: myAvatarUrl,
       });
-      void openExternalUrl(joinUrl).catch(() => undefined);
+      await openExternalUrlInNewWindow(joinUrl, targetWindow);
       return undefined;
     }
   );
@@ -327,7 +331,10 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
   const meetingError = meetingState.status === AsyncStatus.Error;
 
   const handleStartMeeting = () => {
-    startMeeting().catch(() => undefined);
+    const targetWindow = reserveExternalUrlWindow();
+    startMeeting(targetWindow).catch(() => {
+      targetWindow?.close();
+    });
   };
 
   const handleOpenMenu: MouseEventHandler<HTMLButtonElement> = (evt) => {
@@ -438,7 +445,7 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
                       {meetingError
                         ? '\u53d1\u8d77\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5'
                         : canStartMeeting
-                          ? '\u89c6\u9891\u4f1a\u8bae'
+                          ? '\u4f1a\u8bae'
                           : '\u65e0\u6743\u9650\u53d1\u8d77\u4f1a\u8bae'}
                     </Text>
                   </Tooltip>
