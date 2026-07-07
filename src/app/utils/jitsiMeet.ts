@@ -1,8 +1,13 @@
 import { IContent, MsgType } from 'matrix-js-sdk';
 import { sanitizeText } from './sanitize';
 
-export const JITSI_MEET_DOMAIN = 'meet.jit.si';
+export const JITSI_MEET_DOMAIN = '8x8.vc';
+export const JITSI_MEET_APP_ID = 'vpaas-magic-cookie-b3e10afe8b644cbfbd3abe62ddb650cf';
+export const JITSI_MEET_SCRIPT_URL =
+  `https://${JITSI_MEET_DOMAIN}/${JITSI_MEET_APP_ID}/external_api.js`;
 export const CINNY_JITSI_MEET_CONTENT_KEY = 'io.cinny.jitsi_meet';
+
+const LEGACY_JITSI_MEET_DOMAIN = 'meet.jit.si';
 
 export type CinnyJitsiMeetInfo = {
   version: 1;
@@ -33,7 +38,12 @@ export const makeJitsiMeetRoomName = (): string =>
   `starfire-${Date.now().toString(36)}-${randomHex(10)}`;
 
 export const getJitsiMeetUrl = (roomName: string): string =>
-  `https://${JITSI_MEET_DOMAIN}/${encodeURIComponent(roomName)}`;
+  `https://${JITSI_MEET_DOMAIN}/${encodeURIComponent(JITSI_MEET_APP_ID)}/${encodeURIComponent(
+    roomName
+  )}`;
+
+export const getJitsiMeetApiRoomName = (meeting: Pick<CinnyJitsiMeetInfo, 'roomName'>): string =>
+  `${JITSI_MEET_APP_ID}/${meeting.roomName}`;
 
 type JitsiMeetUserInfo = {
   displayName?: string;
@@ -93,10 +103,25 @@ export const createJitsiMeetInfo = (): CinnyJitsiMeetInfo => {
 const isAllowedJitsiMeetUrl = (url: string, roomName: string): boolean => {
   try {
     const parsedUrl = new URL(url);
+    const pathParts = parsedUrl.pathname
+      .split('/')
+      .filter(Boolean)
+      .map((part) => decodeURIComponent(part));
+
+    if (
+      parsedUrl.protocol === 'https:' &&
+      parsedUrl.hostname === LEGACY_JITSI_MEET_DOMAIN &&
+      pathParts.length === 1
+    ) {
+      return pathParts[0] === roomName;
+    }
+
     return (
       parsedUrl.protocol === 'https:' &&
       parsedUrl.hostname === JITSI_MEET_DOMAIN &&
-      decodeURIComponent(parsedUrl.pathname.replace(/^\//, '')) === roomName
+      pathParts.length === 2 &&
+      pathParts[0] === JITSI_MEET_APP_ID &&
+      pathParts[1] === roomName
     );
   } catch {
     return false;
@@ -117,7 +142,7 @@ export const getJitsiMeetInfo = (
     roomName.length === 0 ||
     typeof url !== 'string' ||
     typeof domain !== 'string' ||
-    domain !== JITSI_MEET_DOMAIN ||
+    (domain !== JITSI_MEET_DOMAIN && domain !== LEGACY_JITSI_MEET_DOMAIN) ||
     !isAllowedJitsiMeetUrl(url, roomName)
   ) {
     return undefined;

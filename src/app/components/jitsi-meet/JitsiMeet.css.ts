@@ -127,6 +127,42 @@ export const Frame = style({
   backgroundColor: '#0b0f16',
 });
 
+export const FrameMount = style({
+  position: 'relative',
+  width: '100%',
+  height: '100%',
+  minWidth: 0,
+  minHeight: 0,
+  backgroundColor: '#0b0f16',
+});
+
+export const FrameApiNode = style({
+  width: '100%',
+  height: '100%',
+  minWidth: 0,
+  minHeight: 0,
+
+  selectors: {
+    '& > iframe': {
+      display: 'block',
+      width: '100%',
+      height: '100%',
+      border: 0,
+      backgroundColor: '#0b0f16',
+    },
+  },
+});
+
+export const FrameStatus = style({
+  position: 'absolute',
+  inset: 0,
+  justifyContent: 'center',
+  padding: config.space.S400,
+  color: '#f8fafc',
+  backgroundColor: '#0b0f16',
+  textAlign: 'center',
+});
+
 export const MeetingCard = style({
   width: `min(${toRem(372)}, 100%)`,
   maxWidth: '100%',
