@@ -16,6 +16,7 @@ use std::{
         atomic::{AtomicU64, Ordering},
         OnceLock,
     },
+    thread,
     time::Duration,
 };
 use tauri::{
@@ -173,6 +174,18 @@ fn next_external_popup_label(parent_label: &str) -> String {
     format!("{parent_label}-popup-{next_id}")
 }
 
+fn close_external_popup_window(window: tauri::WebviewWindow) {
+    let _ = window.hide();
+    let _ = window.close();
+
+    thread::spawn(move || {
+        thread::sleep(Duration::from_millis(250));
+        let _ = window.close();
+        thread::sleep(Duration::from_millis(250));
+        let _ = window.destroy();
+    });
+}
+
 fn get_jitsi_authenticated_meeting_url(url: &Url) -> Option<Url> {
     if url.scheme() == "https"
         && url.host_str() == Some("meet.jit.si")
@@ -213,7 +226,7 @@ fn handle_jitsi_authenticated_meeting_redirect(
     let _ = parent_window.set_focus();
 
     if let Some(current_window) = app.get_webview_window(current_label) {
-        let _ = current_window.close();
+        close_external_popup_window(current_window);
     }
 
     true
