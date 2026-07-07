@@ -32,12 +32,7 @@ import { useIsDirectRoom, useRoom } from '../../hooks/useRoom';
 import { useSetting } from '../../state/hooks/settings';
 import { settingsAtom } from '../../state/settings';
 import { useSpaceOptionally } from '../../hooks/useSpace';
-import {
-  getCanonicalAliasOrRoomId,
-  getMxIdLocalPart,
-  isRoomAlias,
-  mxcUrlToHttp,
-} from '../../utils/matrix';
+import { getCanonicalAliasOrRoomId, isRoomAlias, mxcUrlToHttp } from '../../utils/matrix';
 import * as css from './RoomViewHeader.css';
 import { useRoomUnread } from '../../state/hooks/unread';
 import { usePowerLevelsContext } from '../../hooks/usePowerLevels';
@@ -74,14 +69,8 @@ import { ContainerColor } from '../../styles/ContainerColor.css';
 import { RoomSettingsPage } from '../../state/roomSettings';
 import { RoomMessageSearchDialog } from '../message-search';
 import { StartJitsiMeetButton } from '../../components/jitsi-meet';
-import {
-  createJitsiMeetInfo,
-  getJitsiMeetJoinUrl,
-  makeJitsiMeetMessageContent,
-} from '../../utils/jitsiMeet';
+import { createJitsiMeetInfo, makeJitsiMeetMessageContent } from '../../utils/jitsiMeet';
 import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
-import { getMemberAvatarMxc, getMemberDisplayName } from '../../utils/room';
-import { openExternalUrlInNewWindow, reserveExternalUrlWindow } from '../../utils/desktop';
 
 type RoomMenuProps = {
   room: Room;
@@ -300,30 +289,12 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
   const creators = useRoomCreators(room);
   const permissions = useRoomPermissions(creators, powerLevels);
   const myUserId = mx.getSafeUserId();
-  const myDisplayName =
-    getMemberDisplayName(room, myUserId) ??
-    mx.getUser(myUserId)?.displayName ??
-    getMxIdLocalPart(myUserId) ??
-    myUserId;
-  const myAvatarMxc = getMemberAvatarMxc(room, myUserId) ?? mx.getUser(myUserId)?.avatarUrl;
-  const myAvatarUrl = myAvatarMxc
-    ? mxcUrlToHttp(mx, myAvatarMxc, useAuthentication, 128, 128, 'crop') ?? undefined
-    : undefined;
   const canStartMeeting = permissions.event(EventType.RoomMessage, myUserId);
-  const [meetingState, startMeeting] = useAsyncCallback<
-    undefined,
-    MatrixError | Error,
-    [Window | undefined]
-  >(
-    async (targetWindow) => {
+  const [meetingState, startMeeting] = useAsyncCallback<undefined, MatrixError | Error, []>(
+    async () => {
       const nextMeeting = createJitsiMeetInfo();
       const content = makeJitsiMeetMessageContent(nextMeeting);
       await mx.sendMessage(room.roomId, content as never);
-      const joinUrl = getJitsiMeetJoinUrl(nextMeeting.url, {
-        displayName: myDisplayName,
-        avatarUrl: myAvatarUrl,
-      });
-      await openExternalUrlInNewWindow(joinUrl, targetWindow);
       return undefined;
     }
   );
@@ -331,10 +302,7 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
   const meetingError = meetingState.status === AsyncStatus.Error;
 
   const handleStartMeeting = () => {
-    const targetWindow = reserveExternalUrlWindow();
-    startMeeting(targetWindow).catch(() => {
-      targetWindow?.close();
-    });
+    startMeeting().catch(() => undefined);
   };
 
   const handleOpenMenu: MouseEventHandler<HTMLButtonElement> = (evt) => {
