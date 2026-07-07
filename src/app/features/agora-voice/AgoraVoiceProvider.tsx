@@ -23,6 +23,8 @@ import {
   config,
 } from 'folds';
 import {
+  ClientEvent,
+  ClientEventHandlerMap,
   MatrixEvent,
   MatrixEventEvent,
   Room,
@@ -46,6 +48,7 @@ const AGORA_VOICE_VERSION = 1;
 const QUOTA_EXHAUSTED_MESSAGE = '本月10000分钟免费额度已用完';
 const RINGBACK_INTERVAL_MS = 3600;
 const INCOMING_RING_INTERVAL_MS = 2600;
+const SIGNAL_DISPATCH_TIMEOUT_MS = 1500;
 
 type VoiceAction = 'invite' | 'answer' | 'reject' | 'cancel' | 'hangup' | 'busy';
 type RingToneKind = 'incoming' | 'outgoing';
@@ -63,6 +66,7 @@ type AgoraVoiceSignal = {
   action: VoiceAction;
   callId: string;
   channel: string;
+  roomId?: string;
   target: string;
   sender: string;
   createdAt: number;
@@ -100,6 +104,17 @@ type AgoraVoiceContextValue = {
   available: boolean;
   activeRoomId?: string;
   startCall: (room: Room) => Promise<void>;
+};
+
+type ToDeviceMatrixClient = {
+  queueToDevice?: (batch: {
+    eventType: string;
+    batch: Array<{
+      userId: string;
+      deviceId: string;
+      payload: AgoraVoiceSignal;
+    }>;
+  }) => Promise<void>;
 };
 
 const AgoraVoiceContext = createContext<AgoraVoiceContextValue>({
@@ -166,6 +181,39 @@ const formatDuration = (startedAt?: number): string => {
 
   return `${String(minutes).padStart(2, '0')}:${String(restSeconds).padStart(2, '0')}`;
 };
+
+const waitForSignalDispatch = (signals: Array<Promise<unknown> | undefined>): Promise<void> =>
+  new Promise((resolve, reject) => {
+    const pendingSignals = signals.filter((signal): signal is Promise<unknown> => !!signal);
+    if (pendingSignals.length === 0) {
+      resolve();
+      return;
+    }
+
+    let settled = false;
+    let rejectedCount = 0;
+    let lastError: unknown;
+    let timerId: number | undefined;
+    const finish = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      if (timerId !== undefined) window.clearTimeout(timerId);
+      callback();
+    };
+    timerId = window.setTimeout(() => finish(resolve), SIGNAL_DISPATCH_TIMEOUT_MS);
+
+    pendingSignals.forEach((signal) => {
+      signal
+        .then(() => finish(resolve))
+        .catch((error) => {
+          rejectedCount += 1;
+          lastError = error;
+          if (rejectedCount === pendingSignals.length) {
+            finish(() => reject(lastError));
+          }
+        });
+    });
+  });
 
 const playTone = (
   audioContext: AudioContext,
@@ -471,7 +519,7 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
     async (
       roomId: string,
       target: string,
-      signal: Omit<AgoraVoiceSignal, 'version' | 'target' | 'sender' | 'createdAt'>
+      signal: Omit<AgoraVoiceSignal, 'version' | 'roomId' | 'target' | 'sender' | 'createdAt'>
     ) => {
       const content: AgoraVoiceSignal = {
         version: AGORA_VOICE_VERSION,
@@ -481,7 +529,24 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
         ...signal,
       };
 
-      await mx.sendEvent(roomId, AGORA_VOICE_EVENT_TYPE as never, content as never);
+      const deviceSignal = (mx as ToDeviceMatrixClient).queueToDevice?.({
+        eventType: AGORA_VOICE_EVENT_TYPE,
+        batch: [
+          {
+            userId: target,
+            deviceId: '*',
+            payload: {
+              ...content,
+              roomId,
+            },
+          },
+        ],
+      });
+      void deviceSignal?.catch(() => undefined);
+      const roomSignal = mx.sendEvent(roomId, AGORA_VOICE_EVENT_TYPE as never, content as never);
+      void roomSignal.catch(() => undefined);
+
+      await waitForSignalDispatch([deviceSignal, roomSignal]);
     },
     [mx, myUserId]
   );
@@ -625,12 +690,14 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
     };
     updateCall(connectingCall);
 
+    const answerPromise = sendSignal(currentCall.roomId, currentCall.peerId, {
+      action: 'answer',
+      callId: currentCall.callId,
+      channel: currentCall.channel,
+    });
+
     try {
-      await sendSignal(currentCall.roomId, currentCall.peerId, {
-        action: 'answer',
-        callId: currentCall.callId,
-        channel: currentCall.channel,
-      });
+      void answerPromise.catch(() => undefined);
       await joinAgora(connectingCall);
     } catch {
       await sendSignal(currentCall.roomId, currentCall.peerId, {
@@ -794,6 +861,16 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
   );
 
   useEffect(() => {
+    const handlePossiblyEncryptedSignal = (mEvent: MatrixEvent, room?: Room) => {
+      handleSignal(mEvent, room);
+      if (room && mEvent.isEncrypted() && mEvent.getType() !== AGORA_VOICE_EVENT_TYPE) {
+        void mx
+          .decryptEventIfNeeded(mEvent)
+          .then(() => handleSignal(mEvent, room))
+          .catch(() => undefined);
+      }
+    };
+
     const handleDecrypted = (mEvent: MatrixEvent) => {
       if (mEvent.isDecryptionFailure()) return;
 
@@ -806,6 +883,38 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
       handleSignal(mEvent, room);
     };
 
+    const handleClientEvent: ClientEventHandlerMap[ClientEvent.Event] = (mEvent) => {
+      const roomId = mEvent.getRoomId();
+      if (!roomId) return;
+
+      const room = mx.getRoom(roomId);
+      if (!room) return;
+
+      handlePossiblyEncryptedSignal(mEvent, room);
+    };
+
+    const handleToDeviceEvent: ClientEventHandlerMap[ClientEvent.ToDeviceEvent] = (mEvent) => {
+      const handleDecryptedToDeviceSignal = () => {
+        const signal = parseSignal(mEvent);
+        if (!signal || signal.target !== myUserId || typeof signal.roomId !== 'string') return;
+
+        const room = mx.getRoom(signal.roomId);
+        if (!room) return;
+
+        handleSignal(mEvent, room);
+      };
+
+      if (mEvent.isEncrypted() && mEvent.getType() !== AGORA_VOICE_EVENT_TYPE) {
+        void mx
+          .decryptEventIfNeeded(mEvent)
+          .then(handleDecryptedToDeviceSignal)
+          .catch(() => undefined);
+        return;
+      }
+
+      handleDecryptedToDeviceSignal();
+    };
+
     const handleTimelineEvent: RoomEventHandlerMap[RoomEvent.Timeline] = (
       mEvent,
       room,
@@ -815,18 +924,16 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
     ) => {
       if (toStartOfTimeline || removed || !data.liveEvent) return;
 
-      handleSignal(mEvent, room);
-      if (room && mEvent.isEncrypted() && mEvent.getType() !== AGORA_VOICE_EVENT_TYPE) {
-        void mx
-          .decryptEventIfNeeded(mEvent)
-          .then(() => handleSignal(mEvent, room))
-          .catch(() => undefined);
-      }
+      handlePossiblyEncryptedSignal(mEvent, room);
     };
 
+    mx.on(ClientEvent.Event, handleClientEvent);
+    mx.on(ClientEvent.ToDeviceEvent, handleToDeviceEvent);
     mx.on(RoomEvent.Timeline, handleTimelineEvent);
     mx.on(MatrixEventEvent.Decrypted, handleDecrypted);
     return () => {
+      mx.off(ClientEvent.Event, handleClientEvent);
+      mx.off(ClientEvent.ToDeviceEvent, handleToDeviceEvent);
       mx.removeListener(RoomEvent.Timeline, handleTimelineEvent);
       mx.off(MatrixEventEvent.Decrypted, handleDecrypted);
     };
