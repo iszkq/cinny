@@ -1,3 +1,5 @@
+import { deflate as pakoDeflate } from 'pako';
+
 const TOKEN_VERSION = '007';
 const APP_ID_RE = /^[0-9a-f]{32}$/i;
 const TOKEN_EXPIRE_SECONDS = 60 * 60;
@@ -92,7 +94,7 @@ const hmacSha256 = async (key: Uint8Array, message: Uint8Array): Promise<Uint8Ar
   return new Uint8Array(await crypto.subtle.sign('HMAC', cryptoKey, message));
 };
 
-const deflate = async (bytes: Uint8Array): Promise<Uint8Array> => {
+const deflateWithCompressionStream = async (bytes: Uint8Array): Promise<Uint8Array> => {
   const CompressionStream = (window as CompressionWindow).CompressionStream;
   if (!CompressionStream) {
     throw new Error('当前浏览器不支持本地生成声网 token。');
@@ -113,6 +115,14 @@ const deflate = async (bytes: Uint8Array): Promise<Uint8Array> => {
   }
 
   return concatBytes(chunks);
+};
+
+const deflate = async (bytes: Uint8Array): Promise<Uint8Array> => {
+  try {
+    return pakoDeflate(bytes);
+  } catch {
+    return deflateWithCompressionStream(bytes);
+  }
 };
 
 const bytesToBase64 = (bytes: Uint8Array): string => {

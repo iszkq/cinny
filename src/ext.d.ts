@@ -98,6 +98,10 @@ declare module 'browser-encrypt-attachment' {
   ): Promise<ArrayBuffer>;
 }
 
+declare module 'pako' {
+  export function deflate(data: Uint8Array | ArrayBuffer | string): Uint8Array;
+}
+
 declare module '*.svg' {
   const content: string;
   export default content;

@@ -1,6 +1,6 @@
 {
   "name": "cinny",
-  "version": "1.5.8",
+  "version": "1.5.9",
   "description": "Yet another matrix client",
   "main": "index.js",
   "type": "module",
@@ -109,6 +109,7 @@
     "matrix-js-sdk": "38.2.0",
     "matrix-widget-api": "1.13.0",
     "millify": "6.1.0",
+    "pako": "1.0.11",
     "pdfjs-dist": "4.2.67",
     "prismjs": "1.30.0",
     "react": "18.2.0",
