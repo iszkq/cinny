@@ -38,8 +38,19 @@ import * as css from './AgoraVoice.css';
 const AGORA_VOICE_EVENT_TYPE = 'org.starfire.voice_call';
 const AGORA_VOICE_VERSION = 1;
 const QUOTA_EXHAUSTED_MESSAGE = '本月10000分钟免费额度已用完';
+const RINGBACK_INTERVAL_MS = 3600;
+const INCOMING_RING_INTERVAL_MS = 2600;
 
 type VoiceAction = 'invite' | 'answer' | 'reject' | 'cancel' | 'hangup' | 'busy';
+type RingToneKind = 'incoming' | 'outgoing';
+
+type RingToneController = {
+  stop: () => void;
+};
+
+type VoiceAudioWindow = Window & {
+  webkitAudioContext?: new () => AudioContext;
+};
 
 type AgoraVoiceSignal = {
   version: 1;
@@ -150,6 +161,70 @@ const formatDuration = (startedAt?: number): string => {
   return `${String(minutes).padStart(2, '0')}:${String(restSeconds).padStart(2, '0')}`;
 };
 
+const playTone = (
+  audioContext: AudioContext,
+  destination: AudioNode,
+  frequency: number,
+  startAt: number,
+  duration: number,
+  volume: number
+) => {
+  const oscillator = audioContext.createOscillator();
+  const gain = audioContext.createGain();
+
+  oscillator.type = 'sine';
+  oscillator.frequency.setValueAtTime(frequency, startAt);
+  gain.gain.setValueAtTime(0, startAt);
+  gain.gain.linearRampToValueAtTime(volume, startAt + 0.03);
+  gain.gain.setValueAtTime(volume, startAt + Math.max(0.04, duration - 0.05));
+  gain.gain.linearRampToValueAtTime(0, startAt + duration);
+
+  oscillator.connect(gain);
+  gain.connect(destination);
+  oscillator.start(startAt);
+  oscillator.stop(startAt + duration + 0.05);
+};
+
+const startRingTone = (kind: RingToneKind): RingToneController | undefined => {
+  const AudioContextCtor = window.AudioContext ?? (window as VoiceAudioWindow).webkitAudioContext;
+  if (!AudioContextCtor) return undefined;
+
+  const audioContext = new AudioContextCtor();
+  const masterGain = audioContext.createGain();
+  const timers: number[] = [];
+  const intervalMs = kind === 'incoming' ? INCOMING_RING_INTERVAL_MS : RINGBACK_INTERVAL_MS;
+
+  masterGain.gain.value = kind === 'incoming' ? 0.07 : 0.045;
+  masterGain.connect(audioContext.destination);
+
+  const playPattern = () => {
+    const now = audioContext.currentTime + 0.03;
+
+    if (kind === 'outgoing') {
+      playTone(audioContext, masterGain, 440, now, 1.05, 0.52);
+      playTone(audioContext, masterGain, 480, now, 1.05, 0.46);
+      return;
+    }
+
+    playTone(audioContext, masterGain, 659, now, 0.24, 0.55);
+    playTone(audioContext, masterGain, 784, now + 0.32, 0.24, 0.5);
+    playTone(audioContext, masterGain, 659, now + 0.76, 0.24, 0.48);
+    playTone(audioContext, masterGain, 784, now + 1.08, 0.24, 0.44);
+  };
+
+  void audioContext.resume().catch(() => undefined);
+  playPattern();
+  timers.push(window.setInterval(playPattern, intervalMs));
+
+  return {
+    stop: () => {
+      timers.forEach((timerId) => window.clearInterval(timerId));
+      masterGain.disconnect();
+      void audioContext.close().catch(() => undefined);
+    },
+  };
+};
+
 type IncomingCallDialogProps = {
   peerName: string;
   onAccept: () => void;
@@ -254,7 +329,7 @@ function ActiveCallPanel({
 
   const status =
     call.phase === 'outgoing'
-      ? '正在呼叫'
+      ? '等待对方接听'
       : call.phase === 'connecting'
         ? '连接中'
         : formatDuration(call.connectedAt);
@@ -319,6 +394,7 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
   const callRef = useRef<VoiceCall>();
   const timeoutRef = useRef<number>();
   const noticeTimeoutRef = useRef<number>();
+  const ringToneRef = useRef<RingToneController>();
   const agoraSessionRef = useRef<AgoraSession>();
 
   useEffect(() => {
@@ -337,6 +413,27 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
     },
     []
   );
+
+  const stopRingTone = useCallback(() => {
+    ringToneRef.current?.stop();
+    ringToneRef.current = undefined;
+  }, []);
+
+  useEffect(() => {
+    stopRingTone();
+
+    if (call?.phase === 'outgoing') {
+      ringToneRef.current = startRingTone('outgoing');
+      return stopRingTone;
+    }
+
+    if (call?.phase === 'incoming') {
+      ringToneRef.current = startRingTone('incoming');
+      return stopRingTone;
+    }
+
+    return undefined;
+  }, [call?.phase, stopRingTone]);
 
   const showRemainingNotice = useCallback(
     (remainingSeconds: number) => {
