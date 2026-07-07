@@ -10,7 +10,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { Box, config, Icons, Scroll } from 'folds';
+import { Box, Button, config, Icon, Icons, Scroll, Spinner, Text } from 'folds';
 import FocusTrap from 'focus-trap-react';
 import { isKeyHotkey } from 'is-hotkey';
 import { Room } from 'matrix-js-sdk';
@@ -537,6 +537,45 @@ function RemoteStickerSidebar({
   );
 }
 
+type RemoteStickerStatusProps = {
+  loading: boolean;
+  error?: string;
+  onRetry: () => void;
+};
+function RemoteStickerStatus({ loading, error, onRetry }: RemoteStickerStatusProps) {
+  const title = loading ? '正在加载云端表情包' : error ? '云端表情包加载失败' : '暂无云端表情包';
+
+  return (
+    <Box
+      style={{ padding: `${config.space.S700} ${config.space.S500}` }}
+      alignItems="Center"
+      justifyContent="Center"
+      direction="Column"
+      gap="300"
+    >
+      {loading ? <Spinner size="400" /> : <Icon size="600" src={Icons.Sticker} />}
+      <Box direction="Column" alignItems="Center" gap="100" style={{ maxWidth: '100%' }}>
+        <Text align="Center">{title}</Text>
+        {error && (
+          <Text
+            priority="300"
+            align="Center"
+            size="T200"
+            style={{ maxWidth: '100%', wordBreak: 'break-word' }}
+          >
+            {error}
+          </Text>
+        )}
+      </Box>
+      {error && (
+        <Button size="300" variant="Surface" radii="300" onClick={onRetry}>
+          <Text size="B300">{'重试'}</Text>
+        </Button>
+      )}
+    </Box>
+  );
+}
+
 type EmojiGroupHolderProps = {
   contentScrollRef: RefObject<HTMLDivElement>;
   previewAtom: PrimitiveAtom<PreviewData | undefined>;
@@ -660,7 +699,12 @@ export function EmojiBoard({
   const imagePacks = imagePackMode === 'personal' ? personalImagePacks : contextualImagePacks;
   const [draggingPackId, setDraggingPackId] = useState<string>();
   const [packDropTarget, setPackDropTarget] = useState<PersonalPackDropTarget>();
-  const remoteStickerImages = useRemoteStickerIndex(
+  const {
+    stickers: remoteStickerImages,
+    loading: remoteStickerLoading,
+    error: remoteStickerError,
+    retry: retryRemoteStickers,
+  } = useRemoteStickerIndex(
     tab === EmojiBoardTab.Emoji || tab === EmojiBoardTab.Sticker || tab === EmojiBoardTab.Cloud
   );
   const [emojiGroupItems, stickerGroupItems, cloudGroupItems] = useGroups(
@@ -1137,6 +1181,13 @@ export function EmojiBoard({
                 );
               })}
             </div>
+            {cloudTab && groups.length === 0 && !searchedItems && (
+              <RemoteStickerStatus
+                loading={remoteStickerLoading}
+                error={remoteStickerError}
+                onRetry={retryRemoteStickers}
+              />
+            )}
             {tab === EmojiBoardTab.Sticker && groups.length === 0 && <NoStickerPacks />}
           </EmojiGroupHolder>
         </Box>

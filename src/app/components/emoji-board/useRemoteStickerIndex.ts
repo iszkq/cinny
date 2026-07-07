@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { IImageInfo } from '../../../types/matrix/common';
 import { ImageUsage, PackImage, PackImageReader } from '../../plugins/custom-emoji';
 import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
@@ -53,6 +53,13 @@ type RemoteStickerPackImage = PackImage & {
   [REMOTE_STICKER_THUMB_URL]?: string;
 };
 
+export type RemoteStickerIndexState = {
+  stickers: PackImageReader[];
+  loading: boolean;
+  error?: string;
+  retry: () => void;
+};
+
 let cachedRemoteStickers: PackImageReader[] | undefined;
 let pendingRemoteStickers: Promise<PackImageReader[]> | undefined;
 
@@ -81,16 +88,36 @@ const fetchRemoteStickerIndexWithDesktop = async (url: string): Promise<RemoteSt
 
 const fetchRemoteStickerIndex = async (): Promise<RemoteStickerIndex> => {
   const url = getFreshIndexUrl();
+  let desktopError: unknown;
 
   if (isDesktopUpdaterSupported()) {
     try {
       return await fetchRemoteStickerIndexWithDesktop(url);
     } catch (error) {
+      desktopError = error;
       console.warn(error);
     }
   }
 
-  return fetchRemoteStickerIndexWithBrowser(url);
+  try {
+    return await fetchRemoteStickerIndexWithBrowser(url);
+  } catch (browserError) {
+    if (desktopError) {
+      console.warn(browserError);
+      throw desktopError;
+    }
+    throw browserError;
+  }
+};
+
+const getRemoteStickerErrorMessage = (error: unknown): string => {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  if (typeof error === 'string' && error) {
+    return error;
+  }
+  return '云端表情包加载失败';
 };
 
 const getDisplayName = (item: RemoteStickerIndexItem): string | undefined => {
@@ -184,15 +211,16 @@ const loadRemoteStickers = async (): Promise<PackImageReader[]> => {
         .filter((item): item is PackImageReader => item !== undefined);
       return cachedRemoteStickers;
     })
-    .catch((error) => {
-      console.warn(error);
-      return [];
-    })
     .finally(() => {
       pendingRemoteStickers = undefined;
     });
 
   return pendingRemoteStickers;
+};
+
+const clearRemoteStickerCache = (): void => {
+  cachedRemoteStickers = undefined;
+  pendingRemoteStickers = undefined;
 };
 
 export const getRemoteStickerPackId = (image: PackImageReader): string | undefined => {
@@ -215,25 +243,54 @@ export const getRemoteStickerPreviewUrl = (image: PackImageReader): string | und
   return content[REMOTE_STICKER_PREVIEW_URL] ?? content[REMOTE_STICKER_THUMB_URL];
 };
 
-export const useRemoteStickerIndex = (enabled: boolean): PackImageReader[] => {
+export const useRemoteStickerIndex = (enabled: boolean): RemoteStickerIndexState => {
   const [stickers, setStickers] = useState<PackImageReader[]>(() => cachedRemoteStickers ?? []);
+  const [loading, setLoading] = useState(() => enabled && !cachedRemoteStickers);
+  const [error, setError] = useState<string>();
+  const [reloadId, setReloadId] = useState(0);
+
+  const retry = useCallback(() => {
+    clearRemoteStickerCache();
+    setError(undefined);
+    setLoading(true);
+    setReloadId((id) => id + 1);
+  }, []);
 
   useEffect(() => {
     if (!enabled) {
+      setLoading(false);
+      setError(undefined);
       return undefined;
     }
 
     let disposed = false;
-    loadRemoteStickers().then((items) => {
-      if (!disposed) {
-        setStickers(items);
-      }
-    });
+    setLoading(!cachedRemoteStickers);
+    setError(undefined);
+
+    loadRemoteStickers()
+      .then((items) => {
+        if (!disposed) {
+          setStickers(items);
+          setError(undefined);
+        }
+      })
+      .catch((loadError) => {
+        if (!disposed) {
+          console.warn(loadError);
+          setStickers([]);
+          setError(getRemoteStickerErrorMessage(loadError));
+        }
+      })
+      .finally(() => {
+        if (!disposed) {
+          setLoading(false);
+        }
+      });
 
     return () => {
       disposed = true;
     };
-  }, [enabled]);
+  }, [enabled, reloadId]);
 
-  return stickers;
+  return { stickers, loading, error, retry };
 };

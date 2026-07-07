@@ -5,11 +5,11 @@ mod desktop_media_cache;
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine};
 use reqwest::{
     header::{ACCEPT, CONTENT_TYPE},
-    Client, Url,
+    Client, Proxy, Url,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{env, fs, process::Command, sync::OnceLock};
+use std::{env, fs, process::Command, sync::OnceLock, time::Duration};
 use tauri::{plugin::PermissionState, AppHandle};
 use tauri_plugin_notification::NotificationExt;
 
@@ -83,7 +83,19 @@ fn is_allowed_external_url(url: &str) -> bool {
 }
 
 fn get_remote_sticker_http_client() -> &'static Client {
-    REMOTE_STICKER_HTTP_CLIENT.get_or_init(Client::new)
+    REMOTE_STICKER_HTTP_CLIENT.get_or_init(|| {
+        let mut builder = Client::builder()
+            .connect_timeout(Duration::from_secs(10))
+            .timeout(Duration::from_secs(30));
+
+        if let Some(proxy_url) = detect_desktop_updater_proxy() {
+            if let Ok(proxy) = Proxy::all(&proxy_url) {
+                builder = builder.proxy(proxy);
+            }
+        }
+
+        builder.build().unwrap_or_else(|_| Client::new())
+    })
 }
 
 fn parse_remote_sticker_index_url(url: &str) -> Result<Url, String> {
