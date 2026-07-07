@@ -1,7 +1,7 @@
 {
   "identifier": "default",
   "description": "Default desktop capability for the main 星火 window.",
-  "windows": ["main", "image-preview-*", "bible-window"],
+  "windows": ["main", "image-preview-*", "bible-window", "cinny-external-*"],
   "permissions": [
     "core:default",
     "core:event:allow-emit-to",
@@ -11,6 +11,7 @@
     "core:window:allow-destroy",
     "core:window:allow-minimize",
     "core:window:allow-start-dragging",
+    "core:window:allow-set-title",
     "core:window:allow-toggle-maximize",
     "core:window:allow-set-overlay-icon",
     "notification:default",

@@ -30,10 +30,14 @@ type JitsiMeetCardProps = {
   avatarUrl?: string;
 };
 export function JitsiMeetCard({ meeting, displayName, avatarUrl }: JitsiMeetCardProps) {
-  const joinUrl = getJitsiMeetJoinUrl(meeting.url, { displayName, avatarUrl });
   const meetingTitle = meeting.title || DEFAULT_MEETING_TITLE;
+  const joinUrl = getJitsiMeetJoinUrl(meeting.url, {
+    displayName,
+    avatarUrl,
+    subject: meetingTitle,
+  });
   const handleJoin = () => {
-    void openExternalUrlInNewWindow(joinUrl, meeting.url).catch(() => undefined);
+    void openExternalUrlInNewWindow(joinUrl, meeting.url, meetingTitle).catch(() => undefined);
   };
 
   return (

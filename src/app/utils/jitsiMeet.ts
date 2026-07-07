@@ -30,8 +30,15 @@ const randomHex = (byteLength: number): string => {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
 
-export const makeJitsiMeetRoomName = (): string =>
-  `starfire-${Date.now().toString(36)}-${randomHex(10)}`;
+const getSafeJitsiRoomName = (title?: string): string | undefined => {
+  const safeTitle = getSafeText(title, 120);
+  if (!safeTitle) return undefined;
+
+  return safeTitle.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim();
+};
+
+export const makeJitsiMeetRoomName = (title?: string): string =>
+  getSafeJitsiRoomName(title) ?? `starfire-${Date.now().toString(36)}-${randomHex(10)}`;
 
 export const getJitsiMeetUrl = (roomName: string): string =>
   `https://${JITSI_MEET_DOMAIN}/${encodeURIComponent(roomName)}`;
@@ -39,6 +46,7 @@ export const getJitsiMeetUrl = (roomName: string): string =>
 type JitsiMeetUserInfo = {
   displayName?: string;
   avatarUrl?: string;
+  subject?: string;
 };
 
 const getSafeText = (value?: string, maxLength = 80): string | undefined => {
@@ -64,11 +72,15 @@ export const getJitsiMeetJoinUrl = (url: string, userInfo?: JitsiMeetUserInfo): 
   const hashParams = new URLSearchParams();
   const safeDisplayName = getSafeText(userInfo?.displayName);
   const safeAvatarUrl = getSafeAvatarUrl(userInfo?.avatarUrl);
+  const safeSubject = getSafeText(userInfo?.subject, 120);
 
   hashParams.set('config.disableDeepLinking', 'true');
   hashParams.set('config.disableThirdPartyRequests', 'false');
   hashParams.set('config.prejoinConfig.enabled', 'false');
   hashParams.set('config.prejoinPageEnabled', 'false');
+  if (safeSubject) {
+    hashParams.set('config.subject', JSON.stringify(safeSubject));
+  }
   if (safeDisplayName) {
     hashParams.set('userInfo.displayName', JSON.stringify(safeDisplayName));
   }
@@ -82,8 +94,8 @@ export const getJitsiMeetJoinUrl = (url: string, userInfo?: JitsiMeetUserInfo): 
 };
 
 export const createJitsiMeetInfo = (title?: string): CinnyJitsiMeetInfo => {
-  const roomName = makeJitsiMeetRoomName();
   const meetingTitle = getSafeText(title, 120);
+  const roomName = makeJitsiMeetRoomName(meetingTitle);
   return {
     version: 1,
     roomName,
@@ -145,8 +157,8 @@ export const getJitsiMeetInfo = (
 
 export const makeJitsiMeetMessageContent = (meeting: CinnyJitsiMeetInfo): IContent => {
   const label = '\u52a0\u5165\u4f1a\u8bae';
-  const joinUrl = getJitsiMeetJoinUrl(meeting.url);
   const title = meeting.title ?? '\u4f1a\u8bae';
+  const joinUrl = getJitsiMeetJoinUrl(meeting.url, { subject: title });
   const body = `\u53d1\u8d77\u4e86\u4f1a\u8bae\u201c${title}\u201d\uff1a${joinUrl}`;
   const safeTitle = sanitizeText(title);
   const safeUrl = sanitizeText(joinUrl);
