@@ -73,14 +73,15 @@ import { InviteUserPrompt } from '../../components/invite-user-prompt';
 import { ContainerColor } from '../../styles/ContainerColor.css';
 import { RoomSettingsPage } from '../../state/roomSettings';
 import { RoomMessageSearchDialog } from '../message-search';
-import { JitsiMeetDialog, StartJitsiMeetButton } from '../../components/jitsi-meet';
+import { StartJitsiMeetButton } from '../../components/jitsi-meet';
 import {
-  CinnyJitsiMeetInfo,
   createJitsiMeetInfo,
+  getJitsiMeetJoinUrl,
   makeJitsiMeetMessageContent,
 } from '../../utils/jitsiMeet';
 import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
 import { getMemberAvatarMxc, getMemberDisplayName } from '../../utils/room';
+import { openExternalUrl } from '../../utils/desktop';
 
 type RoomMenuProps = {
   room: Room;
@@ -274,7 +275,6 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
   const [menuAnchor, setMenuAnchor] = useState<RectCords>();
   const [pinMenuAnchor, setPinMenuAnchor] = useState<RectCords>();
   const [messageSearch, setMessageSearch] = useState(false);
-  const [meeting, setMeeting] = useState<CinnyJitsiMeetInfo>();
   const direct = useIsDirectRoom();
 
   const pinnedEvents = useRoomPinnedEvents(room);
@@ -315,7 +315,11 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
       const nextMeeting = createJitsiMeetInfo();
       const content = makeJitsiMeetMessageContent(nextMeeting);
       await mx.sendMessage(room.roomId, content as never);
-      setMeeting(nextMeeting);
+      const joinUrl = getJitsiMeetJoinUrl(nextMeeting.url, {
+        displayName: myDisplayName,
+        avatarUrl: myAvatarUrl,
+      });
+      void openExternalUrl(joinUrl).catch(() => undefined);
       return undefined;
     }
   );
@@ -351,14 +355,6 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
           room={room}
           direct={direct}
           requestClose={() => setMessageSearch(false)}
-        />
-      )}
-      {meeting && (
-        <JitsiMeetDialog
-          meeting={meeting}
-          displayName={myDisplayName}
-          avatarUrl={myAvatarUrl}
-          requestClose={() => setMeeting(undefined)}
         />
       )}
       <PageHeader className={ContainerColor({ variant: 'Surface' })} balance={compact}>

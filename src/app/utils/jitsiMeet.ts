@@ -3,8 +3,6 @@ import { sanitizeText } from './sanitize';
 
 export const JITSI_MEET_DOMAIN = '8x8.vc';
 export const JITSI_MEET_APP_ID = 'vpaas-magic-cookie-b3e10afe8b644cbfbd3abe62ddb650cf';
-export const JITSI_MEET_SCRIPT_URL =
-  `https://${JITSI_MEET_DOMAIN}/${JITSI_MEET_APP_ID}/external_api.js`;
 export const CINNY_JITSI_MEET_CONTENT_KEY = 'io.cinny.jitsi_meet';
 
 const LEGACY_JITSI_MEET_DOMAIN = 'meet.jit.si';
@@ -42,9 +40,6 @@ export const getJitsiMeetUrl = (roomName: string): string =>
     roomName
   )}`;
 
-export const getJitsiMeetApiRoomName = (meeting: Pick<CinnyJitsiMeetInfo, 'roomName'>): string =>
-  `${JITSI_MEET_APP_ID}/${meeting.roomName}`;
-
 type JitsiMeetUserInfo = {
   displayName?: string;
   avatarUrl?: string;
@@ -68,8 +63,8 @@ const getSafeAvatarUrl = (avatarUrl?: string): string | undefined => {
   }
 };
 
-export const getJitsiMeetEmbedUrl = (url: string, userInfo?: JitsiMeetUserInfo): string => {
-  const embedUrl = new URL(url);
+export const getJitsiMeetJoinUrl = (url: string, userInfo?: JitsiMeetUserInfo): string => {
+  const joinUrl = new URL(url);
   const hashParams = new URLSearchParams();
   const safeDisplayName = getSafeText(userInfo?.displayName);
   const safeAvatarUrl = getSafeAvatarUrl(userInfo?.avatarUrl);
@@ -85,9 +80,11 @@ export const getJitsiMeetEmbedUrl = (url: string, userInfo?: JitsiMeetUserInfo):
     hashParams.set('userInfo.avatarUrl', JSON.stringify(safeAvatarUrl));
   }
 
-  embedUrl.hash = hashParams.toString();
-  return embedUrl.toString();
+  joinUrl.hash = hashParams.toString();
+  return joinUrl.toString();
 };
+
+export const getJitsiMeetEmbedUrl = getJitsiMeetJoinUrl;
 
 export const createJitsiMeetInfo = (): CinnyJitsiMeetInfo => {
   const roomName = makeJitsiMeetRoomName();
@@ -159,8 +156,9 @@ export const getJitsiMeetInfo = (
 
 export const makeJitsiMeetMessageContent = (meeting: CinnyJitsiMeetInfo): IContent => {
   const label = '\u52a0\u5165\u4f1a\u8bae';
-  const body = `\u53d1\u8d77\u4e86\u89c6\u9891\u4f1a\u8bae\uff1a${meeting.url}`;
-  const safeUrl = sanitizeText(meeting.url);
+  const joinUrl = getJitsiMeetJoinUrl(meeting.url);
+  const body = `\u53d1\u8d77\u4e86\u89c6\u9891\u4f1a\u8bae\uff1a${joinUrl}`;
+  const safeUrl = sanitizeText(joinUrl);
 
   return {
     msgtype: MsgType.Text,
