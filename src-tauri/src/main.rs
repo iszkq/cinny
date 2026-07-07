@@ -690,7 +690,7 @@ async fn open_external_url_window(
                         &nested_title_app,
                         &nested_title_parent_label,
                         &nested_title_label,
-                        window,
+                        &window,
                         &title,
                     );
                 });
@@ -708,7 +708,7 @@ async fn open_external_url_window(
                     &popup_title_app,
                     &popup_title_parent_label,
                     &popup_title_label,
-                    window,
+                    &window,
                     &title,
                 );
             });
