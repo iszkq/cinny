@@ -35,6 +35,45 @@ const REMOTE_STICKER_MEDIA_MAX_BYTES: u64 = 25 * 1024 * 1024;
 static REMOTE_STICKER_HTTP_CLIENT: OnceLock<Client> = OnceLock::new();
 static EXTERNAL_POPUP_COUNTER: AtomicU64 = AtomicU64::new(1);
 
+const JITSI_FIREBASE_AUTH_INIT_SCRIPT: &str = r#"
+(() => {
+  const isJitsiFirebaseAuthPage = () =>
+    window.location.hostname === 'web-cdn.jitsi.net' &&
+    /\/auth-static\/meet-jit-si\/[^/]+\/signin\.html$/.test(window.location.pathname);
+
+  if (!isJitsiFirebaseAuthPage()) return;
+
+  const patchFirebaseUi = () => {
+    const AuthUI = window.firebaseui?.auth?.AuthUI;
+    if (!AuthUI?.prototype?.start || AuthUI.prototype.__cinnyJitsiRedirectPatch) {
+      return Boolean(AuthUI?.prototype?.__cinnyJitsiRedirectPatch);
+    }
+
+    const originalStart = AuthUI.prototype.start;
+    AuthUI.prototype.start = function startWithDesktopRedirectFlow(container, config) {
+      if (isJitsiFirebaseAuthPage() && config && typeof config === 'object') {
+        config = {
+          ...config,
+          callbacks: { ...(config.callbacks || {}) },
+          signInFlow: 'redirect',
+        };
+      }
+      return originalStart.call(this, container, config);
+    };
+    AuthUI.prototype.__cinnyJitsiRedirectPatch = true;
+    return true;
+  };
+
+  if (patchFirebaseUi()) return;
+
+  const timer = window.setInterval(() => {
+    if (patchFirebaseUi()) window.clearInterval(timer);
+  }, 0);
+
+  window.setTimeout(() => window.clearInterval(timer), 10000);
+})();
+"#;
+
 #[derive(Deserialize)]
 struct DesktopNotificationPayload {
     title: String,
@@ -126,12 +165,58 @@ fn parse_external_webview_url(url: &str) -> Result<Url, String> {
 }
 
 fn is_allowed_external_popup_url(url: &Url) -> bool {
-    matches!(url.scheme(), "http" | "https" | "about")
+    matches!(url.scheme(), "http" | "https" | "about" | "jitsi-meet")
 }
 
 fn next_external_popup_label(parent_label: &str) -> String {
     let next_id = EXTERNAL_POPUP_COUNTER.fetch_add(1, Ordering::Relaxed);
     format!("{parent_label}-popup-{next_id}")
+}
+
+fn get_jitsi_authenticated_meeting_url(url: &Url) -> Option<Url> {
+    if url.scheme() == "https"
+        && url.host_str() == Some("meet.jit.si")
+        && url.query_pairs().any(|(key, value)| key == "jwt" && !value.is_empty())
+    {
+        return Some(url.clone());
+    }
+
+    if url.scheme() == "jitsi-meet"
+        && url.host_str() == Some("meet.jit.si")
+        && url.query_pairs().any(|(key, value)| key == "jwt" && !value.is_empty())
+    {
+        let mut https_url = url.clone();
+        if https_url.set_scheme("https").is_ok() {
+            return Some(https_url);
+        }
+    }
+
+    None
+}
+
+fn handle_jitsi_authenticated_meeting_redirect(
+    app: &AppHandle,
+    parent_label: &str,
+    current_label: &str,
+    url: &Url,
+) -> bool {
+    let Some(meeting_url) = get_jitsi_authenticated_meeting_url(url) else {
+        return false;
+    };
+    let Some(parent_window) = app.get_webview_window(parent_label) else {
+        return false;
+    };
+
+    let _ = parent_window.navigate(meeting_url);
+    let _ = parent_window.unminimize();
+    let _ = parent_window.show();
+    let _ = parent_window.set_focus();
+
+    if let Some(current_window) = app.get_webview_window(current_label) {
+        let _ = current_window.close();
+    }
+
+    true
 }
 
 fn get_remote_sticker_http_client() -> &'static Client {
@@ -374,6 +459,12 @@ async fn open_external_url_window(
             }
 
             let popup_label = next_external_popup_label(&popup_parent_label);
+            let popup_navigation_app = popup_app.clone();
+            let popup_navigation_parent_label = popup_parent_label.clone();
+            let popup_navigation_label = popup_label.clone();
+            let nested_popup_app = popup_app.clone();
+            let nested_popup_parent_label = popup_label.clone();
+            let nested_meeting_parent_label = popup_parent_label.clone();
             let popup_url = Url::parse("about:blank").expect("about:blank is a valid URL");
             let popup_builder = WebviewWindowBuilder::new(
                 &popup_app,
@@ -386,6 +477,59 @@ async fn open_external_url_window(
             .focused(true)
             .visible(true)
             .disable_drag_drop_handler()
+            .initialization_script(JITSI_FIREBASE_AUTH_INIT_SCRIPT)
+            .on_navigation(move |url| {
+                !handle_jitsi_authenticated_meeting_redirect(
+                    &popup_navigation_app,
+                    &popup_navigation_parent_label,
+                    &popup_navigation_label,
+                    url,
+                )
+            })
+            .on_new_window(move |nested_url, nested_features| {
+                if !is_allowed_external_popup_url(&nested_url) {
+                    let _ = open_url_with_system_handler(nested_url.as_str());
+                    return tauri::webview::NewWindowResponse::Deny;
+                }
+
+                let nested_popup_label = next_external_popup_label(&nested_popup_parent_label);
+                let nested_navigation_app = nested_popup_app.clone();
+                let nested_navigation_parent_label = nested_meeting_parent_label.clone();
+                let nested_navigation_label = nested_popup_label.clone();
+                let nested_popup_url =
+                    Url::parse("about:blank").expect("about:blank is a valid URL");
+                let nested_popup_builder = WebviewWindowBuilder::new(
+                    &nested_popup_app,
+                    nested_popup_label,
+                    WebviewUrl::External(nested_popup_url),
+                )
+                .window_features(nested_features)
+                .title(nested_url.as_str())
+                .resizable(true)
+                .focused(true)
+                .visible(true)
+                .disable_drag_drop_handler()
+                .initialization_script(JITSI_FIREBASE_AUTH_INIT_SCRIPT)
+                .on_navigation(move |url| {
+                    !handle_jitsi_authenticated_meeting_redirect(
+                        &nested_navigation_app,
+                        &nested_navigation_parent_label,
+                        &nested_navigation_label,
+                        url,
+                    )
+                })
+                .on_document_title_changed(|window, title| {
+                    let _ = window.set_title(&title);
+                });
+
+                match nested_popup_builder.build() {
+                    Ok(window) => tauri::webview::NewWindowResponse::Create { window },
+                    Err(_) => {
+                        let _ = open_url_with_system_handler(nested_url.as_str());
+                        tauri::webview::NewWindowResponse::Deny
+                    }
+                }
+            })
             .on_document_title_changed(|window, title| {
                 let _ = window.set_title(&title);
             });
