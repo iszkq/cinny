@@ -174,6 +174,10 @@ type LocalMatrixEvent = MatrixEvent & {
   };
 };
 
+type PendingEventRoom = Room & {
+  removePendingEvent?: (eventId: string) => void;
+};
+
 const createLocalRoomEvent = (
   mx: ReturnType<typeof useMatrixClient>,
   room: Room,
@@ -204,6 +208,23 @@ const setLocalEventContent = (event: MatrixEvent, content: IContent): void => {
   if (localEvent.clearEvent) {
     localEvent.clearEvent.content = content;
   }
+};
+
+const removeLocalPendingEvent = (room: Room, localEvent: MatrixEvent): void => {
+  const eventId = localEvent.getId();
+  if (eventId) {
+    const pendingRoom = room as PendingEventRoom;
+    if (typeof pendingRoom.removePendingEvent === 'function') {
+      try {
+        pendingRoom.removePendingEvent(eventId);
+        return;
+      } catch {
+        // Fall back to a cancelled pending status on older or patched SDK builds.
+      }
+    }
+  }
+
+  room.updatePendingEvent(localEvent, EventStatus.CANCELLED);
 };
 
 const sendLocalRoomEvent = (
@@ -302,8 +323,17 @@ const sendRoomEventWithPendingContent = (
   }
 
   return (async () => {
+    let finalContent: IContent;
     try {
-      setLocalEventContent(localEvent, await getFinalContent());
+      finalContent = await getFinalContent();
+    } catch (error) {
+      (localEvent as MatrixEvent & { error?: unknown }).error = error;
+      removeLocalPendingEvent(room, localEvent);
+      throw error;
+    }
+
+    try {
+      setLocalEventContent(localEvent, finalContent);
       return await sendLocalRoomEvent(mx, room, localEvent, options);
     } catch (error) {
       (localEvent as MatrixEvent & { error?: unknown }).error = error;
@@ -402,6 +432,15 @@ const getRemoteStickerFileName = (label: string, mimeType: string): string => {
   const extension = REMOTE_STICKER_MIME_EXTENSION[mimeType.toLowerCase()] ?? 'gif';
   return `${baseName}.${extension}`;
 };
+
+const createRemoteStickerHttpContent = (url: string, info?: IImageInfo): IContent => ({
+  body: STICKER_EVENT_BODY,
+  url,
+  info: {
+    ...info,
+    mimetype: getRemoteStickerMimeType(undefined, info),
+  },
+});
 
 const cloneMessageContent = (content: IContent): IContent =>
   JSON.parse(JSON.stringify(content)) as IContent;
@@ -573,7 +612,15 @@ const createRemoteStickerContent = async (
     remoteStickerUploadCache.set(cacheKey, uploadPromise);
   }
 
-  const uploadedContent = await uploadPromise;
+  let uploadedContent: IContent;
+  try {
+    uploadedContent = await uploadPromise;
+  } catch (error) {
+    if (!isDesktopUpdaterSupported()) {
+      return createRemoteStickerHttpContent(url, info);
+    }
+    throw error;
+  }
   const content = cloneMessageContent(uploadedContent);
   content.body = STICKER_EVENT_BODY;
   return content;
@@ -1429,10 +1476,13 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           })
           .catch((error) => {
             setSendError(getStickerSendErrorMessage(error, remoteSticker));
+          })
+          .finally(() => {
+            stickerSendingRef.current = false;
+            setSendStatus(undefined);
           });
       } catch (error) {
         setSendError(getStickerSendErrorMessage(error, remoteSticker));
-      } finally {
         stickerSendingRef.current = false;
         setSendStatus(undefined);
       }

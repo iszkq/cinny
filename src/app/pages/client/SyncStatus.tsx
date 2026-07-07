@@ -7,6 +7,7 @@ import { ContainerColor } from '../../styles/ContainerColor.css';
 type StateData = {
   current: SyncState | null;
   previous: SyncState | null | undefined;
+  error?: unknown;
 };
 
 type SyncStatusProps = {
@@ -21,6 +22,21 @@ const isConnectionIssueState = (state: SyncState | null): boolean =>
 const isHealthySyncState = (state: SyncState | null): boolean =>
   state === SyncState.Prepared || state === SyncState.Syncing || state === SyncState.Catchup;
 
+const getSyncError = (data: unknown): unknown =>
+  typeof data === 'object' && data !== null && 'error' in data
+    ? (data as { error?: unknown }).error
+    : undefined;
+
+const isAbortError = (error: unknown): boolean => {
+  const abortError = error as { name?: unknown; message?: unknown };
+  const name = typeof abortError?.name === 'string' ? abortError.name : '';
+  const message = typeof abortError?.message === 'string' ? abortError.message : '';
+  return name === 'AbortError' || /aborted|abort/i.test(message);
+};
+
+const isVisibleConnectionIssue = (data: StateData): boolean =>
+  isConnectionIssueState(data.current) && !isAbortError(data.error);
+
 export function SyncStatus({ mx }: SyncStatusProps) {
   const [stateData, setStateData] = useState<StateData>({
     current: null,
@@ -32,32 +48,33 @@ export function SyncStatus({ mx }: SyncStatusProps) {
 
   useSyncState(
     mx,
-    useCallback((current, previous) => {
+    useCallback((current, previous, data) => {
       if (isHealthySyncState(current)) {
         setSyncEstablished(true);
       }
 
+      const error = getSyncError(data);
       setStateData((s) => {
-        if (s.current === current && s.previous === previous) {
+        if (s.current === current && s.previous === previous && s.error === error) {
           return s;
         }
-        return { current, previous };
+        return { current, previous, error };
       });
     }, [])
   );
 
   useEffect(() => {
-    if (isConnectionIssueState(stateData.current)) {
+    if (isVisibleConnectionIssue(stateData)) {
       setConnectionIssueSince((prev) => prev ?? Date.now());
       return undefined;
     }
 
     setConnectionIssueSince(null);
     return undefined;
-  }, [stateData.current]);
+  }, [stateData]);
 
   useEffect(() => {
-    if (isConnectionIssueState(stateData.current)) {
+    if (isVisibleConnectionIssue(stateData)) {
       const issueSince = connectionIssueSince ?? Date.now();
       const visibleInMs = Math.max(
         0,
@@ -78,13 +95,15 @@ export function SyncStatus({ mx }: SyncStatusProps) {
 
   if (
     !syncEstablished &&
-    (visibleStateData.current === SyncState.Reconnecting ||
-      visibleStateData.current === SyncState.Error)
+    isVisibleConnectionIssue(visibleStateData)
   ) {
     return null;
   }
 
-  if (visibleStateData.current === SyncState.Reconnecting) {
+  if (
+    visibleStateData.current === SyncState.Reconnecting &&
+    !isAbortError(visibleStateData.error)
+  ) {
     return (
       <Box direction="Column" shrink="No">
         <Box
@@ -102,7 +121,10 @@ export function SyncStatus({ mx }: SyncStatusProps) {
     );
   }
 
-  if (visibleStateData.current === SyncState.Error) {
+  if (
+    visibleStateData.current === SyncState.Error &&
+    !isAbortError(visibleStateData.error)
+  ) {
     return (
       <Box direction="Column" shrink="No">
         <Box
