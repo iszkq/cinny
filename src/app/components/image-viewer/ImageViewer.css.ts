@@ -84,6 +84,15 @@ export const ImageViewerContent = style([
   },
 ]);
 
+export const ImageViewerContentWithOcr = style({
+  flexDirection: 'row',
+  '@media': {
+    'screen and (max-width: 750px)': {
+      flexDirection: 'column',
+    },
+  },
+});
+
 export const ImageViewerStage = style([
   DefaultReset,
   {
@@ -168,19 +177,65 @@ export const ImageViewerLoading = style([
   },
 ]);
 
+export const ImageViewerOcrGlyph = style([
+  DefaultReset,
+  {
+    position: 'relative',
+    width: '18px',
+    height: '18px',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    color: 'currentColor',
+    selectors: {
+      '&::before': {
+        content: '""',
+        position: 'absolute',
+        inset: 0,
+        background: [
+          'linear-gradient(currentColor, currentColor) left top / 7px 1.8px no-repeat',
+          'linear-gradient(currentColor, currentColor) left top / 1.8px 7px no-repeat',
+          'linear-gradient(currentColor, currentColor) right top / 7px 1.8px no-repeat',
+          'linear-gradient(currentColor, currentColor) right top / 1.8px 7px no-repeat',
+          'linear-gradient(currentColor, currentColor) left bottom / 7px 1.8px no-repeat',
+          'linear-gradient(currentColor, currentColor) left bottom / 1.8px 7px no-repeat',
+          'linear-gradient(currentColor, currentColor) right bottom / 7px 1.8px no-repeat',
+          'linear-gradient(currentColor, currentColor) right bottom / 1.8px 7px no-repeat',
+        ].join(', '),
+      },
+      '&::after': {
+        content: '"\\6587"',
+        position: 'relative',
+        fontSize: '10px',
+        fontWeight: 700,
+        lineHeight: 1,
+      },
+    },
+  },
+]);
+
 export const ImageViewerOcrPanel = style([
   DefaultReset,
   {
     flexShrink: 0,
-    maxHeight: 'min(28vh, 220px)',
+    width: 'min(34vw, 360px)',
+    minWidth: '280px',
+    maxWidth: '380px',
+    height: '100%',
+    maxHeight: 'none',
     overflow: 'hidden',
     padding: config.space.S300,
     borderRadius: config.radii.R300,
-    background: 'rgba(255, 255, 255, 0.68)',
+    background: 'rgba(255, 255, 255, 0.78)',
     border: '1px solid rgba(148, 163, 184, 0.24)',
     boxShadow: '0 14px 36px rgba(15, 23, 42, 0.1)',
     '@media': {
       'screen and (max-width: 750px)': {
+        width: '100%',
+        minWidth: 0,
+        maxWidth: 'none',
+        height: 'auto',
         maxHeight: '32dvh',
         padding: config.space.S200,
         borderRadius: config.radii.R300,

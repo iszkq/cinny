@@ -392,6 +392,22 @@ const normalizeAihubmixText = (value: unknown): string | undefined => {
   return decodeEscapedText(trimmedValue);
 };
 
+const sanitizeImageOcrText = (value: string): string => {
+  const decodedText = decodeEscapedText(value);
+
+  return decodedText
+    .replace(/```[\w-]*\s*/g, '')
+    .replace(/```/g, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p\s*>/gi, '\n')
+    .replace(/<\/div\s*>/gi, '\n')
+    .replace(/<\/?[a-z][^>]*>/gi, '')
+    .replace(/^\s{0,3}#{1,6}\s+/gm, '')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+};
+
 const blobToDataUrl = (blob: Blob): Promise<string> =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -531,12 +547,17 @@ export const recognizeImageTextWithAihubmix = async (
       model: config?.model?.trim() || AIHUBMIX_IMAGE_OCR_MODEL,
       messages: [
         {
+          role: 'system',
+          content:
+            '\u4f60\u662f\u4e00\u4e2a\u4e25\u683c\u7684 OCR \u7eaf\u6587\u672c\u63d0\u53d6\u5668\u3002\u53ea\u8f93\u51fa\u56fe\u7247\u4e2d\u771f\u5b9e\u5b58\u5728\u7684\u6587\u5b57\uff0c\u4e0d\u8981\u89e3\u91ca\uff0c\u4e0d\u8981\u8865\u5145\uff0c\u4e0d\u8981\u751f\u6210 Markdown\u3001HTML\u3001XML\u3001JSON \u6216\u4ee3\u7801\u5757\u3002',
+        },
+        {
           role: 'user',
           content: [
             {
               type: 'text',
               text:
-                '\u8bf7\u8bc6\u522b\u56fe\u7247\u4e2d\u7684\u6240\u6709\u6587\u5b57\uff0c\u5c3d\u91cf\u4fdd\u7559\u539f\u6709\u6362\u884c\u548c\u9605\u8bfb\u987a\u5e8f\uff0c\u53ea\u8f93\u51fa\u8bc6\u522b\u5230\u7684\u6587\u5b57\u3002',
+                '\u8bf7\u8bc6\u522b\u56fe\u7247\u4e2d\u7684\u6240\u6709\u6587\u5b57\uff0c\u5c3d\u91cf\u4fdd\u7559\u539f\u6709\u6362\u884c\u548c\u9605\u8bfb\u987a\u5e8f\u3002\u8f93\u51fa\u7eaf\u6587\u672c\uff0c\u4e0d\u8981\u4f7f\u7528 #\u3001<div>\u3001</div>\u3001``` \u6216\u4efb\u4f55\u683c\u5f0f\u5316\u6807\u8bb0\u3002',
             },
             {
               type: 'image_url',
@@ -569,7 +590,7 @@ export const recognizeImageTextWithAihubmix = async (
     throw new Error('OCR \u54cd\u5e94\u91cc\u6ca1\u6709\u6587\u672c\u3002');
   }
 
-  const recognizedText = normalizeAihubmixText(extractChatText(payload));
+  const recognizedText = sanitizeImageOcrText(extractChatText(payload));
   if (!recognizedText) {
     throw new Error('\u6ca1\u6709\u8bc6\u522b\u5230\u6587\u5b57\u3002');
   }

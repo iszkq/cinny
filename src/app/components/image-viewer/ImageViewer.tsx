@@ -676,7 +676,7 @@ export const ImageViewer = as<'div', ImageViewerProps>(
                         ocrState.status === 'loading' ? (
                           <Spinner size="100" variant="Secondary" fill="Solid" />
                         ) : (
-                          <Icon size="50" src={Icons.Alphabet} />
+                          <span className={css.ImageViewerOcrGlyph} aria-hidden="true" />
                         )
                       }
                     >
@@ -768,12 +768,12 @@ export const ImageViewer = as<'div', ImageViewerProps>(
                     before={
                       ocrState.status === 'loading' ? (
                         <Spinner size="100" variant="Secondary" fill="Solid" />
-                      ) : (
-                        <Icon size="50" src={Icons.Alphabet} />
-                      )
-                    }
-                  >
-                    <Text size="B300">{'\u8bc6\u522b\u6587\u5b57'}</Text>
+                        ) : (
+                          <span className={css.ImageViewerOcrGlyph} aria-hidden="true" />
+                        )
+                      }
+                    >
+                      <Text size="B300">{'\u8bc6\u522b\u6587\u5b57'}</Text>
                   </Chip>
                 )}
 
@@ -842,7 +842,14 @@ export const ImageViewer = as<'div', ImageViewerProps>(
           )}
         </Header>
 
-        <Box grow="Yes" className={css.ImageViewerContent} direction="Column" gap="200">
+        <Box
+          grow="Yes"
+          className={classNames(
+            css.ImageViewerContent,
+            imageOcrConfig && ocrPanelOpen && css.ImageViewerContentWithOcr
+          )}
+          gap="200"
+        >
           <Box
             grow="Yes"
             className={css.ImageViewerStage}
