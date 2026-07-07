@@ -49,6 +49,10 @@ const QUOTA_EXHAUSTED_MESSAGE = '本月10000分钟免费额度已用完';
 const RINGBACK_INTERVAL_MS = 3600;
 const INCOMING_RING_INTERVAL_MS = 2600;
 const SIGNAL_DISPATCH_TIMEOUT_MS = 1500;
+const AGORA_SDK_LOAD_TIMEOUT_MS = 15000;
+const AGORA_JOIN_TIMEOUT_MS = 20000;
+const AGORA_MIC_TIMEOUT_MS = 20000;
+const AGORA_PUBLISH_TIMEOUT_MS = 15000;
 
 type VoiceAction = 'invite' | 'answer' | 'reject' | 'cancel' | 'hangup' | 'busy';
 type RingToneKind = 'incoming' | 'outgoing';
@@ -99,6 +103,18 @@ type Notice = {
   id: number;
   message: string;
 };
+
+type AgoraStepErrorCode = 'sdk_timeout' | 'join_timeout' | 'mic_timeout' | 'publish_timeout';
+
+class AgoraStepError extends Error {
+  public readonly code: AgoraStepErrorCode;
+
+  public constructor(code: AgoraStepErrorCode, message: string) {
+    super(message);
+    this.name = 'AgoraStepError';
+    this.code = code;
+  }
+}
 
 type AgoraVoiceContextValue = {
   available: boolean;
@@ -232,6 +248,69 @@ const waitForSignalDispatch = (signals: Array<Promise<unknown> | undefined>): Pr
         });
     });
   });
+
+const withTimeout = <T,>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  createTimeoutError: () => Error
+): Promise<T> =>
+  new Promise((resolve, reject) => {
+    let settled = false;
+    const timerId = window.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      reject(createTimeoutError());
+    }, timeoutMs);
+
+    promise
+      .then((value) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timerId);
+        resolve(value);
+      })
+      .catch((error) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timerId);
+        reject(error);
+      });
+  });
+
+const getAgoraConnectErrorMessage = (error: unknown): string => {
+  if (error instanceof AgoraStepError) {
+    if (error.code === 'sdk_timeout') {
+      return '声网 SDK 加载超时，请检查网络后重试';
+    }
+    if (error.code === 'join_timeout') {
+      return '语音连接超时，请检查网络后重试';
+    }
+    if (error.code === 'mic_timeout') {
+      return '麦克风授权超时，请允许浏览器使用麦克风后重试';
+    }
+    if (error.code === 'publish_timeout') {
+      return '麦克风音频发布超时，请重试';
+    }
+  }
+
+  const rtcError = error as { name?: unknown; message?: unknown; code?: unknown };
+  const name = typeof rtcError?.name === 'string' ? rtcError.name : '';
+  const message = typeof rtcError?.message === 'string' ? rtcError.message : '';
+  const code = typeof rtcError?.code === 'string' ? rtcError.code : '';
+  const detail = `${name} ${code} ${message}`;
+
+  if (/NotAllowedError|Permission|PERMISSION|NotReadableError|DEVICE_ACCESS_DENIED/i.test(detail)) {
+    return '麦克风权限被拒绝，请允许浏览器使用麦克风后重试';
+  }
+  if (/NotFoundError|DevicesNotFoundError|DEVICE_NOT_FOUND|not found/i.test(detail)) {
+    return '没有找到可用麦克风，请检查设备后重试';
+  }
+  if (/token|dynamic key|CAN_NOT_GET_GATEWAY_SERVER|INVALID/i.test(detail)) {
+    return '声网鉴权或连接失败，请检查 App ID/证书后重试';
+  }
+
+  return '语音连接失败，请重试';
+};
 
 const sendToDeviceSignal = async (
   mx: VoiceMatrixClient,
@@ -661,7 +740,11 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
       const token = appCertificate
         ? await buildAgoraRtcToken(appId, appCertificate, voiceCall.channel, uid)
         : null;
-      const AgoraRTC = await loadAgoraRTC();
+      const AgoraRTC = await withTimeout(
+        loadAgoraRTC(),
+        AGORA_SDK_LOAD_TIMEOUT_MS,
+        () => new AgoraStepError('sdk_timeout', 'Agora SDK load timed out.')
+      );
       setAgoraArea(AgoraRTC, area);
 
       const client = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
@@ -685,10 +768,22 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
           }
         });
 
-        await client.join(appId, voiceCall.channel, token, uid);
+        await withTimeout(
+          client.join(appId, voiceCall.channel, token, uid),
+          AGORA_JOIN_TIMEOUT_MS,
+          () => new AgoraStepError('join_timeout', 'Agora channel join timed out.')
+        );
         joined = true;
-        localTrack = await AgoraRTC.createMicrophoneAudioTrack();
-        await client.publish([localTrack]);
+        localTrack = await withTimeout(
+          AgoraRTC.createMicrophoneAudioTrack(),
+          AGORA_MIC_TIMEOUT_MS,
+          () => new AgoraStepError('mic_timeout', 'Agora microphone creation timed out.')
+        );
+        await withTimeout(
+          client.publish([localTrack]),
+          AGORA_PUBLISH_TIMEOUT_MS,
+          () => new AgoraStepError('publish_timeout', 'Agora audio publish timed out.')
+        );
         agoraSessionRef.current = {
           callId: voiceCall.callId,
           client,
@@ -737,23 +832,24 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
     };
     updateCall(connectingCall);
 
-    const answerPromise = sendSignal(currentCall.roomId, currentCall.peerId, {
-      action: 'answer',
-      callId: currentCall.callId,
-      channel: currentCall.channel,
-    });
+    let joined = false;
 
     try {
-      void answerPromise.catch(() => undefined);
       await joinAgora(connectingCall);
-    } catch {
+      joined = true;
       await sendSignal(currentCall.roomId, currentCall.peerId, {
-        action: 'hangup',
+        action: 'answer',
+        callId: currentCall.callId,
+        channel: currentCall.channel,
+      });
+    } catch (error) {
+      await sendSignal(currentCall.roomId, currentCall.peerId, {
+        action: joined ? 'hangup' : 'reject',
         callId: currentCall.callId,
         channel: currentCall.channel,
         reason: 'connect_failed',
       }).catch(() => undefined);
-      finishCall('语音连接失败，请重试', true);
+      finishCall(getAgoraConnectErrorMessage(error), false);
     }
   }, [clearCallTimeout, finishCall, joinAgora, sendSignal, updateCall]);
 
@@ -861,14 +957,14 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
           phase: 'connecting',
         };
         updateCall(connectingCall);
-        void joinAgora(connectingCall).catch(async () => {
+        void joinAgora(connectingCall).catch(async (error) => {
           await sendSignal(currentCall.roomId, currentCall.peerId, {
             action: 'hangup',
             callId: currentCall.callId,
             channel: currentCall.channel,
             reason: 'connect_failed',
           }).catch(() => undefined);
-          finishCall('语音连接失败，请重试', true);
+          finishCall(getAgoraConnectErrorMessage(error), false);
         });
         return;
       }
@@ -879,9 +975,11 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
             ? '对方未接听'
             : signal.reason === 'quota'
               ? QUOTA_EXHAUSTED_MESSAGE
-              : signal.action === 'busy'
-                ? '对方正在通话中'
-                : '对方已拒绝';
+              : signal.reason === 'connect_failed'
+                ? '对方语音连接失败'
+                : signal.action === 'busy'
+                  ? '对方正在通话中'
+                  : '对方已拒绝';
         finishCall(message, false);
         return;
       }
@@ -892,7 +990,8 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
       }
 
       if (signal.action === 'hangup') {
-        finishCall(undefined, true);
+        const failedToConnect = signal.reason === 'connect_failed';
+        finishCall(failedToConnect ? '对方语音连接失败' : undefined, !failedToConnect);
       }
     },
     [
