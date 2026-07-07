@@ -22,7 +22,13 @@ import {
   Text,
   config,
 } from 'folds';
-import { MatrixEvent, Room, RoomEvent, RoomEventHandlerMap } from 'matrix-js-sdk';
+import {
+  MatrixEvent,
+  MatrixEventEvent,
+  Room,
+  RoomEvent,
+  RoomEventHandlerMap,
+} from 'matrix-js-sdk';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useClientConfig } from '../../hooks/useClientConfig';
 import { getMemberDisplayName } from '../../utils/room';
@@ -396,6 +402,7 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
   const noticeTimeoutRef = useRef<number>();
   const ringToneRef = useRef<RingToneController>();
   const agoraSessionRef = useRef<AgoraSession>();
+  const handledSignalKeysRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     callRef.current = call;
@@ -674,6 +681,15 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
       const sender = mEvent.getSender();
       if (!signal || !sender || sender === myUserId || signal.target !== myUserId) return;
 
+      const signalKey =
+        mEvent.getId() ?? `${room.roomId}:${signal.callId}:${signal.action}:${sender}`;
+      if (handledSignalKeysRef.current.has(signalKey)) return;
+      handledSignalKeysRef.current.add(signalKey);
+      if (handledSignalKeysRef.current.size > 200) {
+        const [oldestSignalKey] = handledSignalKeysRef.current;
+        handledSignalKeysRef.current.delete(oldestSignalKey);
+      }
+
       if (signal.action === 'invite') {
         if (typeof signal.expiresAt === 'number' && Date.now() > signal.expiresAt) return;
 
@@ -778,6 +794,18 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
   );
 
   useEffect(() => {
+    const handleDecrypted = (mEvent: MatrixEvent) => {
+      if (mEvent.isDecryptionFailure()) return;
+
+      const roomId = mEvent.getRoomId();
+      if (!roomId) return;
+
+      const room = mx.getRoom(roomId);
+      if (!room) return;
+
+      handleSignal(mEvent, room);
+    };
+
     const handleTimelineEvent: RoomEventHandlerMap[RoomEvent.Timeline] = (
       mEvent,
       room,
@@ -788,11 +816,19 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
       if (toStartOfTimeline || removed || !data.liveEvent) return;
 
       handleSignal(mEvent, room);
+      if (room && mEvent.isEncrypted() && mEvent.getType() !== AGORA_VOICE_EVENT_TYPE) {
+        void mx
+          .decryptEventIfNeeded(mEvent)
+          .then(() => handleSignal(mEvent, room))
+          .catch(() => undefined);
+      }
     };
 
     mx.on(RoomEvent.Timeline, handleTimelineEvent);
+    mx.on(MatrixEventEvent.Decrypted, handleDecrypted);
     return () => {
       mx.removeListener(RoomEvent.Timeline, handleTimelineEvent);
+      mx.off(MatrixEventEvent.Decrypted, handleDecrypted);
     };
   }, [handleSignal, mx]);
 
