@@ -102,17 +102,30 @@ export function StartJitsiMeetPrompt({
             escapeDeactivates: stopPropagation,
           }}
         >
-          <Dialog variant="Surface">
-            <Box as="form" onSubmit={handleSubmit} direction="Column">
+          <Dialog
+            variant="Surface"
+            style={{
+              width: 'min(420px, calc(100vw - 32px))',
+              maxWidth: 'calc(100vw - 32px)',
+              overflow: 'hidden',
+            }}
+          >
+            <Box
+              as="form"
+              onSubmit={handleSubmit}
+              direction="Column"
+              style={{ width: '100%', minWidth: 0 }}
+            >
               <Header
                 style={{
                   padding: `0 ${config.space.S200} 0 ${config.space.S400}`,
                   borderBottomWidth: config.borderWidth.B300,
+                  minWidth: 0,
                 }}
                 variant="Surface"
                 size="500"
               >
-                <Box grow="Yes">
+                <Box grow="Yes" style={{ minWidth: 0 }}>
                   <Text size="H4">{'\u53d1\u8d77\u4f1a\u8bae'}</Text>
                 </Box>
                 <IconButton size="300" onClick={requestClose} radii="300" disabled={submitting}>
@@ -123,12 +136,13 @@ export function StartJitsiMeetPrompt({
                 style={{
                   boxSizing: 'border-box',
                   padding: config.space.S400,
-                  width: 'min(420px, calc(100vw - 32px))',
+                  width: '100%',
+                  minWidth: 0,
                 }}
                 direction="Column"
                 gap="400"
               >
-                <Box direction="Column" gap="100">
+                <Box direction="Column" gap="100" style={{ width: '100%', minWidth: 0 }}>
                   <Text size="L400">{'\u4f1a\u8bae\u540d\u79f0'}</Text>
                   <Input
                     autoFocus
@@ -139,6 +153,7 @@ export function StartJitsiMeetPrompt({
                     size="400"
                     radii="300"
                     readOnly={submitting}
+                    style={{ width: '100%', minWidth: 0 }}
                   />
                   {error && (
                     <Text size="T200" style={{ color: color.Critical.Main }}>
@@ -146,7 +161,12 @@ export function StartJitsiMeetPrompt({
                     </Text>
                   )}
                 </Box>
-                <Box justifyContent="End" gap="200" style={{ flexWrap: 'wrap' }}>
+                <Box
+                  justifyContent="End"
+                  gap="200"
+                  wrap="Wrap"
+                  style={{ width: '100%', minWidth: 0 }}
+                >
                   <Button
                     type="button"
                     variant="Secondary"
