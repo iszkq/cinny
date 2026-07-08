@@ -87,7 +87,25 @@ Starfire 是基于上游 [cinnyapp/cinny](https://github.com/cinnyapp/cinny) 深
 - `src/app/features/room/RoomTimeline.tsx`
 - `src/app/components/message`
 
-### 会议与一对一语音通话
+### Jitsi 会议
+
+- 房间顶部提供会议按钮，可在当前房间发起 Jitsi 会议。
+- 发起会议时支持填写会议名称，客户端会生成 `meet.jit.si` 会议房间并发送到当前 Matrix 房间。
+- 聊天时间线会渲染会议卡片，显示会议名称、会议域名和 `加入会议` 按钮。
+- 加入会议时会带入当前用户昵称、头像和会议主题，减少进入会议后的重复设置。
+- 会议链接会关闭 Jitsi 预加入页和深链跳转提示，点击后尽量直接进入会议。
+- Web 端按浏览器原生方式打开会议窗口；桌面端会用独立窗口承载外部会议页面。
+- 桌面端已针对 Jitsi 主持人/Google 授权弹窗做处理：授权回调完成后会识别已授权会议地址，并尽量隐藏和关闭授权弹窗，减少白屏窗口残留。
+- Jitsi 会议适合多人音视频会议，具体音视频、屏幕共享、主持人权限和会议限制由 Jitsi 服务本身决定。
+
+相关入口：
+
+- `src/app/components/jitsi-meet`
+- `src/app/utils/jitsiMeet.ts`
+- `src/app/features/room/RoomViewHeader.tsx`
+- `src-tauri/src/main.rs`
+
+### 一对一语音通话
 
 - 私聊房间支持一对一语音通话，基于声网 Agora Web RTC SDK 接入。
 - 支持发起、接听、拒绝、挂断和麦克风静音/恢复。
@@ -97,13 +115,11 @@ Starfire 是基于上游 [cinnyapp/cinny](https://github.com/cinnyapp/cinny) 深
 - `config.json` 中的 `agoraVoice.timeoutSeconds` 控制呼叫等待超时，默认 60 秒；连接远端音频另有连接超时保护。
 - 当前声网 RTC token 默认有效期约 1 小时，长时间通话建议后续补充 token 自动续期逻辑。
 - `agoraVoice.monthlyFreeMinutes` 用于本地免费分钟数预估和提示，实际用量与计费仍以声网后台为准。
-- 桌面端会议入口已针对 Jitsi 主持人授权流程做过优化，授权弹窗在完成授权后会尽量自动收尾，减少白屏窗口残留。
 
 相关入口：
 
 - `src/app/features/agora-voice`
 - `src/app/features/room/RoomViewHeader.tsx`
-- `src/app/plugins/call`
 - `config.json`
 
 ### 圣经工具
