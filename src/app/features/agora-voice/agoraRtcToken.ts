@@ -147,7 +147,10 @@ const packRtcService = (channelName: string, uid: number, privilegeExpire: numbe
 
   return concatBytes([
     new ByteWriter().putUint16(RTC_SERVICE_TYPE).putPrivilegeMap(privileges).pack(),
-    new ByteWriter().putString(channelName).putString(uid === 0 ? '' : String(uid)).pack(),
+    new ByteWriter()
+      .putString(channelName)
+      .putString(uid === 0 ? '' : String(uid))
+      .pack(),
   ]);
 };
 
@@ -158,7 +161,7 @@ export const createAgoraUid = (userId: string): number => {
     hash = Math.imul(hash, 16777619);
   }
 
-  return (hash >>> 0) || 1;
+  return hash >>> 0 || 1;
 };
 
 export const buildAgoraRtcToken = async (
@@ -178,7 +181,8 @@ export const buildAgoraRtcToken = async (
   let signing = await hmacSha256(new ByteWriter().putUint32(issueTs).pack(), appCertificateBytes);
   signing = await hmacSha256(new ByteWriter().putUint32(salt).pack(), signing);
 
-  const service = packRtcService(channelName, uid, tokenExpire);
+  const privilegeExpire = issueTs + tokenExpire;
+  const service = packRtcService(channelName, uid, privilegeExpire);
   const signingInfo = concatBytes([
     new ByteWriter()
       .putString(appId)

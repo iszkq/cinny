@@ -124,6 +124,7 @@ type AgoraStepErrorCode =
   | 'join_timeout'
   | 'mic_timeout'
   | 'publish_timeout'
+  | 'remote_audio_timeout'
   | 'call_ended';
 
 class AgoraStepError extends Error {
@@ -323,6 +324,9 @@ const getAgoraConnectErrorMessage = (error: unknown): string => {
     }
     if (error.code === 'publish_timeout') {
       return '麦克风音频发布超时，请重试';
+    }
+    if (error.code === 'remote_audio_timeout') {
+      return '音频订阅超时，请检查网络后重试';
     }
     if (error.code === 'call_ended') {
       return '语音通话已结束';
@@ -1390,7 +1394,7 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
             () =>
               finish(
                 new AgoraStepError(
-                  'join_timeout',
+                  'remote_audio_timeout',
                   'Agora self test did not receive published audio.'
                 )
               ),
@@ -1422,6 +1426,7 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
       );
       ensureSelfTestActive();
 
+      const probeSubscription = waitForProbeSubscription();
       await withTimeout(
         localClient.publish([localTrack]),
         AGORA_PUBLISH_TIMEOUT_MS,
@@ -1429,7 +1434,7 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
       );
       ensureSelfTestActive();
 
-      await waitForProbeSubscription();
+      await probeSubscription;
       ensureSelfTestActive();
       if (!localClient || !probeClient || !localTrack) {
         throw new Error('语音自测初始化失败。');
