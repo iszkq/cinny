@@ -78,7 +78,6 @@ export const getJitsiMeetJoinUrl = (url: string, userInfo?: JitsiMeetUserInfo): 
   hashParams.set('config.disableThirdPartyRequests', 'false');
   hashParams.set('config.prejoinConfig.enabled', 'false');
   hashParams.set('config.prejoinPageEnabled', 'false');
-  hashParams.set('cinny.autoHostAuth', 'true');
   if (safeSubject) {
     hashParams.set('config.subject', JSON.stringify(safeSubject));
   }

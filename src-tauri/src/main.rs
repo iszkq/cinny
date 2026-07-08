@@ -39,140 +39,31 @@ static EXTERNAL_POPUP_COUNTER: AtomicU64 = AtomicU64::new(1);
 static JITSI_AUTH_POPUP_LABELS: OnceLock<Mutex<HashMap<String, HashSet<String>>>> =
     OnceLock::new();
 const JITSI_AUTH_CLOSE_TITLE: &str = "__cinny_close_jitsi_auth_window__";
-const JITSI_FIREBASE_AUTH_CLOSE_DELAY_MS: u64 = 4_000;
-
-const JITSI_MEETING_AUTO_HOST_AUTH_INIT_SCRIPT: &str = r#"
-(() => {
-  const AUTO_HOST_AUTH_PARAM = 'cinny.autoHostAuth';
-  const AUTO_HOST_AUTH_VALUE = 'true';
-  const MAX_AUTOMATION_TIME_MS = 120000;
-  const POLL_INTERVAL_MS = 500;
-
-  const isJitsiMeetingPage = () =>
-    window.location.protocol === 'https:' &&
-    window.location.hostname === 'meet.jit.si' &&
-    window.location.pathname.split('/').filter(Boolean).length >= 1;
-
-  if (!isJitsiMeetingPage()) return;
-
-  const getRoomKey = () =>
-    `cinny:jitsi:auto-host-auth:${window.location.origin}${window.location.pathname}`;
-  const getAttemptKey = () => `${getRoomKey()}:attempted`;
-
-  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-  if (hashParams.get(AUTO_HOST_AUTH_PARAM) === AUTO_HOST_AUTH_VALUE) {
-    window.sessionStorage.setItem(getRoomKey(), AUTO_HOST_AUTH_VALUE);
-  }
-
-  const shouldAutoHostAuth = () =>
-    window.sessionStorage.getItem(getRoomKey()) === AUTO_HOST_AUTH_VALUE;
-
-  if (!shouldAutoHostAuth()) return;
-
-  const hasAuthenticatedMeetingToken = () => {
-    try {
-      return Boolean(new URLSearchParams(window.location.search).get('jwt'));
-    } catch {
-      return false;
-    }
-  };
-
-  if (hasAuthenticatedMeetingToken()) return;
-
-  const hostAuthTextPatterns = [
-    /\u4e3b\u6301\u4eba\u6388\u6743/,
-    /\u6211\u662f\u4e3b\u6301\u4eba/,
-    /\u4ee5\u4e3b\u6301\u4eba\u8eab\u4efd/,
-    /i\s*am\s+the\s+host/i,
-    /i(?:'|\u2019)?\s*m\s+the\s+host/i,
-    /sign\s+in\s+as\s+(the\s+)?host/i,
-    /authenticate\s+as\s+(the\s+)?host/i,
-  ];
-
-  const getElementText = (element) =>
-    [
-      element.innerText,
-      element.textContent,
-      element.getAttribute?.('aria-label'),
-      element.getAttribute?.('title'),
-      element.value,
-    ]
-      .filter(Boolean)
-      .join(' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-
-  const isUsable = (element) => {
-    if (!element || element.disabled || element.getAttribute?.('aria-disabled') === 'true') {
-      return false;
-    }
-
-    const style = window.getComputedStyle(element);
-    return (
-      style.display !== 'none' &&
-      style.visibility !== 'hidden' &&
-      element.getClientRects().length > 0
-    );
-  };
-
-  const findHostAuthButton = () =>
-    Array.from(
-      document.querySelectorAll(
-        'button, [role="button"], a[href], input[type="button"], input[type="submit"]'
-      )
-    ).find((element) => {
-      if (!isUsable(element)) return false;
-
-      const text = getElementText(element);
-      return text && hostAuthTextPatterns.some((pattern) => pattern.test(text));
-    });
-
-  const clickHostAuthButton = () => {
-    if (!isJitsiMeetingPage() || hasAuthenticatedMeetingToken()) return true;
-    if (window.sessionStorage.getItem(getAttemptKey())) return true;
-
-    const button = findHostAuthButton();
-    if (!button) return false;
-
-    window.sessionStorage.setItem(getAttemptKey(), String(Date.now()));
-    button.click();
-    return true;
-  };
-
-  if (clickHostAuthButton()) return;
-
-  const startedAt = Date.now();
-  const timer = window.setInterval(() => {
-    if (clickHostAuthButton() || Date.now() - startedAt > MAX_AUTOMATION_TIME_MS) {
-      window.clearInterval(timer);
-    }
-  }, POLL_INTERVAL_MS);
-
-  const observer = new MutationObserver(() => {
-    if (clickHostAuthButton()) {
-      observer.disconnect();
-      window.clearInterval(timer);
-    }
-  });
-
-  const observe = () => {
-    if (!document.body) {
-      window.setTimeout(observe, 50);
-      return;
-    }
-
-    observer.observe(document.body, { childList: true, subtree: true });
-  };
-
-  observe();
-  window.setTimeout(() => observer.disconnect(), MAX_AUTOMATION_TIME_MS);
-})();
-"#;
+const JITSI_FIREBASE_AUTH_CLOSE_DELAY_MS: u64 = 1_200;
 
 const JITSI_FIREBASE_AUTH_INIT_SCRIPT: &str = r#"
 (() => {
   const CLOSE_TITLE = '__cinny_close_jitsi_auth_window__';
-  const FIREBASE_AUTH_HANDLER_CLOSE_DELAY_MS = 4000;
+  const FIREBASE_AUTH_HANDLER_CLOSE_DELAY_MS = 1200;
+  const BLANK_AUTH_PAGE_CLOSE_DELAY_MS = 3500;
+
+  const closeAuthWindow = () => {
+    document.title = CLOSE_TITLE;
+    window.setTimeout(() => window.close(), 0);
+    window.setTimeout(() => window.close(), 250);
+    window.setTimeout(() => window.close(), 1000);
+  };
+
+  try {
+    const originalClose = window.close.bind(window);
+    window.close = () => {
+      document.title = CLOSE_TITLE;
+      return originalClose();
+    };
+  } catch {
+    // Some WebView engines expose window.close as readonly. Native code still handles title changes.
+  }
+
   const isJitsiFirebaseAuthPage = () =>
     window.location.hostname === 'web-cdn.jitsi.net' &&
     /\/auth-static\/meet-jit-si\/[^/]+\/signin\.html$/.test(window.location.pathname);
@@ -187,15 +78,8 @@ const JITSI_FIREBASE_AUTH_INIT_SCRIPT: &str = r#"
     );
   };
 
-  const closeAfterAuthenticatedRedirect = () => {
-    document.title = CLOSE_TITLE;
-    window.setTimeout(() => window.close(), 250);
-    window.setTimeout(() => window.close(), 1000);
-    window.setTimeout(() => window.close(), 2500);
-  };
-
   if (isJitsiFirebaseAuthHandlerPage()) {
-    window.setTimeout(closeAfterAuthenticatedRedirect, FIREBASE_AUTH_HANDLER_CLOSE_DELAY_MS);
+    window.setTimeout(closeAuthWindow, FIREBASE_AUTH_HANDLER_CLOSE_DELAY_MS);
     return;
   }
 
@@ -217,7 +101,7 @@ const JITSI_FIREBASE_AUTH_INIT_SCRIPT: &str = r#"
   try {
     const originalReplace = window.location.replace.bind(window.location);
     window.location.replace = (value) => {
-      if (isAuthenticatedMeetingUrl(value)) closeAfterAuthenticatedRedirect();
+      if (isAuthenticatedMeetingUrl(value)) closeAuthWindow();
       return originalReplace(value);
     };
   } catch {
@@ -235,7 +119,7 @@ const JITSI_FIREBASE_AUTH_INIT_SCRIPT: &str = r#"
 
       if (currentUser && authButtons.length === 0 && closePollCount >= 12) {
         document.title = CLOSE_TITLE;
-        closeAfterAuthenticatedRedirect();
+        closeAuthWindow();
         return true;
       }
     } catch {
@@ -247,6 +131,17 @@ const JITSI_FIREBASE_AUTH_INIT_SCRIPT: &str = r#"
   const closePoll = window.setInterval(() => {
     if (closeWhenSignedInButStillOnAuthPage()) window.clearInterval(closePoll);
   }, 250);
+
+  window.setTimeout(() => {
+    const hasInteractiveAuthUi = document.querySelector(
+      '.firebaseui-idp-button, button, input, [role="button"], iframe'
+    );
+    const visibleText = (document.body?.innerText || '').replace(/\s+/g, '').trim();
+
+    if (!hasInteractiveAuthUi && visibleText.length === 0) {
+      closeAuthWindow();
+    }
+  }, BLANK_AUTH_PAGE_CLOSE_DELAY_MS);
 
   const patchFirebaseUi = () => {
     const AuthUI = window.firebaseui?.auth?.AuthUI;
@@ -816,7 +711,6 @@ async fn open_external_url_window(
         .focused(true)
         .visible(true)
         .disable_drag_drop_handler()
-        .initialization_script(JITSI_MEETING_AUTO_HOST_AUTH_INIT_SCRIPT)
         .on_navigation(move |url| {
             if get_jitsi_authenticated_meeting_url(url).is_some() {
                 close_jitsi_auth_popup_windows_for_parent(
