@@ -44,7 +44,7 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
   return mx;
 };
 
-const WEB_INITIAL_SYNC_LIMIT = 2;
+const WEB_INITIAL_SYNC_LIMIT = 0;
 
 export const startClient = async (mx: MatrixClient) => {
   await mx.startClient({

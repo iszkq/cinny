@@ -206,7 +206,7 @@ const getTimelineReplyRelation = (mEvent: MatrixEvent): TimelineReplyRelation =>
 };
 
 const DESKTOP_PAGINATION_LIMIT = 80;
-const WEB_PAGINATION_LIMIT = 56;
+const WEB_PAGINATION_LIMIT = 40;
 const IMAGE_VIEWER_RANGE_BUFFER = 48;
 
 export const getFirstLinkedTimeline = (
@@ -604,6 +604,7 @@ const useTimelinePagination = (
       );
       if (err) {
         // TODO: handle pagination error.
+        fetching = false;
         return;
       }
       const fetchedTimeline =
@@ -615,7 +616,12 @@ const useTimelinePagination = (
       const room = roomId ? mx.getRoom(roomId) : null;
 
       if (room?.hasEncryptionStateEvent()) {
-        await to(decryptAllTimelineEvent(mx, fetchedTimeline));
+        const decryptPromise = to(decryptAllTimelineEvent(mx, fetchedTimeline));
+        if (isDesktopUpdaterSupported()) {
+          await decryptPromise;
+        } else {
+          decryptPromise.then(() => undefined);
+        }
       }
 
       fetching = false;

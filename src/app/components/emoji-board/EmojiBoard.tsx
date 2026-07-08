@@ -704,9 +704,7 @@ export function EmojiBoard({
     loading: remoteStickerLoading,
     error: remoteStickerError,
     retry: retryRemoteStickers,
-  } = useRemoteStickerIndex(
-    tab === EmojiBoardTab.Emoji || tab === EmojiBoardTab.Sticker || tab === EmojiBoardTab.Cloud
-  );
+  } = useRemoteStickerIndex(cloudTab);
   const [emojiGroupItems, stickerGroupItems, cloudGroupItems] = useGroups(
     tab,
     imagePacks,
@@ -721,7 +719,6 @@ export function EmojiBoard({
       return list.concat(remoteStickerImages);
     }
     list = list.concat(imagePacks.flatMap((pack) => pack.getImages(usage)));
-    list = list.concat(remoteStickerImages);
     if (emojiTab) list = list.concat(emojis);
     return list;
   }, [cloudTab, emojiTab, usage, imagePacks, remoteStickerImages]);

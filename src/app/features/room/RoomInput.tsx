@@ -601,6 +601,10 @@ const createRemoteStickerContent = async (
   label: string,
   info?: IImageInfo
 ): Promise<IContent> => {
+  if (!isDesktopUpdaterSupported()) {
+    return createRemoteStickerHttpContent(url, info);
+  }
+
   const cacheKey = getRemoteStickerUploadCacheKey(room, url);
   let uploadPromise = remoteStickerUploadCache.get(cacheKey);
 
@@ -1433,7 +1437,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const handleStickerSelect = async (mxc: string, label: string, info?: IImageInfo) => {
       const remoteSticker = isHttpUrl(mxc);
       const matrixSticker = isMxcUrl(mxc);
-      if (stickerSendingRef.current) {
+      const serializedRemoteUpload = remoteSticker && isDesktopUpdaterSupported();
+      if (serializedRemoteUpload && stickerSendingRef.current) {
         closeEmojiBoard();
         return;
       }
@@ -1444,7 +1449,9 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         return;
       }
 
-      stickerSendingRef.current = true;
+      if (serializedRemoteUpload) {
+        stickerSendingRef.current = true;
+      }
       setSendError(undefined);
       closeEmojiBoard();
       try {
@@ -1478,12 +1485,16 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
             setSendError(getStickerSendErrorMessage(error, remoteSticker));
           })
           .finally(() => {
-            stickerSendingRef.current = false;
+            if (serializedRemoteUpload) {
+              stickerSendingRef.current = false;
+            }
             setSendStatus(undefined);
           });
       } catch (error) {
         setSendError(getStickerSendErrorMessage(error, remoteSticker));
-        stickerSendingRef.current = false;
+        if (serializedRemoteUpload) {
+          stickerSendingRef.current = false;
+        }
         setSendStatus(undefined);
       }
     };
