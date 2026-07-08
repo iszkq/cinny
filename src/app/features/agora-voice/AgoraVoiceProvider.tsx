@@ -60,7 +60,12 @@ const AGORA_SDK_LOAD_TIMEOUT_MS = 15000;
 const AGORA_JOIN_TIMEOUT_MS = 20000;
 const AGORA_MIC_TIMEOUT_MS = 20000;
 const AGORA_PUBLISH_TIMEOUT_MS = 15000;
-const AGORA_REMOTE_AUDIO_TIMEOUT_MS = 30000;
+const AGORA_REMOTE_AUDIO_TIMEOUT_MS = 45000;
+const AGORA_REMOTE_AUDIO_SCAN_INTERVAL_MS = 500;
+const AGORA_REMOTE_AUDIO_SCAN_TIMEOUT_MS = 15000;
+const AGORA_SELF_TEST_TIMEOUT_MS = 30000;
+const AGORA_SELF_TEST_SUCCESS_CLOSE_DELAY_MS = 1600;
+const AGORA_SELF_TEST_ROOM_ID = '__cinny_agora_voice_self_test__';
 
 type VoiceAction = 'invite' | 'answer' | 'reject' | 'cancel' | 'hangup' | 'busy';
 type RingToneKind = 'incoming' | 'outgoing';
@@ -93,7 +98,7 @@ type VoiceCall = {
   roomId: string;
   peerId: string;
   channel: string;
-  direction: 'incoming' | 'outgoing';
+  direction: 'incoming' | 'outgoing' | 'self-test';
   phase: VoiceCallPhase;
   createdAt: number;
   connectedAt?: number;
@@ -105,6 +110,7 @@ type AgoraSession = {
   localTrack: AgoraLocalAudioTrack;
   joinedAt: number;
   usageRecorded: boolean;
+  cleanup?: () => Promise<void>;
 };
 
 type Notice = {
@@ -134,6 +140,7 @@ type AgoraVoiceContextValue = {
   available: boolean;
   activeRoomId?: string;
   startCall: (room: Room) => Promise<void>;
+  startSelfTest: () => Promise<void>;
 };
 
 type ToDeviceMatrixClient = {
@@ -168,6 +175,7 @@ type VoiceMatrixClient = ToDeviceMatrixClient & {
 const AgoraVoiceContext = createContext<AgoraVoiceContextValue>({
   available: false,
   startCall: async () => undefined,
+  startSelfTest: async () => undefined,
 });
 
 const isSignalAction = (action: unknown): action is VoiceAction =>
@@ -209,6 +217,11 @@ const createChannelName = (roomId: string, callId: string): string => {
 
 const isAgoraUserUid = (user: AgoraRemoteUser, uid: number): boolean =>
   String(user.uid) === String(uid);
+
+const createDistinctAgoraUid = (value: string, usedUid: number): number => {
+  const uid = createAgoraUid(value);
+  return uid === usedUid ? (uid % 4294967294) + 1 : uid;
+};
 
 const getDirectPeerId = (room: Room, myUserId: string): string | undefined => {
   const joinedPeer = room.getJoinedMembers().find((member) => member.userId !== myUserId);
@@ -546,8 +559,8 @@ function ActiveCallPanel({
     call.phase === 'outgoing'
       ? '等待对方接听'
       : call.phase === 'connecting'
-        ? '连接中'
-        : formatDuration(call.connectedAt);
+      ? '连接中'
+      : formatDuration(call.connectedAt);
 
   return (
     <Box className={css.FloatingCall} alignItems="Center" gap="300">
@@ -726,6 +739,7 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
       session.client.removeAllListeners?.();
       session.localTrack.close();
       await session.client.leave().catch(() => undefined);
+      await session.cleanup?.().catch(() => undefined);
       setMicEnabled(true);
     },
     [recordUsage]
@@ -822,19 +836,60 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
       let localTrack: AgoraLocalAudioTrack | undefined;
       let joined = false;
       let remoteAudioReady = false;
+      let remoteAudioSubscribing = false;
+      let remoteAudioScanTimer: number | undefined;
+
+      const stopRemoteAudioScan = () => {
+        if (remoteAudioScanTimer !== undefined) {
+          window.clearInterval(remoteAudioScanTimer);
+          remoteAudioScanTimer = undefined;
+        }
+      };
+
+      const subscribeRemoteAudio = async (user: AgoraRemoteUser): Promise<boolean> => {
+        if (
+          remoteAudioReady ||
+          remoteAudioSubscribing ||
+          !isAgoraUserUid(user, peerUid) ||
+          callRef.current?.callId !== voiceCall.callId
+        ) {
+          return remoteAudioReady;
+        }
+
+        remoteAudioSubscribing = true;
+        try {
+          await client.subscribe(user, 'audio');
+          if (callRef.current?.callId !== voiceCall.callId) return true;
+
+          remoteAudioReady = true;
+          stopRemoteAudioScan();
+          markCallActive(voiceCall);
+          try {
+            user.audioTrack?.play();
+          } catch {
+            // The call is connected; a browser autoplay block should not keep it stuck connecting.
+          }
+          return true;
+        } catch {
+          return false;
+        } finally {
+          remoteAudioSubscribing = false;
+        }
+      };
+
+      const scanRemoteAudio = () => {
+        client.remoteUsers?.forEach((user) => {
+          if ((user.hasAudio || user.audioTrack) && isAgoraUserUid(user, peerUid)) {
+            subscribeRemoteAudio(user).catch(() => undefined);
+          }
+        });
+      };
 
       try {
         client.on('user-published', (user, mediaType) => {
           if (mediaType !== 'audio' || !isAgoraUserUid(user, peerUid)) return;
 
-          void client
-            .subscribe(user, 'audio')
-            .then(() => {
-              remoteAudioReady = true;
-              user.audioTrack?.play();
-              markCallActive(voiceCall);
-            })
-            .catch(() => undefined);
+          subscribeRemoteAudio(user).catch(() => undefined);
         });
         client.on('user-left', (user?: AgoraRemoteUser) => {
           if (user && !isAgoraUserUid(user, peerUid)) return;
@@ -851,6 +906,7 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
           () => new AgoraStepError('join_timeout', 'Agora channel join timed out.')
         );
         joined = true;
+        scanRemoteAudio();
         localTrack = await withTimeout(
           AgoraRTC.createMicrophoneAudioTrack(),
           AGORA_MIC_TIMEOUT_MS,
@@ -861,6 +917,7 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
           AGORA_PUBLISH_TIMEOUT_MS,
           () => new AgoraStepError('publish_timeout', 'Agora audio publish timed out.')
         );
+        scanRemoteAudio();
         if (callRef.current?.callId !== voiceCall.callId) {
           throw new AgoraStepError('call_ended', 'Call ended before Agora join completed.');
         }
@@ -876,6 +933,18 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
         if (remoteAudioReady) {
           markCallActive(voiceCall);
         } else {
+          const scanStartedAt = Date.now();
+          remoteAudioScanTimer = window.setInterval(() => {
+            if (
+              remoteAudioReady ||
+              callRef.current?.callId !== voiceCall.callId ||
+              Date.now() - scanStartedAt > AGORA_REMOTE_AUDIO_SCAN_TIMEOUT_MS
+            ) {
+              stopRemoteAudioScan();
+              return;
+            }
+            scanRemoteAudio();
+          }, AGORA_REMOTE_AUDIO_SCAN_INTERVAL_MS);
           updateCall({
             ...voiceCall,
             phase: 'connecting',
@@ -884,6 +953,7 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
           armRemoteAudioTimeout(voiceCall);
         }
       } catch (error) {
+        stopRemoteAudioScan();
         client.removeAllListeners?.();
         localTrack?.close();
         if (joined) {
@@ -918,21 +988,23 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
     };
     updateCall(connectingCall);
 
+    let answered = false;
     let joined = false;
 
     try {
-      await joinAgora(connectingCall);
-      joined = true;
       await sendSignal(currentCall.roomId, currentCall.peerId, {
         action: 'answer',
         callId: currentCall.callId,
         channel: currentCall.channel,
       });
+      answered = true;
+      await joinAgora(connectingCall);
+      joined = true;
     } catch (error) {
       if (isCallEndedError(error)) return;
 
       await sendSignal(currentCall.roomId, currentCall.peerId, {
-        action: joined ? 'hangup' : 'reject',
+        action: answered || joined ? 'hangup' : 'reject',
         callId: currentCall.callId,
         channel: currentCall.channel,
         reason: 'connect_failed',
@@ -945,14 +1017,19 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
     const currentCall = callRef.current;
     if (!currentCall) return;
 
+    if (currentCall.direction === 'self-test') {
+      finishCall(undefined, false);
+      return;
+    }
+
     const actions: VoiceAction[] =
       currentCall.phase === 'incoming'
         ? ['reject']
         : currentCall.phase === 'outgoing'
-          ? ['cancel', 'hangup']
-          : currentCall.phase === 'connecting'
-            ? ['hangup', 'cancel']
-            : ['hangup'];
+        ? ['cancel', 'hangup']
+        : currentCall.phase === 'connecting'
+        ? ['hangup', 'cancel']
+        : ['hangup'];
 
     await Promise.all(
       actions.map((action) =>
@@ -1073,12 +1150,12 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
           signal.reason === 'timeout'
             ? '对方未接听'
             : signal.reason === 'quota'
-              ? QUOTA_EXHAUSTED_MESSAGE
-              : signal.reason === 'connect_failed'
-                ? '对方语音连接失败'
-                : signal.action === 'busy'
-                  ? '对方正在通话中'
-                  : '对方已拒绝';
+            ? QUOTA_EXHAUSTED_MESSAGE
+            : signal.reason === 'connect_failed'
+            ? '对方语音连接失败'
+            : signal.action === 'busy'
+            ? '对方正在通话中'
+            : '对方已拒绝';
         finishCall(message, false);
         return;
       }
@@ -1192,6 +1269,209 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
     [clearCallTimeout, leaveAgora]
   );
 
+  const startSelfTest = useCallback(async () => {
+    const { appId, appCertificate, area } = agoraVoice ?? {};
+    if (!available || !appId) {
+      showNotice('语音通话未配置');
+      return;
+    }
+
+    if (callRef.current) {
+      showNotice('当前已有语音通话');
+      return;
+    }
+
+    const callId = createCallId();
+    const channel = createChannelName(AGORA_SELF_TEST_ROOM_ID, callId);
+    const selfTestCall: VoiceCall = {
+      callId,
+      roomId: AGORA_SELF_TEST_ROOM_ID,
+      peerId: `${myUserId}:self-test`,
+      channel,
+      direction: 'self-test',
+      phase: 'connecting',
+      createdAt: Date.now(),
+    };
+
+    updateCall(selfTestCall);
+
+    let localClient: AgoraClient | undefined;
+    let probeClient: AgoraClient | undefined;
+    let localTrack: AgoraLocalAudioTrack | undefined;
+    let localJoined = false;
+    let probeJoined = false;
+    let sessionRegistered = false;
+    let successTimer: number | undefined;
+
+    const ensureSelfTestActive = () => {
+      if (callRef.current?.callId !== callId) {
+        throw new AgoraStepError('call_ended', 'Self test ended before Agora check completed.');
+      }
+    };
+
+    const cleanupSelfTestResources = async () => {
+      if (successTimer !== undefined) {
+        window.clearTimeout(successTimer);
+        successTimer = undefined;
+      }
+      localClient?.removeAllListeners?.();
+      probeClient?.removeAllListeners?.();
+      localTrack?.close();
+      if (localJoined) await localClient?.leave().catch(() => undefined);
+      if (probeJoined) await probeClient?.leave().catch(() => undefined);
+    };
+
+    try {
+      const AgoraRTC = await withTimeout(
+        loadAgoraRTC(),
+        AGORA_SDK_LOAD_TIMEOUT_MS,
+        () => new AgoraStepError('sdk_timeout', 'Agora SDK load timed out.')
+      );
+      setAgoraArea(AgoraRTC, area);
+      ensureSelfTestActive();
+
+      const localUid = createAgoraUid(`${myUserId}:self-test:local`);
+      const probeUid = createDistinctAgoraUid(`${myUserId}:self-test:probe`, localUid);
+      const [localToken, probeToken] = appCertificate
+        ? await Promise.all([
+            withTimeout(
+              buildAgoraRtcToken(appId, appCertificate, channel, localUid),
+              AGORA_TOKEN_TIMEOUT_MS,
+              () => new AgoraStepError('token_timeout', 'Agora token generation timed out.')
+            ),
+            withTimeout(
+              buildAgoraRtcToken(appId, appCertificate, channel, probeUid),
+              AGORA_TOKEN_TIMEOUT_MS,
+              () => new AgoraStepError('token_timeout', 'Agora token generation timed out.')
+            ),
+          ])
+        : [null, null];
+      ensureSelfTestActive();
+
+      localClient = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
+      probeClient = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
+
+      const waitForProbeSubscription = () =>
+        new Promise<void>((resolve, reject) => {
+          let settled = false;
+          let scanTimer: number | undefined;
+          let timeoutTimer: number | undefined;
+
+          const finish = (error?: Error) => {
+            if (settled) return;
+            settled = true;
+            if (scanTimer !== undefined) window.clearInterval(scanTimer);
+            if (timeoutTimer !== undefined) window.clearTimeout(timeoutTimer);
+            if (error) reject(error);
+            else resolve();
+          };
+
+          const subscribePublishedAudio = (user: AgoraRemoteUser) => {
+            if (!probeClient || !isAgoraUserUid(user, localUid)) return;
+
+            probeClient
+              .subscribe(user, 'audio')
+              .then(() => finish())
+              .catch(() => undefined);
+          };
+
+          probeClient?.on('user-published', (user, mediaType) => {
+            if (mediaType === 'audio') subscribePublishedAudio(user);
+          });
+
+          const scanPublishedAudio = () => {
+            probeClient?.remoteUsers?.forEach((user) => {
+              if (user.hasAudio || user.audioTrack) subscribePublishedAudio(user);
+            });
+          };
+
+          scanTimer = window.setInterval(scanPublishedAudio, AGORA_REMOTE_AUDIO_SCAN_INTERVAL_MS);
+          timeoutTimer = window.setTimeout(
+            () =>
+              finish(
+                new AgoraStepError(
+                  'join_timeout',
+                  'Agora self test did not receive published audio.'
+                )
+              ),
+            AGORA_SELF_TEST_TIMEOUT_MS
+          );
+          scanPublishedAudio();
+        });
+
+      await withTimeout(
+        localClient.join(appId, channel, localToken, localUid),
+        AGORA_JOIN_TIMEOUT_MS,
+        () => new AgoraStepError('join_timeout', 'Agora self test local join timed out.')
+      );
+      localJoined = true;
+      ensureSelfTestActive();
+
+      await withTimeout(
+        probeClient.join(appId, channel, probeToken, probeUid),
+        AGORA_JOIN_TIMEOUT_MS,
+        () => new AgoraStepError('join_timeout', 'Agora self test probe join timed out.')
+      );
+      probeJoined = true;
+      ensureSelfTestActive();
+
+      localTrack = await withTimeout(
+        AgoraRTC.createMicrophoneAudioTrack(),
+        AGORA_MIC_TIMEOUT_MS,
+        () => new AgoraStepError('mic_timeout', 'Agora microphone creation timed out.')
+      );
+      ensureSelfTestActive();
+
+      await withTimeout(
+        localClient.publish([localTrack]),
+        AGORA_PUBLISH_TIMEOUT_MS,
+        () => new AgoraStepError('publish_timeout', 'Agora audio publish timed out.')
+      );
+      ensureSelfTestActive();
+
+      await waitForProbeSubscription();
+      ensureSelfTestActive();
+      if (!localClient || !probeClient || !localTrack) {
+        throw new Error('语音自测初始化失败。');
+      }
+
+      const activeLocalClient = localClient;
+      const activeProbeClient = probeClient;
+      const activeLocalTrack = localTrack;
+      agoraSessionRef.current = {
+        callId,
+        client: activeLocalClient,
+        localTrack: activeLocalTrack,
+        joinedAt: Date.now(),
+        usageRecorded: true,
+        cleanup: async () => {
+          if (successTimer !== undefined) {
+            window.clearTimeout(successTimer);
+            successTimer = undefined;
+          }
+          activeProbeClient.removeAllListeners?.();
+          await activeProbeClient.leave().catch(() => undefined);
+        },
+      };
+      sessionRegistered = true;
+      setMicEnabled(true);
+      markCallActive(selfTestCall);
+
+      successTimer = window.setTimeout(() => {
+        if (callRef.current?.callId === callId) {
+          finishCall('语音自测通过：声网、麦克风和音频订阅正常', false);
+        }
+      }, AGORA_SELF_TEST_SUCCESS_CLOSE_DELAY_MS);
+    } catch (error) {
+      if (!sessionRegistered) {
+        await cleanupSelfTestResources();
+      }
+      if (isCallEndedError(error)) return;
+
+      finishCall(getAgoraConnectErrorMessage(error), false);
+    }
+  }, [agoraVoice, available, finishCall, markCallActive, myUserId, showNotice, updateCall]);
+
   const startCall = useCallback(
     async (room: Room) => {
       if (!available || !agoraVoice?.appId) {
@@ -1265,15 +1545,20 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
   const value = useMemo<AgoraVoiceContextValue>(
     () => ({
       available,
-      activeRoomId: call?.roomId,
+      activeRoomId: call?.direction === 'self-test' ? undefined : call?.roomId,
       startCall,
+      startSelfTest,
     }),
-    [available, call?.roomId, startCall]
+    [available, call?.direction, call?.roomId, startCall, startSelfTest]
   );
 
-  const callRoom = call ? mx.getRoom(call.roomId) : undefined;
-  const peerName =
-    call && callRoom ? getMemberDisplayName(callRoom, call.peerId) ?? call.peerId : call?.peerId;
+  const callRoom = call && call.direction !== 'self-test' ? mx.getRoom(call.roomId) : undefined;
+  let peerName = call?.peerId;
+  if (call?.direction === 'self-test') {
+    peerName = '语音自测';
+  } else if (call && callRoom) {
+    peerName = getMemberDisplayName(callRoom, call.peerId) ?? call.peerId;
+  }
 
   return (
     <AgoraVoiceContext.Provider value={value}>

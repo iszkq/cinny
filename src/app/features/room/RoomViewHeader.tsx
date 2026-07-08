@@ -75,9 +75,11 @@ import { useAgoraVoice } from '../agora-voice';
 
 type RoomMenuProps = {
   room: Room;
+  canStartVoiceTest?: boolean;
+  onStartVoiceTest?: () => void;
   requestClose: () => void;
 };
-const RoomMenu = forwardRef<HTMLDivElement, RoomMenuProps>(({ room, requestClose }, ref) => {
+const RoomMenu = forwardRef<HTMLDivElement, RoomMenuProps>(({ room, canStartVoiceTest, onStartVoiceTest, requestClose }, ref) => {
   const mx = useMatrixClient();
   const [sendReadReceipts] = useSetting(settingsAtom, 'sendReadReceipts');
   const unread = useRoomUnread(room.roomId, roomToUnreadAtom);
@@ -112,6 +114,11 @@ const RoomMenu = forwardRef<HTMLDivElement, RoomMenuProps>(({ room, requestClose
   const parentSpace = useSpaceOptionally();
   const handleOpenSettings = () => {
     openSettings(room.roomId, parentSpace?.roomId);
+    requestClose();
+  };
+
+  const handleStartVoiceTest = () => {
+    onStartVoiceTest?.();
     requestClose();
   };
 
@@ -186,6 +193,18 @@ const RoomMenu = forwardRef<HTMLDivElement, RoomMenuProps>(({ room, requestClose
             {'\u590d\u5236\u94fe\u63a5'}
           </Text>
         </MenuItem>
+        {canStartVoiceTest && (
+          <MenuItem
+            onClick={handleStartVoiceTest}
+            size="300"
+            after={<Icon size="100" src={Icons.Phone} />}
+            radii="300"
+          >
+            <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
+              语音自测
+            </Text>
+          </MenuItem>
+        )}
         <MenuItem
           onClick={handleOpenSettings}
           size="300"
@@ -311,6 +330,10 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
 
   const handleStartVoice = () => {
     void agoraVoice.startCall(room);
+  };
+
+  const handleStartVoiceTest = () => {
+    agoraVoice.startSelfTest().catch(() => undefined);
   };
 
   const handleSubmitMeeting = (title: string) => {
@@ -618,7 +641,12 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
                     escapeDeactivates: stopPropagation,
                   }}
                 >
-                  <RoomMenu room={room} requestClose={() => setMenuAnchor(undefined)} />
+                  <RoomMenu
+                    room={room}
+                    canStartVoiceTest={agoraVoice.available}
+                    onStartVoiceTest={handleStartVoiceTest}
+                    requestClose={() => setMenuAnchor(undefined)}
+                  />
                 </FocusTrap>
               }
             />

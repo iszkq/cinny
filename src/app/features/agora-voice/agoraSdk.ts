@@ -15,6 +15,7 @@ export type AgoraAreaCode =
 
 export type AgoraRemoteUser = {
   uid: number | string;
+  hasAudio?: boolean;
   audioTrack?: {
     play: () => void;
     stop?: () => void;
@@ -38,6 +39,7 @@ export type AgoraClient = {
   leave: () => Promise<void>;
   on: (event: string, listener: (...args: any[]) => void) => void;
   removeAllListeners?: () => void;
+  remoteUsers?: AgoraRemoteUser[];
 };
 
 export type AgoraRTCFactory = {
