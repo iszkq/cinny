@@ -8,19 +8,39 @@ import { useEffect, useState } from 'react';
 import { MatrixRTCSessionManagerEvents } from 'matrix-js-sdk/lib/matrixrtc/MatrixRTCSessionManager';
 import { useMatrixClient } from './useMatrixClient';
 
+type ListenerLimitedEmitter = {
+  setMaxListeners?: (maxListeners: number) => void;
+};
+
+const CALL_EVENT_MAX_LISTENERS = 200;
+
+const relaxCallEventListenerLimit = (emitter: ListenerLimitedEmitter): void => {
+  emitter.setMaxListeners?.(CALL_EVENT_MAX_LISTENERS);
+};
+
 export const useCallSession = (room: Room): MatrixRTCSession => {
   const mx = useMatrixClient();
 
-  const [session, setSession] = useState(mx.matrixRTC.getRoomSession(room));
+  relaxCallEventListenerLimit(mx.matrixRTC);
+
+  const [session, setSession] = useState(() => {
+    const initialSession = mx.matrixRTC.getRoomSession(room);
+    relaxCallEventListenerLimit(initialSession);
+    return initialSession;
+  });
 
   useEffect(() => {
     const start = (roomId: string) => {
       if (roomId !== room.roomId) return;
-      setSession(mx.matrixRTC.getRoomSession(room));
+      const nextSession = mx.matrixRTC.getRoomSession(room);
+      relaxCallEventListenerLimit(nextSession);
+      setSession(nextSession);
     };
     const end = (roomId: string) => {
       if (roomId !== room.roomId) return;
-      setSession(mx.matrixRTC.getRoomSession(room));
+      const nextSession = mx.matrixRTC.getRoomSession(room);
+      relaxCallEventListenerLimit(nextSession);
+      setSession(nextSession);
     };
     mx.matrixRTC.on(MatrixRTCSessionManagerEvents.SessionStarted, start);
     mx.matrixRTC.on(MatrixRTCSessionManagerEvents.SessionEnded, end);
@@ -34,6 +54,8 @@ export const useCallSession = (room: Room): MatrixRTCSession => {
 };
 
 export const useCallMembers = (room: Room, session: MatrixRTCSession): CallMembership[] => {
+  relaxCallEventListenerLimit(session);
+
   const [memberships, setMemberships] = useState<CallMembership[]>(
     MatrixRTCSession.sessionMembershipsForRoom(room, session.sessionDescription)
   );
@@ -55,6 +77,8 @@ export const useCallMembers = (room: Room, session: MatrixRTCSession): CallMembe
 };
 
 export const useCallMembersChange = (session: MatrixRTCSession, callback: () => void): void => {
+  relaxCallEventListenerLimit(session);
+
   useEffect(() => {
     session.on(MatrixRTCSessionEvent.MembershipsChanged, callback);
     return () => {
