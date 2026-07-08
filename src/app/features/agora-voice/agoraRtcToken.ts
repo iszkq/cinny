@@ -175,8 +175,8 @@ export const buildAgoraRtcToken = async (
   const issueTs = Math.floor(Date.now() / 1000);
   const salt = Math.floor(Math.random() * 99999999) + 1;
   const appCertificateBytes = textEncoder.encode(appCertificate);
-  let signing = await hmacSha256(appCertificateBytes, new ByteWriter().putUint32(issueTs).pack());
-  signing = await hmacSha256(signing, new ByteWriter().putUint32(salt).pack());
+  let signing = await hmacSha256(new ByteWriter().putUint32(issueTs).pack(), appCertificateBytes);
+  signing = await hmacSha256(new ByteWriter().putUint32(salt).pack(), signing);
 
   const service = packRtcService(channelName, uid, tokenExpire);
   const signingInfo = concatBytes([
