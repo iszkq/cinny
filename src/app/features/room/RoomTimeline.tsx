@@ -616,8 +616,9 @@ const useTimelinePagination = (
       const room = roomId ? mx.getRoom(roomId) : null;
 
       if (room?.hasEncryptionStateEvent()) {
-        const decryptPromise = to(decryptAllTimelineEvent(mx, fetchedTimeline));
-        if (isDesktopUpdaterSupported()) {
+        const retryFailures = isDesktopUpdaterSupported();
+        const decryptPromise = to(decryptAllTimelineEvent(mx, fetchedTimeline, { retryFailures }));
+        if (retryFailures) {
           await decryptPromise;
         } else {
           decryptPromise.then(() => undefined);

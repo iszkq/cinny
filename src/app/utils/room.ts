@@ -720,13 +720,24 @@ export const isMembershipChanged = (mEvent: MatrixEvent): boolean =>
   mEvent.getContent().membership !== mEvent.getPrevContent().membership ||
   mEvent.getContent().reason !== mEvent.getPrevContent().reason;
 
-export const decryptAllTimelineEvent = async (mx: MatrixClient, timeline: EventTimeline) => {
+type DecryptTimelineEventOptions = {
+  retryFailures?: boolean;
+};
+
+export const decryptAllTimelineEvent = async (
+  mx: MatrixClient,
+  timeline: EventTimeline,
+  options: DecryptTimelineEventOptions = {}
+) => {
   const crypto = mx.getCrypto();
   if (!crypto) return;
+  const retryFailures = options.retryFailures ?? true;
   const decryptionPromises = timeline
     .getEvents()
     .filter(
-      (event) => !event.isBeingDecrypted() && (event.isEncrypted() || event.isDecryptionFailure())
+      (event) =>
+        !event.isBeingDecrypted() &&
+        (event.isEncrypted() || (retryFailures && event.isDecryptionFailure()))
     )
     .reverse()
     .map((event) => event.attemptDecryption(crypto as CryptoBackend, { isRetry: true }));

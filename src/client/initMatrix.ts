@@ -1,4 +1,5 @@
 import { createClient, MatrixClient, IndexedDBStore, IndexedDBCryptoStore } from 'matrix-js-sdk';
+import { logger as matrixLogger } from 'matrix-js-sdk/lib/logger';
 
 import { cryptoCallbacks } from './secretStorageKeys';
 import { clearNavToActivePathStore } from '../app/state/navToActivePath';
@@ -15,7 +16,33 @@ type Session = {
   deviceId: string;
 };
 
+const MALFORMED_ENCRYPTED_EVENT_WARNING = 'missing field `algorithm`';
+
+let webMatrixLoggerFilterInstalled = false;
+
+const isIgnorableWebMatrixWarning = (messages: unknown[]): boolean => {
+  const text = messages.map((message) => (typeof message === 'string' ? message : '')).join(' ');
+  return (
+    text.includes('Error decrypting event') &&
+    text.includes(MALFORMED_ENCRYPTED_EVENT_WARNING)
+  );
+};
+
+const installWebMatrixLoggerFilter = () => {
+  if (webMatrixLoggerFilterInstalled || isDesktopUpdaterSupported()) return;
+
+  webMatrixLoggerFilterInstalled = true;
+
+  const originalWarn = matrixLogger.warn.bind(matrixLogger);
+  matrixLogger.warn = (...messages: unknown[]) => {
+    if (isIgnorableWebMatrixWarning(messages)) return;
+    originalWarn(...messages);
+  };
+};
+
 export const initClient = async (session: Session): Promise<MatrixClient> => {
+  installWebMatrixLoggerFilter();
+
   const indexedDBStore = new IndexedDBStore({
     indexedDB: global.indexedDB,
     localStorage: global.localStorage,

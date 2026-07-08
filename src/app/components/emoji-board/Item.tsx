@@ -74,6 +74,7 @@ type CustomEmojiItemProps = {
 };
 export function CustomEmojiItem({ mx, useAuthentication, image }: CustomEmojiItemProps) {
   const desktopSupported = isDesktopUpdaterSupported();
+  const imageLoading = desktopSupported ? 'eager' : 'lazy';
   const previewUrl = getRemoteStickerPreviewUrl(image);
   const noReferrer = isHttpUrl(previewUrl ?? image.url);
   const { primaryUrl, fallbackUrl } = getEmojiBoardMediaUrls({
@@ -110,7 +111,7 @@ export function CustomEmojiItem({ mx, useAuthentication, image }: CustomEmojiIte
           <Box className={css.MediaFrame}>
             <img
               key={requestKey}
-              loading="eager"
+              loading={imageLoading}
               decoding="async"
               className={classNames(css.CustomEmojiImg, !isLoaded && css.MediaImgPending)}
               alt=""
@@ -129,7 +130,7 @@ export function CustomEmojiItem({ mx, useAuthentication, image }: CustomEmojiIte
         ) : (
           <img
             key={requestKey}
-            loading="eager"
+            loading={imageLoading}
             decoding="async"
             className={css.CustomEmojiImg}
             alt=""
@@ -156,6 +157,7 @@ type StickerItemProps = {
 
 export function StickerItem({ mx, useAuthentication, image }: StickerItemProps) {
   const desktopSupported = isDesktopUpdaterSupported();
+  const imageLoading = desktopSupported ? 'eager' : 'lazy';
   const previewUrl = getRemoteStickerPreviewUrl(image);
   const noReferrer = isHttpUrl(previewUrl ?? image.url);
   const { primaryUrl, fallbackUrl } = getEmojiBoardMediaUrls({
@@ -193,7 +195,7 @@ export function StickerItem({ mx, useAuthentication, image }: StickerItemProps) 
           <Box className={css.MediaFrame}>
             <img
               key={requestKey}
-              loading="eager"
+              loading={imageLoading}
               decoding="async"
               className={classNames(css.StickerImg, !isLoaded && css.MediaImgPending)}
               alt=""
@@ -210,7 +212,7 @@ export function StickerItem({ mx, useAuthentication, image }: StickerItemProps) 
         ) : (
           <img
             key={requestKey}
-            loading="eager"
+            loading={imageLoading}
             decoding="async"
             className={css.StickerImg}
             alt=""
