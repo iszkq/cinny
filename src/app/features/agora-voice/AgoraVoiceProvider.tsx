@@ -1044,7 +1044,7 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
     } catch (error) {
       if (isCallEndedError(error)) return;
 
-      logAgoraVoiceError('accept_incoming_call_failed', error, connectingCall);
+      logAgoraVoiceError('accept_incoming_call_join_or_signal_failed', error, connectingCall);
       await sendSignal(currentCall.roomId, currentCall.peerId, {
         action: answered || joined ? 'hangup' : 'reject',
         callId: currentCall.callId,

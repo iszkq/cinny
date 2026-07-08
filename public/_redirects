@@ -1,0 +1,7 @@
+/config.json /config.json 200
+/manifest.json /manifest.json 200
+/sw.js /sw.js 200
+/pdf.worker.min.js /pdf.worker.min.js 200
+/public/* /public/:splat 200
+/assets/* /assets/:splat 200
+/* /index.html 200
