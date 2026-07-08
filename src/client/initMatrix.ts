@@ -5,6 +5,7 @@ import { clearNavToActivePathStore } from '../app/state/navToActivePath';
 import { SETTINGS_STORAGE_KEY } from '../app/state/settingsStorage';
 import { restorePinLockStorage, snapshotPinLockStorage } from '../app/utils/pinLock';
 import { clearDesktopMediaCache } from '../app/utils/desktopMediaAssetCache';
+import { isDesktopUpdaterSupported } from '../app/utils/desktopUpdater';
 import { pushSessionToSW } from '../sw-session';
 
 type Session = {
@@ -43,10 +44,13 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
   return mx;
 };
 
+const WEB_INITIAL_SYNC_LIMIT = 2;
+
 export const startClient = async (mx: MatrixClient) => {
   await mx.startClient({
     lazyLoadMembers: true,
     disablePresence: true,
+    ...(!isDesktopUpdaterSupported() ? { initialSyncLimit: WEB_INITIAL_SYNC_LIMIT } : {}),
   });
 };
 
