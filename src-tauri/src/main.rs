@@ -39,13 +39,165 @@ static EXTERNAL_POPUP_COUNTER: AtomicU64 = AtomicU64::new(1);
 static JITSI_AUTH_POPUP_LABELS: OnceLock<Mutex<HashMap<String, HashSet<String>>>> =
     OnceLock::new();
 const JITSI_AUTH_CLOSE_TITLE: &str = "__cinny_close_jitsi_auth_window__";
+const JITSI_FIREBASE_AUTH_CLOSE_DELAY_MS: u64 = 4_000;
+
+const JITSI_MEETING_AUTO_HOST_AUTH_INIT_SCRIPT: &str = r#"
+(() => {
+  const AUTO_HOST_AUTH_PARAM = 'cinny.autoHostAuth';
+  const AUTO_HOST_AUTH_VALUE = 'true';
+  const MAX_AUTOMATION_TIME_MS = 120000;
+  const POLL_INTERVAL_MS = 500;
+
+  const isJitsiMeetingPage = () =>
+    window.location.protocol === 'https:' &&
+    window.location.hostname === 'meet.jit.si' &&
+    window.location.pathname.split('/').filter(Boolean).length >= 1;
+
+  if (!isJitsiMeetingPage()) return;
+
+  const getRoomKey = () =>
+    `cinny:jitsi:auto-host-auth:${window.location.origin}${window.location.pathname}`;
+  const getAttemptKey = () => `${getRoomKey()}:attempted`;
+
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  if (hashParams.get(AUTO_HOST_AUTH_PARAM) === AUTO_HOST_AUTH_VALUE) {
+    window.sessionStorage.setItem(getRoomKey(), AUTO_HOST_AUTH_VALUE);
+  }
+
+  const shouldAutoHostAuth = () =>
+    window.sessionStorage.getItem(getRoomKey()) === AUTO_HOST_AUTH_VALUE;
+
+  if (!shouldAutoHostAuth()) return;
+
+  const hasAuthenticatedMeetingToken = () => {
+    try {
+      return Boolean(new URLSearchParams(window.location.search).get('jwt'));
+    } catch {
+      return false;
+    }
+  };
+
+  if (hasAuthenticatedMeetingToken()) return;
+
+  const hostAuthTextPatterns = [
+    /\u4e3b\u6301\u4eba\u6388\u6743/,
+    /\u6211\u662f\u4e3b\u6301\u4eba/,
+    /\u4ee5\u4e3b\u6301\u4eba\u8eab\u4efd/,
+    /i\s*am\s+the\s+host/i,
+    /i(?:'|\u2019)?\s*m\s+the\s+host/i,
+    /sign\s+in\s+as\s+(the\s+)?host/i,
+    /authenticate\s+as\s+(the\s+)?host/i,
+  ];
+
+  const getElementText = (element) =>
+    [
+      element.innerText,
+      element.textContent,
+      element.getAttribute?.('aria-label'),
+      element.getAttribute?.('title'),
+      element.value,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+  const isUsable = (element) => {
+    if (!element || element.disabled || element.getAttribute?.('aria-disabled') === 'true') {
+      return false;
+    }
+
+    const style = window.getComputedStyle(element);
+    return (
+      style.display !== 'none' &&
+      style.visibility !== 'hidden' &&
+      element.getClientRects().length > 0
+    );
+  };
+
+  const findHostAuthButton = () =>
+    Array.from(
+      document.querySelectorAll(
+        'button, [role="button"], a[href], input[type="button"], input[type="submit"]'
+      )
+    ).find((element) => {
+      if (!isUsable(element)) return false;
+
+      const text = getElementText(element);
+      return text && hostAuthTextPatterns.some((pattern) => pattern.test(text));
+    });
+
+  const clickHostAuthButton = () => {
+    if (!isJitsiMeetingPage() || hasAuthenticatedMeetingToken()) return true;
+    if (window.sessionStorage.getItem(getAttemptKey())) return true;
+
+    const button = findHostAuthButton();
+    if (!button) return false;
+
+    window.sessionStorage.setItem(getAttemptKey(), String(Date.now()));
+    button.click();
+    return true;
+  };
+
+  if (clickHostAuthButton()) return;
+
+  const startedAt = Date.now();
+  const timer = window.setInterval(() => {
+    if (clickHostAuthButton() || Date.now() - startedAt > MAX_AUTOMATION_TIME_MS) {
+      window.clearInterval(timer);
+    }
+  }, POLL_INTERVAL_MS);
+
+  const observer = new MutationObserver(() => {
+    if (clickHostAuthButton()) {
+      observer.disconnect();
+      window.clearInterval(timer);
+    }
+  });
+
+  const observe = () => {
+    if (!document.body) {
+      window.setTimeout(observe, 50);
+      return;
+    }
+
+    observer.observe(document.body, { childList: true, subtree: true });
+  };
+
+  observe();
+  window.setTimeout(() => observer.disconnect(), MAX_AUTOMATION_TIME_MS);
+})();
+"#;
 
 const JITSI_FIREBASE_AUTH_INIT_SCRIPT: &str = r#"
 (() => {
   const CLOSE_TITLE = '__cinny_close_jitsi_auth_window__';
+  const FIREBASE_AUTH_HANDLER_CLOSE_DELAY_MS = 4000;
   const isJitsiFirebaseAuthPage = () =>
     window.location.hostname === 'web-cdn.jitsi.net' &&
     /\/auth-static\/meet-jit-si\/[^/]+\/signin\.html$/.test(window.location.pathname);
+
+  const isJitsiFirebaseAuthHandlerPage = () => {
+    const hostname = window.location.hostname.toLowerCase();
+    return (
+      window.location.protocol === 'https:' &&
+      hostname.startsWith('meet-jit-si') &&
+      hostname.endsWith('.firebaseapp.com') &&
+      window.location.pathname.replace(/\/$/, '') === '/__/auth/handler'
+    );
+  };
+
+  const closeAfterAuthenticatedRedirect = () => {
+    document.title = CLOSE_TITLE;
+    window.setTimeout(() => window.close(), 250);
+    window.setTimeout(() => window.close(), 1000);
+    window.setTimeout(() => window.close(), 2500);
+  };
+
+  if (isJitsiFirebaseAuthHandlerPage()) {
+    window.setTimeout(closeAfterAuthenticatedRedirect, FIREBASE_AUTH_HANDLER_CLOSE_DELAY_MS);
+    return;
+  }
 
   if (!isJitsiFirebaseAuthPage()) return;
 
@@ -60,13 +212,6 @@ const JITSI_FIREBASE_AUTH_INIT_SCRIPT: &str = r#"
     } catch {
       return false;
     }
-  };
-
-  const closeAfterAuthenticatedRedirect = () => {
-    document.title = CLOSE_TITLE;
-    window.setTimeout(() => window.close(), 250);
-    window.setTimeout(() => window.close(), 1000);
-    window.setTimeout(() => window.close(), 2500);
   };
 
   try {
@@ -246,6 +391,16 @@ fn register_jitsi_auth_popup_window(parent_label: &str, popup_label: &str) {
     }
 }
 
+fn hide_external_popup_window(app: &AppHandle, label: &str) {
+    let app_handle = app.clone();
+    let window_label = label.to_owned();
+    let _ = app.run_on_main_thread(move || {
+        if let Some(window) = app_handle.get_webview_window(&window_label) {
+            let _ = window.hide();
+        }
+    });
+}
+
 fn close_external_popup_window(app: &AppHandle, label: &str) {
     let app_handle = app.clone();
     let window_label = label.to_owned();
@@ -305,6 +460,20 @@ fn close_jitsi_auth_popup_windows_for_parent(app: &AppHandle, parent_label: &str
     close_registered_jitsi_auth_popup_windows(app, parent_label, &mut labels_to_close);
 }
 
+fn hide_jitsi_auth_popup_windows(app: &AppHandle, parent_label: &str, current_label: &str) {
+    let mut labels_to_hide = HashSet::from([current_label.to_owned()]);
+
+    if let Ok(labels) = get_jitsi_auth_popup_labels().lock() {
+        if let Some(registered_labels) = labels.get(parent_label) {
+            labels_to_hide.extend(registered_labels.iter().cloned());
+        }
+    }
+
+    for label in labels_to_hide {
+        hide_external_popup_window(app, &label);
+    }
+}
+
 fn handle_jitsi_auth_popup_title(
     app: &AppHandle,
     parent_label: &str,
@@ -361,6 +530,55 @@ fn handle_jitsi_authenticated_meeting_redirect(
     close_jitsi_auth_popup_windows(app, parent_label, current_label);
 
     true
+}
+
+fn is_jitsi_firebase_auth_handler_url(url: &Url) -> bool {
+    if url.scheme() != "https" || url.path().trim_end_matches('/') != "/__/auth/handler" {
+        return false;
+    }
+
+    url.host_str().is_some_and(|host| {
+        let host = host.to_ascii_lowercase();
+        host.ends_with(".firebaseapp.com") && host.starts_with("meet-jit-si")
+    })
+}
+
+fn close_jitsi_auth_popup_windows_after_delay(
+    app: &AppHandle,
+    parent_label: &str,
+    current_label: &str,
+    delay_ms: u64,
+) {
+    let delayed_app = app.clone();
+    let delayed_parent_label = parent_label.to_owned();
+    let delayed_current_label = current_label.to_owned();
+
+    hide_jitsi_auth_popup_windows(app, parent_label, current_label);
+
+    thread::spawn(move || {
+        thread::sleep(Duration::from_millis(delay_ms));
+        close_jitsi_auth_popup_windows(
+            &delayed_app,
+            &delayed_parent_label,
+            &delayed_current_label,
+        );
+    });
+}
+
+fn schedule_jitsi_auth_popup_close_after_firebase_callback(
+    app: &AppHandle,
+    parent_label: &str,
+    current_label: &str,
+    url: &Url,
+) {
+    if is_jitsi_firebase_auth_handler_url(url) {
+        close_jitsi_auth_popup_windows_after_delay(
+            app,
+            parent_label,
+            current_label,
+            JITSI_FIREBASE_AUTH_CLOSE_DELAY_MS,
+        );
+    }
 }
 
 fn get_remote_sticker_http_client() -> &'static Client {
@@ -598,6 +816,7 @@ async fn open_external_url_window(
         .focused(true)
         .visible(true)
         .disable_drag_drop_handler()
+        .initialization_script(JITSI_MEETING_AUTO_HOST_AUTH_INIT_SCRIPT)
         .on_navigation(move |url| {
             if get_jitsi_authenticated_meeting_url(url).is_some() {
                 close_jitsi_auth_popup_windows_for_parent(
@@ -616,6 +835,10 @@ async fn open_external_url_window(
 
             let popup_label = next_external_popup_label(&popup_parent_label);
             register_jitsi_auth_popup_window(&popup_parent_label, &popup_label);
+            let popup_starts_on_firebase_auth_handler = is_jitsi_firebase_auth_handler_url(&url);
+            let popup_initial_auth_handler_app = popup_app.clone();
+            let popup_initial_auth_handler_parent_label = popup_parent_label.clone();
+            let popup_initial_auth_handler_label = popup_label.clone();
             let popup_navigation_app = popup_app.clone();
             let popup_navigation_parent_label = popup_parent_label.clone();
             let popup_navigation_label = popup_label.clone();
@@ -634,17 +857,28 @@ async fn open_external_url_window(
             .window_features(features)
             .title(url.as_str())
             .resizable(true)
-            .focused(true)
-            .visible(true)
+            .focused(!popup_starts_on_firebase_auth_handler)
+            .visible(!popup_starts_on_firebase_auth_handler)
             .disable_drag_drop_handler()
             .initialization_script(JITSI_FIREBASE_AUTH_INIT_SCRIPT)
             .on_navigation(move |url| {
-                !handle_jitsi_authenticated_meeting_redirect(
+                if handle_jitsi_authenticated_meeting_redirect(
                     &popup_navigation_app,
                     &popup_navigation_parent_label,
                     &popup_navigation_label,
                     url,
-                )
+                ) {
+                    return false;
+                }
+
+                schedule_jitsi_auth_popup_close_after_firebase_callback(
+                    &popup_navigation_app,
+                    &popup_navigation_parent_label,
+                    &popup_navigation_label,
+                    url,
+                );
+
+                true
             })
             .on_new_window(move |nested_url, nested_features| {
                 if !is_allowed_external_popup_url(&nested_url) {
@@ -657,6 +891,11 @@ async fn open_external_url_window(
                     &nested_meeting_parent_label,
                     &nested_popup_label,
                 );
+                let nested_starts_on_firebase_auth_handler =
+                    is_jitsi_firebase_auth_handler_url(&nested_url);
+                let nested_initial_auth_handler_app = nested_popup_app.clone();
+                let nested_initial_auth_handler_parent_label = nested_meeting_parent_label.clone();
+                let nested_initial_auth_handler_label = nested_popup_label.clone();
                 let nested_navigation_app = nested_popup_app.clone();
                 let nested_navigation_parent_label = nested_meeting_parent_label.clone();
                 let nested_navigation_label = nested_popup_label.clone();
@@ -673,17 +912,28 @@ async fn open_external_url_window(
                 .window_features(nested_features)
                 .title(nested_url.as_str())
                 .resizable(true)
-                .focused(true)
-                .visible(true)
+                .focused(!nested_starts_on_firebase_auth_handler)
+                .visible(!nested_starts_on_firebase_auth_handler)
                 .disable_drag_drop_handler()
                 .initialization_script(JITSI_FIREBASE_AUTH_INIT_SCRIPT)
                 .on_navigation(move |url| {
-                    !handle_jitsi_authenticated_meeting_redirect(
+                    if handle_jitsi_authenticated_meeting_redirect(
                         &nested_navigation_app,
                         &nested_navigation_parent_label,
                         &nested_navigation_label,
                         url,
-                    )
+                    ) {
+                        return false;
+                    }
+
+                    schedule_jitsi_auth_popup_close_after_firebase_callback(
+                        &nested_navigation_app,
+                        &nested_navigation_parent_label,
+                        &nested_navigation_label,
+                        url,
+                    );
+
+                    true
                 })
                 .on_document_title_changed(move |window, title| {
                     handle_jitsi_auth_popup_title(
@@ -696,7 +946,18 @@ async fn open_external_url_window(
                 });
 
                 match nested_popup_builder.build() {
-                    Ok(window) => tauri::webview::NewWindowResponse::Create { window },
+                    Ok(window) => {
+                        if nested_starts_on_firebase_auth_handler {
+                            schedule_jitsi_auth_popup_close_after_firebase_callback(
+                                &nested_initial_auth_handler_app,
+                                &nested_initial_auth_handler_parent_label,
+                                &nested_initial_auth_handler_label,
+                                &nested_url,
+                            );
+                        }
+
+                        tauri::webview::NewWindowResponse::Create { window }
+                    }
                     Err(_) => {
                         let _ = open_url_with_system_handler(nested_url.as_str());
                         tauri::webview::NewWindowResponse::Deny
@@ -714,7 +975,18 @@ async fn open_external_url_window(
             });
 
             match popup_builder.build() {
-                Ok(window) => tauri::webview::NewWindowResponse::Create { window },
+                Ok(window) => {
+                    if popup_starts_on_firebase_auth_handler {
+                        schedule_jitsi_auth_popup_close_after_firebase_callback(
+                            &popup_initial_auth_handler_app,
+                            &popup_initial_auth_handler_parent_label,
+                            &popup_initial_auth_handler_label,
+                            &url,
+                        );
+                    }
+
+                    tauri::webview::NewWindowResponse::Create { window }
+                }
                 Err(_) => {
                     let _ = open_url_with_system_handler(url.as_str());
                     tauri::webview::NewWindowResponse::Deny
