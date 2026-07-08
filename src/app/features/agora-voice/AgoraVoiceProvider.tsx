@@ -355,6 +355,41 @@ const getAgoraConnectErrorMessage = (error: unknown): string => {
 const isCallEndedError = (error: unknown): boolean =>
   error instanceof AgoraStepError && error.code === 'call_ended';
 
+const getAgoraErrorDetail = (error: unknown): Record<string, unknown> => {
+  if (error instanceof AgoraStepError) {
+    return {
+      name: error.name,
+      code: error.code,
+      message: error.message,
+    };
+  }
+
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+    };
+  }
+
+  const rtcError = error as { name?: unknown; message?: unknown; code?: unknown };
+  return {
+    name: typeof rtcError?.name === 'string' ? rtcError.name : undefined,
+    code: typeof rtcError?.code === 'string' ? rtcError.code : undefined,
+    message: typeof rtcError?.message === 'string' ? rtcError.message : String(error),
+  };
+};
+
+const logAgoraVoiceError = (stage: string, error: unknown, call?: VoiceCall): void => {
+  // Keep enough context in production consoles to diagnose real devices without exposing tokens.
+  console.warn('[agora-voice]', stage, {
+    callId: call?.callId,
+    direction: call?.direction,
+    phase: call?.phase,
+    roomId: call?.roomId,
+    error: getAgoraErrorDetail(error),
+  });
+};
+
 const sendToDeviceSignal = async (
   mx: VoiceMatrixClient,
   target: string,
@@ -874,7 +909,8 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
             // The call is connected; a browser autoplay block should not keep it stuck connecting.
           }
           return true;
-        } catch {
+        } catch (error) {
+          logAgoraVoiceError('subscribe_remote_audio_failed', error, voiceCall);
           return false;
         } finally {
           remoteAudioSubscribing = false;
@@ -957,6 +993,7 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
           armRemoteAudioTimeout(voiceCall);
         }
       } catch (error) {
+        logAgoraVoiceError('join_agora_failed', error, voiceCall);
         stopRemoteAudioScan();
         client.removeAllListeners?.();
         localTrack?.close();
@@ -992,21 +1029,22 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
     };
     updateCall(connectingCall);
 
-    let answered = false;
     let joined = false;
+    let answered = false;
 
     try {
+      await joinAgora(connectingCall);
+      joined = true;
       await sendSignal(currentCall.roomId, currentCall.peerId, {
         action: 'answer',
         callId: currentCall.callId,
         channel: currentCall.channel,
       });
       answered = true;
-      await joinAgora(connectingCall);
-      joined = true;
     } catch (error) {
       if (isCallEndedError(error)) return;
 
+      logAgoraVoiceError('accept_incoming_call_failed', error, connectingCall);
       await sendSignal(currentCall.roomId, currentCall.peerId, {
         action: answered || joined ? 'hangup' : 'reject',
         callId: currentCall.callId,
@@ -1138,6 +1176,7 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
         void joinAgora(connectingCall).catch(async (error) => {
           if (isCallEndedError(error)) return;
 
+          logAgoraVoiceError('outgoing_join_failed', error, connectingCall);
           await sendSignal(currentCall.roomId, currentCall.peerId, {
             action: 'hangup',
             callId: currentCall.callId,
