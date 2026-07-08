@@ -2,9 +2,9 @@
 
 Starfire 是基于上游 [cinnyapp/cinny](https://github.com/cinnyapp/cinny) 深度整理和扩展的 Matrix 客户端，面向中文使用场景持续优化。项目同时支持 Web 端和 Tauri 桌面端，桌面端产品名为 `Starfire`。
 
-当前版本：`1.4.0`
+当前版本：`1.5.17`
 
-这个仓库不是简单的界面汉化，而是在保留 Cinny 轻量、现代、模块化结构的基础上，补充了更适合中文用户和二次开发的能力，包括消息收藏、房间/联系人分类、圣经工具、AI 配置、桌面端能力、外观自定义、设备管理增强以及多处聊天体验修复。
+这个仓库不是简单的界面汉化，而是在保留 Cinny 轻量、现代、模块化结构的基础上，补充了更适合中文用户和二次开发的能力，包括消息收藏、房间/联系人分类、一对一语音通话、会议入口、圣经工具、AI 配置、桌面端能力、外观自定义、设备管理增强以及多处聊天体验修复。
 
 ## 功能亮点
 
@@ -86,6 +86,25 @@ Starfire 是基于上游 [cinnyapp/cinny](https://github.com/cinnyapp/cinny) 深
 - `src/app/features/room`
 - `src/app/features/room/RoomTimeline.tsx`
 - `src/app/components/message`
+
+### 会议与一对一语音通话
+
+- 私聊房间支持一对一语音通话，基于声网 Agora Web RTC SDK 接入。
+- 支持发起、接听、拒绝、挂断和麦克风静音/恢复。
+- 接听后会先向对方发送已接听信令，再加入声网频道，减少主叫端长时间停留在“连接中”的情况。
+- 连接阶段会扫描并订阅远端音频流，远端音频订阅成功后进入通话中状态。
+- 房间更多菜单提供 `语音自测`，可用于验证声网配置、麦克风权限、发布音频和订阅音频链路。
+- `config.json` 中的 `agoraVoice.timeoutSeconds` 控制呼叫等待超时，默认 60 秒；连接远端音频另有连接超时保护。
+- 当前声网 RTC token 默认有效期约 1 小时，长时间通话建议后续补充 token 自动续期逻辑。
+- `agoraVoice.monthlyFreeMinutes` 用于本地免费分钟数预估和提示，实际用量与计费仍以声网后台为准。
+- 桌面端会议入口已针对 Jitsi 主持人授权流程做过优化，授权弹窗在完成授权后会尽量自动收尾，减少白屏窗口残留。
+
+相关入口：
+
+- `src/app/features/agora-voice`
+- `src/app/features/room/RoomViewHeader.tsx`
+- `src/app/plugins/call`
+- `config.json`
 
 ### 圣经工具
 
