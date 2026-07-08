@@ -142,6 +142,7 @@ import { ForwardMessagesModal } from './ForwardMessagesModal';
 import { ThreadDialog } from './ThreadDialog';
 import { ScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
 import { POLL_START_EVENT_TYPE, UNSTABLE_POLL_START_EVENT_TYPE } from '../../utils/polls';
+import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
 
 const TimelineFloat = as<'div', css.TimelineFloatVariants>(
   ({ position, className, ...props }, ref) => (
@@ -203,6 +204,10 @@ const getTimelineReplyRelation = (mEvent: MatrixEvent): TimelineReplyRelation =>
     threadRootId: mEvent.threadRootId ?? threadRootId,
   };
 };
+
+const DESKTOP_PAGINATION_LIMIT = 80;
+const WEB_PAGINATION_LIMIT = 56;
+const IMAGE_VIEWER_RANGE_BUFFER = 48;
 
 export const getFirstLinkedTimeline = (
   timeline: EventTimeline,
@@ -284,23 +289,112 @@ const getTimelineImageViewerItems = (linkedTimelines: EventTimeline[]): ViewerIm
   return items;
 };
 
+type TimelineIndexEntry = {
+  timeline: EventTimeline;
+  timelineSet: EventTimelineSet;
+  event: MatrixEvent;
+  eventIndex: number;
+  baseIndex: number;
+};
+
+type TimelineIndexRange = {
+  timeline: EventTimeline;
+  timelineSet: EventTimelineSet;
+  baseIndex: number;
+  endIndex: number;
+};
+
+type TimelineIndex = {
+  ranges: TimelineIndexRange[];
+  eventsCount: number;
+  version: string;
+};
+
+const buildTimelineIndex = (linkedTimelines: EventTimeline[], version: string): TimelineIndex => {
+  const ranges: TimelineIndexRange[] = [];
+  let baseIndex = 0;
+
+  linkedTimelines.forEach((timeline) => {
+    const timelineSet = timeline.getTimelineSet();
+    const endIndex = baseIndex + timeline.getEvents().length;
+
+    ranges.push({
+      timeline,
+      timelineSet,
+      baseIndex,
+      endIndex,
+    });
+
+    baseIndex = endIndex;
+  });
+
+  return {
+    ranges,
+    eventsCount: baseIndex,
+    version,
+  };
+};
+
+const getTimelineIndexEntry = (
+  timelineIndex: TimelineIndex,
+  index: number
+): TimelineIndexEntry | undefined => {
+  const range = timelineIndex.ranges.find(
+    (timelineRange) => index >= timelineRange.baseIndex && index < timelineRange.endIndex
+  );
+  if (!range) {
+    return undefined;
+  }
+
+  const eventIndex = index - range.baseIndex;
+  const event = range.timeline.getEvents()[eventIndex];
+  if (!event) {
+    return undefined;
+  }
+
+  const entry: TimelineIndexEntry = {
+    timeline: range.timeline,
+    timelineSet: range.timelineSet,
+    event,
+    eventIndex,
+    baseIndex: range.baseIndex,
+  };
+
+  return entry;
+};
+
+const getEventIdAbsoluteIndexFromTimelineIndex = (
+  timelineIndex: TimelineIndex,
+  eventTimeline: EventTimeline,
+  eventId: string
+): number | undefined => {
+  const range = timelineIndex.ranges.find(
+    (timelineRange) => timelineRange.timeline === eventTimeline
+  );
+  if (!range) {
+    return undefined;
+  }
+
+  const eventIndex = eventTimeline.getEvents().findIndex((evt) => evt.getId() === eventId);
+  if (eventIndex === -1) {
+    return undefined;
+  }
+
+  return range.baseIndex + eventIndex;
+};
+
 const getTimelineImageViewerItemsInRange = (
-  linkedTimelines: EventTimeline[],
+  timelineIndex: TimelineIndex,
   range: ItemRange
 ): ViewerImageItem[] => {
-  const eventsCount = getTimelinesEventsCount(linkedTimelines);
+  const { eventsCount } = timelineIndex;
   const start = Math.max(range.start - IMAGE_VIEWER_RANGE_BUFFER, 0);
   const end = Math.min(range.end + IMAGE_VIEWER_RANGE_BUFFER, eventsCount);
   const seenEventIds = new Set<string>();
   const items: ViewerImageItem[] = [];
 
   for (let index = start; index < end; index += 1) {
-    const [eventTimeline, baseIndex] = getTimelineAndBaseIndex(linkedTimelines, index);
-    if (!eventTimeline) {
-      continue;
-    }
-
-    const mEvent = getTimelineEvent(eventTimeline, getTimelineRelativeIndex(index, baseIndex));
+    const mEvent = getTimelineIndexEntry(timelineIndex, index)?.event;
     const eventId = mEvent?.getId();
     if (!mEvent || !eventId || seenEventIds.has(eventId) || mEvent.isRedacted()) {
       continue;
@@ -403,9 +497,6 @@ type RoomTimelineProps = {
   roomInputRef: RefObject<HTMLElement>;
   editor: Editor;
 };
-
-const PAGINATION_LIMIT = 80;
-const IMAGE_VIEWER_RANGE_BUFFER = 48;
 
 type Timeline = {
   linkedTimelines: EventTimeline[];
@@ -576,13 +667,13 @@ const useLiveTimelineRefresh = (room: Room, onRefresh: () => void) => {
   }, [room, onRefresh]);
 };
 
-const getInitialTimeline = (room: Room) => {
+const getInitialTimeline = (room: Room, limit: number) => {
   const linkedTimelines = getLinkedTimelines(getLiveTimeline(room));
   const evLength = getTimelinesEventsCount(linkedTimelines);
   return {
     linkedTimelines,
     range: {
-      start: Math.max(evLength - PAGINATION_LIMIT, 0),
+      start: Math.max(evLength - limit, 0),
       end: evLength,
     },
   };
@@ -659,6 +750,9 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
   const [showHiddenEvents] = useSetting(settingsAtom, 'showHiddenEvents');
   const [showDeveloperTools] = useSetting(settingsAtom, 'developerTools');
   const timelinePaddingY = screenSize === ScreenSize.Mobile ? config.space.S300 : config.space.S600;
+  const timelinePageLimit = isDesktopUpdaterSupported()
+    ? DESKTOP_PAGINATION_LIMIT
+    : WEB_PAGINATION_LIMIT;
 
   const [hour24Clock] = useSetting(settingsAtom, 'hour24Clock');
   const [dateFormatString] = useSetting(settingsAtom, 'dateFormatString');
@@ -750,15 +844,20 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
   const parseMemberEvent = useMemberEventParser();
 
   const [timeline, setTimeline] = useState<Timeline>(() =>
-    eventId ? getEmptyTimeline() : getInitialTimeline(room)
+    eventId ? getEmptyTimeline() : getInitialTimeline(room, timelinePageLimit)
   );
   const eventsLength = getTimelinesEventsCount(timeline.linkedTimelines);
+  const timelineVersion = timeline.linkedTimelines.map(timelineToEventsCount).join(':');
+  const timelineIndex = useMemo(
+    () => buildTimelineIndex(timeline.linkedTimelines, timelineVersion),
+    [timeline.linkedTimelines, timelineVersion]
+  );
   const liveTimeline = getLiveTimeline(room);
   const liveTimelineLinked =
     timeline.linkedTimelines[timeline.linkedTimelines.length - 1] === liveTimeline;
   const imageViewerItems = useMemo(
-    () => getTimelineImageViewerItemsInRange(timeline.linkedTimelines, timeline.range),
-    [timeline.linkedTimelines, timeline.range]
+    () => getTimelineImageViewerItemsInRange(timelineIndex, timeline.range),
+    [timelineIndex, timeline.range]
   );
   const latestRenderedEventId = useRoomLatestRenderedEvent(room)?.getId();
   const canPaginateBack =
@@ -784,13 +883,13 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     mx,
     timeline,
     setTimeline,
-    PAGINATION_LIMIT
+    timelinePageLimit
   );
 
   const { getItems, scrollToItem, scrollToElement, observeBackAnchor, observeFrontAnchor } =
     useVirtualPaginator({
       count: eventsLength,
-      limit: PAGINATION_LIMIT,
+      limit: timelinePageLimit,
       range: timeline.range,
       onRangeChange: useCallback((r) => setTimeline((cs) => ({ ...cs, range: r })), []),
       getScrollElement,
@@ -837,10 +936,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
         event: MatrixEvent;
       }>
     >((messages, item) => {
-      const [eventTimeline, baseIndex] = getTimelineAndBaseIndex(timeline.linkedTimelines, item);
-      if (!eventTimeline) return messages;
-
-      const event = getTimelineEvent(eventTimeline, getTimelineRelativeIndex(item, baseIndex));
+      const event = getTimelineIndexEntry(timelineIndex, item)?.event;
       const targetEventId = event?.getId();
       const senderId = event?.getSender();
 
@@ -883,7 +979,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     }
 
     return receiptMap;
-  }, [ignoredUsersSet, mx, receiptTick, room, timeline.linkedTimelines, visibleItems]);
+  }, [ignoredUsersSet, mx, receiptTick, room, timelineIndex, visibleItems]);
 
   const getInlineReadReceiptUserIds = useCallback(
     (targetEventId: string): string[] | undefined => {
@@ -912,19 +1008,19 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
         setTimeline({
           linkedTimelines: lTimelines,
           range: {
-            start: Math.max(evtAbsIndex - PAGINATION_LIMIT, 0),
-            end: Math.min(evtAbsIndex + PAGINATION_LIMIT, evLength),
+            start: Math.max(evtAbsIndex - timelinePageLimit, 0),
+            end: Math.min(evtAbsIndex + timelinePageLimit, evLength),
           },
         });
       },
-      [alive]
+      [alive, timelinePageLimit]
     ),
     useCallback(() => {
       if (!alive()) return;
-      setTimeline(getInitialTimeline(room));
+      setTimeline(getInitialTimeline(room, timelinePageLimit));
       scrollToBottomRef.current.count += 1;
       scrollToBottomRef.current.smooth = false;
-    }, [alive, room])
+    }, [alive, room, timelinePageLimit])
   );
 
   useEffect(() => {
@@ -975,7 +1071,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
           setAtBottom(true);
           scrollToBottomRef.current.count += 1;
           scrollToBottomRef.current.smooth = true;
-          setTimeline(getInitialTimeline(room));
+          setTimeline(getInitialTimeline(room, timelinePageLimit));
           return;
         }
 
@@ -1012,7 +1108,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
           setUnreadInfo(getRoomUnreadInfo(room));
         }
       },
-      [eventId, mx, navigateRoom, room, unreadInfo, privateReceipt]
+      [eventId, mx, navigateRoom, room, timelinePageLimit, unreadInfo, privateReceipt]
     )
   );
 
@@ -1078,7 +1174,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     ) => {
       const evtTimeline = getEventTimeline(room, evtId);
       const absoluteIndex =
-        evtTimeline && getEventIdAbsoluteIndex(timeline.linkedTimelines, evtTimeline, evtId);
+        evtTimeline && getEventIdAbsoluteIndexFromTimelineIndex(timelineIndex, evtTimeline, evtId);
 
       if (typeof absoluteIndex === 'number') {
         const scrolled = scrollToItem(absoluteIndex, {
@@ -1097,17 +1193,17 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
         loadEventTimeline(evtId);
       }
     },
-    [room, timeline, scrollToItem, loadEventTimeline]
+    [room, timelineIndex, scrollToItem, loadEventTimeline]
   );
 
   useLiveTimelineRefresh(
     room,
     useCallback(() => {
       if (liveTimelineLinked) {
-        setTimeline(getInitialTimeline(room));
+        setTimeline(getInitialTimeline(room, timelinePageLimit));
       }
       syncUnreadInfo();
-    }, [room, liveTimelineLinked, syncUnreadInfo])
+    }, [room, liveTimelineLinked, timelinePageLimit, syncUnreadInfo])
   );
 
   // Stay at bottom when room editor resize
@@ -1435,7 +1531,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
 
       setUnreadInfo(undefined);
       setAtBottom(true);
-      setTimeline(getInitialTimeline(room));
+      setTimeline(getInitialTimeline(room, timelinePageLimit));
       scrollToBottomRef.current.count += 1;
       scrollToBottomRef.current.smooth = true;
     };
@@ -1444,7 +1540,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     return () => {
       window.removeEventListener(ROOM_FOLLOW_LATEST, handleFollowLatest);
     };
-  }, [eventId, mx, navigateRoom, privateReceipt, room]);
+  }, [eventId, mx, navigateRoom, privateReceipt, room, timelinePageLimit]);
 
   // scroll out of view msg editor in view.
   useEffect(() => {
@@ -1468,7 +1564,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     }
     setUnreadInfo(undefined);
     setAtBottom(true);
-    setTimeline(getInitialTimeline(room));
+    setTimeline(getInitialTimeline(room, timelinePageLimit));
     scrollToBottomRef.current.count += 1;
     scrollToBottomRef.current.smooth = false;
 
@@ -2472,10 +2568,9 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
   let newDivider = false;
   let dayDivider = false;
   const eventRenderer = (item: number) => {
-    const [eventTimeline, baseIndex] = getTimelineAndBaseIndex(timeline.linkedTimelines, item);
-    if (!eventTimeline) return null;
-    const timelineSet = eventTimeline?.getTimelineSet();
-    const mEvent = getTimelineEvent(eventTimeline, getTimelineRelativeIndex(item, baseIndex));
+    const timelineEntry = getTimelineIndexEntry(timelineIndex, item);
+    if (!timelineEntry) return null;
+    const { event: mEvent, timelineSet } = timelineEntry;
     const mEventId = mEvent?.getId();
 
     if (!mEvent || !mEventId) return null;
@@ -2621,7 +2716,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
           justifyContent="End"
           style={{ minHeight: '100%', padding: `${timelinePaddingY} 0` }}
         >
-          {!canPaginateBack && rangeAtStart && getItems().length > 0 && (
+          {!canPaginateBack && rangeAtStart && visibleItems.length > 0 && (
             <div
               style={{
                 padding: `${config.space.S700} ${config.space.S400} ${config.space.S600} ${
@@ -2636,66 +2731,66 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             (messageLayout === MessageLayout.Compact ? (
               <>
                 <MessageBase>
-                  <CompactPlaceholder key={getItems().length} />
+                  <CompactPlaceholder key={visibleItems.length} />
                 </MessageBase>
                 <MessageBase>
-                  <CompactPlaceholder key={getItems().length} />
+                  <CompactPlaceholder key={visibleItems.length} />
                 </MessageBase>
                 <MessageBase>
-                  <CompactPlaceholder key={getItems().length} />
+                  <CompactPlaceholder key={visibleItems.length} />
                 </MessageBase>
                 <MessageBase>
-                  <CompactPlaceholder key={getItems().length} />
+                  <CompactPlaceholder key={visibleItems.length} />
                 </MessageBase>
                 <MessageBase ref={observeBackAnchor}>
-                  <CompactPlaceholder key={getItems().length} />
+                  <CompactPlaceholder key={visibleItems.length} />
                 </MessageBase>
               </>
             ) : (
               <>
                 <MessageBase>
-                  <DefaultPlaceholder key={getItems().length} />
+                  <DefaultPlaceholder key={visibleItems.length} />
                 </MessageBase>
                 <MessageBase>
-                  <DefaultPlaceholder key={getItems().length} />
+                  <DefaultPlaceholder key={visibleItems.length} />
                 </MessageBase>
                 <MessageBase ref={observeBackAnchor}>
-                  <DefaultPlaceholder key={getItems().length} />
+                  <DefaultPlaceholder key={visibleItems.length} />
                 </MessageBase>
               </>
             ))}
 
-          {getItems().map(eventRenderer)}
+          {visibleItems.map(eventRenderer)}
 
           {(!liveTimelineLinked || !rangeAtEnd) &&
             (messageLayout === MessageLayout.Compact ? (
               <>
                 <MessageBase ref={observeFrontAnchor}>
-                  <CompactPlaceholder key={getItems().length} />
+                  <CompactPlaceholder key={visibleItems.length} />
                 </MessageBase>
                 <MessageBase>
-                  <CompactPlaceholder key={getItems().length} />
+                  <CompactPlaceholder key={visibleItems.length} />
                 </MessageBase>
                 <MessageBase>
-                  <CompactPlaceholder key={getItems().length} />
+                  <CompactPlaceholder key={visibleItems.length} />
                 </MessageBase>
                 <MessageBase>
-                  <CompactPlaceholder key={getItems().length} />
+                  <CompactPlaceholder key={visibleItems.length} />
                 </MessageBase>
                 <MessageBase>
-                  <CompactPlaceholder key={getItems().length} />
+                  <CompactPlaceholder key={visibleItems.length} />
                 </MessageBase>
               </>
             ) : (
               <>
                 <MessageBase ref={observeFrontAnchor}>
-                  <DefaultPlaceholder key={getItems().length} />
+                  <DefaultPlaceholder key={visibleItems.length} />
                 </MessageBase>
                 <MessageBase>
-                  <DefaultPlaceholder key={getItems().length} />
+                  <DefaultPlaceholder key={visibleItems.length} />
                 </MessageBase>
                 <MessageBase>
-                  <DefaultPlaceholder key={getItems().length} />
+                  <DefaultPlaceholder key={visibleItems.length} />
                 </MessageBase>
               </>
             ))}

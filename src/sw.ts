@@ -6,6 +6,7 @@ declare const self: ServiceWorkerGlobalScope;
 type SessionInfo = {
   accessToken: string;
   baseUrl: string;
+  userId?: string;
 };
 
 /**
@@ -29,9 +30,13 @@ async function cleanupDeadClients() {
   });
 }
 
-function setSession(clientId: string, accessToken: any, baseUrl: any) {
+function setSession(clientId: string, accessToken: unknown, baseUrl: unknown, userId: unknown) {
   if (typeof accessToken === 'string' && typeof baseUrl === 'string') {
-    sessions.set(clientId, { accessToken, baseUrl });
+    sessions.set(clientId, {
+      accessToken,
+      baseUrl,
+      ...(typeof userId === 'string' ? { userId } : {}),
+    });
   } else {
     // Logout or invalid session
     sessions.delete(clientId);
@@ -62,7 +67,7 @@ function requestSession(client: Client): Promise<SessionInfo | undefined> {
 
 async function requestSessionWithTimeout(
   clientId: string,
-  timeoutMs = 3000
+  timeoutMs = 750
 ): Promise<SessionInfo | undefined> {
   const client = await self.clients.get(clientId);
   if (!client) return undefined;
@@ -96,10 +101,10 @@ self.addEventListener('message', (event: ExtendableMessageEvent) => {
   const client = event.source as Client | null;
   if (!client) return;
 
-  const { type, accessToken, baseUrl } = event.data || {};
+  const { type, accessToken, baseUrl, userId } = event.data || {};
 
   if (type === 'setSession') {
-    setSession(client.id, accessToken, baseUrl);
+    setSession(client.id, accessToken, baseUrl, userId);
     cleanupDeadClients();
   }
 });
@@ -267,8 +272,6 @@ self.addEventListener('fetch', (event: FetchEvent) => {
   }
 
   event.respondWith(
-    requestSessionWithTimeout(clientId).then((s) => {
-      return fetchMediaWithFallback(event.request, s);
-    })
+    requestSessionWithTimeout(clientId).then((s) => fetchMediaWithFallback(event.request, s))
   );
 });

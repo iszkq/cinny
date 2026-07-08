@@ -69,7 +69,7 @@ if (!desktopSubWindow && 'serviceWorker' in navigator) {
 
   const sendSessionToSW = () => {
     const session = getFallbackSession();
-    pushSessionToSW(session?.baseUrl, session?.accessToken);
+    pushSessionToSW(session?.baseUrl, session?.accessToken, session?.userId);
   };
 
   navigator.serviceWorker.register(swUrl).then(sendSessionToSW);

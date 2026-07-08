@@ -486,7 +486,7 @@ const fetchRemoteStickerMediaWithBrowser = async (
 
   try {
     const response = await fetch(url, {
-      cache: 'no-store',
+      cache: 'force-cache',
       signal: abortController.signal,
     });
 

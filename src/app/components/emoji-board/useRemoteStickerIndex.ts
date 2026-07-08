@@ -62,6 +62,13 @@ export type RemoteStickerIndexState = {
 
 let cachedRemoteStickers: PackImageReader[] | undefined;
 let pendingRemoteStickers: Promise<PackImageReader[]> | undefined;
+const REMOTE_STICKER_INDEX_CACHE_KEY = 'cinny.remoteStickerIndex.v1';
+const REMOTE_STICKER_INDEX_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
+
+type RemoteStickerIndexCache = {
+  cachedAt: number;
+  index: RemoteStickerIndex;
+};
 
 const getFreshIndexUrl = (): string => {
   try {
@@ -74,7 +81,7 @@ const getFreshIndexUrl = (): string => {
 };
 
 const fetchRemoteStickerIndexWithBrowser = async (url: string): Promise<RemoteStickerIndex> => {
-  const response = await fetch(url, { cache: 'no-store' });
+  const response = await fetch(url, { cache: 'default' });
   if (!response.ok) {
     throw new Error(`Failed to load remote sticker index: ${response.status}`);
   }
@@ -87,10 +94,11 @@ const fetchRemoteStickerIndexWithDesktop = async (url: string): Promise<RemoteSt
 };
 
 const fetchRemoteStickerIndex = async (): Promise<RemoteStickerIndex> => {
-  const url = getFreshIndexUrl();
+  const desktopSupported = isDesktopUpdaterSupported();
+  const url = desktopSupported ? getFreshIndexUrl() : REMOTE_STICKER_INDEX_URL;
   let desktopError: unknown;
 
-  if (isDesktopUpdaterSupported()) {
+  if (desktopSupported) {
     try {
       return await fetchRemoteStickerIndexWithDesktop(url);
     } catch (error) {
@@ -107,6 +115,70 @@ const fetchRemoteStickerIndex = async (): Promise<RemoteStickerIndex> => {
       throw desktopError;
     }
     throw browserError;
+  }
+};
+
+const getCachedRemoteStickerIndex = (): RemoteStickerIndex | undefined => {
+  if (
+    isDesktopUpdaterSupported() ||
+    typeof window === 'undefined' ||
+    typeof window.localStorage === 'undefined'
+  ) {
+    return undefined;
+  }
+
+  try {
+    const rawCache = window.localStorage.getItem(REMOTE_STICKER_INDEX_CACHE_KEY);
+    if (!rawCache) return undefined;
+
+    const cache = JSON.parse(rawCache) as RemoteStickerIndexCache;
+    if (
+      !cache?.index ||
+      typeof cache.cachedAt !== 'number' ||
+      Date.now() - cache.cachedAt > REMOTE_STICKER_INDEX_CACHE_TTL_MS
+    ) {
+      return undefined;
+    }
+
+    return cache.index;
+  } catch {
+    return undefined;
+  }
+};
+
+const setCachedRemoteStickerIndex = (index: RemoteStickerIndex): void => {
+  if (
+    isDesktopUpdaterSupported() ||
+    typeof window === 'undefined' ||
+    typeof window.localStorage === 'undefined'
+  ) {
+    return;
+  }
+
+  try {
+    const cache: RemoteStickerIndexCache = {
+      cachedAt: Date.now(),
+      index,
+    };
+    window.localStorage.setItem(REMOTE_STICKER_INDEX_CACHE_KEY, JSON.stringify(cache));
+  } catch {
+    // Storage quota errors should not block stickers.
+  }
+};
+
+const clearCachedRemoteStickerIndex = (): void => {
+  if (
+    isDesktopUpdaterSupported() ||
+    typeof window === 'undefined' ||
+    typeof window.localStorage === 'undefined'
+  ) {
+    return;
+  }
+
+  try {
+    window.localStorage.removeItem(REMOTE_STICKER_INDEX_CACHE_KEY);
+  } catch {
+    // Ignore storage failures; in-memory cache has already been cleared.
   }
 };
 
@@ -190,6 +262,19 @@ const toRemoteSticker = (
   return PackImageReader.fromPackImage(shortcode, image);
 };
 
+const parseRemoteStickerIndex = (index: RemoteStickerIndex): PackImageReader[] => {
+  const items = Array.isArray(index.items) ? index.items : [];
+  const packsById = new Map(
+    (Array.isArray(index.packs) ? index.packs : [])
+      .filter((pack): pack is RemoteStickerIndexPack & { id: string } => !!pack.id)
+      .map((pack) => [pack.id, pack])
+  );
+
+  return items
+    .map((item) => toRemoteSticker(item, packsById))
+    .filter((item): item is PackImageReader => item !== undefined);
+};
+
 const loadRemoteStickers = async (): Promise<PackImageReader[]> => {
   if (cachedRemoteStickers) {
     return cachedRemoteStickers;
@@ -198,17 +283,16 @@ const loadRemoteStickers = async (): Promise<PackImageReader[]> => {
     return pendingRemoteStickers;
   }
 
+  const cachedIndex = getCachedRemoteStickerIndex();
+  if (cachedIndex) {
+    cachedRemoteStickers = parseRemoteStickerIndex(cachedIndex);
+    return cachedRemoteStickers;
+  }
+
   pendingRemoteStickers = fetchRemoteStickerIndex()
     .then((index) => {
-      const items = Array.isArray(index.items) ? index.items : [];
-      const packsById = new Map(
-        (Array.isArray(index.packs) ? index.packs : [])
-          .filter((pack): pack is RemoteStickerIndexPack & { id: string } => !!pack.id)
-          .map((pack) => [pack.id, pack])
-      );
-      cachedRemoteStickers = items
-        .map((item) => toRemoteSticker(item, packsById))
-        .filter((item): item is PackImageReader => item !== undefined);
+      setCachedRemoteStickerIndex(index);
+      cachedRemoteStickers = parseRemoteStickerIndex(index);
       return cachedRemoteStickers;
     })
     .finally(() => {
@@ -221,6 +305,7 @@ const loadRemoteStickers = async (): Promise<PackImageReader[]> => {
 const clearRemoteStickerCache = (): void => {
   cachedRemoteStickers = undefined;
   pendingRemoteStickers = undefined;
+  clearCachedRemoteStickerIndex();
 };
 
 export const getRemoteStickerPackId = (image: PackImageReader): string | undefined => {

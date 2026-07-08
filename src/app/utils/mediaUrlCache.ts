@@ -4,8 +4,6 @@ import { getFallbackSession } from '../state/sessions';
 
 const LEGACY_PERSISTENT_MEDIA_CACHE = 'cinny-auth-media-v2';
 const PERSISTENT_MEDIA_CACHE_PREFIX = 'cinny-auth-media-v3';
-const PERSISTENT_MEDIA_PRELOAD_CONCURRENCY = 2;
-const OBJECT_URL_MEDIA_PRELOAD_CONCURRENCY = 2;
 const FAILED_MEDIA_RETRY_DELAY_MS = 30 * 1000;
 const FAILED_MEDIA_NOT_FOUND_RETRY_DELAY_MS = 5 * 60 * 1000;
 
@@ -68,11 +66,41 @@ const getPersistentMediaLimits = () => {
   };
 };
 
+const getMediaPreloadConcurrency = () => {
+  const deviceMemory =
+    typeof navigator === 'undefined'
+      ? undefined
+      : (navigator as DeviceMemoryNavigator).deviceMemory;
+
+  if (typeof deviceMemory === 'number' && deviceMemory <= 4) {
+    return {
+      persistent: 2,
+      objectUrl: 3,
+    };
+  }
+
+  if (typeof deviceMemory === 'number' && deviceMemory >= 8) {
+    return {
+      persistent: 4,
+      objectUrl: 6,
+    };
+  }
+
+  return {
+    persistent: 3,
+    objectUrl: 4,
+  };
+};
+
 const {
   maxItems: MAX_OBJECT_URL_MEDIA_ITEMS,
   maxBytes: MAX_OBJECT_URL_MEDIA_BYTES,
 } = getObjectUrlMediaLimits();
 const { maxEntries: MAX_PERSISTENT_MEDIA_ENTRIES } = getPersistentMediaLimits();
+const {
+  persistent: PERSISTENT_MEDIA_PRELOAD_CONCURRENCY,
+  objectUrl: OBJECT_URL_MEDIA_PRELOAD_CONCURRENCY,
+} = getMediaPreloadConcurrency();
 
 type PersistentMediaTask = {
   src: string;
