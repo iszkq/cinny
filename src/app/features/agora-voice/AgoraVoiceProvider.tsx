@@ -901,13 +901,15 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
       if (!appId) throw new Error('声网 App ID 未配置。');
 
       const { uid, peerUid } = getCallAgoraUids(voiceCall, myUserId);
-      const token = appCertificate
-        ? await withTimeout(
-            buildAgoraRtcToken(appId, appCertificate, voiceCall.channel, uid),
-            AGORA_TOKEN_TIMEOUT_MS,
-            () => new AgoraStepError('token_timeout', 'Agora token generation timed out.')
-          )
-        : null;
+      const generateToken = appCertificate
+        ? () =>
+            withTimeout(
+              buildAgoraRtcToken(appId, appCertificate, voiceCall.channel, uid),
+              AGORA_TOKEN_TIMEOUT_MS,
+              () => new AgoraStepError('token_timeout', 'Agora token generation timed out.')
+            )
+        : undefined;
+      const token = generateToken ? await generateToken() : null;
       const AgoraRTC = await withTimeout(
         loadAgoraRTC(),
         AGORA_SDK_LOAD_TIMEOUT_MS,
@@ -921,12 +923,33 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
       let remoteAudioReady = false;
       let remoteAudioSubscribing = false;
       let remoteAudioScanTimer: number | undefined;
+      let tokenRenewal: Promise<void> | undefined;
 
       const stopRemoteAudioScan = () => {
         if (remoteAudioScanTimer !== undefined) {
           window.clearInterval(remoteAudioScanTimer);
           remoteAudioScanTimer = undefined;
         }
+      };
+
+      const renewToken = (reason: string): Promise<void> | undefined => {
+        if (!generateToken || !client.renewToken || callRef.current?.callId !== voiceCall.callId) {
+          return undefined;
+        }
+
+        if (!tokenRenewal) {
+          tokenRenewal = generateToken()
+            .then((nextToken) => client.renewToken?.(nextToken))
+            .then(() => undefined)
+            .catch((error) => {
+              logAgoraVoiceError(`renew_token_${reason}_failed`, error, voiceCall);
+            })
+            .finally(() => {
+              tokenRenewal = undefined;
+            });
+        }
+
+        return tokenRenewal;
       };
 
       const subscribeRemoteAudio = async (user: AgoraRemoteUser): Promise<boolean> => {
@@ -982,6 +1005,12 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
           if (currentCall?.callId === voiceCall.callId) {
             finishCall(undefined, currentCall.phase === 'active');
           }
+        });
+        client.on('token-privilege-will-expire', () => {
+          renewToken('will_expire');
+        });
+        client.on('token-privilege-did-expire', () => {
+          renewToken('did_expire');
         });
 
         await withTimeout(

@@ -26,7 +26,7 @@ import {
   isNotificationEvent,
   roomHaveNotification,
 } from '../../utils/room';
-import { ROOM_MARKED_AS_READ } from '../../utils/notifications';
+import { ROOM_MARKED_AS_READ, flushPendingRoomReadMarkers } from '../../utils/notifications';
 import { roomToParentsAtom } from './roomToParents';
 import { useStateEventCallback } from '../../hooks/useStateEventCallback';
 import { useSyncState } from '../../hooks/useSyncState';
@@ -215,7 +215,10 @@ export const useBindRoomToUnreadAtom = (mx: MatrixClient, unreadAtom: typeof roo
 
   useEffect(() => {
     resetUnreadState();
-  }, [resetUnreadState]);
+    flushPendingRoomReadMarkers(mx)
+      .then(resetUnreadState)
+      .catch(() => undefined);
+  }, [mx, resetUnreadState]);
 
   useSyncState(
     mx,
@@ -228,9 +231,12 @@ export const useBindRoomToUnreadAtom = (mx: MatrixClient, unreadAtom: typeof roo
           state !== prevState
         ) {
           resetUnreadState();
+          flushPendingRoomReadMarkers(mx)
+            .then(resetUnreadState)
+            .catch(() => undefined);
         }
       },
-      [resetUnreadState]
+      [mx, resetUnreadState]
     )
   );
 

@@ -36,6 +36,7 @@ export type AgoraClient = {
   ) => Promise<number | string>;
   publish: (tracks: AgoraLocalAudioTrack[]) => Promise<void>;
   subscribe: (user: AgoraRemoteUser, mediaType: 'audio') => Promise<void>;
+  renewToken?: (token: string) => Promise<void>;
   leave: () => Promise<void>;
   on: (event: string, listener: (...args: any[]) => void) => void;
   removeAllListeners?: () => void;
