@@ -7,8 +7,9 @@ import {
   Room,
   RoomEvent,
   RoomStateEvent,
+  SyncState,
 } from 'matrix-js-sdk';
-import { useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
 import { Membership, RoomToParents, StateEvent } from '../../../types/matrix/room';
 import {
   getRoomToParents,
@@ -17,6 +18,7 @@ import {
   isValidChild,
   mapParentWithChildren,
 } from '../../utils/room';
+import { useSyncState } from '../../hooks/useSyncState';
 
 export type RoomToParentsAction =
   | {
@@ -72,9 +74,29 @@ export const useBindRoomToParentsAtom = (
   roomToParents: typeof roomToParentsAtom
 ) => {
   const setRoomToParents = useSetAtom(roomToParents);
+  const initializeRoomToParents = useCallback(() => {
+    setRoomToParents({ type: 'INITIALIZE', roomToParents: getRoomToParents(mx) });
+  }, [mx, setRoomToParents]);
+
+  useSyncState(
+    mx,
+    useCallback(
+      (state, prevState) => {
+        if (
+          state !== prevState &&
+          (state === SyncState.Prepared ||
+            state === SyncState.Syncing ||
+            state === SyncState.Catchup)
+        ) {
+          initializeRoomToParents();
+        }
+      },
+      [initializeRoomToParents]
+    )
+  );
 
   useEffect(() => {
-    setRoomToParents({ type: 'INITIALIZE', roomToParents: getRoomToParents(mx) });
+    initializeRoomToParents();
 
     const handleAddRoom = (room: Room) => {
       if (isSpace(room) && room.getMyMembership() !== Membership.Invite) {
@@ -120,5 +142,5 @@ export const useBindRoomToParentsAtom = (
       mx.removeListener(RoomStateEvent.Events, handleStateChange);
       mx.removeListener(ClientEvent.DeleteRoom, handleDeleteRoom);
     };
-  }, [mx, setRoomToParents]);
+  }, [mx, setRoomToParents, initializeRoomToParents]);
 };

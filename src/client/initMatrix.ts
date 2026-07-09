@@ -23,8 +23,7 @@ let webMatrixLoggerFilterInstalled = false;
 const isIgnorableWebMatrixWarning = (messages: unknown[]): boolean => {
   const text = messages.map((message) => (typeof message === 'string' ? message : '')).join(' ');
   return (
-    text.includes('Error decrypting event') &&
-    text.includes(MALFORMED_ENCRYPTED_EVENT_WARNING)
+    text.includes('Error decrypting event') && text.includes(MALFORMED_ENCRYPTED_EVENT_WARNING)
   );
 };
 
@@ -71,7 +70,7 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
   return mx;
 };
 
-const WEB_INITIAL_SYNC_LIMIT = 0;
+const WEB_INITIAL_SYNC_LIMIT = 2;
 
 export const startClient = async (mx: MatrixClient) => {
   await mx.startClient({

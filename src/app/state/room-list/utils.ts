@@ -1,7 +1,8 @@
 import { useSetAtom, WritableAtom } from 'jotai';
-import { ClientEvent, MatrixClient, Room, RoomEvent } from 'matrix-js-sdk';
-import { useEffect } from 'react';
+import { ClientEvent, MatrixClient, Room, RoomEvent, SyncState } from 'matrix-js-sdk';
+import { useCallback, useEffect } from 'react';
 import { Membership } from '../../../types/matrix/room';
+import { useSyncState } from '../../hooks/useSyncState';
 
 export type RoomsAction =
   | {
@@ -19,10 +20,10 @@ export const useBindRoomsWithMembershipsAtom = (
   memberships: Membership[]
 ) => {
   const setRoomsAtom = useSetAtom(roomsAtom);
-
-  useEffect(() => {
+  const initializeRooms = useCallback(() => {
     const satisfyMembership = (room: Room): boolean =>
       !!memberships.find((membership) => membership === room.getMyMembership());
+
     setRoomsAtom({
       type: 'INITIALIZE',
       rooms: mx
@@ -30,6 +31,29 @@ export const useBindRoomsWithMembershipsAtom = (
         .filter(satisfyMembership)
         .map((room) => room.roomId),
     });
+  }, [mx, memberships, setRoomsAtom]);
+
+  useSyncState(
+    mx,
+    useCallback(
+      (state, prevState) => {
+        if (
+          state !== prevState &&
+          (state === SyncState.Prepared ||
+            state === SyncState.Syncing ||
+            state === SyncState.Catchup)
+        ) {
+          initializeRooms();
+        }
+      },
+      [initializeRooms]
+    )
+  );
+
+  useEffect(() => {
+    const satisfyMembership = (room: Room): boolean =>
+      !!memberships.find((membership) => membership === room.getMyMembership());
+    initializeRooms();
 
     const handleAddRoom = (room: Room) => {
       if (satisfyMembership(room)) {
@@ -57,7 +81,7 @@ export const useBindRoomsWithMembershipsAtom = (
       mx.removeListener(RoomEvent.MyMembership, handleMembershipChange);
       mx.removeListener(ClientEvent.DeleteRoom, handleDeleteRoom);
     };
-  }, [mx, memberships, setRoomsAtom]);
+  }, [mx, memberships, setRoomsAtom, initializeRooms]);
 };
 
 export const compareRoomsEqual = (a: string[], b: string[]) => {
