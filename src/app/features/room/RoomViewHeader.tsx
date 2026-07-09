@@ -72,6 +72,7 @@ import { StartJitsiMeetButton, StartJitsiMeetPrompt } from '../../components/jit
 import { createJitsiMeetInfo, makeJitsiMeetMessageContent } from '../../utils/jitsiMeet';
 import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
 import { useAgoraVoice } from '../agora-voice';
+import { getAllVersionsRoomCreator } from '../../utils/room';
 
 type RoomMenuProps = {
   room: Room;
@@ -79,202 +80,204 @@ type RoomMenuProps = {
   onStartVoiceTest?: () => void;
   requestClose: () => void;
 };
-const RoomMenu = forwardRef<HTMLDivElement, RoomMenuProps>(({ room, canStartVoiceTest, onStartVoiceTest, requestClose }, ref) => {
-  const mx = useMatrixClient();
-  const [sendReadReceipts] = useSetting(settingsAtom, 'sendReadReceipts');
-  const unread = useRoomUnread(room.roomId, roomToUnreadAtom);
-  const powerLevels = usePowerLevelsContext();
-  const creators = useRoomCreators(room);
+const RoomMenu = forwardRef<HTMLDivElement, RoomMenuProps>(
+  ({ room, canStartVoiceTest, onStartVoiceTest, requestClose }, ref) => {
+    const mx = useMatrixClient();
+    const [sendReadReceipts] = useSetting(settingsAtom, 'sendReadReceipts');
+    const unread = useRoomUnread(room.roomId, roomToUnreadAtom);
+    const powerLevels = usePowerLevelsContext();
+    const creators = useRoomCreators(room);
 
-  const permissions = useRoomPermissions(creators, powerLevels);
-  const canInvite = permissions.action('invite', mx.getSafeUserId());
-  const notificationPreferences = useRoomsNotificationPreferencesContext();
-  const notificationMode = getRoomNotificationMode(notificationPreferences, room.roomId);
-  const { navigateRoom } = useRoomNavigate();
+    const permissions = useRoomPermissions(creators, powerLevels);
+    const canInvite = permissions.action('invite', mx.getSafeUserId());
+    const notificationPreferences = useRoomsNotificationPreferencesContext();
+    const notificationMode = getRoomNotificationMode(notificationPreferences, room.roomId);
+    const { navigateRoom } = useRoomNavigate();
 
-  const [invitePrompt, setInvitePrompt] = useState(false);
+    const [invitePrompt, setInvitePrompt] = useState(false);
 
-  const handleMarkAsRead = () => {
-    markAsRead(mx, room.roomId, !sendReadReceipts);
-    requestClose();
-  };
+    const handleMarkAsRead = () => {
+      markAsRead(mx, room.roomId, !sendReadReceipts);
+      requestClose();
+    };
 
-  const handleInvite = () => {
-    setInvitePrompt(true);
-  };
+    const handleInvite = () => {
+      setInvitePrompt(true);
+    };
 
-  const handleCopyLink = () => {
-    const roomIdOrAlias = getCanonicalAliasOrRoomId(mx, room.roomId);
-    const viaServers = isRoomAlias(roomIdOrAlias) ? undefined : getViaServers(room);
-    copyToClipboard(getMatrixToRoom(roomIdOrAlias, viaServers));
-    requestClose();
-  };
+    const handleCopyLink = () => {
+      const roomIdOrAlias = getCanonicalAliasOrRoomId(mx, room.roomId);
+      const viaServers = isRoomAlias(roomIdOrAlias) ? undefined : getViaServers(room);
+      copyToClipboard(getMatrixToRoom(roomIdOrAlias, viaServers));
+      requestClose();
+    };
 
-  const openSettings = useOpenRoomSettings();
-  const parentSpace = useSpaceOptionally();
-  const handleOpenSettings = () => {
-    openSettings(room.roomId, parentSpace?.roomId);
-    requestClose();
-  };
+    const openSettings = useOpenRoomSettings();
+    const parentSpace = useSpaceOptionally();
+    const handleOpenSettings = () => {
+      openSettings(room.roomId, parentSpace?.roomId);
+      requestClose();
+    };
 
-  const handleStartVoiceTest = () => {
-    onStartVoiceTest?.();
-    requestClose();
-  };
+    const handleStartVoiceTest = () => {
+      onStartVoiceTest?.();
+      requestClose();
+    };
 
-  return (
-    <Menu ref={ref} style={{ maxWidth: toRem(160), width: '100vw' }}>
-      {invitePrompt && (
-        <InviteUserPrompt
-          room={room}
-          requestClose={() => {
-            setInvitePrompt(false);
-            requestClose();
-          }}
-        />
-      )}
-      <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
-        <MenuItem
-          onClick={handleMarkAsRead}
-          size="300"
-          after={<Icon size="100" src={Icons.CheckTwice} />}
-          radii="300"
-          disabled={!unread}
-        >
-          <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-            {'\u6807\u8bb0\u4e3a\u5df2\u8bfb'}
-          </Text>
-        </MenuItem>
-        <RoomNotificationModeSwitcher roomId={room.roomId} value={notificationMode}>
-          {(handleOpen, opened, changing) => (
-            <MenuItem
-              size="300"
-              after={
-                changing ? (
-                  <Spinner size="100" variant="Secondary" />
-                ) : (
-                  <Icon size="100" src={getRoomNotificationModeIcon(notificationMode)} />
-                )
-              }
-              radii="300"
-              aria-pressed={opened}
-              onClick={handleOpen}
-            >
-              <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-                {'\u901a\u77e5\u63d0\u9192'}
-              </Text>
-            </MenuItem>
-          )}
-        </RoomNotificationModeSwitcher>
-      </Box>
-      <Line variant="Surface" size="300" />
-      <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
-        <MenuItem
-          onClick={handleInvite}
-          variant="Primary"
-          fill="None"
-          size="300"
-          after={<Icon size="100" src={Icons.UserPlus} />}
-          radii="300"
-          aria-pressed={invitePrompt}
-          disabled={!canInvite}
-        >
-          <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-            {'\u9080\u8bf7'}
-          </Text>
-        </MenuItem>
-        <MenuItem
-          onClick={handleCopyLink}
-          size="300"
-          after={<Icon size="100" src={Icons.Link} />}
-          radii="300"
-        >
-          <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-            {'\u590d\u5236\u94fe\u63a5'}
-          </Text>
-        </MenuItem>
-        {canStartVoiceTest && (
+    return (
+      <Menu ref={ref} style={{ maxWidth: toRem(160), width: '100vw' }}>
+        {invitePrompt && (
+          <InviteUserPrompt
+            room={room}
+            requestClose={() => {
+              setInvitePrompt(false);
+              requestClose();
+            }}
+          />
+        )}
+        <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
           <MenuItem
-            onClick={handleStartVoiceTest}
+            onClick={handleMarkAsRead}
             size="300"
-            after={<Icon size="100" src={Icons.Phone} />}
+            after={<Icon size="100" src={Icons.CheckTwice} />}
+            radii="300"
+            disabled={!unread}
+          >
+            <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
+              {'\u6807\u8bb0\u4e3a\u5df2\u8bfb'}
+            </Text>
+          </MenuItem>
+          <RoomNotificationModeSwitcher roomId={room.roomId} value={notificationMode}>
+            {(handleOpen, opened, changing) => (
+              <MenuItem
+                size="300"
+                after={
+                  changing ? (
+                    <Spinner size="100" variant="Secondary" />
+                  ) : (
+                    <Icon size="100" src={getRoomNotificationModeIcon(notificationMode)} />
+                  )
+                }
+                radii="300"
+                aria-pressed={opened}
+                onClick={handleOpen}
+              >
+                <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
+                  {'\u901a\u77e5\u63d0\u9192'}
+                </Text>
+              </MenuItem>
+            )}
+          </RoomNotificationModeSwitcher>
+        </Box>
+        <Line variant="Surface" size="300" />
+        <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
+          <MenuItem
+            onClick={handleInvite}
+            variant="Primary"
+            fill="None"
+            size="300"
+            after={<Icon size="100" src={Icons.UserPlus} />}
+            radii="300"
+            aria-pressed={invitePrompt}
+            disabled={!canInvite}
+          >
+            <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
+              {'\u9080\u8bf7'}
+            </Text>
+          </MenuItem>
+          <MenuItem
+            onClick={handleCopyLink}
+            size="300"
+            after={<Icon size="100" src={Icons.Link} />}
             radii="300"
           >
             <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-              语音自测
+              {'\u590d\u5236\u94fe\u63a5'}
             </Text>
           </MenuItem>
-        )}
-        <MenuItem
-          onClick={handleOpenSettings}
-          size="300"
-          after={<Icon size="100" src={Icons.Setting} />}
-          radii="300"
-        >
-          <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-            {'\u623f\u95f4\u8bbe\u7f6e'}
-          </Text>
-        </MenuItem>
-        <UseStateProvider initial={false}>
-          {(promptJump, setPromptJump) => (
-            <>
-              <MenuItem
-                onClick={() => setPromptJump(true)}
-                size="300"
-                after={<Icon size="100" src={Icons.RecentClock} />}
-                radii="300"
-                aria-pressed={promptJump}
-              >
-                <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-                  {'\u8df3\u8f6c\u5230\u6307\u5b9a\u65f6\u95f4'}
-                </Text>
-              </MenuItem>
-              {promptJump && (
-                <JumpToTime
-                  onSubmit={(eventId) => {
-                    setPromptJump(false);
-                    navigateRoom(room.roomId, eventId);
-                    requestClose();
-                  }}
-                  onCancel={() => setPromptJump(false)}
-                />
-              )}
-            </>
+          {canStartVoiceTest && (
+            <MenuItem
+              onClick={handleStartVoiceTest}
+              size="300"
+              after={<Icon size="100" src={Icons.Phone} />}
+              radii="300"
+            >
+              <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
+                语音自测
+              </Text>
+            </MenuItem>
           )}
-        </UseStateProvider>
-      </Box>
-      <Line variant="Surface" size="300" />
-      <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
-        <UseStateProvider initial={false}>
-          {(promptLeave, setPromptLeave) => (
-            <>
-              <MenuItem
-                onClick={() => setPromptLeave(true)}
-                variant="Critical"
-                fill="None"
-                size="300"
-                after={<Icon size="100" src={Icons.ArrowGoLeft} />}
-                radii="300"
-                aria-pressed={promptLeave}
-              >
-                <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-                  {'\u9000\u51fa\u623f\u95f4'}
-                </Text>
-              </MenuItem>
-              {promptLeave && (
-                <LeaveRoomPrompt
-                  roomId={room.roomId}
-                  onDone={requestClose}
-                  onCancel={() => setPromptLeave(false)}
-                />
-              )}
-            </>
-          )}
-        </UseStateProvider>
-      </Box>
-    </Menu>
-  );
-});
+          <MenuItem
+            onClick={handleOpenSettings}
+            size="300"
+            after={<Icon size="100" src={Icons.Setting} />}
+            radii="300"
+          >
+            <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
+              {'\u623f\u95f4\u8bbe\u7f6e'}
+            </Text>
+          </MenuItem>
+          <UseStateProvider initial={false}>
+            {(promptJump, setPromptJump) => (
+              <>
+                <MenuItem
+                  onClick={() => setPromptJump(true)}
+                  size="300"
+                  after={<Icon size="100" src={Icons.RecentClock} />}
+                  radii="300"
+                  aria-pressed={promptJump}
+                >
+                  <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
+                    {'\u8df3\u8f6c\u5230\u6307\u5b9a\u65f6\u95f4'}
+                  </Text>
+                </MenuItem>
+                {promptJump && (
+                  <JumpToTime
+                    onSubmit={(eventId) => {
+                      setPromptJump(false);
+                      navigateRoom(room.roomId, eventId);
+                      requestClose();
+                    }}
+                    onCancel={() => setPromptJump(false)}
+                  />
+                )}
+              </>
+            )}
+          </UseStateProvider>
+        </Box>
+        <Line variant="Surface" size="300" />
+        <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
+          <UseStateProvider initial={false}>
+            {(promptLeave, setPromptLeave) => (
+              <>
+                <MenuItem
+                  onClick={() => setPromptLeave(true)}
+                  variant="Critical"
+                  fill="None"
+                  size="300"
+                  after={<Icon size="100" src={Icons.ArrowGoLeft} />}
+                  radii="300"
+                  aria-pressed={promptLeave}
+                >
+                  <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
+                    {'\u9000\u51fa\u623f\u95f4'}
+                  </Text>
+                </MenuItem>
+                {promptLeave && (
+                  <LeaveRoomPrompt
+                    roomId={room.roomId}
+                    onDone={requestClose}
+                    onCancel={() => setPromptLeave(false)}
+                  />
+                )}
+              </>
+            )}
+          </UseStateProvider>
+        </Box>
+      </Menu>
+    );
+  }
+);
 
 export function RoomViewHeader({ callView }: { callView?: boolean }) {
   const mx = useMatrixClient();
@@ -287,6 +290,7 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
   const [meetingPrompt, setMeetingPrompt] = useState(false);
   const direct = useIsDirectRoom();
   const agoraVoice = useAgoraVoice();
+  const parentSpace = useSpaceOptionally();
 
   const pinnedEvents = useRoomPinnedEvents(room);
   const avatarMxc = useRoomAvatar(room, direct);
@@ -312,7 +316,12 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
   const permissions = useRoomPermissions(creators, powerLevels);
   const myUserId = mx.getSafeUserId();
   const canStartMeeting = permissions.event(EventType.RoomMessage, myUserId);
-  const canStartVoice = direct && canStartMeeting && agoraVoice.available;
+  const roomCreators = getAllVersionsRoomCreator(room);
+  const parentSpaceCreators = parentSpace ? getAllVersionsRoomCreator(parentSpace) : undefined;
+  const ownTestRoom =
+    !direct && (roomCreators.has(myUserId) || !!parentSpaceCreators?.has(myUserId));
+  const voiceEnabledRoom = direct || ownTestRoom;
+  const canStartVoice = voiceEnabledRoom && canStartMeeting && agoraVoice.available;
   const [meetingState, startMeeting] = useAsyncCallback<undefined, MatrixError | Error, [string]>(
     async (title) => {
       const nextMeeting = createJitsiMeetInfo(title);
@@ -329,7 +338,7 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
   };
 
   const handleStartVoice = () => {
-    void agoraVoice.startCall(room);
+    agoraVoice.startCall(room).catch(() => undefined);
   };
 
   const handleStartVoiceTest = () => {
@@ -351,7 +360,6 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
   };
 
   const openSettings = useOpenRoomSettings();
-  const parentSpace = useSpaceOptionally();
   const handleMemberToggle = () => {
     if (callView) {
       openSettings(room.roomId, parentSpace?.roomId, RoomSettingsPage.MembersPage);
@@ -359,6 +367,20 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
     }
     setPeopleDrawer(!peopleDrawer);
   };
+
+  let voiceTooltip = '\u8bed\u97f3\u901a\u8bdd\u672a\u914d\u7f6e';
+  if (canStartVoice) {
+    voiceTooltip = '\u8bed\u97f3\u901a\u8bdd';
+  } else if (agoraVoice.available) {
+    voiceTooltip = '\u65e0\u6743\u9650\u53d1\u8d77\u8bed\u97f3\u901a\u8bdd';
+  }
+
+  let meetingTooltip = '\u65e0\u6743\u9650\u53d1\u8d77\u4f1a\u8bae';
+  if (meetingError) {
+    meetingTooltip = '\u53d1\u8d77\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5';
+  } else if (canStartMeeting) {
+    meetingTooltip = '\u4f1a\u8bae';
+  }
 
   return (
     <>
@@ -448,19 +470,13 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
           </Box>
 
           <Box shrink="No">
-            {!callView && direct && (
+            {!callView && voiceEnabledRoom && (
               <TooltipProvider
                 position="Bottom"
                 offset={4}
                 tooltip={
                   <Tooltip>
-                    <Text>
-                      {canStartVoice
-                        ? '\u8bed\u97f3\u901a\u8bdd'
-                        : agoraVoice.available
-                          ? '\u65e0\u6743\u9650\u53d1\u8d77\u8bed\u97f3\u901a\u8bdd'
-                          : '\u8bed\u97f3\u901a\u8bdd\u672a\u914d\u7f6e'}
-                    </Text>
+                    <Text>{voiceTooltip}</Text>
                   </Tooltip>
                 }
               >
@@ -487,13 +503,7 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
                 offset={4}
                 tooltip={
                   <Tooltip>
-                    <Text>
-                      {meetingError
-                        ? '\u53d1\u8d77\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5'
-                        : canStartMeeting
-                          ? '\u4f1a\u8bae'
-                          : '\u65e0\u6743\u9650\u53d1\u8d77\u4f1a\u8bae'}
-                    </Text>
+                    <Text>{meetingTooltip}</Text>
                   </Tooltip>
                 }
               >
