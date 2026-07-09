@@ -67,6 +67,8 @@ import { useDirectCreateSelected } from '../../../hooks/router/useDirectSelected
 import { CompactClientNavButton } from '../CompactClientNavButton';
 import { isDesktopLikeScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
 import { desktopPageNavCollapsedAtom } from '../../../state/desktopPageNav';
+import { useClientSyncReady } from '../../../hooks/useClientSyncReady';
+import { ClientNavSyncLoading } from '../ClientSyncLoading';
 
 type DirectMenuProps = {
   requestClose: () => void;
@@ -211,6 +213,7 @@ export function Direct() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const { scrollMargin, virtualListRef } = useVirtualizerScrollMargin(scrollRef);
   const directs = useDirectRooms();
+  const clientSyncReady = useClientSyncReady(mx);
   const notificationPreferences = useRoomsNotificationPreferencesContext();
   const roomToUnread = useAtomValue(roomToUnreadAtom);
   const categorizedRoomIds = useRoomNavCategorizedRoomIds(ROOM_NAV_CATEGORY_SCOPE);
@@ -220,6 +223,7 @@ export function Direct() {
 
   const selectedRoomId = useSelectedRoom();
   const noRoomToDisplay = directs.length === 0;
+  const roomListLoading = noRoomToDisplay && !clientSyncReady;
   const [closedCategories, setClosedCategories] = useAtom(useClosedNavCategoriesAtom());
 
   const defaultDirectIds = useMemo(
@@ -260,9 +264,14 @@ export function Direct() {
   return (
     <PageNav resizable>
       <DirectHeader />
-      {noRoomToDisplay ? (
-        <DirectEmpty />
-      ) : (
+      {roomListLoading && (
+        <ClientNavSyncLoading
+          title={'\u6b63\u5728\u540c\u6b65\u79c1\u804a'}
+          content={'\u79c1\u804a\u5217\u8868\u9a6c\u4e0a\u51fa\u73b0\u3002'}
+        />
+      )}
+      {!roomListLoading && noRoomToDisplay && <DirectEmpty />}
+      {!roomListLoading && !noRoomToDisplay && (
         <PageNavContent scrollRef={scrollRef}>
           <Box direction="Column" gap="300">
             <NavCategory>

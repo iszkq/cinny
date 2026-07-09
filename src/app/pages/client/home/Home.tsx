@@ -76,6 +76,8 @@ import { _RoomSearchParams } from '../../paths';
 import { CompactClientNavButton } from '../CompactClientNavButton';
 import { isDesktopLikeScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
 import { desktopPageNavCollapsedAtom } from '../../../state/desktopPageNav';
+import { useClientSyncReady } from '../../../hooks/useClientSyncReady';
+import { ClientNavSyncLoading } from '../ClientSyncLoading';
 
 type HomeMenuProps = {
   requestClose: () => void;
@@ -232,6 +234,7 @@ export function Home() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const { scrollMargin, virtualListRef } = useVirtualizerScrollMargin(scrollRef);
   const rooms = useHomeRooms();
+  const clientSyncReady = useClientSyncReady(mx);
   const notificationPreferences = useRoomsNotificationPreferencesContext();
   const roomToUnread = useAtomValue(roomToUnreadAtom);
   const categorizedRoomIds = useRoomNavCategorizedRoomIds(ROOM_NAV_CATEGORY_SCOPE);
@@ -240,6 +243,7 @@ export function Home() {
   const selectedRoomId = useSelectedRoom();
   const createRoomSelected = useHomeCreateSelected();
   const noRoomToDisplay = rooms.length === 0;
+  const roomListLoading = noRoomToDisplay && !clientSyncReady;
   const [closedCategories, setClosedCategories] = useAtom(useClosedNavCategoriesAtom());
 
   const defaultRoomIds = useMemo(
@@ -280,9 +284,14 @@ export function Home() {
   return (
     <PageNav resizable>
       <HomeHeader />
-      {noRoomToDisplay ? (
-        <HomeEmpty />
-      ) : (
+      {roomListLoading && (
+        <ClientNavSyncLoading
+          title={'\u6b63\u5728\u540c\u6b65\u623f\u95f4'}
+          content={'\u623f\u95f4\u5217\u8868\u9a6c\u4e0a\u51fa\u73b0\u3002'}
+        />
+      )}
+      {!roomListLoading && noRoomToDisplay && <HomeEmpty />}
+      {!roomListLoading && !noRoomToDisplay && (
         <PageNavContent scrollRef={scrollRef}>
           <Box direction="Column" gap="300">
             <NavCategory>
