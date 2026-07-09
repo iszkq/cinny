@@ -338,7 +338,9 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
   };
 
   const handleStartVoice = () => {
-    agoraVoice.startCall(room).catch(() => undefined);
+    agoraVoice
+      .startCall(room, { allowSelfTarget: ownTestRoom, roomCall: ownTestRoom })
+      .catch(() => undefined);
   };
 
   const handleStartVoiceTest = () => {

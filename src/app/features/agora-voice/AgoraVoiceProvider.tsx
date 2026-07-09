@@ -83,9 +83,11 @@ type AgoraVoiceSignal = {
   action: VoiceAction;
   callId: string;
   channel: string;
+  mode?: 'room';
   roomId?: string;
   target: string;
   sender: string;
+  senderSessionId?: string;
   createdAt: number;
   expiresAt?: number;
   reason?: string;
@@ -98,6 +100,7 @@ type VoiceCall = {
   roomId: string;
   peerId: string;
   channel: string;
+  mode?: 'room';
   direction: 'incoming' | 'outgoing' | 'self-test';
   phase: VoiceCallPhase;
   createdAt: number;
@@ -137,10 +140,15 @@ class AgoraStepError extends Error {
   }
 }
 
+type StartCallOptions = {
+  allowSelfTarget?: boolean;
+  roomCall?: boolean;
+};
+
 type AgoraVoiceContextValue = {
   available: boolean;
   activeRoomId?: string;
-  startCall: (room: Room) => Promise<void>;
+  startCall: (room: Room, options?: StartCallOptions) => Promise<void>;
   startSelfTest: () => Promise<void>;
 };
 
@@ -224,6 +232,25 @@ const createDistinctAgoraUid = (value: string, usedUid: number): number => {
   return uid === usedUid ? (uid % 4294967294) + 1 : uid;
 };
 
+const getCallAgoraUids = (
+  voiceCall: VoiceCall,
+  myUserId: string
+): { uid: number; peerUid: number } => {
+  if (voiceCall.peerId !== myUserId) {
+    return {
+      uid: createAgoraUid(myUserId),
+      peerUid: createAgoraUid(voiceCall.peerId),
+    };
+  }
+
+  const selfSide = voiceCall.direction === 'outgoing' ? 'caller' : 'callee';
+  const peerSide = voiceCall.direction === 'outgoing' ? 'callee' : 'caller';
+  return {
+    uid: createAgoraUid(`${myUserId}:${voiceCall.callId}:${selfSide}`),
+    peerUid: createAgoraUid(`${myUserId}:${voiceCall.callId}:${peerSide}`),
+  };
+};
+
 const getDirectPeerId = (room: Room, myUserId: string): string | undefined => {
   const joinedPeer = room.getJoinedMembers().find((member) => member.userId !== myUserId);
   if (joinedPeer) return joinedPeer.userId;
@@ -235,6 +262,18 @@ const getDirectPeerId = (room: Room, myUserId: string): string | undefined => {
         member.userId !== myUserId &&
         (member.membership === 'join' || member.membership === 'invite')
     )?.userId;
+};
+
+const getCallablePeerId = (
+  room: Room,
+  myUserId: string,
+  allowSelfTarget?: boolean
+): string | undefined =>
+  getDirectPeerId(room, myUserId) ?? (allowSelfTarget ? myUserId : undefined);
+
+const isJoinedOrInvitedMember = (room: Room, userId: string): boolean => {
+  const member = room.getMember(userId);
+  return member?.membership === 'join' || member?.membership === 'invite';
 };
 
 const formatDuration = (startedAt?: number): string => {
@@ -664,6 +703,7 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
   const ringToneRef = useRef<RingToneController>();
   const agoraSessionRef = useRef<AgoraSession>();
   const handledSignalKeysRef = useRef<Set<string>>(new Set());
+  const sessionIdRef = useRef(createCallId());
 
   useEffect(() => {
     callRef.current = call;
@@ -732,12 +772,16 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
     async (
       roomId: string,
       target: string,
-      signal: Omit<AgoraVoiceSignal, 'version' | 'roomId' | 'target' | 'sender' | 'createdAt'>
+      signal: Omit<
+        AgoraVoiceSignal,
+        'version' | 'roomId' | 'target' | 'sender' | 'senderSessionId' | 'createdAt'
+      >
     ) => {
       const content: AgoraVoiceSignal = {
         version: AGORA_VOICE_VERSION,
         target,
         sender: myUserId,
+        senderSessionId: sessionIdRef.current,
         createdAt: Date.now(),
         ...signal,
       };
@@ -842,6 +886,7 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
           action: 'hangup',
           callId: currentCall.callId,
           channel: currentCall.channel,
+          mode: currentCall.mode,
           reason: 'connect_failed',
         }).catch(() => undefined);
         finishCall('语音连接超时，请重试', false);
@@ -855,8 +900,7 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
       const { appId, appCertificate, area } = agoraVoice ?? {};
       if (!appId) throw new Error('声网 App ID 未配置。');
 
-      const uid = createAgoraUid(myUserId);
-      const peerUid = createAgoraUid(voiceCall.peerId);
+      const { uid, peerUid } = getCallAgoraUids(voiceCall, myUserId);
       const token = appCertificate
         ? await withTimeout(
             buildAgoraRtcToken(appId, appCertificate, voiceCall.channel, uid),
@@ -1014,6 +1058,7 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
       action: 'reject',
       callId: currentCall.callId,
       channel: currentCall.channel,
+      mode: currentCall.mode,
     }).catch(() => undefined);
     finishCall(undefined, false);
   }, [finishCall, sendSignal]);
@@ -1039,6 +1084,7 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
         action: 'answer',
         callId: currentCall.callId,
         channel: currentCall.channel,
+        mode: currentCall.mode,
       });
       answered = true;
     } catch (error) {
@@ -1049,6 +1095,7 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
         action: answered || joined ? 'hangup' : 'reject',
         callId: currentCall.callId,
         channel: currentCall.channel,
+        mode: currentCall.mode,
         reason: 'connect_failed',
       }).catch(() => undefined);
       finishCall(getAgoraConnectErrorMessage(error), false);
@@ -1079,6 +1126,7 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
           action,
           callId: currentCall.callId,
           channel: currentCall.channel,
+          mode: currentCall.mode,
         }).catch(() => undefined)
       )
     );
@@ -1102,10 +1150,19 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
 
       const signal = parseSignal(mEvent);
       const sender = mEvent.getSender();
-      if (!signal || !sender || sender === myUserId || signal.target !== myUserId) return;
+      if (!signal || !sender || signal.sender !== sender || signal.target !== myUserId) return;
 
-      const signalKey =
-        mEvent.getId() ?? `${room.roomId}:${signal.callId}:${signal.action}:${sender}`;
+      const selfSignal = sender === myUserId;
+      const roomCall = signal.mode === 'room';
+      if (selfSignal && (signal.senderSessionId === sessionIdRef.current || !roomCall)) return;
+
+      const signalKey = [
+        room.roomId,
+        signal.callId,
+        signal.action,
+        sender,
+        signal.senderSessionId ?? '',
+      ].join(':');
       if (handledSignalKeysRef.current.has(signalKey)) return;
       handledSignalKeysRef.current.add(signalKey);
       if (handledSignalKeysRef.current.size > 200) {
@@ -1116,14 +1173,19 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
       if (signal.action === 'invite') {
         if (typeof signal.expiresAt === 'number' && Date.now() > signal.expiresAt) return;
 
-        const peerId = getDirectPeerId(room, myUserId);
-        if (peerId !== sender) return;
+        if (roomCall) {
+          if (!isJoinedOrInvitedMember(room, sender)) return;
+        } else {
+          const peerId = getDirectPeerId(room, myUserId);
+          if (peerId !== sender) return;
+        }
 
         if (getAgoraVoiceRemainingSeconds(myUserId, monthlyFreeMinutes) <= 0) {
           void sendSignal(room.roomId, sender, {
             action: 'reject',
             callId: signal.callId,
             channel: signal.channel,
+            mode: signal.mode,
             reason: 'quota',
           }).catch(() => undefined);
           return;
@@ -1137,6 +1199,7 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
             action: 'busy',
             callId: signal.callId,
             channel: signal.channel,
+            mode: signal.mode,
           }).catch(() => undefined);
           return;
         }
@@ -1146,6 +1209,7 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
           roomId: room.roomId,
           peerId: sender,
           channel: signal.channel,
+          mode: signal.mode,
           direction: 'incoming',
           phase: 'incoming',
           createdAt: signal.createdAt,
@@ -1156,6 +1220,7 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
             action: 'reject',
             callId: signal.callId,
             channel: signal.channel,
+            mode: signal.mode,
             reason: 'timeout',
           }).catch(() => undefined);
           finishCall(undefined, false);
@@ -1166,29 +1231,42 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
       const currentCall = callRef.current;
       if (!currentCall || currentCall.callId !== signal.callId) return;
 
-      if (signal.action === 'answer' && currentCall.phase === 'outgoing') {
-        clearCallTimeout();
-        const connectingCall: VoiceCall = {
-          ...currentCall,
-          phase: 'connecting',
-        };
-        updateCall(connectingCall);
-        void joinAgora(connectingCall).catch(async (error) => {
-          if (isCallEndedError(error)) return;
+      if (signal.action === 'answer') {
+        if (currentCall.phase === 'outgoing') {
+          clearCallTimeout();
+          const connectingCall: VoiceCall = {
+            ...currentCall,
+            phase: 'connecting',
+          };
+          updateCall(connectingCall);
+          void joinAgora(connectingCall).catch(async (error) => {
+            if (isCallEndedError(error)) return;
 
-          logAgoraVoiceError('outgoing_join_failed', error, connectingCall);
-          await sendSignal(currentCall.roomId, currentCall.peerId, {
-            action: 'hangup',
-            callId: currentCall.callId,
-            channel: currentCall.channel,
-            reason: 'connect_failed',
-          }).catch(() => undefined);
-          finishCall(getAgoraConnectErrorMessage(error), false);
-        });
+            logAgoraVoiceError('outgoing_join_failed', error, connectingCall);
+            await sendSignal(currentCall.roomId, currentCall.peerId, {
+              action: 'hangup',
+              callId: currentCall.callId,
+              channel: currentCall.channel,
+              mode: currentCall.mode,
+              reason: 'connect_failed',
+            }).catch(() => undefined);
+            finishCall(getAgoraConnectErrorMessage(error), false);
+          });
+          return;
+        }
+
+        if (roomCall && selfSignal && currentCall.phase === 'incoming') {
+          finishCall(undefined, false);
+        }
         return;
       }
 
       if (signal.action === 'reject' || signal.action === 'busy') {
+        if (roomCall && selfSignal && currentCall.phase === 'incoming') {
+          finishCall(undefined, false);
+          return;
+        }
+
         const message =
           signal.reason === 'timeout'
             ? '对方未接听'
@@ -1517,7 +1595,7 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
   }, [agoraVoice, available, finishCall, markCallActive, myUserId, showNotice, updateCall]);
 
   const startCall = useCallback(
-    async (room: Room) => {
+    async (room: Room, options?: StartCallOptions) => {
       if (!available || !agoraVoice?.appId) {
         showNotice('语音通话未配置');
         return;
@@ -1533,7 +1611,7 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
         return;
       }
 
-      const peerId = getDirectPeerId(room, myUserId);
+      const peerId = getCallablePeerId(room, myUserId, options?.allowSelfTarget);
       if (!peerId) {
         showNotice('未找到可呼叫的私聊对象');
         return;
@@ -1541,11 +1619,13 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
 
       const callId = createCallId();
       const channel = createChannelName(room.roomId, callId);
+      const mode = options?.roomCall ? 'room' : undefined;
       const outgoingCall: VoiceCall = {
         callId,
         roomId: room.roomId,
         peerId,
         channel,
+        mode,
         direction: 'outgoing',
         phase: 'outgoing',
         createdAt: Date.now(),
@@ -1557,6 +1637,7 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
           action: 'invite',
           callId,
           channel,
+          mode,
           expiresAt: Date.now() + timeoutMs,
         });
         armCallTimeout(outgoingCall, () => {
@@ -1564,6 +1645,7 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
             action: 'cancel',
             callId,
             channel,
+            mode,
             reason: 'timeout',
           }).catch(() => undefined);
           finishCall('对方未接听', false);
