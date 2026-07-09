@@ -41,15 +41,25 @@ const dispatchRoomMarkedAsRead = (roomId: string) => {
   );
 };
 
-const getLatestRoomEventId = (mx: MatrixClient, roomId: string): string | undefined => {
+type LatestRoomEvent = {
+  eventId: string;
+  ts?: number;
+};
+
+const getLatestRoomEvent = (mx: MatrixClient, roomId: string): LatestRoomEvent | undefined => {
   const room = mx.getRoom(roomId);
   if (!room) return undefined;
 
   const events = room.getLiveTimeline().getEvents();
   for (let index = events.length - 1; index >= 0; index -= 1) {
-    const eventId = events[index]?.getId();
+    const event = events[index];
+    const eventId = event?.getId();
     if (eventId) {
-      return eventId;
+      const ts = event?.getTs();
+      return {
+        eventId,
+        ts: typeof ts === 'number' ? ts : undefined,
+      };
     }
   }
 
@@ -116,10 +126,11 @@ export const markAsRead = async (
   roomId: string,
   privateReceipt = false
 ): Promise<void> => {
-  const eventId = getLatestRoomEventId(mx, roomId);
-  if (!eventId) return;
+  const latestEvent = getLatestRoomEvent(mx, roomId);
+  if (!latestEvent) return;
+  const { eventId, ts } = latestEvent;
 
-  setOptimisticRoomReadMarker(roomId, eventId, mx.getUserId());
+  setOptimisticRoomReadMarker(roomId, eventId, mx.getUserId(), ts);
   dispatchRoomMarkedAsRead(roomId);
 
   try {
@@ -145,7 +156,7 @@ export const sendAppNotification = async ({
   if (isDesktopUpdaterSupported()) {
     const permission = await getDesktopNotificationState();
     if (permission !== 'granted') {
-      return;
+      return undefined;
     }
 
     const payload: DesktopNotificationPayload = { title };
@@ -157,11 +168,14 @@ export const sendAppNotification = async ({
     } catch {
       // Ignore notification delivery failures to avoid breaking message flow.
     }
-    return;
+    return undefined;
   }
 
-  if (!canUseWebNotifications() || normalizePermission(window.Notification.permission) !== 'granted') {
-    return;
+  if (
+    !canUseWebNotifications() ||
+    normalizePermission(window.Notification.permission) !== 'granted'
+  ) {
+    return undefined;
   }
 
   const notification = new window.Notification(title, {

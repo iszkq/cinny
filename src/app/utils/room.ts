@@ -18,6 +18,7 @@ import {
   RoomMember,
 } from 'matrix-js-sdk';
 import { CryptoBackend } from 'matrix-js-sdk/lib/common-crypto/CryptoBackend';
+import { ReceiptType } from 'matrix-js-sdk/lib/@types/read_receipts';
 import { AccountDataEvent } from '../../types/matrix/accountData';
 import {
   IRoomCreateContent,
@@ -41,10 +42,17 @@ type FullyReadContent = {
 
 const FULLY_READ_EVENT_TYPE = 'm.fully_read';
 const OPTIMISTIC_ROOM_READ_MARKERS_STORAGE_KEY = 'cinny:optimistic-room-read-markers';
-const optimisticRoomReadMarkers = new Map<string, string>();
+
+type RoomReadMarker = {
+  eventId: string;
+  ts?: number;
+};
+
+const optimisticRoomReadMarkers = new Map<string, RoomReadMarker>();
 
 type RoomReadMarkerState = {
   eventId?: string;
+  ts?: number;
   optimistic: boolean;
 };
 
@@ -58,7 +66,41 @@ export type RoomUnreadStatus = {
   unreadInfo: UnreadInfo;
 };
 
-type OptimisticRoomReadMarkersByUser = Record<string, Record<string, string>>;
+type PersistedOptimisticRoomReadMarker =
+  | string
+  | {
+      eventId?: unknown;
+      ts?: unknown;
+    };
+
+type OptimisticRoomReadMarkersByUser = Record<
+  string,
+  Record<string, PersistedOptimisticRoomReadMarker>
+>;
+
+type WrappedReadReceipt = {
+  eventId?: string;
+  data?: {
+    ts?: number;
+  };
+};
+
+const normalizeOptimisticRoomReadMarker = (
+  marker: PersistedOptimisticRoomReadMarker | undefined
+): RoomReadMarker | undefined => {
+  if (typeof marker === 'string') {
+    return { eventId: marker };
+  }
+
+  if (!marker || typeof marker !== 'object' || typeof marker.eventId !== 'string') {
+    return undefined;
+  }
+
+  return {
+    eventId: marker.eventId,
+    ts: typeof marker.ts === 'number' ? marker.ts : undefined,
+  };
+};
 
 const readOptimisticRoomReadMarkers = (): OptimisticRoomReadMarkersByUser => {
   if (typeof window === 'undefined') return {};
@@ -95,16 +137,16 @@ const writeOptimisticRoomReadMarkers = (markersByUser: OptimisticRoomReadMarkers
 const getPersistedOptimisticRoomReadMarker = (
   roomId: string,
   userId?: string | null
-): string | undefined => {
+): RoomReadMarker | undefined => {
   if (!userId) return undefined;
 
   const roomReadMarker = readOptimisticRoomReadMarkers()[userId]?.[roomId];
-  return typeof roomReadMarker === 'string' ? roomReadMarker : undefined;
+  return normalizeOptimisticRoomReadMarker(roomReadMarker);
 };
 
 const setPersistedOptimisticRoomReadMarker = (
   roomId: string,
-  eventId: string,
+  marker: RoomReadMarker,
   userId?: string | null
 ) => {
   if (!userId) return;
@@ -112,7 +154,7 @@ const setPersistedOptimisticRoomReadMarker = (
   const markersByUser = readOptimisticRoomReadMarkers();
   markersByUser[userId] = {
     ...(markersByUser[userId] ?? {}),
-    [roomId]: eventId,
+    [roomId]: marker,
   };
   writeOptimisticRoomReadMarkers(markersByUser);
 };
@@ -149,7 +191,7 @@ export const getStateEvents = (room: Room, eventType: StateEvent): MatrixEvent[]
 export const getAccountData = (
   mx: MatrixClient,
   eventType: AccountDataEvent
-): MatrixEvent | undefined => mx.getAccountData(eventType as any);
+): MatrixEvent | undefined => mx.getAccountData(eventType as string);
 
 export const getRoomFullyReadEventId = (room: Room): string | undefined => {
   const fullyReadEvent = room.accountData.get(FULLY_READ_EVENT_TYPE);
@@ -160,10 +202,12 @@ export const getRoomFullyReadEventId = (room: Room): string | undefined => {
 export const setOptimisticRoomReadMarker = (
   roomId: string,
   eventId: string,
-  userId?: string | null
+  userId?: string | null,
+  ts?: number
 ) => {
-  optimisticRoomReadMarkers.set(roomId, eventId);
-  setPersistedOptimisticRoomReadMarker(roomId, eventId, userId);
+  const marker = { eventId, ts };
+  optimisticRoomReadMarkers.set(roomId, marker);
+  setPersistedOptimisticRoomReadMarker(roomId, marker, userId);
 };
 
 export const clearOptimisticRoomReadMarker = (
@@ -171,45 +215,145 @@ export const clearOptimisticRoomReadMarker = (
   eventId?: string,
   userId?: string | null
 ) => {
-  if (eventId && optimisticRoomReadMarkers.get(roomId) !== eventId) return;
+  if (eventId && optimisticRoomReadMarkers.get(roomId)?.eventId !== eventId) return;
   optimisticRoomReadMarkers.delete(roomId);
   clearPersistedOptimisticRoomReadMarker(roomId, userId);
 };
 
 const getLiveTimelineEventIndex = (room: Room, eventId?: string): number => {
   if (!eventId) return -1;
-  return room.getLiveTimeline().getEvents().findIndex((event) => event.getId() === eventId);
+  return room
+    .getLiveTimeline()
+    .getEvents()
+    .findIndex((event) => event.getId() === eventId);
 };
 
-const getStoredRoomReceiptEventId = (
+const getLiveTimelineEventTs = (room: Room, eventId?: string): number | undefined => {
+  if (!eventId) return undefined;
+
+  const event = room
+    .getLiveTimeline()
+    .getEvents()
+    .find((mEvent) => mEvent.getId() === eventId);
+  const eventTs = event?.getTs();
+  return typeof eventTs === 'number' ? eventTs : undefined;
+};
+
+const makeReadMarkerState = (
+  room: Room,
+  marker: RoomReadMarker | undefined,
+  optimistic: boolean
+): RoomReadMarkerState => {
+  if (!marker) {
+    return {
+      optimistic,
+    };
+  }
+
+  return {
+    eventId: marker.eventId,
+    ts: marker.ts ?? getLiveTimelineEventTs(room, marker.eventId),
+    optimistic,
+  };
+};
+
+const getReceiptMarker = (
+  room: Room,
+  userId: string,
+  receiptType: ReceiptType
+): RoomReadMarker | undefined => {
+  const receipt = room.getReadReceiptForUserId(
+    userId,
+    false,
+    receiptType
+  ) as WrappedReadReceipt | null;
+  if (typeof receipt?.eventId !== 'string') return undefined;
+
+  return {
+    eventId: receipt.eventId,
+    ts: typeof receipt.data?.ts === 'number' ? receipt.data.ts : undefined,
+  };
+};
+
+const getStoredRoomReceiptMarker = (
   room: Room,
   userId?: string | null
-): string | undefined => {
+): RoomReadMarker | undefined => {
   if (!userId) return undefined;
-  return room.getEventReadUpTo(userId) ?? undefined;
+
+  const publicReceipt = getReceiptMarker(room, userId, ReceiptType.Read);
+  const privateReceipt = getReceiptMarker(room, userId, ReceiptType.ReadPrivate);
+
+  if (!publicReceipt) return privateReceipt;
+  if (!privateReceipt) return publicReceipt;
+
+  const publicIndex = getLiveTimelineEventIndex(room, publicReceipt.eventId);
+  const privateIndex = getLiveTimelineEventIndex(room, privateReceipt.eventId);
+
+  if (publicIndex !== -1 && privateIndex !== -1) {
+    return privateIndex >= publicIndex ? privateReceipt : publicReceipt;
+  }
+
+  if (typeof publicReceipt.ts === 'number' && typeof privateReceipt.ts === 'number') {
+    return privateReceipt.ts >= publicReceipt.ts ? privateReceipt : publicReceipt;
+  }
+
+  return privateReceipt;
 };
 
-const getStoredRoomReadMarkerEventId = (
+const getStoredRoomReadMarker = (
   room: Room,
   userId?: string | null
-): string | undefined => {
+): RoomReadMarker | undefined => {
   const fullyReadEventId = getRoomFullyReadEventId(room);
-  const receiptEventId = getStoredRoomReceiptEventId(room, userId);
-  if (!fullyReadEventId) return receiptEventId;
-  if (!receiptEventId) return fullyReadEventId;
+  const receiptMarker = getStoredRoomReceiptMarker(room, userId);
+  const receiptEventId = receiptMarker?.eventId;
+  if (!fullyReadEventId) return receiptMarker;
+
+  const fullyReadMarker = {
+    eventId: fullyReadEventId,
+    ts: getLiveTimelineEventTs(room, fullyReadEventId),
+  };
+  if (!receiptEventId) return fullyReadMarker;
 
   const fullyReadIndex = getLiveTimelineEventIndex(room, fullyReadEventId);
   const receiptIndex = getLiveTimelineEventIndex(room, receiptEventId);
 
   if (fullyReadIndex !== -1 && receiptIndex !== -1) {
-    return receiptIndex > fullyReadIndex ? receiptEventId : fullyReadEventId;
+    return receiptIndex > fullyReadIndex ? receiptMarker : fullyReadMarker;
   }
 
   if (fullyReadIndex === -1 && receiptIndex !== -1) {
-    return receiptEventId;
+    return receiptMarker;
   }
 
-  return fullyReadEventId;
+  if (typeof fullyReadMarker.ts === 'number' && typeof receiptMarker.ts === 'number') {
+    return receiptMarker.ts > fullyReadMarker.ts ? receiptMarker : fullyReadMarker;
+  }
+
+  return fullyReadMarker;
+};
+
+const NOTIFICATION_EVENT_TYPES = [
+  'm.room.create',
+  'm.room.message',
+  'm.room.encrypted',
+  'm.poll.start',
+  'org.matrix.msc3381.poll.start',
+  'm.room.member',
+  'm.sticker',
+];
+export const isNotificationEvent = (mEvent: MatrixEvent) => {
+  const eType = mEvent.getType();
+  if (!NOTIFICATION_EVENT_TYPES.includes(eType)) {
+    return false;
+  }
+  if (eType === 'm.room.member') return false;
+
+  if (mEvent.isRedacted()) return false;
+  if (mEvent.getRelation()?.rel_type === 'm.replace') return false;
+
+  return true;
 };
 
 const getLiveTimelineUnreadState = (
@@ -250,8 +394,7 @@ const getLiveTimelineUnreadState = (
   let total = 0;
   for (let i = readUpToIndex + 1; i < liveEvents.length; i += 1) {
     const event = liveEvents[i];
-    if (!event || event.getSender() === userId) continue;
-    if (isNotificationEvent(event)) {
+    if (event && event.getSender() !== userId && isNotificationEvent(event)) {
       total += 1;
     }
   }
@@ -262,68 +405,94 @@ const getLiveTimelineUnreadState = (
   };
 };
 
-const getRoomEventReadState = (
+const getLiveTimelineUnreadStateFromTs = (
   room: Room,
-  userId: string | null | undefined,
-  storedReadEventId: string | undefined
-): RoomReadMarkerState => {
-  const optimisticReadMarkerEventId =
-    optimisticRoomReadMarkers.get(room.roomId) ??
-    getPersistedOptimisticRoomReadMarker(room.roomId, userId);
-
-  if (optimisticReadMarkerEventId) {
-    optimisticRoomReadMarkers.set(room.roomId, optimisticReadMarkerEventId);
-  }
-
-  if (!optimisticReadMarkerEventId) {
+  userId?: string | null,
+  readUpToTs?: number
+): LiveTimelineUnreadState => {
+  if (!userId || typeof readUpToTs !== 'number') {
     return {
-      eventId: storedReadEventId,
-      optimistic: false,
+      reliable: false,
+      total: 0,
     };
   }
 
-  if (storedReadEventId === optimisticReadMarkerEventId) {
-    clearOptimisticRoomReadMarker(room.roomId, optimisticReadMarkerEventId, userId);
+  const liveEvents = room.getLiveTimeline().getEvents();
+  if (liveEvents.length === 0) {
     return {
-      eventId: storedReadEventId,
-      optimistic: false,
+      reliable: false,
+      total: 0,
     };
   }
 
-  const optimisticIndex = getLiveTimelineEventIndex(room, optimisticReadMarkerEventId);
-  if (optimisticIndex === -1) {
-    clearOptimisticRoomReadMarker(room.roomId, optimisticReadMarkerEventId, userId);
-    return {
-      eventId: storedReadEventId,
-      optimistic: false,
-    };
-  }
-
-  const storedIndex = getLiveTimelineEventIndex(room, storedReadEventId);
-  if (storedIndex >= optimisticIndex) {
-    clearOptimisticRoomReadMarker(room.roomId, optimisticReadMarkerEventId, userId);
-    return {
-      eventId: storedReadEventId,
-      optimistic: false,
-    };
-  }
+  let total = 0;
+  liveEvents.forEach((event) => {
+    if (!event || event.getSender() === userId) return;
+    if (event.getTs() <= readUpToTs) return;
+    if (isNotificationEvent(event)) {
+      total += 1;
+    }
+  });
 
   return {
-    eventId: optimisticReadMarkerEventId,
-    optimistic: true,
+    reliable: true,
+    total,
   };
 };
 
+const getRoomEventReadState = (
+  room: Room,
+  userId: string | null | undefined,
+  storedReadMarker: RoomReadMarker | undefined
+): RoomReadMarkerState => {
+  const optimisticReadMarker =
+    optimisticRoomReadMarkers.get(room.roomId) ??
+    getPersistedOptimisticRoomReadMarker(room.roomId, userId);
+
+  if (optimisticReadMarker) {
+    optimisticRoomReadMarkers.set(room.roomId, optimisticReadMarker);
+  }
+
+  if (!optimisticReadMarker) {
+    return makeReadMarkerState(room, storedReadMarker, false);
+  }
+
+  if (storedReadMarker?.eventId === optimisticReadMarker.eventId) {
+    clearOptimisticRoomReadMarker(room.roomId, optimisticReadMarker.eventId, userId);
+    return makeReadMarkerState(room, storedReadMarker, false);
+  }
+
+  if (
+    typeof storedReadMarker?.ts === 'number' &&
+    typeof optimisticReadMarker.ts === 'number' &&
+    storedReadMarker.ts >= optimisticReadMarker.ts
+  ) {
+    clearOptimisticRoomReadMarker(room.roomId, optimisticReadMarker.eventId, userId);
+    return makeReadMarkerState(room, storedReadMarker, false);
+  }
+
+  const optimisticIndex = getLiveTimelineEventIndex(room, optimisticReadMarker.eventId);
+  if (optimisticIndex === -1) {
+    return makeReadMarkerState(room, optimisticReadMarker, true);
+  }
+
+  const storedIndex = getLiveTimelineEventIndex(room, storedReadMarker?.eventId);
+  if (storedIndex >= optimisticIndex) {
+    clearOptimisticRoomReadMarker(room.roomId, optimisticReadMarker.eventId, userId);
+    return makeReadMarkerState(room, storedReadMarker, false);
+  }
+
+  return makeReadMarkerState(room, optimisticReadMarker, true);
+};
+
 const getRoomReadMarkerState = (room: Room, userId?: string | null): RoomReadMarkerState =>
-  getRoomEventReadState(room, userId, getStoredRoomReadMarkerEventId(room, userId));
+  getRoomEventReadState(room, userId, getStoredRoomReadMarker(room, userId));
 
 const getRoomReceiptState = (room: Room, userId?: string | null): RoomReadMarkerState =>
-  getRoomEventReadState(room, userId, getStoredRoomReceiptEventId(room, userId));
+  getRoomEventReadState(room, userId, getStoredRoomReceiptMarker(room, userId));
 
-export const getRoomReadMarkerEventId = (
-  room: Room,
-  userId?: string | null
-): string | undefined => getRoomReadMarkerState(room, userId).eventId;
+export const getRoomReadMarkerEventId = (room: Room, userId?: string | null): string | undefined =>
+  getRoomReadMarkerState(room, userId).eventId;
 
 export const getMDirects = (mDirectEvent: MatrixEvent): Set<string> => {
   const roomIds = new Set<string>();
@@ -466,28 +635,6 @@ export const getNotificationType = (mx: MatrixClient, roomId: string): Notificat
   return NotificationType.MentionsAndKeywords;
 };
 
-const NOTIFICATION_EVENT_TYPES = [
-  'm.room.create',
-  'm.room.message',
-  'm.room.encrypted',
-  'm.poll.start',
-  'org.matrix.msc3381.poll.start',
-  'm.room.member',
-  'm.sticker',
-];
-export const isNotificationEvent = (mEvent: MatrixEvent) => {
-  const eType = mEvent.getType();
-  if (!NOTIFICATION_EVENT_TYPES.includes(eType)) {
-    return false;
-  }
-  if (eType === 'm.room.member') return false;
-
-  if (mEvent.isRedacted()) return false;
-  if (mEvent.getRelation()?.rel_type === 'm.replace') return false;
-
-  return true;
-};
-
 export const roomHaveNotification = (room: Room): boolean => {
   const total = room.getUnreadNotificationCount(NotificationCountType.Total);
   const highlight = room.getUnreadNotificationCount(NotificationCountType.Highlight);
@@ -495,11 +642,7 @@ export const roomHaveNotification = (room: Room): boolean => {
   return total > 0 || highlight > 0;
 };
 
-const roomHaveUnreadFromReadEvent = (
-  room: Room,
-  userId: string,
-  readUpToId?: string
-): boolean => {
+const roomHaveUnreadFromReadEvent = (room: Room, userId: string, readUpToId?: string): boolean => {
   const liveEvents = room.getLiveTimeline().getEvents();
   const readUpToIndex = getLiveTimelineEventIndex(room, readUpToId);
 
@@ -515,8 +658,7 @@ const roomHaveUnreadFromReadEvent = (
     const event = liveEvents[i];
     if (!event) return false;
     if (event.getId() === readUpToId) return false;
-    if (event.getSender() === userId) continue;
-    if (isNotificationEvent(event)) return true;
+    if (event.getSender() !== userId && isNotificationEvent(event)) return true;
   }
   return false;
 };
@@ -547,6 +689,18 @@ export const getRoomUnreadStatus = (mx: MatrixClient, room: Room): RoomUnreadSta
         roomId: room.roomId,
         highlight: Math.min(highlight, liveTimelineUnread.total),
         total: liveTimelineUnread.total,
+      },
+    };
+  }
+
+  const timestampUnread = getLiveTimelineUnreadStateFromTs(room, userId, receiptState.ts);
+  if (timestampUnread.reliable) {
+    return {
+      hasUnread: timestampUnread.total > 0,
+      unreadInfo: {
+        roomId: room.roomId,
+        highlight: Math.min(highlight, timestampUnread.total),
+        total: timestampUnread.total,
       },
     };
   }
