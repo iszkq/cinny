@@ -129,6 +129,7 @@ const DEFAULT_INLINE_READ_RECEIPTS = 7;
 const MIN_INLINE_READ_RECEIPTS = 1;
 const MAX_INLINE_READ_RECEIPTS = 50;
 const MESSAGE_EMOJI_REOPEN_SUPPRESS_MS = 400;
+const STICKER_TEXT_FALLBACK = '[\u8d34\u7eb8]';
 
 function MessageCopyIcon() {
   return (
@@ -150,7 +151,9 @@ const getMessageCopyText = (mEvent: MatrixEvent): string | undefined => {
 
   if (mEvent.getType() === EventType.Sticker) {
     const stickerBody = mEvent.getContent().body;
-    return typeof stickerBody === 'string' ? stickerBody : '[贴图]';
+    return typeof stickerBody === 'string' && stickerBody.trim()
+      ? stickerBody
+      : STICKER_TEXT_FALLBACK;
   }
 
   if (
@@ -266,7 +269,7 @@ const getMessageEmojiSaveSource = (mEvent: MatrixEvent): MessageEmojiSaveSource 
 
   const mimeType =
     typeof content.info?.mimetype === 'string' ? content.info.mimetype : undefined;
-  const body = typeof content.body === 'string' ? content.body : undefined;
+  const body = typeof content.body === 'string' && content.body.trim() ? content.body : undefined;
   const filename = typeof content.filename === 'string' ? content.filename : undefined;
 
   if (

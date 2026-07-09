@@ -348,7 +348,7 @@ const cloneEditorDraft = (draft: Descendant[]): Descendant[] =>
 
 const EMOJI_BOARD_REOPEN_SUPPRESS_MS = 400;
 const REMOTE_STICKER_DOWNLOAD_TIMEOUT_MS = 15000;
-const STICKER_EVENT_BODY = '';
+const STICKER_EVENT_FALLBACK_BODY = 'Sticker';
 const NOTE_TEXT_MIME_TYPE = 'text/plain;charset=utf-8';
 const NOTE_DEFAULT_BASENAME = 'note';
 
@@ -433,14 +433,7 @@ const getRemoteStickerFileName = (label: string, mimeType: string): string => {
   return `${baseName}.${extension}`;
 };
 
-const createRemoteStickerHttpContent = (url: string, info?: IImageInfo): IContent => ({
-  body: STICKER_EVENT_BODY,
-  url,
-  info: {
-    ...info,
-    mimetype: getRemoteStickerMimeType(undefined, info),
-  },
-});
+const getStickerEventBody = (label: string): string => label.trim() || STICKER_EVENT_FALLBACK_BODY;
 
 const cloneMessageContent = (content: IContent): IContent =>
   JSON.parse(JSON.stringify(content)) as IContent;
@@ -578,7 +571,7 @@ const uploadRemoteStickerContent = async (
 
   const mediaInfo = await getRemoteStickerImageInfo(blob, mimeType, info);
   const content: IContent = {
-    body: STICKER_EVENT_BODY,
+    body: getStickerEventBody(label),
     info: mediaInfo,
   };
 
@@ -601,10 +594,6 @@ const createRemoteStickerContent = async (
   label: string,
   info?: IImageInfo
 ): Promise<IContent> => {
-  if (!isDesktopUpdaterSupported()) {
-    return createRemoteStickerHttpContent(url, info);
-  }
-
   const cacheKey = getRemoteStickerUploadCacheKey(room, url);
   let uploadPromise = remoteStickerUploadCache.get(cacheKey);
 
@@ -616,17 +605,9 @@ const createRemoteStickerContent = async (
     remoteStickerUploadCache.set(cacheKey, uploadPromise);
   }
 
-  let uploadedContent: IContent;
-  try {
-    uploadedContent = await uploadPromise;
-  } catch (error) {
-    if (!isDesktopUpdaterSupported()) {
-      return createRemoteStickerHttpContent(url, info);
-    }
-    throw error;
-  }
+  const uploadedContent = await uploadPromise;
   const content = cloneMessageContent(uploadedContent);
-  content.body = STICKER_EVENT_BODY;
+  content.body = getStickerEventBody(label);
   return content;
 };
 
@@ -1456,7 +1437,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       closeEmojiBoard();
       try {
         const pendingContent: IContent = {
-          body: STICKER_EVENT_BODY,
+          body: getStickerEventBody(label),
           url: mxc,
           ...(info ? { info } : {}),
         };

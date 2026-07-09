@@ -1,5 +1,5 @@
 import { Box, Icon, Icons, Text, as, color, toRem } from 'folds';
-import { EventTimelineSet, Room } from 'matrix-js-sdk';
+import { EventTimelineSet, EventType, Room } from 'matrix-js-sdk';
 import React, { MouseEventHandler, ReactNode, useCallback, useMemo } from 'react';
 import classNames from 'classnames';
 import { getMemberDisplayName, trimReplyFromBody } from '../../utils/room';
@@ -12,6 +12,8 @@ import { scaleSystemEmoji } from '../../plugins/react-custom-html-parser';
 import { useRoomEvent } from '../../hooks/useRoomEvent';
 import colorMXID from '../../../util/colorMXID';
 import { GetMemberPowerTag } from '../../hooks/useMemberPowerTag';
+
+const STICKER_REPLY_FALLBACK = '[\u8d34\u7eb8]';
 
 type ReplyLayoutProps = {
   userColor?: string;
@@ -100,7 +102,13 @@ export const Reply = as<'div', ReplyProps>(
     );
 
     const badEncryption = replyEvent?.getContent().msgtype === 'm.bad.encrypted';
-    const bodyJSX = body ? scaleSystemEmoji(trimReplyFromBody(body)) : fallbackBody;
+    const isStickerReply = replyEvent?.getType() === EventType.Sticker;
+    const trimmedBody = typeof body === 'string' ? trimReplyFromBody(body).trim() : '';
+    const bodyJSX = trimmedBody
+      ? scaleSystemEmoji(trimmedBody)
+      : isStickerReply
+      ? STICKER_REPLY_FALLBACK
+      : fallbackBody;
 
     return (
       <Box direction="Row" gap="200" alignItems="Center" {...props} ref={ref}>
