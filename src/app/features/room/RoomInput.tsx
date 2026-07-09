@@ -165,19 +165,6 @@ type SendRoomEventWithoutQueueOptions = {
   encrypt?: boolean;
 };
 
-type LocalMatrixEvent = MatrixEvent & {
-  event: MatrixEvent['event'] & {
-    content?: IContent;
-  };
-  clearEvent?: {
-    content?: IContent;
-  };
-};
-
-type PendingEventRoom = Room & {
-  removePendingEvent?: (eventId: string) => void;
-};
-
 const createLocalRoomEvent = (
   mx: ReturnType<typeof useMatrixClient>,
   room: Room,
@@ -199,32 +186,6 @@ const createLocalRoomEvent = (
   localEvent.setTxnId(txnId);
   localEvent.setStatus(EventStatus.SENDING);
   return { localEvent, txnId };
-};
-
-const setLocalEventContent = (event: MatrixEvent, content: IContent): void => {
-  const localEvent = event as LocalMatrixEvent;
-  localEvent.event.content = content;
-
-  if (localEvent.clearEvent) {
-    localEvent.clearEvent.content = content;
-  }
-};
-
-const removeLocalPendingEvent = (room: Room, localEvent: MatrixEvent): void => {
-  const eventId = localEvent.getId();
-  if (eventId) {
-    const pendingRoom = room as PendingEventRoom;
-    if (typeof pendingRoom.removePendingEvent === 'function') {
-      try {
-        pendingRoom.removePendingEvent(eventId);
-        return;
-      } catch {
-        // Fall back to a cancelled pending status on older or patched SDK builds.
-      }
-    }
-  }
-
-  room.updatePendingEvent(localEvent, EventStatus.CANCELLED);
 };
 
 const sendLocalRoomEvent = (
@@ -263,7 +224,8 @@ const sendLocalRoomEvent = (
       room.updatePendingEvent(localEvent, EventStatus.SENT, eventId);
       return response;
     } catch (error) {
-      (localEvent as MatrixEvent & { error?: unknown }).error = error;
+      const failedEvent = localEvent as MatrixEvent & { error?: unknown };
+      failedEvent.error = error;
       room.updatePendingEvent(localEvent, EventStatus.NOT_SENT);
       throw error;
     }
@@ -288,59 +250,6 @@ const sendRoomEventWithoutQueue = (
   const { localEvent, txnId } = createLocalRoomEvent(mx, room, eventType, content);
   room.addPendingEvent(localEvent, txnId);
   return sendLocalRoomEvent(mx, room, localEvent, options);
-};
-
-const sendRoomMessageWithoutQueue = (
-  mx: ReturnType<typeof useMatrixClient>,
-  room: Room,
-  content: IContent,
-  options: SendRoomEventWithoutQueueOptions = {}
-): Promise<unknown> => sendRoomEventWithoutQueue(mx, room, EventType.RoomMessage, content, options);
-
-const sendRoomEventWithPendingContent = (
-  mx: ReturnType<typeof useMatrixClient>,
-  room: Room,
-  eventType: string,
-  pendingContent: IContent,
-  getFinalContent: () => Promise<IContent>,
-  options: SendRoomEventWithoutQueueOptions = {}
-): Promise<unknown> => {
-  const fastMx = mx as unknown as FastMatrixEventSender;
-  if (
-    typeof fastMx.encryptEventIfNeeded !== 'function' ||
-    typeof fastMx.sendEventHttpRequest !== 'function'
-  ) {
-    return getFinalContent().then((content) =>
-      mx.sendEvent(room.roomId, eventType, content as never)
-    );
-  }
-
-  const { localEvent, txnId } = createLocalRoomEvent(mx, room, eventType, pendingContent);
-  room.addPendingEvent(localEvent, txnId);
-
-  if (localEvent.status === EventStatus.NOT_SENT) {
-    return Promise.reject(new Error('Event blocked by other events not yet sent'));
-  }
-
-  return (async () => {
-    let finalContent: IContent;
-    try {
-      finalContent = await getFinalContent();
-    } catch (error) {
-      (localEvent as MatrixEvent & { error?: unknown }).error = error;
-      removeLocalPendingEvent(room, localEvent);
-      throw error;
-    }
-
-    try {
-      setLocalEventContent(localEvent, finalContent);
-      return await sendLocalRoomEvent(mx, room, localEvent, options);
-    } catch (error) {
-      (localEvent as MatrixEvent & { error?: unknown }).error = error;
-      room.updatePendingEvent(localEvent, EventStatus.NOT_SENT);
-      throw error;
-    }
-  })();
 };
 
 const cloneEditorDraft = (draft: Descendant[]): Descendant[] =>
@@ -467,6 +376,29 @@ const getRemoteStickerImageInfo = async (
   return info;
 };
 
+const loadRemoteStickerMediaWithBrowser = async (
+  url: string,
+  info: IImageInfo | undefined,
+  cache: 'force-cache' | 'reload',
+  signal: AbortSignal
+): Promise<RemoteStickerMedia> => {
+  const response = await fetch(url, {
+    cache,
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to download remote sticker: ${response.status}`);
+  }
+
+  const blob = await response.blob();
+  const mimeType = getRemoteStickerMimeType(blob.type, info);
+  return {
+    blob: blob.type ? blob : new Blob([blob], { type: mimeType }),
+    mimeType,
+  };
+};
+
 const fetchRemoteStickerMediaWithBrowser = async (
   url: string,
   info?: IImageInfo
@@ -478,26 +410,24 @@ const fetchRemoteStickerMediaWithBrowser = async (
   );
 
   try {
-    const response = await fetch(url, {
-      cache: 'force-cache',
-      signal: abortController.signal,
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to download remote sticker: ${response.status}`);
+    try {
+      return await loadRemoteStickerMediaWithBrowser(
+        url,
+        info,
+        'force-cache',
+        abortController.signal
+      );
+    } catch (error) {
+      if ((error as DOMException | undefined)?.name === 'AbortError') {
+        throw error;
+      }
+      return loadRemoteStickerMediaWithBrowser(url, info, 'reload', abortController.signal);
     }
-
-    const blob = await response.blob();
-    const mimeType = getRemoteStickerMimeType(blob.type, info);
-    return {
-      blob: blob.type ? blob : new Blob([blob], { type: mimeType }),
-      mimeType,
-    };
   } catch (error) {
     if (!isDesktopUpdaterSupported()) {
-      throw new Error(
-        '云端图片缺少跨域访问权限，Web 端无法上传为 Matrix 媒体。请先在 CF/R2 为图片域名开启 CORS。'
-      );
+      throw error instanceof Error
+        ? error
+        : new Error('云端图片读取失败，Web 端无法上传为 Matrix 媒体。');
     }
     throw error;
   } finally {
@@ -692,25 +622,23 @@ const getStickerSendErrorMessage = (error: unknown, remoteSticker: boolean): str
     message?: string;
   };
 
-  const detail =
-    typeof matrixError?.data?.error === 'string' && matrixError.data.error.trim()
-      ? matrixError.data.error.trim()
-      : typeof matrixError?.message === 'string' && matrixError.message.trim()
-      ? matrixError.message.trim()
-      : undefined;
+  let detail: string | undefined;
+  if (typeof matrixError?.data?.error === 'string' && matrixError.data.error.trim()) {
+    detail = matrixError.data.error.trim();
+  } else if (typeof matrixError?.message === 'string' && matrixError.message.trim()) {
+    detail = matrixError.message.trim();
+  }
 
   if (detail && /abort|aborted|operation was aborted/i.test(detail)) {
-    return remoteSticker
-      ? '远程贴纸发送被中止，请检查 CF 图片链接，或在表情索引里补充 mxc 地址。'
-      : '贴纸发送被中止，请重试。';
+    return remoteSticker ? '云端贴纸发送被中止，请重试。' : '贴纸发送被中止，请重试。';
   }
 
   if (detail) {
-    return `贴纸发送失败：${detail}`;
+    return remoteSticker ? `云端贴纸发送失败：${detail}` : `贴纸发送失败：${detail}`;
   }
 
   if (remoteSticker) {
-    return '远程贴纸发送失败，请检查 CF 图片链接，或在表情索引里补充 mxc 地址。';
+    return '云端贴纸发送失败，请重试。';
   }
 
   return '贴纸发送失败，请重试。';
@@ -1418,8 +1346,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const handleStickerSelect = async (mxc: string, label: string, info?: IImageInfo) => {
       const remoteSticker = isHttpUrl(mxc);
       const matrixSticker = isMxcUrl(mxc);
-      const serializedRemoteUpload = remoteSticker && isDesktopUpdaterSupported();
-      if (serializedRemoteUpload && stickerSendingRef.current) {
+      if (remoteSticker && stickerSendingRef.current) {
+        setSendStatus('\u4e0a\u4e00\u5f20\u4e91\u7aef\u8d34\u7eb8\u8fd8\u5728\u51c6\u5907\u4e2d...');
         closeEmojiBoard();
         return;
       }
@@ -1430,8 +1358,14 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         return;
       }
 
-      if (serializedRemoteUpload) {
+      const replyDraftSnapshot = replyDraft;
+      const currentUserId = mx.getUserId();
+
+      if (remoteSticker) {
         stickerSendingRef.current = true;
+        setSendStatus('\u6b63\u5728\u51c6\u5907\u4e91\u7aef\u8d34\u7eb8...');
+      } else {
+        setSendStatus(undefined);
       }
       setSendError(undefined);
       closeEmojiBoard();
@@ -1442,17 +1376,20 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           ...(info ? { info } : {}),
         };
         const finalContent = matrixSticker
-          ? () => Promise.resolve(cloneMessageContent(pendingContent))
-          : () => createRemoteStickerContent(mx, room, mxc, label, info);
+          ? cloneMessageContent(pendingContent)
+          : await createRemoteStickerContent(mx, room, mxc, label, info);
 
-        const sendPromise = sendRoomEventWithPendingContent(
+        if (remoteSticker) {
+          setSendStatus('\u8d34\u7eb8\u53d1\u9001\u4e2d...');
+        }
+
+        const sendPromise = sendRoomEventWithoutQueue(
           mx,
           room,
           EventType.Sticker,
-          withReplyMetadata(pendingContent, replyDraft, mx.getUserId()),
-          async () => withReplyMetadata(await finalContent(), replyDraft, mx.getUserId())
+          withReplyMetadata(finalContent, replyDraftSnapshot, currentUserId)
         );
-        if (replyDraft) {
+        if (replyDraftSnapshot) {
           setReplyDraft(undefined);
           replyDraftRef.current = undefined;
           sendTypingStatus(false);
@@ -1464,16 +1401,22 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           })
           .catch((error) => {
             setSendError(getStickerSendErrorMessage(error, remoteSticker));
+            if (!replyDraftRef.current && replyDraftSnapshot) {
+              setReplyDraft(replyDraftSnapshot);
+            }
           })
           .finally(() => {
-            if (serializedRemoteUpload) {
+            if (remoteSticker) {
               stickerSendingRef.current = false;
             }
             setSendStatus(undefined);
           });
       } catch (error) {
         setSendError(getStickerSendErrorMessage(error, remoteSticker));
-        if (serializedRemoteUpload) {
+        if (!replyDraftRef.current && replyDraftSnapshot) {
+          setReplyDraft(replyDraftSnapshot);
+        }
+        if (remoteSticker) {
           stickerSendingRef.current = false;
         }
         setSendStatus(undefined);
