@@ -28,7 +28,14 @@ export const shouldOpenHrefExternally = (href?: string | null): boolean => {
   return Boolean(parseExternalUrl(href));
 };
 
-export const openExternalUrl = async (href: string): Promise<void> => {
+type OpenExternalUrlOptions = {
+  preserveCurrentWindow?: boolean;
+};
+
+export const openExternalUrl = async (
+  href: string,
+  { preserveCurrentWindow = false }: OpenExternalUrlOptions = {}
+): Promise<void> => {
   const url = parseExternalUrl(href);
   if (!url) return;
 
@@ -41,7 +48,7 @@ export const openExternalUrl = async (href: string): Promise<void> => {
   }
 
   const popup = window.open(resolvedUrl, '_blank', 'noopener,noreferrer');
-  if (!popup) {
+  if (!popup && !preserveCurrentWindow) {
     window.location.assign(resolvedUrl);
   }
 };

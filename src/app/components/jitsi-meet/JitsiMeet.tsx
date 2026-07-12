@@ -39,7 +39,7 @@ export function JitsiMeetCard({ meeting, displayName, avatarUrl }: JitsiMeetCard
   const handleJoin = () => {
     // Jitsi uses nested authentication popups that can deadlock a WebView2 child window.
     // Opening it in the system browser keeps the meeting separate from the desktop client.
-    openExternalUrl(joinUrl).catch(() => undefined);
+    openExternalUrl(joinUrl, { preserveCurrentWindow: true }).catch(() => undefined);
   };
 
   return (
