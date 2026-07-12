@@ -69,21 +69,22 @@ export function BibleTab() {
   const desktop = isDesktopUpdaterSupported();
 
   const warmBibleFeature = useCallback(() => {
-    void warmBibleResources().catch(() => undefined);
-  }, []);
+    if (desktop) return;
+    warmBibleResources().catch(() => undefined);
+  }, [desktop]);
 
   const handleOpen = useCallback(() => {
     warmBibleFeature();
     setOpen(true);
     if (desktop) {
-      void openNativeBibleWindow().catch(() => setOpen(false));
+      openNativeBibleWindow().catch(() => setOpen(false));
     }
   }, [desktop, setOpen, warmBibleFeature]);
 
   const handleClose = useCallback(() => {
     setOpen(false);
     if (desktop) {
-      void closeNativeBibleWindow().catch(() => undefined);
+      closeNativeBibleWindow().catch(() => undefined);
     }
   }, [desktop, setOpen]);
 
@@ -93,7 +94,7 @@ export function BibleTab() {
     let mounted = true;
     let unlistenClose: (() => void) | undefined;
 
-    void listenNativeBibleWindowClose(() => {
+    listenNativeBibleWindowClose(() => {
       if (mounted) {
         setOpen(false);
       }
@@ -130,9 +131,11 @@ export function BibleTab() {
           </SidebarAvatar>
         )}
       </SidebarItemTooltip>
-      <Suspense fallback={opened ? <BibleLoadingModal requestClose={handleClose} /> : null}>
-        {opened && <LazyBibleModal open={opened} requestClose={handleClose} />}
-      </Suspense>
+      {!desktop && (
+        <Suspense fallback={opened ? <BibleLoadingModal requestClose={handleClose} /> : null}>
+          {opened && <LazyBibleModal open={opened} requestClose={handleClose} />}
+        </Suspense>
+      )}
     </SidebarItem>
   );
 }

@@ -6,6 +6,12 @@ export enum EmojiBoardTab {
   Cloud = 'Cloud',
 }
 
+export enum CloudSendMode {
+  Auto = 'Auto',
+  Emoji = 'Emoji',
+  Sticker = 'Sticker',
+}
+
 export enum EmojiType {
   Emoji = 'emoji',
   CustomEmoji = 'customEmoji',

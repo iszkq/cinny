@@ -1,6 +1,6 @@
 import React, { Suspense, lazy, useCallback, useEffect, useRef } from 'react';
 import { Box } from 'folds';
-import { ScreenSizeProvider, useScreenSize } from '../../hooks/useScreenSize';
+import { ScreenSize, ScreenSizeProvider } from '../../hooks/useScreenSize';
 import { emitNativeBibleWindowClose } from '../../utils/nativeBibleWindow';
 
 const LazyBibleExperienceModal = lazy(async () => ({
@@ -24,7 +24,7 @@ const closeCurrentNativeWindow = async (): Promise<void> => {
   });
 
   window.setTimeout(() => {
-    void currentWindow.destroy().catch(() => undefined);
+    currentWindow.destroy().catch(() => undefined);
   }, 240);
 };
 
@@ -47,12 +47,12 @@ function NativeBibleWindowContent() {
   const emitClose = useCallback(() => {
     if (closeEmittedRef.current) return;
     closeEmittedRef.current = true;
-    void emitNativeBibleWindowClose().catch(() => undefined);
+    emitNativeBibleWindowClose().catch(() => undefined);
   }, []);
 
   const handleClose = useCallback(() => {
     emitClose();
-    void closeCurrentNativeWindow();
+    closeCurrentNativeWindow().catch(() => undefined);
   }, [emitClose]);
 
   useEffect(() => {
@@ -98,10 +98,8 @@ function NativeBibleWindowContent() {
 }
 
 export function NativeBibleWindow() {
-  const screenSize = useScreenSize();
-
   return (
-    <ScreenSizeProvider value={screenSize}>
+    <ScreenSizeProvider value={ScreenSize.Desktop}>
       <NativeBibleWindowContent />
     </ScreenSizeProvider>
   );

@@ -49,7 +49,7 @@ export const openExternalUrl = async (href: string): Promise<void> => {
 const getExternalWindowName = (windowKey: string): string => {
   let hash = 0;
   for (let i = 0; i < windowKey.length; i += 1) {
-    hash = (hash * 31 + windowKey.charCodeAt(i)) >>> 0;
+    hash = (hash * 31 + windowKey.charCodeAt(i)) % 0x100000000;
   }
   return `cinny_external_${hash.toString(36)}`;
 };
@@ -74,7 +74,6 @@ const openExternalUrlInNativeWindow = async (
   const pendingOpen = nativeExternalWindowOpenPromises.get(label);
   if (pendingOpen) {
     await pendingOpen;
-    return;
   }
 
   const openPromise = invoke('open_external_url_window', { url: href, label, title })

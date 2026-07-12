@@ -10,7 +10,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { Box, Button, config, Icon, Icons, Scroll, Spinner, Text } from 'folds';
+import { Badge, Box, Button, config, Icon, Icons, Scroll, Spinner, Text } from 'folds';
 import FocusTrap from 'focus-trap-react';
 import { isKeyHotkey } from 'is-hotkey';
 import { Room } from 'matrix-js-sdk';
@@ -66,7 +66,7 @@ import {
   EmojiBoardLayout,
 } from './components';
 import * as css from './components/styles.css';
-import { EmojiBoardTab, EmojiType } from './types';
+import { CloudSendMode, EmojiBoardTab, EmojiType } from './types';
 import { VirtualTile } from '../virtualizer';
 import { getEmojiBoardMediaCandidates, getEmojiBoardMediaUrls } from './components/media';
 import {
@@ -193,7 +193,7 @@ const useGroups = (
   return [emojiGroupItems, stickerGroupItems, cloudGroupItems];
 };
 
-const useItemRenderer = (tab: EmojiBoardTab) => {
+const useItemRenderer = (usage: ImageUsage) => {
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
 
@@ -201,7 +201,7 @@ const useItemRenderer = (tab: EmojiBoardTab) => {
     if ('unicode' in emoji) {
       return <EmojiItem key={emoji.unicode + index} emoji={emoji} />;
     }
-    if (tab === EmojiBoardTab.Sticker || tab === EmojiBoardTab.Cloud) {
+    if (usage === ImageUsage.Sticker) {
       return (
         <StickerItem
           key={emoji.shortcode + index}
@@ -539,7 +539,9 @@ type RemoteStickerStatusProps = {
   onRetry: () => void;
 };
 function RemoteStickerStatus({ loading, error, onRetry }: RemoteStickerStatusProps) {
-  const title = loading ? '正在加载云端表情包' : error ? '云端表情包加载失败' : '暂无云端表情包';
+  let title = '暂无云端表情包';
+  if (loading) title = '正在加载云端表情包';
+  else if (error) title = '云端表情包加载失败';
 
   return (
     <Box
@@ -564,8 +566,8 @@ function RemoteStickerStatus({ loading, error, onRetry }: RemoteStickerStatusPro
         )}
       </Box>
       {error && (
-        <Button size="300" variant="Surface" radii="300" onClick={onRetry}>
-          <Text size="B300">{'重试'}</Text>
+        <Button size="300" variant="Secondary" radii="300" onClick={onRetry}>
+          <Text size="B300">重试</Text>
         </Button>
       )}
     </Box>
@@ -651,7 +653,9 @@ type EmojiBoardProps = {
   returnFocusOnDeactivate?: boolean;
   onEmojiSelect?: (unicode: string, shortcode: string) => void;
   onCustomEmojiSelect?: (mxc: string, shortcode: string) => void;
+  onCloudEmojiSelect?: (url: string, shortcode: string, info?: IImageInfo) => void;
   onStickerSelect?: (mxc: string, label: string, info?: IImageInfo) => void;
+  cloudAutoSendMode?: CloudSendMode.Emoji | CloudSendMode.Sticker;
   allowTextCustomEmoji?: boolean;
   addToRecentEmoji?: boolean;
 };
@@ -665,7 +669,9 @@ export function EmojiBoard({
   returnFocusOnDeactivate,
   onEmojiSelect,
   onCustomEmojiSelect,
+  onCloudEmojiSelect,
   onStickerSelect,
+  cloudAutoSendMode = CloudSendMode.Sticker,
   allowTextCustomEmoji,
   addToRecentEmoji = true,
 }: EmojiBoardProps) {
@@ -675,7 +681,14 @@ export function EmojiBoard({
 
   const emojiTab = tab === EmojiBoardTab.Emoji;
   const cloudTab = tab === EmojiBoardTab.Cloud;
-  const usage = emojiTab ? ImageUsage.Emoticon : ImageUsage.Sticker;
+  const [cloudSendMode, setCloudSendMode] = useState(CloudSendMode.Auto);
+  const effectiveCloudSendMode =
+    cloudSendMode === CloudSendMode.Auto ? cloudAutoSendMode : cloudSendMode;
+  const cloudUsage =
+    effectiveCloudSendMode === CloudSendMode.Emoji ? ImageUsage.Emoticon : ImageUsage.Sticker;
+  let usage = ImageUsage.Sticker;
+  if (cloudTab) usage = cloudUsage;
+  else if (emojiTab) usage = ImageUsage.Emoticon;
   const priorityPackPreloadCount = desktopSupported
     ? PRIORITY_PACK_PRELOAD_COUNT
     : WEB_PRIORITY_PACK_PRELOAD_COUNT;
@@ -684,8 +697,11 @@ export function EmojiBoard({
     : WEB_PRIORITY_PACK_VISIBLE_URL_LIMIT;
 
   const previewAtom = useMemo(
-    () => createPreviewDataAtom(emojiTab ? DefaultEmojiPreview : undefined),
-    [emojiTab]
+    () =>
+      createPreviewDataAtom(
+        emojiTab && usage === ImageUsage.Emoticon ? DefaultEmojiPreview : undefined
+      ),
+    [emojiTab, usage]
   );
   const activeGroupIdAtom = useMemo(() => atom<string | undefined>(undefined), []);
   const [activeGroupId, setActiveGroupId] = useAtom(activeGroupIdAtom);
@@ -706,8 +722,10 @@ export function EmojiBoard({
     imagePacks,
     remoteStickerImages
   );
-  const groups = cloudTab ? cloudGroupItems : emojiTab ? emojiGroupItems : stickerGroupItems;
-  const renderItem = useItemRenderer(tab);
+  let groups: EmojiGroupItem[] = stickerGroupItems;
+  if (cloudTab) groups = cloudGroupItems;
+  else if (emojiTab) groups = emojiGroupItems;
+  const renderItem = useItemRenderer(usage);
 
   const searchList = useMemo(() => {
     let list: Array<PackImageReader | IEmoji> = [];
@@ -817,7 +835,11 @@ export function EmojiBoard({
       }
     }
     if (emojiInfo.type === EmojiType.CustomEmoji) {
-      onCustomEmojiSelect?.(emojiInfo.data, emojiInfo.shortcode);
+      if (cloudTab) {
+        onCloudEmojiSelect?.(emojiInfo.data, emojiInfo.shortcode, emojiInfo.info);
+      } else {
+        onCustomEmojiSelect?.(emojiInfo.data, emojiInfo.shortcode);
+      }
     }
     if (emojiInfo.type === EmojiType.Sticker) {
       onStickerSelect?.(emojiInfo.data, emojiInfo.label, emojiInfo.info);
@@ -853,7 +875,7 @@ export function EmojiBoard({
         return;
       }
 
-      void setPersonalPackOrder(mx, nextOrder).catch(() => undefined);
+      setPersonalPackOrder(mx, nextOrder).catch(() => undefined);
     },
     [allPersonalImagePacks, mx]
   );
@@ -862,8 +884,9 @@ export function EmojiBoard({
     (packId: string, evt: React.DragEvent<HTMLDivElement>) => {
       setDraggingPackId(packId);
       setPackDropTarget(undefined);
-      evt.dataTransfer.effectAllowed = 'move';
-      evt.dataTransfer.setData('text/plain', packId);
+      const { dataTransfer } = evt;
+      dataTransfer.effectAllowed = 'move';
+      dataTransfer.setData('text/plain', packId);
     },
     []
   );
@@ -876,7 +899,8 @@ export function EmojiBoard({
       }
 
       evt.preventDefault();
-      evt.dataTransfer.dropEffect = 'move';
+      const { dataTransfer } = evt;
+      dataTransfer.dropEffect = 'move';
 
       const { top, height } = evt.currentTarget.getBoundingClientRect();
       const position: PackDropPosition = evt.clientY < top + height / 2 ? 'before' : 'after';
@@ -926,14 +950,12 @@ export function EmojiBoard({
       priorityPacks.forEach((pack, packIndex) => {
         getPackMediaUrls(pack).forEach((mediaUrl, mediaIndex) => {
           const priority =
-            packIndex === 0 && mediaIndex < priorityPackVisibleUrlLimit
-              ? 'visible'
-              : 'background';
+            packIndex === 0 && mediaIndex < priorityPackVisibleUrlLimit ? 'visible' : 'background';
 
           if (priority === 'visible') {
-            void primeDesktopMediaAssetUrl(mediaUrl, priority);
+            primeDesktopMediaAssetUrl(mediaUrl, priority)?.catch(() => undefined);
           } else {
-            void warmDesktopMediaAssetCache(mediaUrl);
+            warmDesktopMediaAssetCache(mediaUrl)?.catch(() => undefined);
           }
         });
       });
@@ -943,12 +965,7 @@ export function EmojiBoard({
       disposed = true;
       window.clearTimeout(preloadTimer);
     };
-  }, [
-    desktopSupported,
-    getPackMediaUrls,
-    priorityPackVisibleUrlLimit,
-    priorityPacks,
-  ]);
+  }, [desktopSupported, getPackMediaUrls, priorityPackVisibleUrlLimit, priorityPacks]);
 
   // sync active sidebar tab with scroll
   useEffect(() => {
@@ -978,6 +995,47 @@ export function EmojiBoard({
     }
   }, [tab, virtualizer, groups]);
 
+  let sidebar: ReactNode;
+  if (cloudTab) {
+    sidebar = (
+      <RemoteStickerSidebar
+        activeGroupAtom={activeGroupIdAtom}
+        groups={cloudGroupItems}
+        onScrollToGroup={handleScrollToGroup}
+      />
+    );
+  } else if (emojiTab) {
+    sidebar = (
+      <EmojiSidebar
+        activeGroupAtom={activeGroupIdAtom}
+        packs={imagePacks}
+        onScrollToGroup={handleScrollToGroup}
+        reorderEnabled={imagePackMode === 'personal'}
+        draggingPackId={draggingPackId}
+        dropTarget={packDropTarget}
+        onPackDragStart={handlePackDragStart}
+        onPackDragOver={handlePackDragOver}
+        onPackDrop={handlePackDrop}
+        onPackDragEnd={resetPackDragState}
+      />
+    );
+  } else {
+    sidebar = (
+      <StickerSidebar
+        activeGroupAtom={activeGroupIdAtom}
+        packs={imagePacks}
+        onScrollToGroup={handleScrollToGroup}
+        reorderEnabled={imagePackMode === 'personal'}
+        draggingPackId={draggingPackId}
+        dropTarget={packDropTarget}
+        onPackDragStart={handlePackDragStart}
+        onPackDragOver={handlePackDragOver}
+        onPackDrop={handlePackDrop}
+        onPackDragEnd={resetPackDragState}
+      />
+    );
+  }
+
   return (
     <FocusTrap
       focusTrapOptions={{
@@ -997,6 +1055,66 @@ export function EmojiBoard({
         header={
           <Box direction="Column" gap="200">
             {onTabChange && <EmojiBoardTabs tab={tab} onTabChange={onTabChange} />}
+            {cloudTab && onCloudEmojiSelect && onStickerSelect && (
+              <Box alignItems="Center" justifyContent="SpaceBetween" gap="200">
+                <Text as="span" size="T300">
+                  {'\u53d1\u9001\u65b9\u5f0f'}
+                </Text>
+                <Box alignItems="Center" gap="100">
+                  <Badge
+                    as="button"
+                    type="button"
+                    variant="Secondary"
+                    fill={cloudSendMode === CloudSendMode.Auto ? 'Solid' : 'None'}
+                    size="400"
+                    style={{ cursor: 'pointer' }}
+                    aria-pressed={cloudSendMode === CloudSendMode.Auto}
+                    title={
+                      effectiveCloudSendMode === CloudSendMode.Emoji
+                        ? '\u81ea\u52a8\uff1a\u8f93\u5165\u6846\u6709\u5185\u5bb9\uff0c\u5c06\u4f5c\u4e3a\u8868\u60c5\u63d2\u5165'
+                        : '\u81ea\u52a8\uff1a\u8f93\u5165\u6846\u4e3a\u7a7a\uff0c\u5c06\u4f5c\u4e3a\u8d34\u7eb8\u53d1\u9001'
+                    }
+                    onClick={() => setCloudSendMode(CloudSendMode.Auto)}
+                  >
+                    <Text as="span" size="L400">
+                      {effectiveCloudSendMode === CloudSendMode.Emoji
+                        ? '\u81ea\u52a8\u00b7\u8868\u60c5'
+                        : '\u81ea\u52a8\u00b7\u8d34\u7eb8'}
+                    </Text>
+                  </Badge>
+                  <Badge
+                    as="button"
+                    type="button"
+                    variant="Secondary"
+                    fill={cloudSendMode === CloudSendMode.Emoji ? 'Solid' : 'None'}
+                    size="400"
+                    style={{ cursor: 'pointer' }}
+                    aria-pressed={cloudSendMode === CloudSendMode.Emoji}
+                    title={'\u59cb\u7ec8\u4f5c\u4e3a\u8868\u60c5\u63d2\u5165\u8f93\u5165\u6846'}
+                    onClick={() => setCloudSendMode(CloudSendMode.Emoji)}
+                  >
+                    <Text as="span" size="L400">
+                      {'\u8868\u60c5'}
+                    </Text>
+                  </Badge>
+                  <Badge
+                    as="button"
+                    type="button"
+                    variant="Secondary"
+                    fill={cloudSendMode === CloudSendMode.Sticker ? 'Solid' : 'None'}
+                    size="400"
+                    style={{ cursor: 'pointer' }}
+                    aria-pressed={cloudSendMode === CloudSendMode.Sticker}
+                    title={'\u59cb\u7ec8\u4f5c\u4e3a\u8d34\u7eb8\u7acb\u5373\u53d1\u9001'}
+                    onClick={() => setCloudSendMode(CloudSendMode.Sticker)}
+                  >
+                    <Text as="span" size="L400">
+                      {'\u8d34\u7eb8'}
+                    </Text>
+                  </Badge>
+                </Box>
+              </Box>
+            )}
             <SearchInput
               key={tab}
               query={result?.query}
@@ -1006,45 +1124,11 @@ export function EmojiBoard({
             />
           </Box>
         }
-        sidebar={
-          cloudTab ? (
-            <RemoteStickerSidebar
-              activeGroupAtom={activeGroupIdAtom}
-              groups={cloudGroupItems}
-              onScrollToGroup={handleScrollToGroup}
-            />
-          ) : emojiTab ? (
-            <EmojiSidebar
-              activeGroupAtom={activeGroupIdAtom}
-              packs={imagePacks}
-              onScrollToGroup={handleScrollToGroup}
-              reorderEnabled={imagePackMode === 'personal'}
-              draggingPackId={draggingPackId}
-              dropTarget={packDropTarget}
-              onPackDragStart={handlePackDragStart}
-              onPackDragOver={handlePackDragOver}
-              onPackDrop={handlePackDrop}
-              onPackDragEnd={resetPackDragState}
-            />
-          ) : (
-            <StickerSidebar
-              activeGroupAtom={activeGroupIdAtom}
-              packs={imagePacks}
-              onScrollToGroup={handleScrollToGroup}
-              reorderEnabled={imagePackMode === 'personal'}
-              draggingPackId={draggingPackId}
-              dropTarget={packDropTarget}
-              onPackDragStart={handlePackDragStart}
-              onPackDragOver={handlePackDragOver}
-              onPackDrop={handlePackDrop}
-              onPackDragEnd={resetPackDragState}
-            />
-          )
-        }
+        sidebar={sidebar}
       >
         <Box grow="Yes">
           <EmojiGroupHolder
-            key={tab}
+            key={`${tab}:${usage}`}
             contentScrollRef={contentScrollRef}
             previewAtom={previewAtom}
             onGroupItemClick={handleGroupItemClick}

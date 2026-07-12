@@ -20,7 +20,7 @@ import {
   Room,
 } from 'matrix-js-sdk';
 import { ReactEditor } from 'slate-react';
-import { Descendant, Editor, Transforms } from 'slate';
+import { Descendant, Editor, RangeRef, Transforms } from 'slate';
 import {
   Box,
   Button,
@@ -54,6 +54,7 @@ import {
   AutocompletePrefix,
   AutocompleteQuery,
   getAutocompleteQuery,
+  getEmojiKeywordAutocompleteQuery,
   getPrevWorldRange,
   resetEditor,
   RoomMentionAutocomplete,
@@ -69,7 +70,7 @@ import {
   trimCommand,
   getMentions,
 } from '../../components/editor';
-import { EmojiBoard, EmojiBoardTab } from '../../components/emoji-board';
+import { CloudSendMode, EmojiBoard, EmojiBoardTab } from '../../components/emoji-board';
 import {
   getAudioFileUrl,
   getImageFileUrl,
@@ -148,6 +149,7 @@ import {
 import { ScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
 import { IImageInfo } from '../../../types/matrix/common';
 import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
+import { PackImageReader } from '../../plugins/custom-emoji';
 
 interface RoomInputProps {
   editor: Editor;
@@ -267,7 +269,8 @@ const NOTE_CN = {
   fileName: '\u6587\u4ef6\u540d',
   fileNamePlaceholder: '\u7559\u7a7a\u5219\u4f7f\u7528 note.txt',
   content: '\u5185\u5bb9',
-  contentPlaceholder: '\u5728\u8fd9\u91cc\u7c98\u8d34\u6216\u8f93\u5165\u9700\u8981\u53d1\u9001\u7684\u957f\u6587\u672c',
+  contentPlaceholder:
+    '\u5728\u8fd9\u91cc\u7c98\u8d34\u6216\u8f93\u5165\u9700\u8981\u53d1\u9001\u7684\u957f\u6587\u672c',
   cancel: '\u53d6\u6d88',
   send: '\u53d1\u9001',
   sending: '\u53d1\u9001\u4e2d...',
@@ -312,6 +315,7 @@ const REMOTE_STICKER_MIME_EXTENSION: Record<string, string> = {
 };
 
 const remoteStickerUploadCache = new Map<string, Promise<IContent>>();
+const remoteEmojiUploadCache = new Map<string, Promise<string>>();
 
 const base64ToBlob = (dataBase64: string, mimeType: string): Blob => {
   const binary = window.atob(dataBase64);
@@ -462,6 +466,50 @@ const fetchRemoteStickerMedia = async (
   }
 
   return fetchRemoteStickerMediaWithBrowser(url, info);
+};
+
+const uploadRemoteEmojiMxc = async (
+  mx: ReturnType<typeof useMatrixClient>,
+  url: string,
+  label: string,
+  info?: IImageInfo
+): Promise<string> => {
+  const { blob, mimeType } = await fetchRemoteStickerMedia(url, info);
+  const fileName = getRemoteStickerFileName(label, mimeType);
+  const sourceFile = new File([blob], fileName, { type: mimeType });
+
+  // Inline custom emoji only carries an image src. It cannot carry encrypted-file metadata,
+  // so upload it as regular Matrix media even when the surrounding room is encrypted.
+  const upload = await mx.uploadContent(sourceFile, {
+    includeFilename: true,
+    name: fileName,
+    type: sourceFile.type || mimeType,
+  });
+  const mxc = upload.content_uri;
+  if (!mxc) {
+    throw new Error('Failed to upload remote emoji.');
+  }
+
+  return mxc;
+};
+
+const getRemoteEmojiMxc = async (
+  mx: ReturnType<typeof useMatrixClient>,
+  url: string,
+  label: string,
+  info?: IImageInfo
+): Promise<string> => {
+  const cacheKey = `${mx.getUserId() ?? 'anonymous'}:${url}`;
+  let uploadPromise = remoteEmojiUploadCache.get(cacheKey);
+  if (!uploadPromise) {
+    uploadPromise = uploadRemoteEmojiMxc(mx, url, label, info).catch((error) => {
+      remoteEmojiUploadCache.delete(cacheKey);
+      throw error;
+    });
+    remoteEmojiUploadCache.set(cacheKey, uploadPromise);
+  }
+
+  return uploadPromise;
 };
 
 const getRemoteStickerUploadCacheKey = (room: Room, url: string): string =>
@@ -644,6 +692,26 @@ const getStickerSendErrorMessage = (error: unknown, remoteSticker: boolean): str
   return '贴纸发送失败，请重试。';
 };
 
+const getCloudEmojiErrorMessage = (error: unknown): string => {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    return '\u5f53\u524d\u7f51\u7edc\u5df2\u65ad\u5f00\uff0c\u4e91\u7aef\u8868\u60c5\u8fd8\u6ca1\u6709\u63d2\u5165\u3002';
+  }
+
+  const matrixError = error as {
+    data?: { error?: string };
+    message?: string;
+  };
+  const detail = matrixError?.data?.error?.trim() || matrixError?.message?.trim();
+
+  if (detail && /abort|aborted|operation was aborted/i.test(detail)) {
+    return '\u4e91\u7aef\u8868\u60c5\u51c6\u5907\u88ab\u4e2d\u6b62\uff0c\u8bf7\u91cd\u8bd5\u3002';
+  }
+  if (detail) {
+    return `\u4e91\u7aef\u8868\u60c5\u51c6\u5907\u5931\u8d25\uff1a${detail}`;
+  }
+  return '\u4e91\u7aef\u8868\u60c5\u51c6\u5907\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5\u3002';
+};
+
 export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
   ({ editor, fileDropContainerRef, roomId, room }, ref) => {
     const mx = useMatrixClient();
@@ -701,6 +769,10 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const [sendStatus, setSendStatus] = useState<string>();
     const sendingMessageRef = useRef(false);
     const stickerSendingRef = useRef(false);
+    const cloudEmojiPreparingRef = useRef(false);
+    const cloudEmojiRequestIdRef = useRef(0);
+    const cloudEmojiInsertionRangeRef = useRef<RangeRef>();
+    const roomInputGenerationRef = useRef(0);
     const uploadFamilyObserverAtom = createUploadFamilyObserverAtom(
       roomUploadAtomFamily,
       selectedFiles.map((f) => f.file)
@@ -714,6 +786,9 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       useState<AutocompleteQuery<AutocompletePrefix>>();
     const [emojiBoardTab, setEmojiBoardTab] = useState(EmojiBoardTab.Emoji);
     const [emojiBoardOpen, setEmojiBoardOpen] = useState(false);
+    const [cloudAutoSendMode, setCloudAutoSendMode] = useState<
+      CloudSendMode.Emoji | CloudSendMode.Sticker
+    >(CloudSendMode.Sticker);
     const [mobileAttachmentMenuOpen, setMobileAttachmentMenuOpen] = useState(false);
     const autocompleteFrameRef = useRef<number>();
     const suppressEditorRealtimeUpdatesRef = useRef(false);
@@ -831,14 +906,34 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       autocompleteFrameRef.current = window.requestAnimationFrame(() => {
         autocompleteFrameRef.current = undefined;
 
+        if (ReactEditor.isComposing(editor)) {
+          setAutocompleteQuery(undefined);
+          return;
+        }
+
         const prevWordRange = getPrevWorldRange(editor);
         const query = prevWordRange
-          ? getAutocompleteQuery<AutocompletePrefix>(editor, prevWordRange, AUTOCOMPLETE_PREFIXES)
+          ? getAutocompleteQuery<AutocompletePrefix>(
+              editor,
+              prevWordRange,
+              AUTOCOMPLETE_PREFIXES
+            ) ?? getEmojiKeywordAutocompleteQuery(editor, prevWordRange)
           : undefined;
 
         setAutocompleteQuery(query);
       });
     }, [editor]);
+
+    useEffect(() => {
+      const handleCompositionEnd = (evt: CompositionEvent) => {
+        if (!(evt.target instanceof Element)) return;
+        if (!evt.target.closest('[data-editable-name="RoomInput"]')) return;
+        scheduleAutocompleteQueryUpdate();
+      };
+
+      window.addEventListener('compositionend', handleCompositionEnd, true);
+      return () => window.removeEventListener('compositionend', handleCompositionEnd, true);
+    }, [scheduleAutocompleteQueryUpdate]);
 
     const handleEditorChange = useCallback(() => {
       if (suppressEditorRealtimeUpdatesRef.current) return;
@@ -867,8 +962,22 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       sendTypingStatus,
     ]);
 
-    useEffect(
-      () => () => {
+    useEffect(() => {
+      const generation = roomInputGenerationRef.current + 1;
+      roomInputGenerationRef.current = generation;
+      cloudEmojiRequestIdRef.current += 1;
+      cloudEmojiPreparingRef.current = false;
+      setSendStatus(undefined);
+      setSendError(undefined);
+
+      return () => {
+        if (roomInputGenerationRef.current === generation) {
+          roomInputGenerationRef.current += 1;
+        }
+        cloudEmojiRequestIdRef.current += 1;
+        cloudEmojiPreparingRef.current = false;
+        cloudEmojiInsertionRangeRef.current?.unref();
+        cloudEmojiInsertionRangeRef.current = undefined;
         if (autocompleteFrameRef.current) {
           window.cancelAnimationFrame(autocompleteFrameRef.current);
         }
@@ -884,9 +993,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         }
         resetEditor(editor);
         resetEditorHistory(editor);
-      },
-      [roomId, editor, setMsgDraft, stopRecordingTracks]
-    );
+      };
+    }, [roomId, editor, setMsgDraft, stopRecordingTracks]);
 
     const finalizeVoiceRecording = useCallback(async () => {
       const recorder = mediaRecorderRef.current;
@@ -1067,7 +1175,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     };
 
     const submit = useCallback(async () => {
-      if (sendingMessageRef.current) return;
+      if (sendingMessageRef.current || cloudEmojiPreparingRef.current) return;
 
       const hasUploadDraft = selectedFiles.length > 0;
       const uploadSendSuccess = await uploadBoardHandlers.current?.handleSend();
@@ -1210,6 +1318,103 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       moveCursor(editor, true);
     };
 
+    const resolveCloudEmojiKey = async (
+      sourceUrl: string,
+      shortcode: string,
+      info?: IImageInfo
+    ): Promise<string> => {
+      const inputGeneration = roomInputGenerationRef.current;
+      const currentInput = () => roomInputGenerationRef.current === inputGeneration;
+
+      if (isMxcUrl(sourceUrl)) {
+        if (currentInput()) {
+          setSendError(undefined);
+          setSendStatus(undefined);
+        }
+        return sourceUrl;
+      }
+      if (!isHttpUrl(sourceUrl)) {
+        const message =
+          '\u4e91\u7aef\u8868\u60c5\u5730\u5740\u65e0\u6548\uff0c\u8bf7\u68c0\u67e5\u8fdc\u7a0b\u8868\u60c5\u7d22\u5f15\u3002';
+        if (currentInput()) setSendError(message);
+        throw new Error(message);
+      }
+      if (cloudEmojiPreparingRef.current) {
+        const message =
+          '\u4e0a\u4e00\u679a\u4e91\u7aef\u8868\u60c5\u8fd8\u5728\u51c6\u5907\u4e2d...';
+        if (currentInput()) setSendStatus(message);
+        throw new Error(message);
+      }
+
+      const requestId = cloudEmojiRequestIdRef.current + 1;
+      cloudEmojiRequestIdRef.current = requestId;
+      cloudEmojiPreparingRef.current = true;
+      if (currentInput()) {
+        setSendError(undefined);
+        setSendStatus('\u6b63\u5728\u51c6\u5907\u4e91\u7aef\u8868\u60c5...');
+      }
+      try {
+        const mxc = await getRemoteEmojiMxc(mx, sourceUrl, shortcode, info);
+        return mxc;
+      } catch (error) {
+        if (currentInput() && cloudEmojiRequestIdRef.current === requestId) {
+          setSendError(getCloudEmojiErrorMessage(error));
+        }
+        throw error;
+      } finally {
+        if (cloudEmojiRequestIdRef.current === requestId) {
+          cloudEmojiPreparingRef.current = false;
+          if (currentInput()) setSendStatus(undefined);
+        }
+      }
+    };
+
+    const handleCloudEmojiSelect = async (
+      sourceUrl: string,
+      shortcode: string,
+      info?: IImageInfo
+    ) => {
+      const inputGeneration = roomInputGenerationRef.current;
+      cloudEmojiInsertionRangeRef.current?.unref();
+      const insertionRangeRef = Editor.rangeRef(
+        editor,
+        editor.selection ?? Editor.range(editor, Editor.end(editor, [])),
+        { affinity: 'forward' }
+      );
+      cloudEmojiInsertionRangeRef.current = insertionRangeRef;
+      const sourceDraft = JSON.stringify(editor.children);
+      let rangeReleased = false;
+      const releaseInsertionRange = () => {
+        if (rangeReleased || cloudEmojiInsertionRangeRef.current !== insertionRangeRef) return null;
+        rangeReleased = true;
+        cloudEmojiInsertionRangeRef.current = undefined;
+        return insertionRangeRef.unref();
+      };
+
+      try {
+        const key = await resolveCloudEmojiKey(sourceUrl, shortcode, info);
+        const insertionRange = releaseInsertionRange();
+        if (
+          roomInputGenerationRef.current !== inputGeneration ||
+          !insertionRange ||
+          JSON.stringify(editor.children) !== sourceDraft
+        ) {
+          return;
+        }
+
+        Transforms.select(editor, insertionRange);
+        handleEmoticonSelect(key, shortcode);
+      } catch {
+        releaseInsertionRange();
+        // resolveCloudEmojiKey reports the user-facing failure next to the composer.
+      }
+    };
+
+    const resolveAutocompleteEmojiKey = (image: PackImageReader): string | Promise<string> => {
+      if (!isHttpUrl(image.url)) return image.url;
+      return resolveCloudEmojiKey(image.url, image.body || image.shortcode, image.info);
+    };
+
     const closeEmojiBoard = useCallback(
       (fromPointerTrigger = false) => {
         const now = Date.now();
@@ -1249,9 +1454,14 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       }
 
       emojiBoardSuppressOpenUntilRef.current = 0;
+      setCloudAutoSendMode(
+        !isEmptyEditor(editor) || ReactEditor.isFocused(editor) || editor.selection !== null
+          ? CloudSendMode.Emoji
+          : CloudSendMode.Sticker
+      );
       setEmojiBoardTab(EmojiBoardTab.Emoji);
       setEmojiBoardOpen(true);
-    }, [closeEmojiBoard]);
+    }, [closeEmojiBoard, editor]);
 
     const closeNoteDialog = useCallback(() => {
       if (noteSubmitting) return;
@@ -1287,9 +1497,11 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           return;
         }
 
-        const file = safeFile(new File([noteText], getNoteFileName(noteFileName), {
-          type: NOTE_TEXT_MIME_TYPE,
-        }));
+        const file = safeFile(
+          new File([noteText], getNoteFileName(noteFileName), {
+            type: NOTE_TEXT_MIME_TYPE,
+          })
+        );
 
         try {
           setNoteSubmitting(true);
@@ -1340,14 +1552,26 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           setNoteSubmitting(false);
         }
       },
-      [editor, mx, noteFileName, noteText, replyDraft, room, roomId, sendTypingStatus, setReplyDraft]
+      [
+        editor,
+        mx,
+        noteFileName,
+        noteText,
+        replyDraft,
+        room,
+        roomId,
+        sendTypingStatus,
+        setReplyDraft,
+      ]
     );
 
     const handleStickerSelect = async (mxc: string, label: string, info?: IImageInfo) => {
       const remoteSticker = isHttpUrl(mxc);
       const matrixSticker = isMxcUrl(mxc);
       if (remoteSticker && stickerSendingRef.current) {
-        setSendStatus('\u4e0a\u4e00\u5f20\u4e91\u7aef\u8d34\u7eb8\u8fd8\u5728\u51c6\u5907\u4e2d...');
+        setSendStatus(
+          '\u4e0a\u4e00\u5f20\u4e91\u7aef\u8d34\u7eb8\u8fd8\u5728\u51c6\u5907\u4e2d...'
+        );
         closeEmojiBoard();
         return;
       }
@@ -1677,12 +1901,14 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
             requestClose={handleCloseAutocomplete}
           />
         )}
-        {autocompleteQuery?.prefix === AutocompletePrefix.Emoticon && (
+        {(autocompleteQuery?.prefix === AutocompletePrefix.Emoticon ||
+          autocompleteQuery?.prefix === AutocompletePrefix.EmojiKeyword) && (
           <EmoticonAutocomplete
             imagePackRooms={imagePackRooms}
             imagePackMode="personal"
             editor={editor}
             query={autocompleteQuery}
+            resolveCustomEmojiKey={resolveAutocompleteEmojiKey}
             requestClose={handleCloseAutocomplete}
           />
         )}
@@ -1930,8 +2156,10 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                     imagePackRooms={imagePackRooms}
                     imagePackMode="personal"
                     returnFocusOnDeactivate={false}
+                    cloudAutoSendMode={cloudAutoSendMode}
                     onEmojiSelect={handleEmoticonSelect}
                     onCustomEmojiSelect={handleEmoticonSelect}
+                    onCloudEmojiSelect={handleCloudEmojiSelect}
                     onStickerSelect={handleStickerSelect}
                     requestClose={closeEmojiBoard}
                   />
@@ -1972,8 +2200,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                 variant="SurfaceVariant"
                 size="300"
                 radii="300"
-                disabled={recording}
-                aria-disabled={recording}
+                disabled={recording || cloudEmojiPreparingRef.current}
+                aria-disabled={recording || cloudEmojiPreparingRef.current}
               >
                 <Icon src={Icons.Send} />
               </IconButton>

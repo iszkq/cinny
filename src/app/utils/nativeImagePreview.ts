@@ -33,6 +33,7 @@ export const NATIVE_IMAGE_PREVIEW_ACTION_EVENT = 'cinny://image-preview-action';
 
 const DATA_URL_RE = /^data:/i;
 const BLOB_URL_RE = /^blob:/i;
+const NATIVE_IMAGE_PREVIEW_READY_TIMEOUT_MS = 15_000;
 let nativePreviewWindowSeq = 0;
 
 const getNativePreviewWindowUrl = (previewId: string): string => {
@@ -91,8 +92,19 @@ export const createNativeImagePreviewId = (): string => {
 export const getNativeImagePreviewWindowLabel = (previewId: string): string =>
   `image-preview-${previewId}`;
 
+const closeNativeImagePreviewWindowByLabel = async (label: string): Promise<void> => {
+  const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow');
+  const previewWindow = await WebviewWindow.getByLabel(label);
+  if (!previewWindow) return;
+
+  await previewWindow.close().catch(async () => {
+    await previewWindow.destroy().catch(() => undefined);
+  });
+};
+
 export const openNativeImagePreviewWindow = async (
-  payload: NativeImagePreviewPayload
+  payload: NativeImagePreviewPayload,
+  signal?: AbortSignal
 ): Promise<NativeImagePreviewWindowHandle | undefined> => {
   if (!isDesktopUpdaterSupported()) return undefined;
 
@@ -101,17 +113,39 @@ export const openNativeImagePreviewWindow = async (
     import('@tauri-apps/api/event'),
   ]);
   const label = getNativeImagePreviewWindowLabel(payload.previewId);
+  let previewWindow: InstanceType<typeof WebviewWindow> | undefined;
+  let windowCreated: Promise<void> | undefined;
+  let disposeWindowCreationListeners: () => void = () => undefined;
+
+  let initialPayloadSettled = false;
+  let resolveInitialPayload: () => void = () => undefined;
+  let rejectInitialPayload: (reason?: unknown) => void = () => undefined;
+  const initialPayloadDelivered = new Promise<void>((resolve, reject) => {
+    resolveInitialPayload = resolve;
+    rejectInitialPayload = reject;
+  });
+  const settleInitialPayload = (callback: () => void) => {
+    if (initialPayloadSettled) return;
+    initialPayloadSettled = true;
+    callback();
+  };
 
   const unlistenReady = await listen(
     NATIVE_IMAGE_PREVIEW_READY_EVENT,
     (event: EventPayload<{ previewId?: string }>) => {
       if (event.payload?.previewId !== payload.previewId) return;
-      void emitTo(label, NATIVE_IMAGE_PREVIEW_UPDATE_EVENT, payload);
+      emitTo(label, NATIVE_IMAGE_PREVIEW_UPDATE_EVENT, payload)
+        .then(() => settleInitialPayload(resolveInitialPayload))
+        .catch((error) => settleInitialPayload(() => rejectInitialPayload(error)));
     }
   );
 
   try {
-    const previewWindow = new WebviewWindow(label, {
+    if (signal?.aborted) {
+      throw new Error('Image preview window opening was cancelled.');
+    }
+
+    previewWindow = new WebviewWindow(label, {
       url: getNativePreviewWindowUrl(payload.previewId),
       title: payload.alt || 'Image Preview',
       width: 1120,
@@ -121,15 +155,21 @@ export const openNativeImagePreviewWindow = async (
       resizable: true,
       decorations: false,
       center: true,
-      focus: true,
-      visible: true,
+      focus: false,
+      visible: false,
       dragDropEnabled: false,
     });
+    const openingWindow = previewWindow;
 
-    await new Promise<void>((resolve, reject) => {
+    windowCreated = new Promise<void>((resolve, reject) => {
       let settled = false;
+      let listenersDisposed = false;
       const unlisteners: Array<() => void> = [];
-      const cleanup = () => unlisteners.splice(0).forEach((unlisten) => unlisten());
+      const cleanup = () => {
+        listenersDisposed = true;
+        unlisteners.splice(0).forEach((unlisten) => unlisten());
+      };
+      disposeWindowCreationListeners = cleanup;
       const settle = (callback: () => void) => {
         if (settled) return;
         settled = true;
@@ -137,18 +177,18 @@ export const openNativeImagePreviewWindow = async (
         callback();
       };
       const trackUnlisten = (unlisten: () => void) => {
-        if (settled) {
+        if (settled || listenersDisposed) {
           unlisten();
           return;
         }
         unlisteners.push(unlisten);
       };
 
-      previewWindow
+      openingWindow
         .once('tauri://created', () => settle(resolve))
         .then(trackUnlisten)
         .catch((error) => settle(() => reject(error)));
-      previewWindow
+      openingWindow
         .once('tauri://error', (event: EventPayload<unknown>) =>
           settle(() => reject(event.payload ?? new Error('Failed to create image preview window.')))
         )
@@ -156,13 +196,94 @@ export const openNativeImagePreviewWindow = async (
         .catch((error) => settle(() => reject(error)));
     });
 
+    let unlistenDestroyed: (() => void) | undefined;
+    let destroyedListenerDisposed = false;
+    const windowDestroyed = new Promise<never>((_resolve, reject) => {
+      openingWindow
+        .once('tauri://destroyed', () =>
+          reject(new Error('Image preview window closed before it was ready.'))
+        )
+        .then((nextUnlisten) => {
+          if (destroyedListenerDisposed) {
+            nextUnlisten();
+            return;
+          }
+          unlistenDestroyed = nextUnlisten;
+        })
+        .catch(reject);
+    });
+
+    let removeAbortListener: () => void = () => undefined;
+    const openingAborted = new Promise<never>((_resolve, reject) => {
+      if (!signal) return;
+
+      const handleAbort = () => reject(new Error('Image preview window opening was cancelled.'));
+      if (signal.aborted) {
+        handleAbort();
+        return;
+      }
+
+      signal.addEventListener('abort', handleAbort, { once: true });
+      removeAbortListener = () => signal.removeEventListener('abort', handleAbort);
+    });
+
+    let readyTimeout: number | undefined;
+
+    try {
+      await Promise.race([windowCreated, windowDestroyed, openingAborted]);
+
+      const readyTimedOut = new Promise<never>((_resolve, reject) => {
+        readyTimeout = window.setTimeout(
+          () => reject(new Error('Image preview window did not become ready in time.')),
+          NATIVE_IMAGE_PREVIEW_READY_TIMEOUT_MS
+        );
+      });
+
+      await Promise.race([initialPayloadDelivered, windowDestroyed, openingAborted, readyTimedOut]);
+
+      if (signal?.aborted) {
+        throw new Error('Image preview window opening was cancelled.');
+      }
+
+      await openingWindow.show();
+      await openingWindow.setFocus().catch(() => undefined);
+    } finally {
+      if (readyTimeout !== undefined) {
+        window.clearTimeout(readyTimeout);
+      }
+      removeAbortListener();
+      destroyedListenerDisposed = true;
+      unlistenDestroyed?.();
+    }
+
     return {
       label,
       unlistenReady,
     };
   } catch {
     unlistenReady();
-    await closeNativeImagePreviewWindow(label).catch(() => undefined);
+
+    const disposePreviewWindow = async () => {
+      const currentPreviewWindow = previewWindow;
+      if (currentPreviewWindow) {
+        await currentPreviewWindow.close().catch(async () => {
+          await currentPreviewWindow.destroy().catch(() => undefined);
+        });
+      }
+      await closeNativeImagePreviewWindowByLabel(label).catch(() => undefined);
+    };
+
+    await disposePreviewWindow();
+    if (windowCreated) {
+      windowCreated
+        .then(
+          () => disposePreviewWindow(),
+          () => disposePreviewWindow()
+        )
+        .catch(() => undefined);
+    } else {
+      disposeWindowCreationListeners();
+    }
     return undefined;
   }
 };
@@ -202,8 +323,4 @@ export const emitNativeImagePreviewAction = async (
   await emitTo('main', NATIVE_IMAGE_PREVIEW_ACTION_EVENT, action);
 };
 
-export const closeNativeImagePreviewWindow = async (label: string): Promise<void> => {
-  const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow');
-  const previewWindow = await WebviewWindow.getByLabel(label);
-  await previewWindow?.close();
-};
+export const closeNativeImagePreviewWindow = closeNativeImagePreviewWindowByLabel;

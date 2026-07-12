@@ -39,11 +39,7 @@ import {
 
 type ImageViewerDialogProps = Omit<
   ImageViewerProps,
-  | 'maximized'
-  | 'onMinimize'
-  | 'onOcrPanelOpenChange'
-  | 'onToggleMaximized'
-  | 'onWindowDragStart'
+  'maximized' | 'onMinimize' | 'onOcrPanelOpenChange' | 'onToggleMaximized' | 'onWindowDragStart'
 > & {
   open: boolean;
   renderViewer: (props: ImageViewerProps) => ReactNode;
@@ -144,7 +140,7 @@ export function ImageViewerDialog({
     setNativePreviewActive(false);
 
     if (closeWindow) {
-      void closeNativeImagePreviewWindow(nativePreview.label).catch(() => undefined);
+      closeNativeImagePreviewWindow(nativePreview.label).catch(() => undefined);
     }
   }, []);
 
@@ -156,10 +152,7 @@ export function ImageViewerDialog({
     if (!rect) return nextOffset;
 
     const maxX = Math.max(0, (window.innerWidth - rect.width) / 2 - WINDOW_EDGE_PADDING_PX);
-    const maxY = Math.max(
-      0,
-      (window.innerHeight - rect.height) / 2 - WINDOW_EDGE_PADDING_PX
-    );
+    const maxY = Math.max(0, (window.innerHeight - rect.height) / 2 - WINDOW_EDGE_PADDING_PX);
 
     return {
       x: clamp(nextOffset.x, -maxX, maxX),
@@ -201,13 +194,7 @@ export function ImageViewerDialog({
         window.removeEventListener('pointercancel', handlePointerUp);
       };
     },
-    [
-      clearDragListeners,
-      getClampedWindowOffset,
-      maximized,
-      mobile,
-      windowOffset,
-    ]
+    [clearDragListeners, getClampedWindowOffset, maximized, mobile, windowOffset]
   );
 
   const buildNativePreviewPayload = useCallback(async (previewId: string) => {
@@ -290,15 +277,24 @@ export function ImageViewerDialog({
     }
 
     let cancelled = false;
+    const openAbortController = new AbortController();
     const previewId = createNativeImagePreviewId();
     let unlistenAction: (() => void) | undefined;
     let unlistenReady: (() => void) | undefined;
+    const releaseActionListener = () => {
+      const listener = unlistenAction;
+      unlistenAction = undefined;
+      listener?.();
+    };
 
     const openNativePreview = async () => {
       unlistenAction = await listenNativeImagePreviewAction(previewId, (action) => {
         const input = latestNativeInputRef.current;
 
         if (action.type === 'close') {
+          if (nativePreviewRef.current?.previewId === previewId) {
+            closeNativePreview(false);
+          }
           input.requestClose();
           return;
         }
@@ -310,11 +306,20 @@ export function ImageViewerDialog({
           input.onNext?.();
         }
       });
+      if (cancelled) {
+        releaseActionListener();
+        return;
+      }
 
       const payload = await buildNativePreviewPayload(previewId);
-      const nativePreview = await openNativeImagePreviewWindow(payload);
+      if (cancelled) {
+        releaseActionListener();
+        return;
+      }
+
+      const nativePreview = await openNativeImagePreviewWindow(payload, openAbortController.signal);
       if (!nativePreview) {
-        unlistenAction?.();
+        releaseActionListener();
         if (!cancelled) {
           setNativePreviewFailed(true);
         }
@@ -322,7 +327,7 @@ export function ImageViewerDialog({
       }
 
       if (cancelled) {
-        unlistenAction?.();
+        releaseActionListener();
         nativePreview.unlistenReady();
         await closeNativeImagePreviewWindow(nativePreview.label).catch(() => undefined);
         return;
@@ -332,14 +337,14 @@ export function ImageViewerDialog({
       nativePreviewRef.current = {
         previewId,
         label: nativePreview.label,
-        unlistenAction,
+        unlistenAction: releaseActionListener,
         unlistenReady,
       };
       setNativePreviewActive(true);
     };
 
     openNativePreview().catch(() => {
-      unlistenAction?.();
+      releaseActionListener();
       unlistenReady?.();
       nativePreviewRef.current = undefined;
       setNativePreviewActive(false);
@@ -350,8 +355,10 @@ export function ImageViewerDialog({
 
     return () => {
       cancelled = true;
+      openAbortController.abort();
+      releaseActionListener();
     };
-  }, [buildNativePreviewPayload, desktopNativePreview, open]);
+  }, [buildNativePreviewPayload, closeNativePreview, desktopNativePreview, open]);
 
   useEffect(() => {
     const nativePreview = nativePreviewRef.current;
@@ -361,7 +368,7 @@ export function ImageViewerDialog({
     buildNativePreviewPayload(nativePreview.previewId)
       .then((payload) => {
         if (cancelled) return;
-        void emitNativeImagePreviewPayload(nativePreview.label, payload).catch(() => undefined);
+        emitNativeImagePreviewPayload(nativePreview.label, payload).catch(() => undefined);
       })
       .catch(() => undefined);
 
@@ -372,6 +379,7 @@ export function ImageViewerDialog({
     alt,
     buildNativePreviewPayload,
     loading,
+    nativePreviewActive,
     open,
     src,
     viewerProps.canNext,

@@ -8,7 +8,7 @@ import {
   getNativeImagePreviewId,
   type NativeImagePreviewPayload,
 } from '../../utils/nativeImagePreview';
-import { ScreenSizeProvider, useScreenSize } from '../../hooks/useScreenSize';
+import { ScreenSize, ScreenSizeProvider } from '../../hooks/useScreenSize';
 
 type EventPayload<T> = {
   payload: T;
@@ -30,9 +30,25 @@ const isEditableEventTarget = (target: EventTarget | null): boolean => {
 
 const OCR_PANEL_WINDOW_EXTRA_WIDTH_PX = 252;
 
+const closeCurrentNativeWindow = async (): Promise<void> => {
+  const { getCurrentWindow } = await import('@tauri-apps/api/window');
+  const currentWindow = getCurrentWindow();
+
+  await currentWindow.close().catch(async () => {
+    await currentWindow.destroy().catch(() => {
+      window.close();
+    });
+  });
+
+  window.setTimeout(() => {
+    currentWindow.destroy().catch(() => undefined);
+  }, 240);
+};
+
 function NativeImagePreviewWindowContent() {
   const previewId = getNativeImagePreviewId();
   const closeEmittedRef = useRef(false);
+  const closingRef = useRef(false);
   const ocrExpandedRef = useRef(false);
   const baseWindowSizeRef = useRef<{ width: number; height: number }>();
   const [payload, setPayload] = useState<NativeImagePreviewPayload>();
@@ -41,16 +57,14 @@ function NativeImagePreviewWindowContent() {
   const emitCloseAction = useCallback(() => {
     if (!previewId || closeEmittedRef.current) return;
     closeEmittedRef.current = true;
-    void emitNativeImagePreviewAction({ previewId, type: 'close' }).catch(() => undefined);
+    emitNativeImagePreviewAction({ previewId, type: 'close' }).catch(() => undefined);
   }, [previewId]);
 
   const handleClose = useCallback(() => {
+    if (closingRef.current) return;
+    closingRef.current = true;
     emitCloseAction();
-    import('@tauri-apps/api/window')
-      .then(({ getCurrentWindow }) => getCurrentWindow().close())
-      .catch(() => {
-        window.close();
-      });
+    closeCurrentNativeWindow().catch(() => undefined);
   }, [emitCloseAction]);
 
   const handleMinimize = useCallback(() => {
@@ -104,20 +118,24 @@ function NativeImagePreviewWindowContent() {
     [maximized]
   );
 
-  const handleWindowDragStart = useCallback<React.PointerEventHandler<HTMLElement>>((evt) => {
-    if (maximized) return;
-    if (isInteractiveDragTarget(evt.target)) return;
-    if (evt.pointerType === 'mouse' && evt.button !== 0) return;
+  const handleWindowDragStart = useCallback<React.PointerEventHandler<HTMLElement>>(
+    (evt) => {
+      if (maximized) return;
+      if (isInteractiveDragTarget(evt.target)) return;
+      if (evt.pointerType === 'mouse' && evt.button !== 0) return;
 
-    evt.preventDefault();
-    import('@tauri-apps/api/window')
-      .then(({ getCurrentWindow }) => getCurrentWindow().startDragging())
-      .catch(() => undefined);
-  }, [maximized]);
+      evt.preventDefault();
+      import('@tauri-apps/api/window')
+        .then(({ getCurrentWindow }) => getCurrentWindow().startDragging())
+        .catch(() => undefined);
+    },
+    [maximized]
+  );
 
   useEffect(() => {
     if (!previewId) return undefined;
 
+    let disposed = false;
     let unlisten: (() => void) | undefined;
     import('@tauri-apps/api/event')
       .then(({ listen }) =>
@@ -130,12 +148,17 @@ function NativeImagePreviewWindowContent() {
         )
       )
       .then((nextUnlisten) => {
+        if (disposed) {
+          nextUnlisten();
+          return;
+        }
         unlisten = nextUnlisten;
-        void emitNativeImagePreviewReady(previewId).catch(() => undefined);
+        emitNativeImagePreviewReady(previewId).catch(() => undefined);
       })
       .catch(() => undefined);
 
     return () => {
+      disposed = true;
       unlisten?.();
     };
   }, [previewId]);
@@ -199,14 +222,14 @@ function NativeImagePreviewWindowContent() {
         onPrev={
           payload.canPrev
             ? () => {
-                void emitNativeImagePreviewAction({ previewId, type: 'prev' });
+                emitNativeImagePreviewAction({ previewId, type: 'prev' }).catch(() => undefined);
               }
             : undefined
         }
         onNext={
           payload.canNext
             ? () => {
-                void emitNativeImagePreviewAction({ previewId, type: 'next' });
+                emitNativeImagePreviewAction({ previewId, type: 'next' }).catch(() => undefined);
               }
             : undefined
         }
@@ -220,10 +243,8 @@ function NativeImagePreviewWindowContent() {
 }
 
 export function NativeImagePreviewWindow() {
-  const screenSize = useScreenSize();
-
   return (
-    <ScreenSizeProvider value={screenSize}>
+    <ScreenSizeProvider value={ScreenSize.Tablet}>
       <NativeImagePreviewWindowContent />
     </ScreenSizeProvider>
   );

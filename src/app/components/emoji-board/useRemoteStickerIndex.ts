@@ -205,15 +205,7 @@ const getDisplayName = (item: RemoteStickerIndexItem): string | undefined => {
 const getFirstValidUrl = (
   values: Array<string | undefined>,
   validator: (url: string | undefined | null) => url is string
-): string | undefined => {
-  for (const value of values) {
-    const trimmed = value?.trim();
-    if (validator(trimmed)) {
-      return trimmed;
-    }
-  }
-  return undefined;
-};
+): string | undefined => values.map((value) => value?.trim()).find(validator);
 
 const toRemoteSticker = (
   item: RemoteStickerIndexItem,

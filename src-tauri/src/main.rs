@@ -20,9 +20,7 @@ use std::{
     thread,
     time::Duration,
 };
-use tauri::{
-    plugin::PermissionState, AppHandle, Manager, WebviewUrl, WebviewWindowBuilder,
-};
+use tauri::{plugin::PermissionState, AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_notification::NotificationExt;
 
 #[cfg(target_os = "windows")]
@@ -36,8 +34,7 @@ const REMOTE_STICKER_INDEX_MAX_BYTES: u64 = 25 * 1024 * 1024;
 const REMOTE_STICKER_MEDIA_MAX_BYTES: u64 = 25 * 1024 * 1024;
 static REMOTE_STICKER_HTTP_CLIENT: OnceLock<Client> = OnceLock::new();
 static EXTERNAL_POPUP_COUNTER: AtomicU64 = AtomicU64::new(1);
-static JITSI_AUTH_POPUP_LABELS: OnceLock<Mutex<HashMap<String, HashSet<String>>>> =
-    OnceLock::new();
+static JITSI_AUTH_POPUP_LABELS: OnceLock<Mutex<HashMap<String, HashSet<String>>>> = OnceLock::new();
 const JITSI_AUTH_CLOSE_TITLE: &str = "__cinny_close_jitsi_auth_window__";
 const JITSI_FIREBASE_AUTH_CLOSE_DELAY_MS: u64 = 1_200;
 
@@ -286,6 +283,64 @@ fn register_jitsi_auth_popup_window(parent_label: &str, popup_label: &str) {
     }
 }
 
+fn unregister_jitsi_auth_popup_window(parent_label: &str, popup_label: &str) {
+    if let Ok(mut labels_by_parent) = get_jitsi_auth_popup_labels().lock() {
+        let remove_parent = labels_by_parent
+            .get_mut(parent_label)
+            .is_some_and(|labels| {
+                labels.remove(popup_label);
+                labels.is_empty()
+            });
+
+        if remove_parent {
+            labels_by_parent.remove(parent_label);
+        }
+    }
+}
+
+fn track_jitsi_auth_popup_window(
+    window: &tauri::WebviewWindow,
+    parent_label: &str,
+    popup_label: &str,
+) {
+    register_jitsi_auth_popup_window(parent_label, popup_label);
+
+    let tracked_parent_label = parent_label.to_owned();
+    let tracked_popup_label = popup_label.to_owned();
+    window.on_window_event(move |event| {
+        if matches!(event, tauri::WindowEvent::Destroyed) {
+            unregister_jitsi_auth_popup_window(&tracked_parent_label, &tracked_popup_label);
+        }
+    });
+}
+
+fn track_external_parent_window(
+    app: &AppHandle,
+    window: &tauri::WebviewWindow,
+    parent_label: &str,
+) {
+    let tracked_app = app.clone();
+    let tracked_parent_label = parent_label.to_owned();
+    window.on_window_event(move |event| {
+        if matches!(event, tauri::WindowEvent::Destroyed) {
+            close_jitsi_auth_popup_windows_for_parent(&tracked_app, &tracked_parent_label);
+        }
+    });
+}
+
+fn reveal_webview_window(window: &tauri::WebviewWindow, focus: bool) -> Result<(), String> {
+    let _ = window.unminimize();
+    window
+        .show()
+        .map_err(|error| format!("failed to show window: {error}"))?;
+
+    if focus {
+        let _ = window.set_focus();
+    }
+
+    Ok(())
+}
+
 fn hide_external_popup_window(app: &AppHandle, label: &str) {
     let app_handle = app.clone();
     let window_label = label.to_owned();
@@ -386,14 +441,18 @@ fn handle_jitsi_auth_popup_title(
 fn get_jitsi_authenticated_meeting_url(url: &Url) -> Option<Url> {
     if url.scheme() == "https"
         && url.host_str() == Some("meet.jit.si")
-        && url.query_pairs().any(|(key, value)| key == "jwt" && !value.is_empty())
+        && url
+            .query_pairs()
+            .any(|(key, value)| key == "jwt" && !value.is_empty())
     {
         return Some(url.clone());
     }
 
     if url.scheme() == "jitsi-meet"
         && url.host_str() == Some("meet.jit.si")
-        && url.query_pairs().any(|(key, value)| key == "jwt" && !value.is_empty())
+        && url
+            .query_pairs()
+            .any(|(key, value)| key == "jwt" && !value.is_empty())
     {
         let mut https_url = url.clone();
         if https_url.set_scheme("https").is_ok() {
@@ -452,11 +511,7 @@ fn close_jitsi_auth_popup_windows_after_delay(
 
     thread::spawn(move || {
         thread::sleep(Duration::from_millis(delay_ms));
-        close_jitsi_auth_popup_windows(
-            &delayed_app,
-            &delayed_parent_label,
-            &delayed_current_label,
-        );
+        close_jitsi_auth_popup_windows(&delayed_app, &delayed_parent_label, &delayed_current_label);
     });
 }
 
@@ -493,8 +548,8 @@ fn get_remote_sticker_http_client() -> &'static Client {
 }
 
 fn parse_remote_sticker_index_url(url: &str) -> Result<Url, String> {
-    let parsed = Url::parse(url.trim())
-        .map_err(|error| format!("invalid sticker index URL: {error}"))?;
+    let parsed =
+        Url::parse(url.trim()).map_err(|error| format!("invalid sticker index URL: {error}"))?;
     let valid_origin =
         parsed.scheme() == "https" && parsed.host_str() == Some(REMOTE_STICKER_INDEX_HOST);
     let valid_path = parsed.path() == REMOTE_STICKER_INDEX_PATH;
@@ -509,8 +564,8 @@ fn parse_remote_sticker_index_url(url: &str) -> Result<Url, String> {
 }
 
 fn parse_remote_sticker_media_url(url: &str) -> Result<Url, String> {
-    let parsed = Url::parse(url.trim())
-        .map_err(|error| format!("invalid sticker media URL: {error}"))?;
+    let parsed =
+        Url::parse(url.trim()).map_err(|error| format!("invalid sticker media URL: {error}"))?;
     let valid_origin =
         parsed.scheme() == "https" && parsed.host_str() == Some(REMOTE_STICKER_INDEX_HOST);
     let valid_port = parsed.port().is_none() || parsed.port() == Some(443);
@@ -610,7 +665,11 @@ fn parse_windows_proxy_server(proxy_server: &str) -> Option<String> {
     let mut socks_proxy = None;
     let mut fallback_proxy = None;
 
-    for segment in proxy_server.split(';').map(str::trim).filter(|item| !item.is_empty()) {
+    for segment in proxy_server
+        .split(';')
+        .map(str::trim)
+        .filter(|item| !item.is_empty())
+    {
         if let Some((raw_kind, raw_value)) = segment.split_once('=') {
             let kind = raw_kind.trim().to_ascii_lowercase();
             let value = raw_value.trim();
@@ -645,12 +704,16 @@ fn detect_updater_proxy_from_windows_registry() -> Option<String> {
     let internet_settings = hkcu
         .open_subkey("Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings")
         .ok()?;
-    let proxy_enabled = internet_settings.get_value::<u32, _>("ProxyEnable").unwrap_or(0);
+    let proxy_enabled = internet_settings
+        .get_value::<u32, _>("ProxyEnable")
+        .unwrap_or(0);
     if proxy_enabled == 0 {
         return None;
     }
 
-    let proxy_server = internet_settings.get_value::<String, _>("ProxyServer").ok()?;
+    let proxy_server = internet_settings
+        .get_value::<String, _>("ProxyServer")
+        .ok()?;
     parse_windows_proxy_server(&proxy_server)
 }
 
@@ -674,7 +737,7 @@ fn open_external_url(url: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn open_external_url_window(
+fn open_external_url_window(
     app: AppHandle,
     url: String,
     label: String,
@@ -691,9 +754,16 @@ async fn open_external_url_window(
         existing_window
             .set_title(&title)
             .map_err(|error| format!("failed to update window title: {error}"))?;
-        let _ = existing_window.unminimize();
-        let _ = existing_window.show();
-        let _ = existing_window.set_focus();
+        let should_navigate = existing_window
+            .url()
+            .map(|current_url| current_url != parsed)
+            .unwrap_or(true);
+        if should_navigate {
+            existing_window
+                .navigate(parsed)
+                .map_err(|error| format!("failed to update window URL: {error}"))?;
+        }
+        reveal_webview_window(&existing_window, true)?;
         return Ok(());
     }
 
@@ -702,14 +772,16 @@ async fn open_external_url_window(
     let main_navigation_app = app.clone();
     let main_navigation_label = label.clone();
 
-    WebviewWindowBuilder::new(&app, &label, WebviewUrl::External(parsed))
+    let external_window = WebviewWindowBuilder::new(&app, &label, WebviewUrl::External(parsed))
         .title(&title)
         .inner_size(1180.0, 820.0)
         .min_inner_size(720.0, 520.0)
         .resizable(true)
         .center()
-        .focused(true)
-        .visible(true)
+        // Keep the native shell hidden until WebView2 has finished constructing it. If
+        // construction fails, users never see a short-lived empty window.
+        .focused(false)
+        .visible(false)
         .disable_drag_drop_handler()
         .on_navigation(move |url| {
             if get_jitsi_authenticated_meeting_url(url).is_some() {
@@ -728,7 +800,6 @@ async fn open_external_url_window(
             }
 
             let popup_label = next_external_popup_label(&popup_parent_label);
-            register_jitsi_auth_popup_window(&popup_parent_label, &popup_label);
             let popup_starts_on_firebase_auth_handler = is_jitsi_firebase_auth_handler_url(&url);
             let popup_initial_auth_handler_app = popup_app.clone();
             let popup_initial_auth_handler_parent_label = popup_parent_label.clone();
@@ -745,14 +816,15 @@ async fn open_external_url_window(
             let popup_url = Url::parse("about:blank").expect("about:blank is a valid URL");
             let popup_builder = WebviewWindowBuilder::new(
                 &popup_app,
-                popup_label,
+                popup_label.clone(),
                 WebviewUrl::External(popup_url),
             )
             .window_features(features)
             .title(url.as_str())
+            .min_inner_size(480.0, 360.0)
             .resizable(true)
-            .focused(!popup_starts_on_firebase_auth_handler)
-            .visible(!popup_starts_on_firebase_auth_handler)
+            .focused(false)
+            .visible(false)
             .disable_drag_drop_handler()
             .initialization_script(JITSI_FIREBASE_AUTH_INIT_SCRIPT)
             .on_navigation(move |url| {
@@ -781,10 +853,6 @@ async fn open_external_url_window(
                 }
 
                 let nested_popup_label = next_external_popup_label(&nested_popup_parent_label);
-                register_jitsi_auth_popup_window(
-                    &nested_meeting_parent_label,
-                    &nested_popup_label,
-                );
                 let nested_starts_on_firebase_auth_handler =
                     is_jitsi_firebase_auth_handler_url(&nested_url);
                 let nested_initial_auth_handler_app = nested_popup_app.clone();
@@ -800,14 +868,15 @@ async fn open_external_url_window(
                     Url::parse("about:blank").expect("about:blank is a valid URL");
                 let nested_popup_builder = WebviewWindowBuilder::new(
                     &nested_popup_app,
-                    nested_popup_label,
+                    nested_popup_label.clone(),
                     WebviewUrl::External(nested_popup_url),
                 )
                 .window_features(nested_features)
                 .title(nested_url.as_str())
+                .min_inner_size(480.0, 360.0)
                 .resizable(true)
-                .focused(!nested_starts_on_firebase_auth_handler)
-                .visible(!nested_starts_on_firebase_auth_handler)
+                .focused(false)
+                .visible(false)
                 .disable_drag_drop_handler()
                 .initialization_script(JITSI_FIREBASE_AUTH_INIT_SCRIPT)
                 .on_navigation(move |url| {
@@ -841,6 +910,12 @@ async fn open_external_url_window(
 
                 match nested_popup_builder.build() {
                     Ok(window) => {
+                        track_jitsi_auth_popup_window(
+                            &window,
+                            &nested_meeting_parent_label,
+                            &nested_popup_label,
+                        );
+
                         if nested_starts_on_firebase_auth_handler {
                             schedule_jitsi_auth_popup_close_after_firebase_callback(
                                 &nested_initial_auth_handler_app,
@@ -848,6 +923,14 @@ async fn open_external_url_window(
                                 &nested_initial_auth_handler_label,
                                 &nested_url,
                             );
+                        } else if reveal_webview_window(&window, true).is_err() {
+                            unregister_jitsi_auth_popup_window(
+                                &nested_meeting_parent_label,
+                                &nested_popup_label,
+                            );
+                            let _ = window.destroy();
+                            let _ = open_url_with_system_handler(nested_url.as_str());
+                            return tauri::webview::NewWindowResponse::Deny;
                         }
 
                         tauri::webview::NewWindowResponse::Create { window }
@@ -870,6 +953,8 @@ async fn open_external_url_window(
 
             match popup_builder.build() {
                 Ok(window) => {
+                    track_jitsi_auth_popup_window(&window, &popup_parent_label, &popup_label);
+
                     if popup_starts_on_firebase_auth_handler {
                         schedule_jitsi_auth_popup_close_after_firebase_callback(
                             &popup_initial_auth_handler_app,
@@ -877,6 +962,11 @@ async fn open_external_url_window(
                             &popup_initial_auth_handler_label,
                             &url,
                         );
+                    } else if reveal_webview_window(&window, true).is_err() {
+                        unregister_jitsi_auth_popup_window(&popup_parent_label, &popup_label);
+                        let _ = window.destroy();
+                        let _ = open_url_with_system_handler(url.as_str());
+                        return tauri::webview::NewWindowResponse::Deny;
                     }
 
                     tauri::webview::NewWindowResponse::Create { window }
@@ -891,8 +981,15 @@ async fn open_external_url_window(
             let _ = window.set_title(&title);
         })
         .build()
-        .map(|_| ())
-        .map_err(|error| format!("failed to create external window: {error}"))
+        .map_err(|error| format!("failed to create external window: {error}"))?;
+
+    track_external_parent_window(&app, &external_window, &label);
+    if let Err(error) = reveal_webview_window(&external_window, true) {
+        let _ = external_window.destroy();
+        return Err(error);
+    }
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -912,7 +1009,9 @@ async fn fetch_remote_sticker_index(url: String) -> Result<Value, String> {
 
     let status = response.status();
     if !status.is_success() {
-        return Err(format!("failed to fetch remote sticker index: HTTP {status}"));
+        return Err(format!(
+            "failed to fetch remote sticker index: HTTP {status}"
+        ));
     }
 
     if response
@@ -947,7 +1046,9 @@ async fn fetch_remote_sticker_media(url: String) -> Result<RemoteStickerMediaRes
 
     let status = response.status();
     if !status.is_success() {
-        return Err(format!("failed to fetch remote sticker media: HTTP {status}"));
+        return Err(format!(
+            "failed to fetch remote sticker media: HTTP {status}"
+        ));
     }
 
     if response
@@ -993,8 +1094,7 @@ fn save_downloaded_file(request: SaveDownloadedFileRequest) -> Result<bool, Stri
         return Ok(false);
     };
 
-    fs::write(&save_path, file_bytes)
-        .map_err(|error| format!("failed to save file: {error}"))?;
+    fs::write(&save_path, file_bytes).map_err(|error| format!("failed to save file: {error}"))?;
 
     Ok(true)
 }
