@@ -1942,6 +1942,9 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
             editor={editor}
             query={autocompleteQuery}
             resolveCustomEmojiKey={resolveAutocompleteEmojiKey}
+            onStickerSelect={(image) =>
+              handleStickerSelect(image.url, image.body || image.shortcode, image.info)
+            }
             requestClose={handleCloseAutocomplete}
           />
         )}

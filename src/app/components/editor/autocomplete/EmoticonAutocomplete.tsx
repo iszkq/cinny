@@ -7,8 +7,8 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { Editor, RangeRef } from 'slate';
-import { Box, Icon, IconButton, Icons, MenuItem, Spinner, Text, toRem } from 'folds';
+import { Editor, RangeRef, Transforms } from 'slate';
+import { Badge, Box, Icon, IconButton, Icons, MenuItem, Spinner, Text, toRem } from 'folds';
 import { Room } from 'matrix-js-sdk';
 
 import { AutocompleteQuery } from './autocompleteQuery';
@@ -40,6 +40,7 @@ type EmoticonAutocompleteProps = {
   query: AutocompleteQuery<string>;
   requestClose: () => void;
   resolveCustomEmojiKey?: (image: PackImageReader) => string | Promise<string>;
+  onStickerSelect?: (image: PackImageReader) => void | Promise<void>;
 };
 
 const MAX_AUTOCOMPLETE_RESULTS = 60;
@@ -102,6 +103,7 @@ export function EmoticonAutocomplete({
   query,
   requestClose,
   resolveCustomEmojiKey,
+  onStickerSelect,
 }: EmoticonAutocompleteProps) {
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
@@ -157,6 +159,7 @@ export function EmoticonAutocomplete({
   const aliveRef = useRef(true);
   const activeQueryRangeRef = useRef<RangeRef>();
   const [resolving, setResolving] = useState(false);
+  const [stickerMode, setStickerMode] = useState(false);
   const [canScrollPrevious, setCanScrollPrevious] = useState(false);
   const [canScrollNext, setCanScrollNext] = useState(false);
   const [visibleOptionIndexes, setVisibleOptionIndexes] = useState(() => new Set([0, 1, 2, 3]));
@@ -250,6 +253,19 @@ export function EmoticonAutocomplete({
     async (emoticon: EmoticonSearchItem) => {
       if (completingRef.current) return;
 
+      if (stickerMode && emoticon instanceof PackImageReader && onStickerSelect) {
+        completingRef.current = true;
+        Transforms.delete(editor, { at: query.range });
+        moveCursor(editor, true);
+        requestClose();
+        try {
+          await onStickerSelect(emoticon);
+        } finally {
+          completingRef.current = false;
+        }
+        return;
+      }
+
       const defaultKey = emoticon instanceof PackImageReader ? emoticon.url : emoticon.unicode;
       if (!(emoticon instanceof PackImageReader) || !resolveCustomEmojiKey) {
         completeWithKey(defaultKey, emoticon.shortcode);
@@ -286,7 +302,15 @@ export function EmoticonAutocomplete({
       if (!trackedRange || Editor.string(editor, trackedRange) !== sourceQuery) return;
       completeWithKey(resolvedKey, emoticon.shortcode, trackedRange);
     },
-    [completeWithKey, editor, query.range, resolveCustomEmojiKey]
+    [
+      completeWithKey,
+      editor,
+      onStickerSelect,
+      query.range,
+      requestClose,
+      resolveCustomEmojiKey,
+      stickerMode,
+    ]
   );
 
   const scrollCarousel = useCallback((direction: -1 | 1) => {
@@ -376,11 +400,47 @@ export function EmoticonAutocomplete({
   return (
     <AutocompleteMenu
       headerContent={
-        <Text size="L400">
-          {autoCompleteEmoticon.length > 0
-            ? `\u8868\u60c5\u4e0e\u8d34\u7eb8 (${resultCountLabel})`
-            : '\u8868\u60c5\u4e0e\u8d34\u7eb8'}
-        </Text>
+        <Box alignItems="Center" justifyContent="SpaceBetween" gap="200">
+          <Text size="L400">
+            {autoCompleteEmoticon.length > 0
+              ? `\u8868\u60c5\u4e0e\u8d34\u7eb8 (${resultCountLabel})`
+              : '\u8868\u60c5\u4e0e\u8d34\u7eb8'}
+          </Text>
+          {onStickerSelect && (
+            <Box alignItems="Center" gap="100">
+              <Badge
+                as="button"
+                type="button"
+                variant="Secondary"
+                fill={!stickerMode ? 'Solid' : 'None'}
+                size="400"
+                style={{ cursor: 'pointer' }}
+                aria-pressed={!stickerMode}
+                title="将图片候选插入编辑器作为表情"
+                onClick={() => setStickerMode(false)}
+              >
+                <Text as="span" size="L400">
+                  表情
+                </Text>
+              </Badge>
+              <Badge
+                as="button"
+                type="button"
+                variant="Secondary"
+                fill={stickerMode ? 'Solid' : 'None'}
+                size="400"
+                style={{ cursor: 'pointer' }}
+                aria-pressed={stickerMode}
+                title="将图片候选作为贴纸立即发送"
+                onClick={() => setStickerMode(true)}
+              >
+                <Text as="span" size="L400">
+                  贴纸
+                </Text>
+              </Badge>
+            </Box>
+          )}
+        </Box>
       }
       requestClose={requestClose}
     >
@@ -441,7 +501,11 @@ export function EmoticonAutocomplete({
                   data-option-index={index}
                   radii="300"
                   title={`:${emoticon.shortcode}:`}
-                  aria-label={`\u63d2\u5165\u8868\u60c5 ${emoticon.shortcode}`}
+                  aria-label={
+                    stickerMode && isCustomEmoji
+                      ? `\u53d1\u9001\u8d34\u7eb8 ${emoticon.shortcode}`
+                      : `\u63d2\u5165\u8868\u60c5 ${emoticon.shortcode}`
+                  }
                   disabled={resolving}
                   onKeyDown={(evt: ReactKeyboardEvent<HTMLButtonElement>) =>
                     handleOptionKeyDown(evt, index, emoticon)
