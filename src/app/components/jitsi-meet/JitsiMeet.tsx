@@ -18,7 +18,7 @@ import {
   config,
 } from 'folds';
 import { CinnyJitsiMeetInfo, getJitsiMeetJoinUrl } from '../../utils/jitsiMeet';
-import { openExternalUrlInNewWindow } from '../../utils/desktop';
+import { openExternalUrl } from '../../utils/desktop';
 import { stopPropagation } from '../../utils/keyboard';
 import * as css from './JitsiMeet.css';
 
@@ -37,7 +37,9 @@ export function JitsiMeetCard({ meeting, displayName, avatarUrl }: JitsiMeetCard
     subject: meetingTitle,
   });
   const handleJoin = () => {
-    void openExternalUrlInNewWindow(joinUrl, meeting.url, meetingTitle).catch(() => undefined);
+    // Jitsi uses nested authentication popups that can deadlock a WebView2 child window.
+    // Opening it in the system browser keeps the meeting separate from the desktop client.
+    openExternalUrl(joinUrl).catch(() => undefined);
   };
 
   return (
@@ -209,15 +211,12 @@ type StartJitsiMeetButtonProps = {
   sending?: boolean;
   onStart: () => void;
 };
-export const StartJitsiMeetButton = React.forwardRef<
-  HTMLButtonElement,
-  StartJitsiMeetButtonProps
->(({ disabled, sending, onStart }, ref) => {
-  return (
+export const StartJitsiMeetButton = React.forwardRef<HTMLButtonElement, StartJitsiMeetButtonProps>(
+  ({ disabled, sending, onStart }, ref) => (
     <IconButton ref={ref} fill="None" onClick={onStart} disabled={disabled || sending}>
       {sending ? <Spinner size="200" /> : <Icon size="400" src={Icons.VideoCamera} />}
     </IconButton>
-  );
-});
+  )
+);
 
 StartJitsiMeetButton.displayName = 'StartJitsiMeetButton';

@@ -1,4 +1,4 @@
-import React, { ReactNode } from 'react';
+import React, { ReactNode, useRef } from 'react';
 import FocusTrap from 'focus-trap-react';
 import { isKeyHotkey } from 'is-hotkey';
 import { Header, Menu, Scroll, config } from 'folds';
@@ -14,6 +14,7 @@ type AutocompleteMenuProps = {
 };
 export function AutocompleteMenu({ headerContent, requestClose, children }: AutocompleteMenuProps) {
   const alive = useAlive();
+  const fallbackFocusRef = useRef<HTMLDivElement>(null);
 
   const handleDeactivate = () => {
     if (alive()) {
@@ -30,6 +31,9 @@ export function AutocompleteMenu({ headerContent, requestClose, children }: Auto
             initialFocus: false,
             onPostDeactivate: handleDeactivate,
             returnFocusOnDeactivate: false,
+            // Async result lists can briefly contain only a loading indicator. Keep a stable
+            // focus target so focus-trap never throws while candidates are being replaced.
+            fallbackFocus: () => fallbackFocusRef.current ?? document.body,
             clickOutsideDeactivates: true,
             allowOutsideClick: true,
             isKeyForward: (evt: KeyboardEvent) => isKeyHotkey('arrowdown', evt),
@@ -37,14 +41,16 @@ export function AutocompleteMenu({ headerContent, requestClose, children }: Auto
             escapeDeactivates: stopPropagation,
           }}
         >
-          <Menu className={css.AutocompleteMenu}>
-            <Header className={css.AutocompleteMenuHeader} size="400">
-              {headerContent}
-            </Header>
-            <Scroll style={{ flexGrow: 1 }} onKeyDown={preventScrollWithArrowKey}>
-              <div style={{ padding: config.space.S200 }}>{children}</div>
-            </Scroll>
-          </Menu>
+          <div ref={fallbackFocusRef} tabIndex={-1}>
+            <Menu className={css.AutocompleteMenu}>
+              <Header className={css.AutocompleteMenuHeader} size="400">
+                {headerContent}
+              </Header>
+              <Scroll style={{ flexGrow: 1 }} onKeyDown={preventScrollWithArrowKey}>
+                <div style={{ padding: config.space.S200 }}>{children}</div>
+              </Scroll>
+            </Menu>
+          </div>
         </FocusTrap>
       </div>
     </div>

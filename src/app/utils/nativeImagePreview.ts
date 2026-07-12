@@ -97,8 +97,8 @@ const closeNativeImagePreviewWindowByLabel = async (label: string): Promise<void
   const previewWindow = await WebviewWindow.getByLabel(label);
   if (!previewWindow) return;
 
-  await previewWindow.close().catch(async () => {
-    await previewWindow.destroy().catch(() => undefined);
+  await previewWindow.destroy().catch(async () => {
+    await previewWindow.close().catch(() => undefined);
   });
 };
 

@@ -32,7 +32,10 @@ export const isNativeBibleWindow = (): boolean =>
 
 export const openNativeBibleWindow = async (): Promise<void> => {
   if (!isDesktopUpdaterSupported()) return;
-  if (openNativeBibleWindowPromise) return openNativeBibleWindowPromise;
+  if (openNativeBibleWindowPromise) {
+    await openNativeBibleWindowPromise;
+    return;
+  }
 
   openNativeBibleWindowPromise = (async () => {
     const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow');
@@ -42,7 +45,7 @@ export const openNativeBibleWindow = async (): Promise<void> => {
       await existingWindow.unminimize().catch(() => undefined);
       await existingWindow.show().catch(() => undefined);
       await existingWindow.setFocus().catch(() => undefined);
-      return;
+      return undefined;
     }
 
     const bibleWindow = new WebviewWindow(NATIVE_BIBLE_WINDOW_LABEL, {
@@ -92,11 +95,13 @@ export const openNativeBibleWindow = async (): Promise<void> => {
         .then(trackUnlisten)
         .catch((error) => settle(() => reject(error)));
     });
+
+    return undefined;
   })().finally(() => {
     openNativeBibleWindowPromise = undefined;
   });
 
-  return openNativeBibleWindowPromise;
+  await openNativeBibleWindowPromise;
 };
 
 export const listenNativeBibleWindowClose = async (onClose: () => void): Promise<() => void> => {
@@ -113,5 +118,9 @@ export const emitNativeBibleWindowClose = async (): Promise<void> => {
 export const closeNativeBibleWindow = async (): Promise<void> => {
   const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow');
   const bibleWindow = await WebviewWindow.getByLabel(NATIVE_BIBLE_WINDOW_LABEL);
-  await bibleWindow?.close();
+  if (bibleWindow) {
+    await bibleWindow.destroy().catch(async () => {
+      await bibleWindow.close().catch(() => undefined);
+    });
+  }
 };

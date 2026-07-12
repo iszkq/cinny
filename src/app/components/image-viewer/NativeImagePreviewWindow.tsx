@@ -34,15 +34,11 @@ const closeCurrentNativeWindow = async (): Promise<void> => {
   const { getCurrentWindow } = await import('@tauri-apps/api/window');
   const currentWindow = getCurrentWindow();
 
-  await currentWindow.close().catch(async () => {
-    await currentWindow.destroy().catch(() => {
+  await currentWindow.destroy().catch(async () => {
+    await currentWindow.close().catch(() => {
       window.close();
     });
   });
-
-  window.setTimeout(() => {
-    currentWindow.destroy().catch(() => undefined);
-  }, 240);
 };
 
 function NativeImagePreviewWindowContent() {

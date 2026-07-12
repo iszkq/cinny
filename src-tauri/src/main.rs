@@ -778,10 +778,8 @@ fn open_external_url_window(
         .min_inner_size(720.0, 520.0)
         .resizable(true)
         .center()
-        // Keep the native shell hidden until WebView2 has finished constructing it. If
-        // construction fails, users never see a short-lived empty window.
-        .focused(false)
-        .visible(false)
+        .focused(true)
+        .visible(true)
         .disable_drag_drop_handler()
         .on_navigation(move |url| {
             if get_jitsi_authenticated_meeting_url(url).is_some() {
@@ -1143,6 +1141,22 @@ fn main() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .setup(|app| {
+            let app_handle = app.handle().clone();
+            let main_window = app
+                .get_webview_window("main")
+                .expect("main window is unavailable");
+
+            main_window.on_window_event(move |event| {
+                if matches!(event, tauri::WindowEvent::Destroyed) {
+                    // A meeting or preview child can otherwise keep the event loop alive
+                    // after the main window is closed, leaving a frozen WebView2 process.
+                    app_handle.exit(0);
+                }
+            });
+
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             desktop_media_cache::cache_desktop_media_asset,
             desktop_media_cache::prepare_desktop_media_asset_runtime_file,

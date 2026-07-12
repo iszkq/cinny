@@ -316,6 +316,7 @@ const REMOTE_STICKER_MIME_EXTENSION: Record<string, string> = {
 
 const remoteStickerUploadCache = new Map<string, Promise<IContent>>();
 const remoteEmojiUploadCache = new Map<string, Promise<string>>();
+const REMOTE_EMOJI_PREPARE_TIMEOUT_MS = 20_000;
 
 const base64ToBlob = (dataBase64: string, mimeType: string): Blob => {
   const binary = window.atob(dataBase64);
@@ -493,13 +494,22 @@ const uploadRemoteEmojiMxc = async (
   return mxc;
 };
 
+const getRemoteEmojiUploadCacheKey = (
+  mx: ReturnType<typeof useMatrixClient>,
+  url: string
+): string => `${mx.getUserId() ?? 'anonymous'}:${url}`;
+
+const clearRemoteEmojiUploadCache = (mx: ReturnType<typeof useMatrixClient>, url: string): void => {
+  remoteEmojiUploadCache.delete(getRemoteEmojiUploadCacheKey(mx, url));
+};
+
 const getRemoteEmojiMxc = async (
   mx: ReturnType<typeof useMatrixClient>,
   url: string,
   label: string,
   info?: IImageInfo
 ): Promise<string> => {
-  const cacheKey = `${mx.getUserId() ?? 'anonymous'}:${url}`;
+  const cacheKey = getRemoteEmojiUploadCacheKey(mx, url);
   let uploadPromise = remoteEmojiUploadCache.get(cacheKey);
   if (!uploadPromise) {
     uploadPromise = uploadRemoteEmojiMxc(mx, url, label, info).catch((error) => {
@@ -511,6 +521,21 @@ const getRemoteEmojiMxc = async (
 
   return uploadPromise;
 };
+
+const withTimeout = <T,>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> =>
+  new Promise<T>((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+    promise.then(
+      (value) => {
+        window.clearTimeout(timeoutId);
+        resolve(value);
+      },
+      (error) => {
+        window.clearTimeout(timeoutId);
+        reject(error);
+      }
+    );
+  });
 
 const getRemoteStickerUploadCacheKey = (room: Room, url: string): string =>
   room.hasEncryptionStateEvent() ? `encrypted:${room.roomId}:${url}` : `plain:${url}`;
@@ -705,6 +730,9 @@ const getCloudEmojiErrorMessage = (error: unknown): string => {
 
   if (detail && /abort|aborted|operation was aborted/i.test(detail)) {
     return '\u4e91\u7aef\u8868\u60c5\u51c6\u5907\u88ab\u4e2d\u6b62\uff0c\u8bf7\u91cd\u8bd5\u3002';
+  }
+  if (detail && /timed out|timeout/i.test(detail)) {
+    return '\u4e91\u7aef\u8868\u60c5\u51c6\u5907\u8d85\u65f6\uff0c\u8bf7\u91cd\u8bd5\u3002';
   }
   if (detail) {
     return `\u4e91\u7aef\u8868\u60c5\u51c6\u5907\u5931\u8d25\uff1a${detail}`;
@@ -1354,9 +1382,14 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         setSendStatus('\u6b63\u5728\u51c6\u5907\u4e91\u7aef\u8868\u60c5...');
       }
       try {
-        const mxc = await getRemoteEmojiMxc(mx, sourceUrl, shortcode, info);
+        const mxc = await withTimeout(
+          getRemoteEmojiMxc(mx, sourceUrl, shortcode, info),
+          REMOTE_EMOJI_PREPARE_TIMEOUT_MS,
+          'Cloud emoji preparation timed out.'
+        );
         return mxc;
       } catch (error) {
+        clearRemoteEmojiUploadCache(mx, sourceUrl);
         if (currentInput() && cloudEmojiRequestIdRef.current === requestId) {
           setSendError(getCloudEmojiErrorMessage(error));
         }
