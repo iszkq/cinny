@@ -28,6 +28,7 @@ import { getEmoticonSearchStr } from '../../../plugins/utils';
 import { useCachedMediaUrl } from '../../../hooks/useCachedMediaUrl';
 import { getEmojiBoardMediaUrls } from '../../emoji-board/components/media';
 import { useRemoteStickerIndex } from '../../emoji-board/useRemoteStickerIndex';
+import { useAlapiDoutuSearch } from '../../emoji-board/useAlapiDoutuSearch';
 import { isHttpUrl } from '../../../utils/matrix';
 import { normalize } from '../../../utils/AsyncSearch';
 
@@ -117,6 +118,10 @@ export function EmoticonAutocomplete({
   const stickerPacks = imagePackMode === 'personal' ? personalStickerPacks : contextualStickerPacks;
   const remoteEnabled = Boolean(resolveCustomEmojiKey && query.text.trim());
   const { stickers: remoteStickers, loading: remoteLoading } = useRemoteStickerIndex(remoteEnabled);
+  const { items: alapiDoutuImages, loading: alapiDoutuLoading } = useAlapiDoutuSearch(
+    query.text,
+    remoteEnabled
+  );
   const recentEmoji = useRecentEmoji(mx, 20);
 
   const searchList = useMemo(() => {
@@ -125,12 +130,13 @@ export function EmoticonAutocomplete({
         .flatMap((pack) => pack.getImages(ImageUsage.Emoticon))
         .concat(
           stickerPacks.flatMap((pack) => pack.getImages(ImageUsage.Sticker)),
-          remoteEnabled ? remoteStickers : []
+          remoteEnabled ? remoteStickers : [],
+          remoteEnabled ? alapiDoutuImages : []
         )
     );
 
     return (customEmoji as EmoticonSearchItem[]).concat(emojis);
-  }, [emoticonPacks, remoteEnabled, remoteStickers, stickerPacks]);
+  }, [alapiDoutuImages, emoticonPacks, remoteEnabled, remoteStickers, stickerPacks]);
 
   const [result, search, resetSearch] = useAsyncSearch(
     searchList,
@@ -388,7 +394,7 @@ export function EmoticonAutocomplete({
     });
   });
 
-  const showRemoteLoading = remoteEnabled && remoteLoading;
+  const showRemoteLoading = remoteEnabled && (remoteLoading || alapiDoutuLoading);
   const totalResultCount = query.text ? currentResult?.items.length ?? 0 : recentEmoji.length;
   const resultCountLabel =
     totalResultCount > MAX_AUTOCOMPLETE_RESULTS

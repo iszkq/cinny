@@ -75,6 +75,8 @@ import {
   getRemoteStickerPreviewUrl,
   useRemoteStickerIndex,
 } from './useRemoteStickerIndex';
+import { useAlapiDoutuSearch } from './useAlapiDoutuSearch';
+import { isHttpUrl } from '../../utils/matrix';
 
 const RECENT_GROUP_ID = 'recent_group';
 const SEARCH_GROUP_ID = 'search_group';
@@ -711,12 +713,18 @@ export function EmojiBoard({
   const imagePacks = imagePackMode === 'personal' ? personalImagePacks : contextualImagePacks;
   const [draggingPackId, setDraggingPackId] = useState<string>();
   const [packDropTarget, setPackDropTarget] = useState<PersonalPackDropTarget>();
+  const [searchTerm, setSearchTerm] = useState('');
   const {
     stickers: remoteStickerImages,
     loading: remoteStickerLoading,
     error: remoteStickerError,
     retry: retryRemoteStickers,
   } = useRemoteStickerIndex(cloudTab);
+  const {
+    items: alapiDoutuImages,
+    loading: alapiDoutuLoading,
+    error: alapiDoutuError,
+  } = useAlapiDoutuSearch(searchTerm, !cloudTab);
   const [emojiGroupItems, stickerGroupItems, cloudGroupItems] = useGroups(
     tab,
     imagePacks,
@@ -734,8 +742,9 @@ export function EmojiBoard({
     }
     list = list.concat(imagePacks.flatMap((pack) => pack.getImages(usage)));
     if (emojiTab) list = list.concat(emojis);
+    list = list.concat(alapiDoutuImages);
     return list;
-  }, [cloudTab, emojiTab, usage, imagePacks, remoteStickerImages]);
+  }, [alapiDoutuImages, cloudTab, emojiTab, usage, imagePacks, remoteStickerImages]);
 
   const [result, search, resetSearch] = useAsyncSearch(
     searchList,
@@ -744,6 +753,10 @@ export function EmojiBoard({
   );
 
   const searchedItems = result?.items.slice(0, 100);
+  let searchResultLabel = '没有结果';
+  if (searchedItems?.length) searchResultLabel = '搜索结果';
+  else if (alapiDoutuLoading) searchResultLabel = '正在搜索第三方表情...';
+  else if (alapiDoutuError) searchResultLabel = '第三方表情搜索失败';
 
   const getPackMediaUrls = useCallback(
     (pack: ImagePack) => {
@@ -802,16 +815,20 @@ export function EmojiBoard({
   }, [activeGroupId, cloudTab, imagePacks, priorityPackPreloadCount]);
 
   const handleOnChange: ChangeEventHandler<HTMLInputElement> = useDebounce(
-    useCallback(
-      (evt) => {
-        const term = evt.target.value;
-        if (term) search(term);
-        else resetSearch();
-      },
-      [search, resetSearch]
-    ),
+    useCallback((evt) => {
+      setSearchTerm(evt.target.value);
+    }, []),
     { wait: 200 }
   );
+
+  useEffect(() => {
+    if (searchTerm) search(searchTerm);
+    else resetSearch();
+  }, [resetSearch, search, searchTerm]);
+
+  useEffect(() => {
+    setSearchTerm('');
+  }, [tab]);
 
   const contentScrollRef = useRef<HTMLDivElement>(null);
   const virtualBaseRef = useRef<HTMLDivElement>(null);
@@ -835,7 +852,7 @@ export function EmojiBoard({
       }
     }
     if (emojiInfo.type === EmojiType.CustomEmoji) {
-      if (cloudTab) {
+      if (cloudTab || isHttpUrl(emojiInfo.data)) {
         onCloudEmojiSelect?.(emojiInfo.data, emojiInfo.shortcode, emojiInfo.info);
       } else {
         onCustomEmojiSelect?.(emojiInfo.data, emojiInfo.shortcode);
@@ -1134,10 +1151,7 @@ export function EmojiBoard({
             onGroupItemClick={handleGroupItemClick}
           >
             {searchedItems && (
-              <EmojiGroup
-                id={SEARCH_GROUP_ID}
-                label={searchedItems.length ? '搜索结果' : '没有结果'}
-              >
+              <EmojiGroup id={SEARCH_GROUP_ID} label={searchResultLabel}>
                 {searchedItems.map(renderItem)}
               </EmojiGroup>
             )}

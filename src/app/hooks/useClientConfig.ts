@@ -41,6 +41,13 @@ export type ClientConfig = {
     model?: string;
   };
 
+  alapiDoutu?: {
+    enabled?: boolean;
+    endpoint?: string;
+    token?: string;
+    maxResults?: number;
+  };
+
   featuredCommunities?: {
     openAsDefault?: boolean;
     spaces?: string[];
