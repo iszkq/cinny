@@ -488,9 +488,6 @@ const getRoomEventReadState = (
 const getRoomReadMarkerState = (room: Room, userId?: string | null): RoomReadMarkerState =>
   getRoomEventReadState(room, userId, getStoredRoomReadMarker(room, userId));
 
-const getRoomReceiptState = (room: Room, userId?: string | null): RoomReadMarkerState =>
-  getRoomEventReadState(room, userId, getStoredRoomReceiptMarker(room, userId));
-
 export const getRoomReadMarkerEventId = (room: Room, userId?: string | null): string | undefined =>
   getRoomReadMarkerState(room, userId).eventId;
 
@@ -679,8 +676,8 @@ export const getRoomUnreadStatus = (mx: MatrixClient, room: Room): RoomUnreadSta
     };
   }
 
-  const receiptState = getRoomReceiptState(room, userId);
-  const liveTimelineUnread = getLiveTimelineUnreadState(room, userId, receiptState.eventId);
+  const readMarkerState = getRoomReadMarkerState(room, userId);
+  const liveTimelineUnread = getLiveTimelineUnreadState(room, userId, readMarkerState.eventId);
 
   if (liveTimelineUnread.reliable) {
     return {
@@ -693,7 +690,7 @@ export const getRoomUnreadStatus = (mx: MatrixClient, room: Room): RoomUnreadSta
     };
   }
 
-  const timestampUnread = getLiveTimelineUnreadStateFromTs(room, userId, receiptState.ts);
+  const timestampUnread = getLiveTimelineUnreadStateFromTs(room, userId, readMarkerState.ts);
   if (timestampUnread.reliable) {
     return {
       hasUnread: timestampUnread.total > 0,
@@ -705,8 +702,8 @@ export const getRoomUnreadStatus = (mx: MatrixClient, room: Room): RoomUnreadSta
     };
   }
 
-  const hasUnread = roomHaveUnreadFromReadEvent(room, userId, receiptState.eventId);
-  if (receiptState.optimistic && !hasUnread) {
+  const hasUnread = roomHaveUnreadFromReadEvent(room, userId, readMarkerState.eventId);
+  if (readMarkerState.optimistic && !hasUnread) {
     return {
       hasUnread: false,
       unreadInfo: {

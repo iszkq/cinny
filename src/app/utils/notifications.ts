@@ -5,6 +5,9 @@ import { setOptimisticRoomReadMarker } from './room';
 export type AppNotificationPermission = PermissionState;
 export const ROOM_MARKED_AS_READ = 'cinny.room_marked_as_read';
 const PENDING_ROOM_READ_MARKERS_STORAGE_KEY = 'cinny:pending-room-read-markers';
+const MARKED_UNREAD_EVENT_TYPE = 'm.marked_unread';
+const PRIVATE_READ_RECEIPT_STABLE_VERSION = 'v1.4';
+const PRIVATE_READ_RECEIPT_UNSTABLE_FEATURE = 'org.matrix.msc2285.stable';
 
 type DesktopNotificationPayload = {
   title: string;
@@ -35,7 +38,16 @@ type PersistedPendingRoomReadMarker = {
 
 type PendingRoomReadMarkersByUser = Record<string, Record<string, PersistedPendingRoomReadMarker>>;
 
+type MarkedUnreadContent = {
+  unread?: boolean;
+};
+
 const pendingRoomReadMarkersFlushUserIds = new Set<string>();
+const privateReadReceiptSupport = new WeakMap<MatrixClient, Promise<boolean>>();
+const markedUnreadClearRequests = new Map<string, Promise<void>>();
+const roomReadMarkerRequestChains = new Map<string, Promise<void>>();
+const latestScheduledRoomReadMarkerSignatures = new Map<string, string>();
+const successfulRoomReadMarkerSignatures = new Map<string, string>();
 
 const normalizePermission = (permission: string): AppNotificationPermission => {
   if (permission === 'granted' || permission === 'denied') {
@@ -71,14 +83,17 @@ const getLatestRoomEvent = (mx: MatrixClient, roomId: string): LatestRoomEvent |
   const events = room.getLiveTimeline().getEvents();
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index];
-    const eventId = event?.getId();
-    if (eventId) {
-      const ts = event?.getTs();
-      return {
-        event,
-        eventId,
-        ts: typeof ts === 'number' ? ts : undefined,
-      };
+    // Local echoes have temporary IDs which the homeserver cannot accept as read markers.
+    if (!event?.status) {
+      const eventId = event?.getId();
+      if (eventId) {
+        const ts = event?.getTs();
+        return {
+          event,
+          eventId,
+          ts: typeof ts === 'number' ? ts : undefined,
+        };
+      }
     }
   }
 
@@ -146,11 +161,7 @@ const setPendingRoomReadMarker = (
   writePendingRoomReadMarkers(markersByUser);
 };
 
-const clearPendingRoomReadMarker = (
-  roomId: string,
-  userId?: string | null,
-  eventId?: string
-) => {
+const clearPendingRoomReadMarker = (roomId: string, userId?: string | null, eventId?: string) => {
   if (!userId) return;
 
   const markersByUser = readPendingRoomReadMarkers();
@@ -188,6 +199,43 @@ const findRoomEvent = (
   );
 };
 
+const supportsPrivateReadReceipts = (mx: MatrixClient): Promise<boolean> => {
+  const cachedSupport = privateReadReceiptSupport.get(mx);
+  if (cachedSupport) return cachedSupport;
+
+  const supportRequest = (async () => {
+    try {
+      if (await mx.isVersionSupported(PRIVATE_READ_RECEIPT_STABLE_VERSION)) return true;
+      return await mx.doesServerSupportUnstableFeature(PRIVATE_READ_RECEIPT_UNSTABLE_FEATURE);
+    } catch {
+      // If capability discovery is unavailable, retain the current private-receipt attempt.
+      return true;
+    }
+  })();
+
+  privateReadReceiptSupport.set(mx, supportRequest);
+  return supportRequest;
+};
+
+const clearRoomMarkedUnread = (mx: MatrixClient, roomId: string): Promise<void> => {
+  const room = mx.getRoom(roomId);
+  const markedUnread = room?.accountData
+    .get(MARKED_UNREAD_EVENT_TYPE)
+    ?.getContent<MarkedUnreadContent>()?.unread;
+  if (markedUnread !== true) return Promise.resolve();
+
+  const requestKey = `${mx.getUserId() ?? ''}\u0000${roomId}`;
+  const activeRequest = markedUnreadClearRequests.get(requestKey);
+  if (activeRequest) return activeRequest;
+
+  const request = mx
+    .setRoomAccountData(roomId, MARKED_UNREAD_EVENT_TYPE, { unread: false })
+    .then(() => undefined)
+    .finally(() => markedUnreadClearRequests.delete(requestKey));
+  markedUnreadClearRequests.set(requestKey, request);
+  return request;
+};
+
 const sendRoomReadMarker = async (
   mx: MatrixClient,
   roomId: string,
@@ -195,12 +243,14 @@ const sendRoomReadMarker = async (
   privateReceipt: boolean,
   event?: MatrixEvent
 ) => {
+  const usePrivateReceipt = privateReceipt && (await supportsPrivateReadReceipts(mx));
+
   if (event) {
     await mx.setRoomReadMarkers(
       roomId,
       eventId,
       privateReceipt ? undefined : event,
-      privateReceipt ? event : undefined
+      usePrivateReceipt ? event : undefined
     );
     return;
   }
@@ -209,8 +259,58 @@ const sendRoomReadMarker = async (
     roomId,
     eventId,
     privateReceipt ? undefined : eventId,
-    privateReceipt ? eventId : undefined
+    usePrivateReceipt ? eventId : undefined
   );
+};
+
+const sendRoomReadMarkerOnce = async (
+  mx: MatrixClient,
+  roomId: string,
+  eventId: string,
+  privateReceipt: boolean,
+  event: MatrixEvent | undefined,
+  userId?: string | null
+): Promise<void> => {
+  const requestKey = `${userId ?? ''}\u0000${roomId}`;
+  const signature = `${eventId}\u0000${privateReceipt ? 'private' : 'public'}`;
+
+  if (successfulRoomReadMarkerSignatures.get(requestKey) === signature) {
+    clearPendingRoomReadMarker(roomId, userId, eventId);
+    return;
+  }
+
+  const activeRequest = roomReadMarkerRequestChains.get(requestKey);
+  if (activeRequest && latestScheduledRoomReadMarkerSignatures.get(requestKey) === signature) {
+    await activeRequest;
+    return;
+  }
+
+  latestScheduledRoomReadMarkerSignatures.set(requestKey, signature);
+  const previousRequest = activeRequest ?? Promise.resolve();
+  const request = previousRequest
+    .catch(() => undefined)
+    .then(async () => {
+      // Several live events can arrive while a request is in flight. Skip intermediate markers
+      // and send only the newest queued event, while preserving request order per room.
+      if (latestScheduledRoomReadMarkerSignatures.get(requestKey) !== signature) return;
+      if (successfulRoomReadMarkerSignatures.get(requestKey) === signature) {
+        clearPendingRoomReadMarker(roomId, userId, eventId);
+        return;
+      }
+
+      await sendRoomReadMarker(mx, roomId, eventId, privateReceipt, event);
+      successfulRoomReadMarkerSignatures.set(requestKey, signature);
+      clearPendingRoomReadMarker(roomId, userId, eventId);
+    })
+    .finally(() => {
+      if (latestScheduledRoomReadMarkerSignatures.get(requestKey) === signature) {
+        latestScheduledRoomReadMarkerSignatures.delete(requestKey);
+        roomReadMarkerRequestChains.delete(requestKey);
+      }
+    });
+
+  roomReadMarkerRequestChains.set(requestKey, request);
+  await request;
 };
 
 const invokeDesktopNotificationCommand = async <T>(
@@ -283,10 +383,15 @@ export const markAsRead = async (
   dispatchRoomMarkedAsRead(roomId);
 
   try {
-    await sendRoomReadMarker(mx, roomId, eventId, privateReceipt, event);
-    clearPendingRoomReadMarker(roomId, userId, eventId);
+    await sendRoomReadMarkerOnce(mx, roomId, eventId, privateReceipt, event, userId);
   } catch {
     // Ignore read marker failures so optimistic unread clearing still works locally.
+  }
+
+  try {
+    await clearRoomMarkedUnread(mx, roomId);
+  } catch {
+    // A stale manual-unread marker can be retried the next time this room is read.
   }
 };
 
@@ -313,10 +418,27 @@ export const flushPendingRoomReadMarkers = async (mx: MatrixClient): Promise<voi
         dispatchRoomMarkedAsRead(roomId);
 
         try {
-          await sendRoomReadMarker(mx, roomId, marker.eventId, marker.privateReceipt, event);
-          clearPendingRoomReadMarker(roomId, userId, marker.eventId);
+          const currentPendingMarker = normalizePendingRoomReadMarker(
+            readPendingRoomReadMarkers()[userId]?.[roomId]
+          );
+          if (currentPendingMarker?.eventId === marker.eventId) {
+            await sendRoomReadMarkerOnce(
+              mx,
+              roomId,
+              marker.eventId,
+              marker.privateReceipt,
+              event,
+              userId
+            );
+          }
         } catch {
           // Keep the pending marker so a later sync/session can retry.
+        }
+
+        try {
+          await clearRoomMarkedUnread(mx, roomId);
+        } catch {
+          // Retry when a later read/flush occurs.
         }
       })
     );

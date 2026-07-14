@@ -1087,10 +1087,9 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
         // otherwise we update timeline without paginating
         // so timeline can be updated with evt like: edits, reactions etc
         if (atBottomRef.current) {
-          if (document.hasFocus() && (!unreadInfo || mEvt.getSender() === mx.getUserId())) {
-            // Check if the document is in focus (user is actively viewing the app),
-            // and either there are no unread messages or the latest message is from the current user.
-            // If either condition is met, trigger the markAsRead function to send a read receipt.
+          if (document.hasFocus()) {
+            // Following the live timeline means the newly-arrived event is visible. Always advance
+            // the read marker, even when an older unread divider is still waiting for server sync.
             requestAnimationFrame(() => markAsRead(mx, mEvt.getRoomId()!, privateReceipt));
           }
 
@@ -1241,16 +1240,9 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
       navigateRoom(room.roomId, undefined, { replace: true });
     }
 
-    const readUptoEventId = readUptoEventIdRef.current;
-    if (!readUptoEventId) {
-      requestAnimationFrame(() => markAsRead(mx, room.roomId, privateReceipt));
-      return;
-    }
-    const evtTimeline = getEventTimeline(room, readUptoEventId);
-    const latestTimeline = evtTimeline && getFirstLinkedTimeline(evtTimeline, Direction.Forward);
-    if (latestTimeline === room.getLiveTimeline()) {
-      requestAnimationFrame(() => markAsRead(mx, room.roomId, privateReceipt));
-    }
+    // Every caller verifies that the user is focused at the bottom of the live timeline.
+    // An old marker may live in a detached/paginated timeline; it must not block advancing to live.
+    requestAnimationFrame(() => markAsRead(mx, room.roomId, privateReceipt));
   }, [eventId, mx, navigateRoom, room, privateReceipt]);
 
   const tryAutoMarkAsReadAtLiveBottom = useCallback(() => {
@@ -1337,20 +1329,10 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     useCallback(
       (inFocus) => {
         if (inFocus && atBottomRef.current) {
-          if (unreadInfo?.inLiveTimeline) {
-            handleOpenEvent(unreadInfo.readUptoEventId, false, (scrolled) => {
-              // the unread event is already in view
-              // so, try mark as read;
-              if (!scrolled) {
-                tryAutoMarkAsRead();
-              }
-            });
-            return;
-          }
           tryAutoMarkAsRead();
         }
       },
-      [tryAutoMarkAsRead, unreadInfo, handleOpenEvent]
+      [tryAutoMarkAsRead]
     )
   );
 
