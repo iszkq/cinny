@@ -600,6 +600,10 @@ function EmojiGroupHolder({
         shortcode: emojiInfo.shortcode,
         info: emojiInfo.info,
         preferOriginal: emojiInfo.type === EmojiType.Sticker,
+        anchor: (() => {
+          const { top, bottom, left, right } = element.getBoundingClientRect();
+          return { top, bottom, left, right };
+        })(),
       });
     },
     [setPreviewData]
@@ -621,12 +625,20 @@ function EmojiGroupHolder({
     handleEmojiPreview(targetEl);
   };
 
+  const handleEmojiBlur: FocusEventHandler = (evt) => {
+    if (!evt.currentTarget.contains(evt.relatedTarget as Node | null)) {
+      setPreviewData(undefined);
+    }
+  };
+
   return (
     <Scroll ref={contentScrollRef} size="400" onKeyDown={preventScrollWithArrowKey} hideTrack>
       <Box
         onClick={onGroupItemClick}
         onMouseMove={handleEmojiHover}
+        onMouseLeave={() => setPreviewData(undefined)}
         onFocus={handleEmojiFocus}
+        onBlur={handleEmojiBlur}
         direction="Column"
       >
         {children}

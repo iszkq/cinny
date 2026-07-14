@@ -706,6 +706,18 @@ const getStickerSendErrorMessage = (error: unknown, remoteSticker: boolean): str
     return remoteSticker ? '云端贴纸发送被中止，请重试。' : '贴纸发送被中止，请重试。';
   }
 
+  if (
+    remoteSticker &&
+    detail &&
+    /networkerror|failed to fetch|fetch resource|load failed|cors|cross-origin/i.test(detail)
+  ) {
+    return '这张云端贴纸的源站禁止读取图片，无法转存为 Matrix 媒体。请从其他表情包选择一张贴纸。';
+  }
+
+  if (remoteSticker && detail && /unsupported sticker media url/i.test(detail)) {
+    return '这张云端贴纸来自暂不支持的图片源，无法转存为 Matrix 媒体。请从其他表情包选择一张贴纸。';
+  }
+
   if (detail) {
     return remoteSticker ? `云端贴纸发送失败：${detail}` : `贴纸发送失败：${detail}`;
   }
@@ -733,6 +745,15 @@ const getCloudEmojiErrorMessage = (error: unknown): string => {
   }
   if (detail && /timed out|timeout/i.test(detail)) {
     return '\u4e91\u7aef\u8868\u60c5\u51c6\u5907\u8d85\u65f6\uff0c\u8bf7\u91cd\u8bd5\u3002';
+  }
+  if (
+    detail &&
+    /networkerror|failed to fetch|fetch resource|load failed|cors|cross-origin/i.test(detail)
+  ) {
+    return '这个云端表情的源站禁止读取图片，无法转存为 Matrix 媒体。请从其他表情包选择一个表情。';
+  }
+  if (detail && /unsupported sticker media url/i.test(detail)) {
+    return '这个云端表情来自暂不支持的图片源，无法转存为 Matrix 媒体。请从其他表情包选择一个表情。';
   }
   if (detail) {
     return `\u4e91\u7aef\u8868\u60c5\u51c6\u5907\u5931\u8d25\uff1a${detail}`;

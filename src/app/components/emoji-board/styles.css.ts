@@ -8,8 +8,9 @@ import { toRem, color, config, DefaultReset, FocusOutline } from 'folds';
 export const Base = style({
   maxWidth: toRem(432),
   width: `min(${toRem(432)}, calc(var(--app-width, 100vw) - 2 * ${config.space.S400}))`,
-  height:
-    `min(${toRem(450)}, calc(var(--app-height, 100dvh) - ${config.space.S400} - env(safe-area-inset-top) - env(safe-area-inset-bottom)))`,
+  height: `min(${toRem(450)}, calc(var(--app-height, 100dvh) - ${
+    config.space.S400
+  } - env(safe-area-inset-top) - env(safe-area-inset-bottom)))`,
   backgroundColor: color.Surface.Container,
   color: color.Surface.OnContainer,
   border: `${config.borderWidth.B300} solid ${color.Surface.ContainerLine}`,
@@ -19,8 +20,9 @@ export const Base = style({
   '@media': {
     'screen and (max-width: 750px)': {
       width: `calc(var(--app-width, 100vw) - 2 * ${config.space.S200})`,
-      height:
-        `min(${toRem(420)}, calc(var(--app-height, 100dvh) - ${config.space.S300} - env(safe-area-inset-top) - env(safe-area-inset-bottom)))`,
+      height: `min(${toRem(420)}, calc(var(--app-height, 100dvh) - ${
+        config.space.S300
+      } - env(safe-area-inset-top) - env(safe-area-inset-bottom)))`,
     },
   },
 });
@@ -121,14 +123,17 @@ export const SidebarBtnFallback = style([
  */
 
 export const Preview = style({
-  padding: config.space.S200,
-  margin: config.space.S300,
-  marginTop: 0,
-  minHeight: toRem(40),
-
+  position: 'fixed',
+  zIndex: 1000,
+  width: toRem(176),
+  maxWidth: `calc(100vw - ${toRem(24)})`,
+  padding: config.space.S300,
   borderRadius: config.radii.R400,
-  backgroundColor: color.SurfaceVariant.Container,
-  color: color.SurfaceVariant.OnContainer,
+  border: `${config.borderWidth.B300} solid ${color.Surface.ContainerLine}`,
+  backgroundColor: color.Surface.Container,
+  color: color.Surface.OnContainer,
+  boxShadow: config.shadow.E200,
+  pointerEvents: 'none',
 });
 
 export const MediaFrame = style({
@@ -147,18 +152,18 @@ export const MediaFallbackHidden = style({
 export const PreviewEmoji = style([
   DefaultReset,
   {
-    width: toRem(32),
-    height: toRem(32),
-    fontSize: toRem(32),
-    lineHeight: toRem(32),
+    width: toRem(144),
+    height: toRem(144),
+    fontSize: toRem(96),
+    lineHeight: toRem(144),
   },
 ]);
 export const PreviewImg = style([
   DefaultReset,
   {
     gridArea: '1 / 1',
-    width: toRem(32),
-    height: toRem(32),
+    width: toRem(144),
+    height: toRem(144),
     objectFit: 'contain',
     transition: 'opacity 120ms ease',
   },
@@ -171,8 +176,8 @@ export const PreviewFallback = style([
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
-    width: toRem(32),
-    height: toRem(32),
+    width: toRem(144),
+    height: toRem(144),
     borderRadius: config.radii.R300,
     backgroundColor: color.Surface.Container,
     color: color.Surface.OnContainer,

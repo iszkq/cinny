@@ -207,6 +207,22 @@ const getFirstValidUrl = (
   validator: (url: string | undefined | null) => url is string
 ): string | undefined => values.map((value) => value?.trim()).find(validator);
 
+const REMOTE_STICKER_INDEX_ORIGIN = new URL(REMOTE_STICKER_INDEX_URL).origin;
+
+const isCorsSafeStickerMediaUrl = (url: string): boolean => {
+  try {
+    // HTTP-only items have to be downloaded by the browser before they can be uploaded as MXC.
+    // Only the controlled index origin is known to allow that. Third-party images may render in
+    // <img>, but including them would fail later when fetch() is blocked by CORS.
+    return new URL(url).origin === REMOTE_STICKER_INDEX_ORIGIN;
+  } catch {
+    return false;
+  }
+};
+
+const isCorsSafeHttpStickerMediaUrl = (url: string | undefined | null): url is string =>
+  isHttpUrl(url) && isCorsSafeStickerMediaUrl(url);
+
 const toRemoteSticker = (
   item: RemoteStickerIndexItem,
   packsById: Map<string, RemoteStickerIndexPack>
@@ -217,7 +233,15 @@ const toRemoteSticker = (
     [item.previewUrl, item.httpUrl, item.sourceUrl, item.url, item.thumbUrl, item.thumbnailUrl],
     isHttpUrl
   );
-  const sendUrl = mxcUrl ?? previewUrl;
+  const uploadableHttpUrl = getFirstValidUrl(
+    [item.previewUrl, item.httpUrl, item.sourceUrl, item.url, item.thumbUrl, item.thumbnailUrl],
+    isCorsSafeHttpStickerMediaUrl
+  );
+  // Keep Matrix-native entries regardless of their preview host. For HTTP-only entries, exclude
+  // third-party origins up front so clicking an apparently valid image cannot produce a CORS
+  // failure. The index preparation script can preserve those entries by uploading them to Matrix
+  // and adding an mxc/mxcUrl/matrixUrl field.
+  const sendUrl = mxcUrl ?? uploadableHttpUrl;
 
   if (!sendUrl || !displayName) {
     return undefined;
