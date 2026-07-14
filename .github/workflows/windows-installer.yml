@@ -141,14 +141,10 @@ jobs:
             throw "Generated updater signature file '$($signatureFile.Name)' is empty."
           }
           $assetName = [System.Uri]::EscapeDataString($setupFile.Name)
-          $releaseMetadata = Invoke-RestMethod `
-            -Uri "https://api.github.com/repos/$($env:RELEASE_REPOSITORY)/releases/tags/$($env:RELEASE_TAG)" `
-            -Headers @{
-              Accept = 'application/vnd.github+json'
-              Authorization = "Bearer $env:GH_TOKEN"
-              'X-GitHub-Api-Version' = '2022-11-28'
-            }
-          $releaseBody = [string]$releaseMetadata.body
+          # Prefer the release-notes file that was already decoded explicitly as UTF-8 above.
+          # Reading the GitHub API response through PowerShell can decode UTF-8 Chinese as the
+          # active Windows code page and write mojibake into latest.json.
+          $releaseBody = $releaseNotes
           if ([string]::IsNullOrWhiteSpace($releaseBody)) {
             $releaseBody = "Starfire v$version"
           }
