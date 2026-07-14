@@ -711,7 +711,7 @@ const getStickerSendErrorMessage = (error: unknown, remoteSticker: boolean): str
     detail &&
     /networkerror|failed to fetch|fetch resource|load failed|cors|cross-origin/i.test(detail)
   ) {
-    return '这张云端贴纸的源站禁止读取图片，无法转存为 Matrix 媒体。请从其他表情包选择一张贴纸。';
+    return '这张图片可以预览，但源站不允许网页读取原文件，因此无法转存为 Matrix 媒体。请从其他表情包选择一张贴纸。';
   }
 
   if (remoteSticker && detail && /unsupported sticker media url/i.test(detail)) {
@@ -750,7 +750,7 @@ const getCloudEmojiErrorMessage = (error: unknown): string => {
     detail &&
     /networkerror|failed to fetch|fetch resource|load failed|cors|cross-origin/i.test(detail)
   ) {
-    return '这个云端表情的源站禁止读取图片，无法转存为 Matrix 媒体。请从其他表情包选择一个表情。';
+    return '这个图片可以预览，但源站不允许网页读取原文件，因此无法转存为 Matrix 媒体。请从其他表情包选择一个表情。';
   }
   if (detail && /unsupported sticker media url/i.test(detail)) {
     return '这个云端表情来自暂不支持的图片源，无法转存为 Matrix 媒体。请从其他表情包选择一个表情。';

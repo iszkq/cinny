@@ -123,17 +123,14 @@ export const SidebarBtnFallback = style([
  */
 
 export const Preview = style({
-  position: 'fixed',
-  zIndex: 1000,
-  width: toRem(176),
-  maxWidth: `calc(100vw - ${toRem(24)})`,
-  padding: config.space.S300,
+  padding: config.space.S200,
+  margin: config.space.S300,
+  marginTop: 0,
+  minHeight: toRem(40),
+
   borderRadius: config.radii.R400,
-  border: `${config.borderWidth.B300} solid ${color.Surface.ContainerLine}`,
-  backgroundColor: color.Surface.Container,
-  color: color.Surface.OnContainer,
-  boxShadow: config.shadow.E200,
-  pointerEvents: 'none',
+  backgroundColor: color.SurfaceVariant.Container,
+  color: color.SurfaceVariant.OnContainer,
 });
 
 export const MediaFrame = style({
@@ -152,18 +149,18 @@ export const MediaFallbackHidden = style({
 export const PreviewEmoji = style([
   DefaultReset,
   {
-    width: toRem(144),
-    height: toRem(144),
-    fontSize: toRem(96),
-    lineHeight: toRem(144),
+    width: toRem(32),
+    height: toRem(32),
+    fontSize: toRem(32),
+    lineHeight: toRem(32),
   },
 ]);
 export const PreviewImg = style([
   DefaultReset,
   {
     gridArea: '1 / 1',
-    width: toRem(144),
-    height: toRem(144),
+    width: toRem(32),
+    height: toRem(32),
     objectFit: 'contain',
     transition: 'opacity 120ms ease',
   },
@@ -176,8 +173,8 @@ export const PreviewFallback = style([
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
-    width: toRem(144),
-    height: toRem(144),
+    width: toRem(32),
+    height: toRem(32),
     borderRadius: config.radii.R300,
     backgroundColor: color.Surface.Container,
     color: color.Surface.OnContainer,

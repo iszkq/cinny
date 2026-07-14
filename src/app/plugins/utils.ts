@@ -7,10 +7,8 @@ export const getEmoticonSearchStr: SearchItemStrGetter<PackImageReader | IEmoji>
   if (item instanceof PackImageReader) {
     const content = item.content as {
       'in.cinny.remote_sticker_keywords'?: string[];
-      'in.cinny.alapi_doutu_keywords'?: string[];
     };
     const remoteKeywords = content['in.cinny.remote_sticker_keywords'];
-    const alapiKeywords = content['in.cinny.alapi_doutu_keywords'];
     const names = [shortcode];
     if (item.body) {
       names.push(item.body);
@@ -18,7 +16,6 @@ export const getEmoticonSearchStr: SearchItemStrGetter<PackImageReader | IEmoji>
     if (Array.isArray(remoteKeywords)) {
       names.push(...remoteKeywords);
     }
-    if (Array.isArray(alapiKeywords)) names.push(...alapiKeywords);
     return names;
   }
 

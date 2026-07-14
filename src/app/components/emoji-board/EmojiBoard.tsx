@@ -75,7 +75,6 @@ import {
   getRemoteStickerPreviewUrl,
   useRemoteStickerIndex,
 } from './useRemoteStickerIndex';
-import { useAlapiDoutuSearch } from './useAlapiDoutuSearch';
 import { isHttpUrl } from '../../utils/matrix';
 
 const RECENT_GROUP_ID = 'recent_group';
@@ -600,10 +599,6 @@ function EmojiGroupHolder({
         shortcode: emojiInfo.shortcode,
         info: emojiInfo.info,
         preferOriginal: emojiInfo.type === EmojiType.Sticker,
-        anchor: (() => {
-          const { top, bottom, left, right } = element.getBoundingClientRect();
-          return { top, bottom, left, right };
-        })(),
       });
     },
     [setPreviewData]
@@ -625,20 +620,12 @@ function EmojiGroupHolder({
     handleEmojiPreview(targetEl);
   };
 
-  const handleEmojiBlur: FocusEventHandler = (evt) => {
-    if (!evt.currentTarget.contains(evt.relatedTarget as Node | null)) {
-      setPreviewData(undefined);
-    }
-  };
-
   return (
     <Scroll ref={contentScrollRef} size="400" onKeyDown={preventScrollWithArrowKey} hideTrack>
       <Box
         onClick={onGroupItemClick}
         onMouseMove={handleEmojiHover}
-        onMouseLeave={() => setPreviewData(undefined)}
         onFocus={handleEmojiFocus}
-        onBlur={handleEmojiBlur}
         direction="Column"
       >
         {children}
@@ -732,11 +719,6 @@ export function EmojiBoard({
     error: remoteStickerError,
     retry: retryRemoteStickers,
   } = useRemoteStickerIndex(cloudTab);
-  const {
-    items: alapiDoutuImages,
-    loading: alapiDoutuLoading,
-    error: alapiDoutuError,
-  } = useAlapiDoutuSearch(searchTerm, !cloudTab);
   const [emojiGroupItems, stickerGroupItems, cloudGroupItems] = useGroups(
     tab,
     imagePacks,
@@ -754,9 +736,8 @@ export function EmojiBoard({
     }
     list = list.concat(imagePacks.flatMap((pack) => pack.getImages(usage)));
     if (emojiTab) list = list.concat(emojis);
-    list = list.concat(alapiDoutuImages);
     return list;
-  }, [alapiDoutuImages, cloudTab, emojiTab, usage, imagePacks, remoteStickerImages]);
+  }, [cloudTab, emojiTab, usage, imagePacks, remoteStickerImages]);
 
   const [result, search, resetSearch] = useAsyncSearch(
     searchList,
@@ -767,8 +748,6 @@ export function EmojiBoard({
   const searchedItems = result?.items.slice(0, 100);
   let searchResultLabel = '没有结果';
   if (searchedItems?.length) searchResultLabel = '搜索结果';
-  else if (alapiDoutuLoading) searchResultLabel = '正在搜索第三方表情...';
-  else if (alapiDoutuError) searchResultLabel = '第三方表情搜索失败';
 
   const getPackMediaUrls = useCallback(
     (pack: ImagePack) => {

@@ -1,5 +1,7 @@
 import React, {
+  FocusEvent as ReactFocusEvent,
   KeyboardEvent as ReactKeyboardEvent,
+  MouseEvent as ReactMouseEvent,
   WheelEvent as ReactWheelEvent,
   useCallback,
   useEffect,
@@ -7,6 +9,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { Editor, RangeRef, Transforms } from 'slate';
 import { Badge, Box, Icon, IconButton, Icons, MenuItem, Spinner, Text, toRem } from 'folds';
 import { Room } from 'matrix-js-sdk';
@@ -28,11 +31,23 @@ import { getEmoticonSearchStr } from '../../../plugins/utils';
 import { useCachedMediaUrl } from '../../../hooks/useCachedMediaUrl';
 import { getEmojiBoardMediaUrls } from '../../emoji-board/components/media';
 import { useRemoteStickerIndex } from '../../emoji-board/useRemoteStickerIndex';
-import { useAlapiDoutuSearch } from '../../emoji-board/useAlapiDoutuSearch';
 import { isHttpUrl } from '../../../utils/matrix';
 import { normalize } from '../../../utils/AsyncSearch';
 
 type EmoticonSearchItem = PackImageReader | IEmoji;
+
+type EmoticonHoverPreviewData = {
+  key: string;
+  src?: string;
+  shortcode: string;
+  customEmoji: boolean;
+  anchor: {
+    top: number;
+    bottom: number;
+    left: number;
+    right: number;
+  };
+};
 
 type EmoticonAutocompleteProps = {
   imagePackRooms: Room[];
@@ -66,6 +81,47 @@ const deduplicateCustomEmoji = (images: PackImageReader[]): PackImageReader[] =>
     return true;
   });
 };
+
+function EmoticonHoverPreview({ preview }: { preview?: EmoticonHoverPreviewData }) {
+  if (!preview || typeof document === 'undefined') return null;
+
+  const previewWidth = 160;
+  const viewportPadding = 12;
+  const anchorCenter = (preview.anchor.left + preview.anchor.right) / 2;
+  const left = Math.min(
+    window.innerWidth - viewportPadding - previewWidth / 2,
+    Math.max(viewportPadding + previewWidth / 2, anchorCenter)
+  );
+  const showBelow = preview.anchor.top < 180;
+  const top = showBelow ? preview.anchor.bottom + 8 : preview.anchor.top - 8;
+
+  return createPortal(
+    <div
+      className={css.HoverPreview}
+      style={{
+        left,
+        top,
+        transform: showBelow ? 'translate(-50%, 0)' : 'translate(-50%, -100%)',
+      }}
+      aria-hidden="true"
+    >
+      {preview.customEmoji && preview.src ? (
+        <img
+          className={css.HoverPreviewImage}
+          src={preview.src}
+          alt=""
+          loading="eager"
+          decoding="async"
+          referrerPolicy={isHttpUrl(preview.key) ? 'no-referrer' : undefined}
+        />
+      ) : (
+        <span className={css.HoverPreviewUnicode}>{preview.key}</span>
+      )}
+      <span className={css.HoverPreviewLabel}>:{preview.shortcode}:</span>
+    </div>,
+    document.body
+  );
+}
 
 function CustomEmojiOptionMedia({
   src,
@@ -118,10 +174,6 @@ export function EmoticonAutocomplete({
   const stickerPacks = imagePackMode === 'personal' ? personalStickerPacks : contextualStickerPacks;
   const remoteEnabled = Boolean(resolveCustomEmojiKey && query.text.trim());
   const { stickers: remoteStickers, loading: remoteLoading } = useRemoteStickerIndex(remoteEnabled);
-  const { items: alapiDoutuImages, loading: alapiDoutuLoading } = useAlapiDoutuSearch(
-    query.text,
-    remoteEnabled
-  );
   const recentEmoji = useRecentEmoji(mx, 20);
 
   const searchList = useMemo(() => {
@@ -130,13 +182,12 @@ export function EmoticonAutocomplete({
         .flatMap((pack) => pack.getImages(ImageUsage.Emoticon))
         .concat(
           stickerPacks.flatMap((pack) => pack.getImages(ImageUsage.Sticker)),
-          remoteEnabled ? remoteStickers : [],
-          remoteEnabled ? alapiDoutuImages : []
+          remoteEnabled ? remoteStickers : []
         )
     );
 
     return (customEmoji as EmoticonSearchItem[]).concat(emojis);
-  }, [alapiDoutuImages, emoticonPacks, remoteEnabled, remoteStickers, stickerPacks]);
+  }, [emoticonPacks, remoteEnabled, remoteStickers, stickerPacks]);
 
   const [result, search, resetSearch] = useAsyncSearch(
     searchList,
@@ -169,6 +220,7 @@ export function EmoticonAutocomplete({
   const [canScrollPrevious, setCanScrollPrevious] = useState(false);
   const [canScrollNext, setCanScrollNext] = useState(false);
   const [visibleOptionIndexes, setVisibleOptionIndexes] = useState(() => new Set([0, 1, 2, 3]));
+  const [hoverPreview, setHoverPreview] = useState<EmoticonHoverPreviewData>();
 
   useEffect(() => {
     aliveRef.current = true;
@@ -192,6 +244,7 @@ export function EmoticonAutocomplete({
 
   useEffect(() => {
     optionRefs.current.length = autoCompleteEmoticon.length;
+    setHoverPreview(undefined);
     const carousel = carouselRef.current;
     if (!carousel) return undefined;
 
@@ -204,6 +257,30 @@ export function EmoticonAutocomplete({
       window.removeEventListener('resize', updateScrollState);
     };
   }, [autoCompleteEmoticon.length, query.text, updateScrollState]);
+
+  const showOptionPreview = useCallback(
+    (
+      element: HTMLButtonElement,
+      emoticon: EmoticonSearchItem,
+      src: string | undefined,
+      customEmoji: boolean
+    ) => {
+      const { top, bottom, left, right } = element.getBoundingClientRect();
+      setHoverPreview({
+        key: customEmoji ? (emoticon as PackImageReader).url : (emoticon as IEmoji).unicode,
+        src,
+        shortcode: emoticon.shortcode,
+        customEmoji,
+        anchor: { top, bottom, left, right },
+      });
+    },
+    []
+  );
+
+  const handleCarouselScroll = useCallback(() => {
+    setHoverPreview(undefined);
+    updateScrollState();
+  }, [updateScrollState]);
 
   useEffect(() => {
     const initialIndexes = Array.from(
@@ -394,7 +471,7 @@ export function EmoticonAutocomplete({
     });
   });
 
-  const showRemoteLoading = remoteEnabled && (remoteLoading || alapiDoutuLoading);
+  const showRemoteLoading = remoteEnabled && remoteLoading;
   const totalResultCount = query.text ? currentResult?.items.length ?? 0 : recentEmoji.length;
   const resultCountLabel =
     totalResultCount > MAX_AUTOCOMPLETE_RESULTS
@@ -474,7 +551,7 @@ export function EmoticonAutocomplete({
             className={css.CarouselTrack}
             role="group"
             aria-label="\u8868\u60c5\u4e0e\u8d34\u7eb8\u641c\u7d22\u7ed3\u679c"
-            onScroll={updateScrollState}
+            onScroll={handleCarouselScroll}
             onWheel={handleCarouselWheel}
           >
             {autoCompleteEmoticon.map((emoticon, index) => {
@@ -488,6 +565,17 @@ export function EmoticonAutocomplete({
                     info: emoticon.info,
                     width: 64,
                     height: 64,
+                  }).primaryUrl
+                : undefined;
+              const customEmojiPreviewUrl = isCustomEmoji
+                ? getEmojiBoardMediaUrls({
+                    mx,
+                    mxc: key,
+                    useAuthentication,
+                    info: emoticon.info,
+                    width: 256,
+                    height: 256,
+                    preferOriginal: true,
                   }).primaryUrl
                 : undefined;
 
@@ -513,6 +601,24 @@ export function EmoticonAutocomplete({
                       : `\u63d2\u5165\u8868\u60c5 ${emoticon.shortcode}`
                   }
                   disabled={resolving}
+                  onMouseEnter={(evt: ReactMouseEvent<HTMLButtonElement>) =>
+                    showOptionPreview(
+                      evt.currentTarget,
+                      emoticon,
+                      customEmojiPreviewUrl,
+                      isCustomEmoji
+                    )
+                  }
+                  onMouseLeave={() => setHoverPreview(undefined)}
+                  onFocus={(evt: ReactFocusEvent<HTMLButtonElement>) =>
+                    showOptionPreview(
+                      evt.currentTarget,
+                      emoticon,
+                      customEmojiPreviewUrl,
+                      isCustomEmoji
+                    )
+                  }
+                  onBlur={() => setHoverPreview(undefined)}
                   onKeyDown={(evt: ReactKeyboardEvent<HTMLButtonElement>) =>
                     handleOptionKeyDown(evt, index, emoticon)
                   }
@@ -558,6 +664,7 @@ export function EmoticonAutocomplete({
           >
             <Icon src={Icons.ArrowRight} size="50" />
           </IconButton>
+          <EmoticonHoverPreview preview={hoverPreview} />
         </div>
       )}
     </AutocompleteMenu>

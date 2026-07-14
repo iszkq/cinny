@@ -1,6 +1,5 @@
 import { Box, Icon, Icons, Text } from 'folds';
 import React from 'react';
-import { createPortal } from 'react-dom';
 import classNames from 'classnames';
 import { Atom, atom, useAtomValue } from 'jotai';
 import * as css from './styles.css';
@@ -17,12 +16,6 @@ export type PreviewData = {
   shortcode: string;
   info?: IImageInfo;
   preferOriginal?: boolean;
-  anchor?: {
-    top: number;
-    bottom: number;
-    left: number;
-    right: number;
-  };
 };
 
 export const createPreviewDataAtom = (initial?: PreviewData) =>
@@ -36,7 +29,7 @@ export function Preview({ previewAtom }: PreviewProps) {
   const useAuthentication = useMediaAuthentication();
   const desktopSupported = isDesktopUpdaterSupported();
 
-  const { key, shortcode, info, preferOriginal, anchor } = useAtomValue(previewAtom) ?? {};
+  const { key, shortcode, info, preferOriginal } = useAtomValue(previewAtom) ?? {};
   const remoteHttpEmoji = isHttpUrl(key);
   const customEmoji = isMxcUrl(key) || remoteHttpEmoji;
   const { primaryUrl, fallbackUrl } = getEmojiBoardMediaUrls({
@@ -54,78 +47,10 @@ export function Preview({ previewAtom }: PreviewProps) {
       fallbackMimeType: info?.mimetype,
     });
 
-  if (!shortcode || !anchor || typeof document === 'undefined') return null;
+  if (!shortcode) return null;
 
-  const previewWidth = 176;
-  const viewportPadding = 12;
-  const anchorCenter = (anchor.left + anchor.right) / 2;
-  const left = Math.min(
-    window.innerWidth - viewportPadding - previewWidth / 2,
-    Math.max(viewportPadding + previewWidth / 2, anchorCenter)
-  );
-  const showBelow = anchor.top < 190;
-  const top = showBelow ? anchor.bottom + 8 : anchor.top - 8;
-
-  let previewContent: React.ReactNode = key;
-  if (customEmoji) {
-    previewContent = (
-      <Box className={css.PreviewFallback}>
-        <Icon src={Icons.Photo} size="100" />
-      </Box>
-    );
-
-    if (displayUrl && !hasFailed) {
-      previewContent = (
-        <img
-          key={requestKey}
-          className={css.PreviewImg}
-          src={displayUrl}
-          referrerPolicy={remoteHttpEmoji ? 'no-referrer' : undefined}
-          alt=""
-          loading="eager"
-          decoding="async"
-          onLoad={handleLoad}
-          onError={handleError}
-        />
-      );
-
-      if (desktopSupported) {
-        previewContent = (
-          <Box className={css.MediaFrame}>
-            <img
-              key={requestKey}
-              className={classNames(css.PreviewImg, !isLoaded && css.MediaImgPending)}
-              src={displayUrl}
-              referrerPolicy={remoteHttpEmoji ? 'no-referrer' : undefined}
-              alt=""
-              loading="eager"
-              decoding="async"
-              onLoad={handleLoad}
-              onError={handleError}
-            />
-            <Box className={classNames(css.PreviewFallback, isLoaded && css.MediaFallbackHidden)}>
-              <Icon src={Icons.Photo} size="100" />
-            </Box>
-          </Box>
-        );
-      }
-    }
-  }
-
-  return createPortal(
-    <Box
-      className={css.Preview}
-      direction="Column"
-      gap="200"
-      alignItems="Center"
-      style={{
-        left,
-        top,
-        transform: showBelow ? 'translate(-50%, 0)' : 'translate(-50%, -100%)',
-      }}
-      role="status"
-      aria-label={`表情预览：${shortcode}`}
-    >
+  return (
+    <Box shrink="No" className={css.Preview} gap="300" alignItems="Center">
       {key && (
         <Box
           display="InlineFlex"
@@ -133,13 +58,53 @@ export function Preview({ previewAtom }: PreviewProps) {
           alignItems="Center"
           justifyContent="Center"
         >
-          {previewContent}
+          {customEmoji ? (
+            displayUrl && !hasFailed ? (
+              desktopSupported ? (
+                <Box className={css.MediaFrame}>
+                  <img
+                    key={requestKey}
+                    className={classNames(css.PreviewImg, !isLoaded && css.MediaImgPending)}
+                    src={displayUrl}
+                    referrerPolicy={remoteHttpEmoji ? 'no-referrer' : undefined}
+                    alt=""
+                    loading="eager"
+                    decoding="async"
+                    onLoad={handleLoad}
+                    onError={handleError}
+                  />
+                  <Box
+                    className={classNames(css.PreviewFallback, isLoaded && css.MediaFallbackHidden)}
+                  >
+                    <Icon src={Icons.Photo} size="100" />
+                  </Box>
+                </Box>
+              ) : (
+                <img
+                  key={requestKey}
+                  className={css.PreviewImg}
+                  src={displayUrl}
+                  referrerPolicy={remoteHttpEmoji ? 'no-referrer' : undefined}
+                  alt=""
+                  loading="eager"
+                  decoding="async"
+                  onLoad={handleLoad}
+                  onError={handleError}
+                />
+              )
+            ) : (
+              <Box className={css.PreviewFallback}>
+                <Icon src={Icons.Photo} size="100" />
+              </Box>
+            )
+          ) : (
+            key
+          )}
         </Box>
       )}
-      <Text size="T200" truncate style={{ maxWidth: '100%' }}>
+      <Text size="H5" truncate>
         :{shortcode}:
       </Text>
-    </Box>,
-    document.body
+    </Box>
   );
 }
