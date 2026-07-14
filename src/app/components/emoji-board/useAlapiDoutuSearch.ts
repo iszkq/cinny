@@ -10,6 +10,7 @@ const DEFAULT_ENDPOINT = 'https://v3.alapi.cn/api/doutu';
 const SEARCH_DEBOUNCE_MS = 300;
 const CACHE_TTL_MS = 15 * 60 * 1000;
 const CACHE_LIMIT = 50;
+const EMPTY_DOUTU_ITEMS: PackImageReader[] = [];
 
 type AlapiDoutuResponse = {
   success?: boolean;
@@ -186,13 +187,13 @@ export const useAlapiDoutuSearch = (rawQuery: string, enabled = true): AlapiDout
   const cachedItems = enabled && configured && query ? getCachedItems(cacheKey) : undefined;
   const [state, setState] = useState<Omit<AlapiDoutuSearchState, 'configured'>>({
     query: '',
-    items: [],
+    items: EMPTY_DOUTU_ITEMS,
     loading: false,
   });
 
   useEffect(() => {
     if (!enabled || !configured || !query) {
-      setState({ query, items: [], loading: false });
+      setState({ query, items: EMPTY_DOUTU_ITEMS, loading: false });
       return undefined;
     }
 
@@ -203,7 +204,7 @@ export const useAlapiDoutuSearch = (rawQuery: string, enabled = true): AlapiDout
     }
 
     const abortController = new AbortController();
-    setState({ query, items: [], loading: true });
+    setState({ query, items: EMPTY_DOUTU_ITEMS, loading: true });
     const timerId = window.setTimeout(() => {
       searchAlapiDoutu(endpoint, token, query, maxResults, abortController.signal)
         .then((items) => {
@@ -213,7 +214,7 @@ export const useAlapiDoutuSearch = (rawQuery: string, enabled = true): AlapiDout
         .catch((error: unknown) => {
           if (abortController.signal.aborted) return;
           const message = error instanceof Error ? error.message : '第三方表情搜索失败';
-          setState({ query, items: [], loading: false, error: message });
+          setState({ query, items: EMPTY_DOUTU_ITEMS, loading: false, error: message });
         });
     }, SEARCH_DEBOUNCE_MS);
 
@@ -227,7 +228,12 @@ export const useAlapiDoutuSearch = (rawQuery: string, enabled = true): AlapiDout
     return { query, items: cachedItems, loading: false, configured };
   }
   if (state.query !== query) {
-    return { query, items: [], loading: enabled && configured && Boolean(query), configured };
+    return {
+      query,
+      items: EMPTY_DOUTU_ITEMS,
+      loading: enabled && configured && Boolean(query),
+      configured,
+    };
   }
   return { ...state, configured };
 };
