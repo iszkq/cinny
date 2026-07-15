@@ -304,6 +304,41 @@ type RemoteStickerMedia = {
   mimeType: string;
 };
 
+type RemoteMediaOperation = 'download' | 'upload';
+
+type ErrorDetail = {
+  data?: { error?: string; errcode?: string };
+  errcode?: string;
+  httpStatus?: number;
+  message?: string;
+};
+
+const getErrorDetail = (error: unknown): string | undefined => {
+  const detail = error as ErrorDetail;
+  return detail?.data?.error?.trim() || detail?.message?.trim();
+};
+
+class RemoteMediaOperationError extends Error {
+  readonly operation: RemoteMediaOperation;
+
+  readonly originalError: unknown;
+
+  constructor(operation: RemoteMediaOperation, originalError: unknown) {
+    super(getErrorDetail(originalError) || `Remote media ${operation} failed.`);
+    this.name = 'RemoteMediaOperationError';
+    this.operation = operation;
+    this.originalError = originalError;
+  }
+}
+
+const toRemoteMediaOperationError = (
+  operation: RemoteMediaOperation,
+  error: unknown
+): RemoteMediaOperationError =>
+  error instanceof RemoteMediaOperationError
+    ? error
+    : new RemoteMediaOperationError(operation, error);
+
 const REMOTE_STICKER_MIME_EXTENSION: Record<string, string> = {
   'image/apng': 'apng',
   'image/avif': 'avif',
@@ -458,15 +493,19 @@ const fetchRemoteStickerMedia = async (
   url: string,
   info?: IImageInfo
 ): Promise<RemoteStickerMedia> => {
-  if (isDesktopUpdaterSupported()) {
-    try {
-      return await fetchRemoteStickerMediaWithDesktop(url, info);
-    } catch (error) {
-      console.warn(error);
+  try {
+    if (isDesktopUpdaterSupported()) {
+      try {
+        return await fetchRemoteStickerMediaWithDesktop(url, info);
+      } catch (error) {
+        console.warn(error);
+      }
     }
-  }
 
-  return fetchRemoteStickerMediaWithBrowser(url, info);
+    return await fetchRemoteStickerMediaWithBrowser(url, info);
+  } catch (error) {
+    throw toRemoteMediaOperationError('download', error);
+  }
 };
 
 const uploadRemoteEmojiMxc = async (
@@ -481,14 +520,18 @@ const uploadRemoteEmojiMxc = async (
 
   // Inline custom emoji only carries an image src. It cannot carry encrypted-file metadata,
   // so upload it as regular Matrix media even when the surrounding room is encrypted.
-  const upload = await mx.uploadContent(sourceFile, {
-    includeFilename: true,
-    name: fileName,
-    type: sourceFile.type || mimeType,
-  });
+  const upload = await mx
+    .uploadContent(sourceFile, {
+      includeFilename: true,
+      name: fileName,
+      type: sourceFile.type || mimeType,
+    })
+    .catch((error) => {
+      throw toRemoteMediaOperationError('upload', error);
+    });
   const mxc = upload.content_uri;
   if (!mxc) {
-    throw new Error('Failed to upload remote emoji.');
+    throw toRemoteMediaOperationError('upload', new Error('Matrix did not return a media URL.'));
   }
 
   return mxc;
@@ -562,14 +605,18 @@ const uploadRemoteStickerContent = async (
         encInfo: undefined,
       };
 
-  const upload = await mx.uploadContent(uploadItem.file, {
-    includeFilename: true,
-    name: fileName,
-    type: uploadItem.file.type || mimeType,
-  });
+  const upload = await mx
+    .uploadContent(uploadItem.file, {
+      includeFilename: true,
+      name: fileName,
+      type: uploadItem.file.type || mimeType,
+    })
+    .catch((error) => {
+      throw toRemoteMediaOperationError('upload', error);
+    });
   const mxc = upload.content_uri;
   if (!mxc) {
-    throw new Error('Failed to upload remote sticker.');
+    throw toRemoteMediaOperationError('upload', new Error('Matrix did not return a media URL.'));
   }
 
   const mediaInfo = await getRemoteStickerImageInfo(blob, mimeType, info);
@@ -685,37 +732,102 @@ const getSendErrorMessage = (error: unknown): string => {
   return '发送失败，这条消息目前可能只有你自己可见，请重试。';
 };
 
-const getStickerSendErrorMessage = (error: unknown, remoteSticker: boolean): string => {
+const NETWORK_ERROR_PATTERN =
+  /networkerror|failed to fetch|fetch resource|load failed|cors|cross-origin|network request failed/i;
+const ABORT_ERROR_PATTERN = /abort|aborted|operation was aborted/i;
+const TIMEOUT_ERROR_PATTERN = /timed out|timeout/i;
+
+const getRemoteMediaOperationErrorMessage = (
+  error: unknown,
+  mediaName: '贴纸' | '表情'
+): string | undefined => {
+  if (!(error instanceof RemoteMediaOperationError)) return undefined;
+
+  const originalError = error.originalError as ErrorDetail;
+  const detail = getErrorDetail(error);
+  const errcode = originalError?.errcode ?? originalError?.data?.errcode;
+
+  if (error.operation === 'download') {
+    if (detail && ABORT_ERROR_PATTERN.test(detail)) {
+      return `读取云端${mediaName}已取消，请重新选择后再试。`;
+    }
+    if (detail && TIMEOUT_ERROR_PATTERN.test(detail)) {
+      return `读取云端${mediaName}超时。请检查网络连接后重试。`;
+    }
+    if (detail && /unsupported sticker media url/i.test(detail)) {
+      return `这张云端${mediaName}的地址不受支持，请选择其他${mediaName}。`;
+    }
+    if (detail && NETWORK_ERROR_PATTERN.test(detail)) {
+      return `暂时无法读取云端${mediaName}原文件。图片能预览不代表浏览器一定能下载，请刷新页面后重试；如果仍然失败，请检查网络代理或浏览器扩展。`;
+    }
+    return detail
+      ? `读取云端${mediaName}失败：${detail}`
+      : `暂时无法读取云端${mediaName}，请稍后重试。`;
+  }
+
+  if (
+    originalError?.httpStatus === 413 ||
+    errcode === 'M_TOO_LARGE' ||
+    (detail && /too large|content too large|payload too large|size limit/i.test(detail))
+  ) {
+    return `图片已经读取成功，但超过了 Matrix 服务器的上传大小限制。请选择较小的${mediaName}。`;
+  }
+  if (
+    originalError?.httpStatus === 429 ||
+    errcode === 'M_LIMIT_EXCEEDED' ||
+    (detail && /rate limit|too many requests/i.test(detail))
+  ) {
+    return '图片已经读取成功，但 Matrix 服务器当前请求较多。请稍后再试。';
+  }
+  if (
+    originalError?.httpStatus === 401 ||
+    originalError?.httpStatus === 403 ||
+    errcode === 'M_FORBIDDEN' ||
+    errcode === 'M_UNKNOWN_TOKEN'
+  ) {
+    return '图片已经读取成功，但 Matrix 服务器拒绝了上传。请重新登录后再试。';
+  }
+  if (detail && NETWORK_ERROR_PATTERN.test(detail)) {
+    return '图片已经读取成功，但无法连接到 Matrix 媒体服务器。请检查当前网络或服务器状态后重试。';
+  }
+
+  return detail
+    ? `图片已经读取成功，但保存到 Matrix 媒体服务器失败：${detail}`
+    : '图片已经读取成功，但 Matrix 媒体服务器没有完成保存。请稍后重试。';
+};
+
+const getStickerSendErrorMessage = (
+  error: unknown,
+  remoteSticker: boolean,
+  phase: 'prepare' | 'send' = 'prepare'
+): string => {
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
     return '当前网络已断开，贴纸还没有发送出去。';
   }
 
-  const matrixError = error as {
-    data?: { error?: string };
-    message?: string;
-  };
-
-  let detail: string | undefined;
-  if (typeof matrixError?.data?.error === 'string' && matrixError.data.error.trim()) {
-    detail = matrixError.data.error.trim();
-  } else if (typeof matrixError?.message === 'string' && matrixError.message.trim()) {
-    detail = matrixError.message.trim();
+  if (phase === 'prepare') {
+    const operationMessage = getRemoteMediaOperationErrorMessage(error, '贴纸');
+    if (operationMessage) return operationMessage;
   }
 
-  if (detail && /abort|aborted|operation was aborted/i.test(detail)) {
+  const detail = getErrorDetail(error);
+  const matrixError = error as ErrorDetail;
+  const errcode = matrixError?.errcode ?? matrixError?.data?.errcode;
+
+  if (detail && ABORT_ERROR_PATTERN.test(detail)) {
     return remoteSticker ? '云端贴纸发送被中止，请重试。' : '贴纸发送被中止，请重试。';
   }
-
-  if (
-    remoteSticker &&
-    detail &&
-    /networkerror|failed to fetch|fetch resource|load failed|cors|cross-origin/i.test(detail)
-  ) {
-    return '这张图片可以预览，但源站不允许网页读取原文件，因此无法转存为 Matrix 媒体。请从其他表情包选择一张贴纸。';
+  if (phase === 'send' && detail && NETWORK_ERROR_PATTERN.test(detail)) {
+    return '网络连接不稳定，这张贴纸还没有发送到聊天室。请确认网络恢复后重试。';
   }
-
-  if (remoteSticker && detail && /unsupported sticker media url/i.test(detail)) {
-    return '这张云端贴纸来自暂不支持的图片源，无法转存为 Matrix 媒体。请从其他表情包选择一张贴纸。';
+  if (phase === 'send' && (matrixError?.httpStatus === 429 || errcode === 'M_LIMIT_EXCEEDED')) {
+    return 'Matrix 服务器当前请求较多，这张贴纸还没有发送。请稍后重试。';
+  }
+  if (phase === 'send' && (matrixError?.httpStatus === 401 || errcode === 'M_UNKNOWN_TOKEN')) {
+    return '登录状态已经失效，这张贴纸还没有发送。请重新登录后再试。';
+  }
+  if (phase === 'send' && (matrixError?.httpStatus === 403 || errcode === 'M_FORBIDDEN')) {
+    return '当前账号没有在这个聊天室发送贴纸的权限。';
   }
 
   if (detail) {
@@ -734,26 +846,16 @@ const getCloudEmojiErrorMessage = (error: unknown): string => {
     return '\u5f53\u524d\u7f51\u7edc\u5df2\u65ad\u5f00\uff0c\u4e91\u7aef\u8868\u60c5\u8fd8\u6ca1\u6709\u63d2\u5165\u3002';
   }
 
-  const matrixError = error as {
-    data?: { error?: string };
-    message?: string;
-  };
-  const detail = matrixError?.data?.error?.trim() || matrixError?.message?.trim();
+  const operationMessage = getRemoteMediaOperationErrorMessage(error, '表情');
+  if (operationMessage) return operationMessage;
 
-  if (detail && /abort|aborted|operation was aborted/i.test(detail)) {
+  const detail = getErrorDetail(error);
+
+  if (detail && ABORT_ERROR_PATTERN.test(detail)) {
     return '\u4e91\u7aef\u8868\u60c5\u51c6\u5907\u88ab\u4e2d\u6b62\uff0c\u8bf7\u91cd\u8bd5\u3002';
   }
-  if (detail && /timed out|timeout/i.test(detail)) {
+  if (detail && TIMEOUT_ERROR_PATTERN.test(detail)) {
     return '\u4e91\u7aef\u8868\u60c5\u51c6\u5907\u8d85\u65f6\uff0c\u8bf7\u91cd\u8bd5\u3002';
-  }
-  if (
-    detail &&
-    /networkerror|failed to fetch|fetch resource|load failed|cors|cross-origin/i.test(detail)
-  ) {
-    return '这个图片可以预览，但源站不允许网页读取原文件，因此无法转存为 Matrix 媒体。请从其他表情包选择一个表情。';
-  }
-  if (detail && /unsupported sticker media url/i.test(detail)) {
-    return '这个云端表情来自暂不支持的图片源，无法转存为 Matrix 媒体。请从其他表情包选择一个表情。';
   }
   if (detail) {
     return `\u4e91\u7aef\u8868\u60c5\u51c6\u5907\u5931\u8d25\uff1a${detail}`;
@@ -1678,7 +1780,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
             dispatchRoomFollowLatest(roomId);
           })
           .catch((error) => {
-            setSendError(getStickerSendErrorMessage(error, remoteSticker));
+            setSendError(getStickerSendErrorMessage(error, remoteSticker, 'send'));
             if (!replyDraftRef.current && replyDraftSnapshot) {
               setReplyDraft(replyDraftSnapshot);
             }
