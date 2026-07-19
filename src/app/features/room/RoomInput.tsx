@@ -275,6 +275,8 @@ const NOTE_CN = {
   send: '\u53d1\u9001',
   sending: '\u53d1\u9001\u4e2d...',
   needContent: '\u8bf7\u5148\u8f93\u5165\u8981\u53d1\u9001\u7684\u6587\u672c\u5185\u5bb9\u3002',
+  tooShort:
+    '\u5185\u5bb9\u592a\u77ed\uff0c\u670d\u52a1\u5668\u65e0\u6cd5\u5c06\u5b83\u4f5c\u4e3a\u6587\u4ef6\u4e0a\u4f20\uff0c\u8bf7\u518d\u8f93\u5165\u4e00\u4e9b\u6587\u5b57\u540e\u91cd\u8bd5\u3002',
   sendFailed: '\u53d1\u9001 txt \u6587\u4ef6\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5\u3002',
 } as const;
 
@@ -307,7 +309,7 @@ type RemoteStickerMedia = {
 type RemoteMediaOperation = 'download' | 'upload';
 
 type ErrorDetail = {
-  data?: { error?: string; errcode?: string };
+  data?: { error?: string; errcode?: string; mr_errcode?: string };
   errcode?: string;
   httpStatus?: number;
   message?: string;
@@ -316,6 +318,15 @@ type ErrorDetail = {
 const getErrorDetail = (error: unknown): string | undefined => {
   const detail = error as ErrorDetail;
   return detail?.data?.error?.trim() || detail?.message?.trim();
+};
+
+const isMediaTooSmallError = (error: unknown): boolean => {
+  const detail = error as ErrorDetail;
+  return (
+    detail?.data?.mr_errcode === 'M_MEDIA_TOO_SMALL' ||
+    detail?.data?.errcode === 'M_MEDIA_TOO_SMALL' ||
+    detail?.errcode === 'M_MEDIA_TOO_SMALL'
+  );
 };
 
 class RemoteMediaOperationError extends Error {
@@ -1703,8 +1714,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           setNoteStatus(undefined);
           setNoteSubmitting(false);
           setTimeout(() => ReactEditor.focus(editor), 100);
-        } catch {
-          setNoteStatus(NOTE_CN.sendFailed);
+        } catch (error) {
+          setNoteStatus(isMediaTooSmallError(error) ? NOTE_CN.tooShort : NOTE_CN.sendFailed);
           setNoteSubmitting(false);
         }
       },
