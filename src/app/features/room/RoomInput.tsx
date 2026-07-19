@@ -148,6 +148,7 @@ import {
 } from '../../utils/polls';
 import { ScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
 import { IImageInfo } from '../../../types/matrix/common';
+import { setImageGalleryInfo } from './imageGallery';
 import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
 import { PackImageReader } from '../../plugins/custom-emoji';
 
@@ -1284,6 +1285,10 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
 
       setSendError(undefined);
       const sentUploads: UploadSuccess[] = [];
+      const galleryId =
+        uploads.length > 1 && uploads.every((upload) => upload.file.type.startsWith('image/'))
+          ? mx.makeTxnId()
+          : undefined;
       const sendUploadAtIndex = async (index: number): Promise<boolean> => {
         const upload = uploads[index];
         if (!upload) return true;
@@ -1301,6 +1306,13 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           let content: IContent;
           if (fileItem.file.type.startsWith('image')) {
             content = await getImageMsgContent(mx, fileItem, upload.mxc);
+            if (galleryId) {
+              content = setImageGalleryInfo(content, {
+                id: galleryId,
+                index,
+                count: uploads.length,
+              });
+            }
           } else if (fileItem.file.type.startsWith('video')) {
             content = await getVideoMsgContent(mx, fileItem, upload.mxc);
           } else if (fileItem.file.type.startsWith('audio')) {

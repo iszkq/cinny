@@ -62,6 +62,7 @@ import { safeFile } from '../../../utils/mimeTypes';
 import { encryptFile } from '../../../utils/matrix';
 import { TUploadItem } from '../../../state/room/roomInputDrafts';
 import { getImageMsgContent } from '../msgContent';
+import { getImageGalleryInfo, setImageGalleryInfo } from '../imageGallery';
 
 type MessageEditorProps = {
   roomId: string;
@@ -146,7 +147,20 @@ const ImageMessageEditor = as<'div', MessageEditorProps>(
           throw new Error('Matrix did not return a media URL.');
         }
 
-        const newContent = await getImageMsgContent(mx, uploadItem, mxc);
+        let newContent = await getImageMsgContent(mx, uploadItem, mxc);
+        const eventId = mEvent.getId();
+        const eventTimeline = eventId ? room.getTimelineForEvent(eventId) : undefined;
+        const editedEvent =
+          eventId && eventTimeline
+            ? getEditedEvent(eventId, mEvent, eventTimeline.getTimelineSet())
+            : undefined;
+        const currentContent: IContent =
+          editedEvent?.getContent()['m.new_content'] ?? mEvent.getContent();
+        const galleryInfo =
+          getImageGalleryInfo(currentContent) ?? getImageGalleryInfo(mEvent.getContent());
+        if (galleryInfo) {
+          newContent = setImageGalleryInfo(newContent, galleryInfo);
+        }
         const replacementContent: IContent = {
           ...newContent,
           body: `* ${newContent.body ?? selectedFile.name}`,

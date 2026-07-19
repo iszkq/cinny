@@ -191,8 +191,7 @@ const getMessageMediaCopySource = (mEvent: MatrixEvent): MessageMediaCopySource 
 
   const content = mEvent.getContent();
   const sourceUrl = typeof content.file?.url === 'string' ? content.file.url : content.url;
-  const mimeType =
-    typeof content.info?.mimetype === 'string' ? content.info.mimetype : undefined;
+  const mimeType = typeof content.info?.mimetype === 'string' ? content.info.mimetype : undefined;
 
   if (typeof sourceUrl !== 'string') return undefined;
 
@@ -267,8 +266,7 @@ const getMessageEmojiSaveSource = (mEvent: MatrixEvent): MessageEmojiSaveSource 
 
   if (typeof sourceUrl !== 'string') return undefined;
 
-  const mimeType =
-    typeof content.info?.mimetype === 'string' ? content.info.mimetype : undefined;
+  const mimeType = typeof content.info?.mimetype === 'string' ? content.info.mimetype : undefined;
   const body = typeof content.body === 'string' && content.body.trim() ? content.body : undefined;
   const filename = typeof content.filename === 'string' ? content.filename : undefined;
 
@@ -588,11 +586,7 @@ export const MessageCopyTextItem = as<
   const handleCopy = async () => {
     const mediaSource = getMessageMediaCopySource(mEvent);
 
-    if (
-      mediaSource &&
-      navigator.clipboard?.write &&
-      typeof ClipboardItem !== 'undefined'
-    ) {
+    if (mediaSource && navigator.clipboard?.write && typeof ClipboardItem !== 'undefined') {
       try {
         const mediaUrl = mxcUrlToHttp(mx, mediaSource.url, useAuthentication);
         if (mediaUrl) {
@@ -709,9 +703,7 @@ export const MessageForwardItem = as<
     ref={ref}
   >
     <Text className={css.MessageMenuItemText} as="span" size="T300" truncate>
-      {selected
-        ? '\u53d6\u6d88\u8f6c\u53d1\u9009\u62e9'
-        : '\u52a0\u5165\u8f6c\u53d1\u5217\u8868'}
+      {selected ? '\u53d6\u6d88\u8f6c\u53d1\u9009\u62e9' : '\u52a0\u5165\u8f6c\u53d1\u5217\u8868'}
     </Text>
   </MenuItem>
 ));
@@ -736,40 +728,36 @@ export const MessageFavoriteItem = as<
     [favoriteItemsEvent, recordId]
   );
 
-  const getFavoriteEventRefs = useCallback(
-    () => {
-      const refs = new Map<string, { roomId: string; eventId: string }>();
+  const getFavoriteEventRefs = useCallback(() => {
+    const refs = new Map<string, { roomId: string; eventId: string }>();
 
-      favoritesRooms.forEach((favoritesRoom) => {
-        getFavoriteEventsBySource(favoritesRoom, room.roomId, sourceEventId).forEach((event) => {
-          const eventId = event.getId();
-          if (!eventId) return;
-          refs.set(`${favoritesRoom.roomId}\0${eventId}`, {
-            roomId: favoritesRoom.roomId,
-            eventId,
-          });
+    favoritesRooms.forEach((favoritesRoom) => {
+      getFavoriteEventsBySource(favoritesRoom, room.roomId, sourceEventId).forEach((event) => {
+        const eventId = event.getId();
+        if (!eventId) return;
+        refs.set(`${favoritesRoom.roomId}\0${eventId}`, {
+          roomId: favoritesRoom.roomId,
+          eventId,
         });
       });
+    });
 
-      if (
-        favoriteRecord?.roomId &&
-        favoriteRecord.eventId &&
-        !favoriteRecord.eventId.startsWith('$cinny-favorite-')
-      ) {
-        refs.set(`${favoriteRecord.roomId}\0${favoriteRecord.eventId}`, {
-          roomId: favoriteRecord.roomId,
-          eventId: favoriteRecord.eventId,
-        });
-      }
+    if (
+      favoriteRecord?.roomId &&
+      favoriteRecord.eventId &&
+      !favoriteRecord.eventId.startsWith('$cinny-favorite-')
+    ) {
+      refs.set(`${favoriteRecord.roomId}\0${favoriteRecord.eventId}`, {
+        roomId: favoriteRecord.roomId,
+        eventId: favoriteRecord.eventId,
+      });
+    }
 
-      return Array.from(refs.values());
-    },
-    [favoriteRecord, favoritesRooms, room.roomId, sourceEventId]
-  );
+    return Array.from(refs.values());
+  }, [favoriteRecord, favoritesRooms, room.roomId, sourceEventId]);
 
-  const [favoriteEventRefs, setFavoriteEventRefs] = useState<Array<{ roomId: string; eventId: string }>>(
-    getFavoriteEventRefs
-  );
+  const [favoriteEventRefs, setFavoriteEventRefs] =
+    useState<Array<{ roomId: string; eventId: string }>>(getFavoriteEventRefs);
 
   useEffect(() => {
     setFavoriteEventRefs(getFavoriteEventRefs());
@@ -870,9 +858,7 @@ export const MessageFavoriteItem = as<
       ref={ref}
     >
       <Text className={css.MessageMenuItemText} as="span" size="T300" truncate>
-        {favoriteState.status === AsyncStatus.Loading
-          ? favoriteLoadingLabel
-          : favoriteDefaultLabel}
+        {favoriteState.status === AsyncStatus.Loading ? favoriteLoadingLabel : favoriteDefaultLabel}
       </Text>
     </MenuItem>
   );
@@ -972,10 +958,10 @@ export const MessageSaveEmojiItem = as<
     saveState.status === AsyncStatus.Loading
       ? '\u6536\u85cf\u4e2d...'
       : saved
-        ? '\u5df2\u6536\u85cf'
+      ? '\u5df2\u6536\u85cf'
       : saveState.status === AsyncStatus.Error
-        ? '\u6536\u85cf\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5'
-        : '\u6536\u85cf\u8868\u60c5';
+      ? '\u6536\u85cf\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5'
+      : '\u6536\u85cf\u8868\u60c5';
 
   return (
     <MenuItem
@@ -1056,10 +1042,7 @@ export const MessageInlineReadReceipts = as<
         </OverlayCenter>
       </Overlay>
       <Box
-        className={classNames(
-          css.MessageReadReceiptsRow,
-          aside && css.MessageReadReceiptsRowAside
-        )}
+        className={classNames(css.MessageReadReceiptsRow, aside && css.MessageReadReceiptsRowAside)}
       >
         <button
           className={classNames(
@@ -1200,9 +1183,7 @@ export const MessageDeleteItem = as<
                 direction="Column"
                 gap="400"
               >
-                <Text priority="400">
-                  删除后无法恢复，确定要删除这条消息吗？
-                </Text>
+                <Text priority="400">删除后无法恢复，确定要删除这条消息吗？</Text>
                 <Box direction="Column" gap="100">
                   <Text size="L400">
                     删除原因{' '}
@@ -1330,9 +1311,7 @@ export const MessageReportItem = as<
                 direction="Column"
                 gap="400"
               >
-                <Text priority="400">
-                  举报后服务器可能会通知管理员或相关处理人员进行核查。
-                </Text>
+                <Text priority="400">举报后服务器可能会通知管理员或相关处理人员进行核查。</Text>
                 <Box direction="Column" gap="100">
                   <Text size="L400">举报原因</Text>
                   <Input name="reasonInput" variant="Background" required />
@@ -1423,6 +1402,8 @@ export type MessageProps = {
   hour24Clock: boolean;
   dateFormatString: string;
   readReceiptUserIds?: string[];
+  galleryContainer?: boolean;
+  galleryCell?: boolean;
 };
 
 type PendingMessageStatus = 'encrypting' | 'queued' | 'sending' | 'not_sent' | 'cancelled';
@@ -1481,8 +1462,7 @@ function MessageSendStatus({ room, mEvent }: { room: Room; mEvent: MatrixEvent }
   } else if (retryState.status === AsyncStatus.Loading && status === 'not_sent') {
     statusText = '正在重新发送...';
   } else if (retryState.status === AsyncStatus.Error && status === 'not_sent') {
-    statusText =
-      retryState.error.message || '重新发送失败，这条消息目前可能只有你自己可见。';
+    statusText = retryState.error.message || '重新发送失败，这条消息目前可能只有你自己可见。';
     statusColor = color.Critical.Main;
   } else {
     switch (status) {
@@ -1606,6 +1586,8 @@ export const Message = as<'div', MessageProps>(
       hour24Clock,
       dateFormatString,
       readReceiptUserIds,
+      galleryContainer,
+      galleryCell,
       children,
       ...props
     },
@@ -1637,7 +1619,7 @@ export const Message = as<'div', MessageProps>(
       : undefined;
     const usernameColor = legacyUsernameColor ? colorMXID(senderId) : tagColor;
 
-    const headerJSX = !collapse && (
+    const headerJSX = !galleryCell && !collapse && (
       <Box
         gap="300"
         direction={messageLayout === MessageLayout.Compact ? 'RowReverse' : 'Row'}
@@ -1684,7 +1666,7 @@ export const Message = as<'div', MessageProps>(
       </Box>
     );
 
-    const avatarJSX = !collapse && messageLayout !== MessageLayout.Compact && (
+    const avatarJSX = !galleryCell && !collapse && messageLayout !== MessageLayout.Compact && (
       <AvatarBase
         className={messageLayout === MessageLayout.Bubble ? css.BubbleAvatarBase : undefined}
       >
@@ -1710,7 +1692,10 @@ export const Message = as<'div', MessageProps>(
     );
 
     const readReceiptsJSX =
-      !hideReadReceipts && readReceiptUserIds && readReceiptUserIds.length > 0 ? (
+      !galleryContainer &&
+      !hideReadReceipts &&
+      readReceiptUserIds &&
+      readReceiptUserIds.length > 0 ? (
         <MessageInlineReadReceipts
           room={room}
           eventId={mEvent.getId() ?? ''}
@@ -1719,21 +1704,22 @@ export const Message = as<'div', MessageProps>(
         />
       ) : null;
 
-    const messageBodyJSX = edit && onEditId ? (
-      <MessageEditor
-        style={{
-          maxWidth: '100%',
-          width: '100vw',
-        }}
-        roomId={room.roomId}
-        room={room}
-        mEvent={mEvent}
-        imagePackRooms={imagePackRooms}
-        onCancel={() => onEditId()}
-      />
-    ) : (
-      children
-    );
+    const messageBodyJSX =
+      edit && onEditId ? (
+        <MessageEditor
+          style={{
+            maxWidth: '100%',
+            width: '100vw',
+          }}
+          roomId={room.roomId}
+          room={room}
+          mEvent={mEvent}
+          imagePackRooms={imagePackRooms}
+          onCancel={() => onEditId()}
+        />
+      ) : (
+        children
+      );
 
     const bubbleContentJSX = (
       <Box
@@ -1743,25 +1729,26 @@ export const Message = as<'div', MessageProps>(
           maxWidth: '100%',
         }}
       >
-        {reply}
+        {!galleryCell && reply}
         {messageBodyJSX}
         {reactions}
-        <MessageSendStatus room={room} mEvent={mEvent} />
+        {!galleryContainer && <MessageSendStatus room={room} mEvent={mEvent} />}
       </Box>
     );
 
     const msgContentJSX = (
       <Box
+        className={galleryCell ? css.MessageGalleryCellBody : undefined}
         direction="Column"
         alignSelf="Start"
         style={{
           maxWidth: '100%',
         }}
       >
-        {reply}
+        {!galleryCell && reply}
         {messageBodyJSX}
         {reactions}
-        <MessageSendStatus room={room} mEvent={mEvent} />
+        {!galleryContainer && <MessageSendStatus room={room} mEvent={mEvent} />}
         {messageLayout !== MessageLayout.Bubble && readReceiptsJSX}
       </Box>
     );
@@ -1839,9 +1826,7 @@ export const Message = as<'div', MessageProps>(
 
       const target = evt.target as HTMLElement | null;
       if (
-        target?.closest(
-          'button,a,input,textarea,select,label,summary,[role="button"],audio,video'
-        )
+        target?.closest('button,a,input,textarea,select,label,summary,[role="button"],audio,video')
       ) {
         return;
       }
@@ -1855,6 +1840,7 @@ export const Message = as<'div', MessageProps>(
       <MessageBase
         className={classNames(css.MessageBase, className, {
           [css.MessageBaseBubbleCollapsed]: messageLayout === MessageLayout.Bubble && collapse,
+          [css.MessageGalleryCell]: galleryCell,
         })}
         tabIndex={0}
         space={messageSpacing}
@@ -1864,9 +1850,10 @@ export const Message = as<'div', MessageProps>(
         {...props}
         {...hoverProps}
         {...focusWithinProps}
+        onClick={galleryCell ? handleMessageClick : props.onClick}
         ref={ref}
       >
-        {!edit && (hover || !!menuAnchor || !!emojiBoardAnchor) && (
+        {!galleryContainer && !edit && (hover || !!menuAnchor || !!emojiBoardAnchor) && (
           <div className={css.MessageOptionsBase}>
             <Menu className={css.MessageOptionsBar} variant="SurfaceVariant">
               <Box gap="100">
@@ -2155,37 +2142,47 @@ export const Message = as<'div', MessageProps>(
             </Menu>
           </div>
         )}
-        {messageLayout === MessageLayout.Compact && (
+        {galleryCell && (
+          <div
+            className={css.MessageGalleryCellContent}
+            onContextMenu={handleContextMenu}
+          >
+            {msgContentJSX}
+          </div>
+        )}
+        {!galleryCell && messageLayout === MessageLayout.Compact && (
           <CompactLayout
             before={headerJSX}
-            onContextMenu={handleContextMenu}
+            onContextMenu={galleryContainer ? undefined : handleContextMenu}
             onClick={handleMessageClick}
           >
             {msgContentJSX}
           </CompactLayout>
         )}
-        {messageLayout === MessageLayout.Bubble && (
+        {!galleryCell && messageLayout === MessageLayout.Bubble && (
           <BubbleLayout
             before={avatarJSX}
             header={headerJSX}
             after={readReceiptsJSX}
             tone={isOwnMessage ? 'self' : 'other'}
-            onContextMenu={handleContextMenu}
+            onContextMenu={galleryContainer ? undefined : handleContextMenu}
             onClick={handleMessageClick}
           >
             {bubbleContentJSX}
           </BubbleLayout>
         )}
-        {messageLayout !== MessageLayout.Compact && messageLayout !== MessageLayout.Bubble && (
-          <ModernLayout
-            before={avatarJSX}
-            onContextMenu={handleContextMenu}
-            onClick={handleMessageClick}
-          >
-            {headerJSX}
-            {msgContentJSX}
-          </ModernLayout>
-        )}
+        {!galleryCell &&
+          messageLayout !== MessageLayout.Compact &&
+          messageLayout !== MessageLayout.Bubble && (
+            <ModernLayout
+              before={avatarJSX}
+              onContextMenu={galleryContainer ? undefined : handleContextMenu}
+              onClick={handleMessageClick}
+            >
+              {headerJSX}
+              {msgContentJSX}
+            </ModernLayout>
+          )}
       </MessageBase>
     );
   }

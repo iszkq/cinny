@@ -195,8 +195,9 @@ type MImageProps = {
   content: IImageContent;
   renderImageContent: (props: RenderImageContentProps) => ReactNode;
   outlined?: boolean;
+  galleryCell?: boolean;
 };
-export function MImage({ content, renderImageContent, outlined }: MImageProps) {
+export function MImage({ content, renderImageContent, outlined, galleryCell }: MImageProps) {
   const imgInfo = content?.info;
   const mxcUrl = content.file?.url ?? content.url;
   if (typeof mxcUrl !== 'string') {
@@ -207,12 +208,16 @@ export function MImage({ content, renderImageContent, outlined }: MImageProps) {
   const imageHeight =
     getPositiveDimension(imgInfo?.thumbnail_info?.h) ?? getPositiveDimension(imgInfo?.h);
   const hasAspectRatio = typeof imageWidth === 'number' && typeof imageHeight === 'number';
+  let imageAspectRatio = '1 / 1';
+  if (hasAspectRatio) {
+    imageAspectRatio = `${imageWidth} / ${imageHeight}`;
+  }
   const imageAttachmentStyle: CSSProperties = {
-    width: toRem(IMAGE_TIMELINE_WIDTH),
+    width: galleryCell ? '100%' : toRem(IMAGE_TIMELINE_WIDTH),
     maxWidth: '100%',
   };
   const imageBoxStyle: CSSProperties = {
-    aspectRatio: hasAspectRatio ? `${imageWidth} / ${imageHeight}` : '1 / 1',
+    aspectRatio: imageAspectRatio,
     width: '100%',
     maxWidth: '100%',
     height: 'auto',
