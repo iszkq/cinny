@@ -1,4 +1,6 @@
 import { IconName, IconSrc } from 'folds';
+import parse from 'html-dom-parser';
+import { ChildNode, isTag, isText } from 'domhandler';
 
 import {
   EventTimeline,
@@ -35,6 +37,7 @@ import {
   UNSTABLE_POLL_END_EVENT_TYPE,
   UNSTABLE_POLL_RESPONSE_EVENT_TYPE,
 } from './polls';
+import { sanitizeCustomHtml } from './sanitize';
 
 type FullyReadContent = {
   event_id?: string;
@@ -827,6 +830,52 @@ export const trimReplyFromFormattedBody = (formattedBody: string): string => {
     return formattedBody;
   }
   return formattedBody.slice(i + suffix.length);
+};
+
+const FORMATTED_BODY_LINE_BREAK_TAGS = new Set([
+  'blockquote',
+  'div',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'li',
+  'ol',
+  'p',
+  'pre',
+  'table',
+  'tr',
+  'ul',
+]);
+
+const formattedBodyNodeToText = (node: ChildNode): string => {
+  if (isText(node)) return node.data;
+  if (!isTag(node)) return '';
+  if (node.name === 'br') return '\n';
+  if (node.name === 'img') return node.attribs.alt ?? node.attribs.title ?? '';
+
+  const text = node.childNodes.map(formattedBodyNodeToText).join('');
+  return FORMATTED_BODY_LINE_BREAK_TAGS.has(node.name) ? `${text}\n` : text;
+};
+
+const formattedBodyToPreviewText = (formattedBody: string): string =>
+  parse(sanitizeCustomHtml(trimReplyFromFormattedBody(formattedBody)))
+    .map(formattedBodyNodeToText)
+    .join('')
+    .replace(/\u00a0/g, ' ')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n[ \t]+/g, '\n')
+    .replace(/\n{2,}/g, '\n')
+    .trim();
+
+export const getReplyPreviewBody = (body: string, formattedBody?: string): string => {
+  if (formattedBody) {
+    const formattedPreview = formattedBodyToPreviewText(formattedBody);
+    if (formattedPreview) return formattedPreview;
+  }
+  return trimReplyFromBody(body).trim();
 };
 
 export const parseReplyBody = (userId: string, body: string) =>

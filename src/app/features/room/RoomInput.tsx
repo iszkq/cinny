@@ -123,7 +123,7 @@ import {
   getVideoMsgContent,
 } from './msgContent';
 import { dispatchRoomFollowLatest } from '../../utils/roomViewEvents';
-import { getMemberDisplayName, getMentionContent, trimReplyFromBody } from '../../utils/room';
+import { getMemberDisplayName, getMentionContent, getReplyPreviewBody } from '../../utils/room';
 import { CommandAutocomplete } from './CommandAutocomplete';
 import { Command, SHRUG, TABLEFLIP, UNFLIP, useCommands } from '../../hooks/useCommands';
 import { mobileOrTablet } from '../../utils/user-agent';
@@ -2129,7 +2129,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                         }
                       >
                         <Text size="T300" truncate>
-                          {trimReplyFromBody(replyDraft.body)}
+                          {getReplyPreviewBody(replyDraft.body, replyDraft.formattedBody)}
                         </Text>
                       </ReplyLayout>
                     </Box>

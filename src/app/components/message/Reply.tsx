@@ -2,7 +2,7 @@ import { Box, Icon, Icons, Text, as, color, toRem } from 'folds';
 import { EventTimelineSet, EventType, Room } from 'matrix-js-sdk';
 import React, { MouseEventHandler, ReactNode, useCallback, useMemo } from 'react';
 import classNames from 'classnames';
-import { getMemberDisplayName, trimReplyFromBody } from '../../utils/room';
+import { getMemberDisplayName, getReplyPreviewBody } from '../../utils/room';
 import { getMxIdLocalPart } from '../../utils/matrix';
 import { LinePlaceholder } from './placeholder';
 import { randomNumberBetween } from '../../utils/common';
@@ -88,7 +88,7 @@ export const Reply = as<'div', ReplyProps>(
     );
     const replyEvent = useRoomEvent(room, replyEventId, getFromLocalTimeline);
 
-    const { body } = replyEvent?.getContent() ?? {};
+    const { body, formatted_body: formattedBody } = replyEvent?.getContent() ?? {};
     const sender = replyEvent?.getSender();
     const powerTag = sender ? getMemberPowerTag?.(sender) : undefined;
     const tagColor = powerTag?.color ? accessibleTagColors?.get(powerTag.color) : undefined;
@@ -103,7 +103,10 @@ export const Reply = as<'div', ReplyProps>(
 
     const badEncryption = replyEvent?.getContent().msgtype === 'm.bad.encrypted';
     const isStickerReply = replyEvent?.getType() === EventType.Sticker;
-    const trimmedBody = typeof body === 'string' ? trimReplyFromBody(body).trim() : '';
+    const trimmedBody =
+      typeof body === 'string'
+        ? getReplyPreviewBody(body, typeof formattedBody === 'string' ? formattedBody : undefined)
+        : '';
     const bodyJSX = trimmedBody
       ? scaleSystemEmoji(trimmedBody)
       : isStickerReply

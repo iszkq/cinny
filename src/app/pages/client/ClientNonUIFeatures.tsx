@@ -63,6 +63,7 @@ import { openExternalUrl, shouldOpenHrefExternally } from '../../utils/desktop';
 import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
 import { useDesktopUpdater } from '../../hooks/useDesktopUpdater';
 import { sendAppNotification } from '../../utils/notifications';
+import { GlobalImageViewer } from '../../components/image-viewer';
 
 const EXTERNAL_LINK_SELECTOR = 'a[href]';
 const DESKTOP_UPDATE_AUTO_CHECK_DELAY_MS = 30000;
@@ -1072,6 +1073,7 @@ export function ClientNonUIFeatures({ children }: ClientNonUIFeaturesProps) {
       <DesktopTaskbarUnreadBadgeFeature />
       <InviteNotifications />
       <MessageNotifications />
+      <GlobalImageViewer />
       {children}
     </>
   );

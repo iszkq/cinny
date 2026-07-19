@@ -13,6 +13,7 @@ import {
   as,
 } from 'folds';
 import classNames from 'classnames';
+import { useSetAtom } from 'jotai';
 import { BlurhashCanvas } from 'react-blurhash';
 import { EncryptedAttachmentInfo } from 'browser-encrypt-attachment';
 import {
@@ -31,9 +32,12 @@ import { validBlurHash } from '../../../utils/blurHash';
 import { primeCachedMediaObjectUrl } from '../../../utils/mediaUrlCache';
 import { useStableMediaUrl } from '../../emoji-board/useStableMediaUrl';
 import { prepareEncryptedMediaObjectUrl } from '../../../utils/encryptedMediaCache';
-import { ImageViewerDialog } from '../../image-viewer';
 import { useClientConfig } from '../../../hooks/useClientConfig';
 import type { AihubmixImageOcrConfig } from '../../../utils/ai';
+import {
+  imageViewerSessionAtom,
+  type ViewerImageItem as GlobalViewerImageItem,
+} from '../../../state/imageViewer';
 
 const IMAGE_PREVIEW_WIDTH = 230;
 const IMAGE_PREVIEW_HEIGHT = 460;
@@ -49,14 +53,7 @@ type RenderViewerProps = {
   onPrev?: () => void;
   onNext?: () => void;
 };
-export type ViewerImageItem = {
-  id: string;
-  body: string;
-  mimeType?: string;
-  url: string;
-  info?: IImageInfo & IThumbnailContent;
-  encInfo?: EncryptedAttachmentInfo;
-};
+export type ViewerImageItem = GlobalViewerImageItem;
 type RenderImageProps = {
   alt: string;
   title: string;
@@ -109,6 +106,7 @@ export const ImageContent = as<'div', ImageContentProps>(
     ref
   ) => {
     const mx = useMatrixClient();
+    const setImageViewerSession = useSetAtom(imageViewerSessionAtom);
     const clientConfig = useClientConfig();
     const useAuthentication = useMediaAuthentication();
     const blurHash = validBlurHash(info?.[MATRIX_BLUR_HASH_PROPERTY_NAME]);
@@ -129,10 +127,6 @@ export const ImageContent = as<'div', ImageContentProps>(
 
     const [load, setLoad] = useState(false);
     const [error, setError] = useState(false);
-    const [viewer, setViewer] = useState(false);
-    const [activeViewerItemId, setActiveViewerItemId] = useState<string>();
-    const [viewerSourceCache, setViewerSourceCache] = useState<Record<string, string>>({});
-    const [loadingViewerItemId, setLoadingViewerItemId] = useState<string>();
     const [stableRetryNonce, setStableRetryNonce] = useState(0);
     const [blurred, setBlurred] = useState(markedAsSpoiler ?? false);
     const stablePreviewEnabled = autoPlay && previewMediaStrategy === 'stable' && !encInfo;
@@ -250,26 +244,6 @@ export const ImageContent = as<'div', ImageContentProps>(
       }, [encInfo, info, mimeType, preferOriginalPreview, prepareMediaSrc, url])
     );
 
-    const [viewerSrcState, loadViewerSrc] = useAsyncCallback(
-      useCallback(
-        async () => prepareMediaSrc(url, mimeType ?? FALLBACK_MIMETYPE, encInfo),
-        [encInfo, mimeType, prepareMediaSrc, url]
-      )
-    );
-    const [viewerItemSrcState, loadViewerItemSrc] = useAsyncCallback<
-      { itemId: string; src: string },
-      Error,
-      [ViewerImageItem]
-    >(
-      useCallback(
-        async (item) => ({
-          itemId: item.id,
-          src: await prepareMediaSrc(item.url, item.mimeType ?? FALLBACK_MIMETYPE, item.encInfo),
-        }),
-        [prepareMediaSrc]
-      )
-    );
-
     const handleLoad = () => {
       setLoad(true);
       setError(false);
@@ -296,25 +270,6 @@ export const ImageContent = as<'div', ImageContentProps>(
       loadSrc().catch(() => undefined);
     };
 
-    const handleOpenViewer = () => {
-      setActiveViewerItemId(viewerItemId);
-      setViewer(true);
-      if (srcState.status === AsyncStatus.Success && srcState.data.kind === 'original') {
-        return;
-      }
-      if (
-        viewerSrcState.status === AsyncStatus.Idle ||
-        viewerSrcState.status === AsyncStatus.Error
-      ) {
-        loadViewerSrc().catch(() => undefined);
-      }
-    };
-
-    const handleCloseViewer = useCallback(() => {
-      setViewer(false);
-      setActiveViewerItemId(undefined);
-    }, []);
-
     useEffect(() => {
       if (autoPlay && !stablePreviewEnabled) {
         loadSrc().catch(() => undefined);
@@ -326,8 +281,6 @@ export const ImageContent = as<'div', ImageContentProps>(
       : srcState.status === AsyncStatus.Success
       ? srcState.data.src
       : undefined;
-    const viewerSrc =
-      viewerSrcState.status === AsyncStatus.Success ? viewerSrcState.data : previewSrc;
     const previewRenderKey = stablePreviewEnabled
       ? `${stablePreviewRequestKey}-${stableRetryNonce}`
       : previewSrc;
@@ -339,114 +292,46 @@ export const ImageContent = as<'div', ImageContentProps>(
       : (srcState.status === AsyncStatus.Loading || srcState.status === AsyncStatus.Success) &&
         !load;
 
-    const currentViewerLoading =
-      viewer &&
-      srcState.status === AsyncStatus.Success &&
-      srcState.data.kind === 'thumbnail' &&
-      viewerSrcState.status !== AsyncStatus.Success;
+    const handleOpenViewer = useCallback(() => {
+      const activeItemId = viewerItemId ?? url;
+      const activeItem: ViewerImageItem = {
+        id: activeItemId,
+        body,
+        mimeType,
+        url,
+        info,
+        encInfo,
+      };
+      const items = viewerItems?.some((item) => item.id === activeItemId)
+        ? viewerItems
+        : [activeItem];
 
-    useEffect(() => {
-      if (!viewerItemId || !viewerSrc) return;
-
-      setViewerSourceCache((cache) => {
-        if (cache[viewerItemId] === viewerSrc) return cache;
-        return {
-          ...cache,
-          [viewerItemId]: viewerSrc,
-        };
+      setImageViewerSession({
+        activeItemId,
+        items,
+        initialSrc: previewSrc,
+        resolveSource: (item) =>
+          prepareMediaSrc(item.url, item.mimeType ?? FALLBACK_MIMETYPE, item.encInfo),
+        imageOcrConfig,
+        renderViewer,
       });
-    }, [viewerItemId, viewerSrc]);
-
-    useEffect(() => {
-      if (viewerItemSrcState.status !== AsyncStatus.Success) return;
-
-      setViewerSourceCache((cache) => {
-        if (cache[viewerItemSrcState.data.itemId] === viewerItemSrcState.data.src) return cache;
-        return {
-          ...cache,
-          [viewerItemSrcState.data.itemId]: viewerItemSrcState.data.src,
-        };
-      });
-    }, [viewerItemSrcState]);
-
-    const activeViewerId = activeViewerItemId ?? viewerItemId;
-    const activeViewerItem =
-      viewerItems?.find((item) => item.id === activeViewerId) ??
-      viewerItems?.find((item) => item.id === viewerItemId);
-    const activeViewerIndex =
-      activeViewerItem && viewerItems
-        ? viewerItems.findIndex((item) => item.id === activeViewerItem.id)
-        : -1;
-    const cachedActiveViewerSrc = activeViewerItem
-      ? viewerSourceCache[activeViewerItem.id]
-      : undefined;
-    const activeViewerSrc =
-      cachedActiveViewerSrc ??
-      (activeViewerItem?.id === viewerItemId ? viewerSrc : undefined) ??
-      viewerSrc;
-    const activeViewerLoading =
-      !activeViewerItem || activeViewerItem.id === viewerItemId
-        ? currentViewerLoading
-        : !cachedActiveViewerSrc || loadingViewerItemId === activeViewerItem?.id;
-    const viewerItemsCount = viewerItems?.length ?? 0;
-    const viewerNavigationEnabled = !!viewerItems && viewerItemsCount > 1 && activeViewerIndex >= 0;
-
-    const ensureViewerItemSource = useCallback(
-      (item: ViewerImageItem) => {
-        if (viewerSourceCache[item.id]) return;
-
-        setLoadingViewerItemId(item.id);
-        loadViewerItemSrc(item)
-          .catch(() => undefined)
-          .finally(() => {
-            setLoadingViewerItemId((currentItemId) =>
-              currentItemId === item.id ? undefined : currentItemId
-            );
-          });
-      },
-      [loadViewerItemSrc, viewerSourceCache]
-    );
-
-    const handleSelectViewerItem = useCallback(
-      (itemId: string) => {
-        const item = viewerItems?.find((entry) => entry.id === itemId);
-        if (!item) return;
-
-        setActiveViewerItemId(item.id);
-        ensureViewerItemSource(item);
-      },
-      [ensureViewerItemSource, viewerItems]
-    );
-
-    const handlePrevViewerItem = useCallback(() => {
-      if (!viewerItems || activeViewerIndex <= 0) return;
-      handleSelectViewerItem(viewerItems[activeViewerIndex - 1].id);
-    }, [activeViewerIndex, handleSelectViewerItem, viewerItems]);
-
-    const handleNextViewerItem = useCallback(() => {
-      if (!viewerItems || activeViewerIndex < 0 || activeViewerIndex >= viewerItems.length - 1) {
-        return;
-      }
-      handleSelectViewerItem(viewerItems[activeViewerIndex + 1].id);
-    }, [activeViewerIndex, handleSelectViewerItem, viewerItems]);
+    }, [
+      body,
+      encInfo,
+      imageOcrConfig,
+      info,
+      mimeType,
+      prepareMediaSrc,
+      previewSrc,
+      renderViewer,
+      setImageViewerSession,
+      url,
+      viewerItemId,
+      viewerItems,
+    ]);
 
     return (
       <Box className={classNames(css.RelativeBase, className)} {...props} ref={ref}>
-        {viewer && activeViewerSrc && (
-          <ImageViewerDialog
-            open={viewer}
-            src={activeViewerSrc}
-            alt={activeViewerItem?.body ?? body}
-            loading={activeViewerLoading}
-            canPrev={viewerNavigationEnabled && activeViewerIndex > 0}
-            canNext={viewerNavigationEnabled && activeViewerIndex < viewerItemsCount - 1}
-            onPrev={viewerNavigationEnabled ? handlePrevViewerItem : undefined}
-            onNext={viewerNavigationEnabled ? handleNextViewerItem : undefined}
-            imageOcrConfig={imageOcrConfig}
-            requestClose={handleCloseViewer}
-            renderViewer={renderViewer}
-          />
-        )}
         {typeof blurHash === 'string' && !load && (
           <BlurhashCanvas
             style={{ width: '100%', height: '100%' }}
