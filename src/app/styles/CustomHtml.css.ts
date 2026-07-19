@@ -216,6 +216,7 @@ export const Emoticon = recipe({
 
       height: '1em',
       minWidth: '1em',
+      fontFamily: 'Twemoji, var(--font-secondary)',
       fontSize: '1.33em',
       lineHeight: '1em',
       verticalAlign: 'middle',
