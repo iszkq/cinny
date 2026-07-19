@@ -65,7 +65,6 @@ type RenderMessageContentProps = {
   room?: Room;
   eventId?: string;
   imageViewerItems?: ViewerImageItem[];
-  imageGalleryCell?: boolean;
 };
 export function RenderMessageContent({
   displayName,
@@ -83,7 +82,6 @@ export function RenderMessageContent({
   room,
   eventId,
   imageViewerItems,
-  imageGalleryCell,
 }: RenderMessageContentProps) {
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
@@ -257,7 +255,6 @@ export function RenderMessageContent({
       <>
         <MImage
           content={getContent()}
-          galleryCell={imageGalleryCell}
           renderImageContent={(props) => (
             <ImageContent
               {...props}
@@ -268,11 +265,6 @@ export function RenderMessageContent({
               renderImage={(p) => (
                 <Image
                   {...p}
-                  style={
-                    imageGalleryCell
-                      ? { width: '100%', height: '100%', objectFit: 'cover' }
-                      : undefined
-                  }
                   loading={mediaAutoLoad ? 'eager' : 'lazy'}
                   decoding="async"
                 />

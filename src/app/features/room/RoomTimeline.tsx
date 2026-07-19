@@ -143,7 +143,6 @@ import { ThreadDialog } from './ThreadDialog';
 import { ScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
 import { POLL_START_EVENT_TYPE, UNSTABLE_POLL_START_EVENT_TYPE } from '../../utils/polls';
 import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
-import { getImageGalleryInfo, type ImageGalleryInfo } from './imageGallery';
 
 const TimelineFloat = as<'div', css.TimelineFloatVariants>(
   ({ position, className, ...props }, ref) => (
@@ -201,8 +200,7 @@ const getTimelineReplyRelation = (mEvent: MatrixEvent): TimelineReplyRelation =>
       : undefined;
 
   return {
-    replyEventId:
-      mEvent.replyEventId ?? (typeof replyEventId === 'string' ? replyEventId : undefined),
+    replyEventId: mEvent.replyEventId ?? (typeof replyEventId === 'string' ? replyEventId : undefined),
     threadRootId: mEvent.threadRootId ?? threadRootId,
   };
 };
@@ -338,10 +336,10 @@ const buildTimelineIndex = (linkedTimelines: EventTimeline[], version: string): 
   };
 };
 
-function getTimelineIndexEntry(
+const getTimelineIndexEntry = (
   timelineIndex: TimelineIndex,
   index: number
-): TimelineIndexEntry | undefined {
+): TimelineIndexEntry | undefined => {
   const range = timelineIndex.ranges.find(
     (timelineRange) => index >= timelineRange.baseIndex && index < timelineRange.endIndex
   );
@@ -364,67 +362,6 @@ function getTimelineIndexEntry(
   };
 
   return entry;
-}
-
-type ImageGalleryTimelineEntry = TimelineIndexEntry & {
-  item: number;
-  eventId: string;
-  gallery: ImageGalleryInfo;
-};
-
-type ImageGalleryTimelineGroup = {
-  anchorItem: number;
-  entries: ImageGalleryTimelineEntry[];
-};
-
-const getVisibleImageGalleryGroups = (
-  timelineIndex: TimelineIndex,
-  visibleItems: number[]
-): Map<number, ImageGalleryTimelineGroup> => {
-  const groups = new Map<string, ImageGalleryTimelineEntry[]>();
-
-  visibleItems.forEach((item) => {
-    const timelineEntry = getTimelineIndexEntry(timelineIndex, item);
-    const event = timelineEntry?.event;
-    const eventId = event?.getId();
-    const senderId = event?.getSender();
-    if (
-      !timelineEntry ||
-      !event ||
-      !eventId ||
-      !senderId ||
-      event.isRedacted() ||
-      event.getType() !== MessageEvent.RoomMessage
-    ) {
-      return;
-    }
-
-    const editedEvent = getEditedEvent(eventId, event, timelineEntry.timelineSet);
-    const latestContent: IContent =
-      editedEvent?.getContent()['m.new_content'] ?? event.getContent();
-    const gallery =
-      getImageGalleryInfo(latestContent) ?? getImageGalleryInfo(event.getContent<IContent>());
-    if (!gallery) return;
-
-    const key = `${senderId}\u0000${gallery.id}`;
-    const entries = groups.get(key) ?? [];
-    entries.push({ ...timelineEntry, item, eventId, gallery });
-    groups.set(key, entries);
-  });
-
-  const galleryByItem = new Map<number, ImageGalleryTimelineGroup>();
-  groups.forEach((entries) => {
-    if (entries.length < 2) return;
-
-    entries.sort((a, b) => a.gallery.index - b.gallery.index || a.item - b.item);
-    const group: ImageGalleryTimelineGroup = {
-      anchorItem: Math.min(...entries.map((entry) => entry.item)),
-      entries,
-    };
-    entries.forEach((entry) => galleryByItem.set(entry.item, group));
-  });
-
-  return galleryByItem;
 };
 
 const getEventIdAbsoluteIndexFromTimelineIndex = (
@@ -461,7 +398,13 @@ const getTimelineImageViewerItemsInRange = (
     const timelineEntry = getTimelineIndexEntry(timelineIndex, index);
     const mEvent = timelineEntry?.event;
     const eventId = mEvent?.getId();
-    if (!timelineEntry || !mEvent || !eventId || seenEventIds.has(eventId) || mEvent.isRedacted()) {
+    if (
+      !timelineEntry ||
+      !mEvent ||
+      !eventId ||
+      seenEventIds.has(eventId) ||
+      mEvent.isRedacted()
+    ) {
       continue;
     }
     seenEventIds.add(eventId);
@@ -472,9 +415,10 @@ const getTimelineImageViewerItemsInRange = (
       typeof content.file?.url === 'string'
         ? content.file.url
         : typeof content.url === 'string'
-        ? content.url
-        : undefined;
-    const mimeType = typeof content.info?.mimetype === 'string' ? content.info.mimetype : undefined;
+          ? content.url
+          : undefined;
+    const mimeType =
+      typeof content.info?.mimetype === 'string' ? content.info.mimetype : undefined;
     const info =
       content.info && typeof content.info === 'object'
         ? (content.info as ViewerImageItem['info'])
@@ -1030,10 +974,13 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
 
     for (let index = visibleMessages.length - 1; index >= 0; index -= 1) {
       const target = visibleMessages[index];
-      const readers = Array.from(new Set(room.getUsersReadUpTo(target.event))).filter(
-        (readerId) =>
-          readerId !== myUserId && !assignedUsers.has(readerId) && !ignoredUsersSet.has(readerId)
-      );
+      const readers = Array.from(new Set(room.getUsersReadUpTo(target.event)))
+        .filter(
+          (readerId) =>
+            readerId !== myUserId &&
+            !assignedUsers.has(readerId) &&
+            !ignoredUsersSet.has(readerId)
+        );
 
       if (readers.length === 0) continue;
 
@@ -1317,7 +1264,13 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     if (!isScrollAtBottom(scrollElement)) return;
 
     tryAutoMarkAsRead();
-  }, [getScrollElement, latestRenderedEventId, liveTimelineLinked, rangeAtEnd, tryAutoMarkAsRead]);
+  }, [
+    getScrollElement,
+    latestRenderedEventId,
+    liveTimelineLinked,
+    rangeAtEnd,
+    tryAutoMarkAsRead,
+  ]);
 
   useEffect(() => {
     const scrollElement = getScrollElement();
@@ -1846,30 +1799,18 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     );
   };
 
-  let imageGalleryRenderEntries: ImageGalleryTimelineEntry[] | undefined;
   const renderMatrixEvent = useMatrixEventRenderer<
     [string, MatrixEvent, number, EventTimelineSet, boolean]
   >(
     {
       [POLL_START_EVENT_TYPE]: renderPollStartEvent,
       [UNSTABLE_POLL_START_EVENT_TYPE]: renderPollStartEvent,
-      [MessageEvent.RoomMessage]: function renderRoomMessage(
-        mEventId,
-        mEvent,
-        item,
-        timelineSet,
-        collapse,
-        galleryCell = false
-      ) {
+      [MessageEvent.RoomMessage]: (mEventId, mEvent, item, timelineSet, collapse) => {
         const reactionRelations = getEventReactions(timelineSet, mEventId);
         const reactions = reactionRelations && reactionRelations.getSortedAnnotationsByKey();
         const hasReactions = reactions && reactions.length > 0;
         const { replyEventId, threadRootId } = getTimelineReplyRelation(mEvent);
-        const galleryEntries = galleryCell ? undefined : imageGalleryRenderEntries;
-        const galleryContainer = !!galleryEntries;
-        const highlighted = galleryEntries
-          ? galleryEntries.some((entry) => focusItem?.index === entry.item && focusItem.highlight)
-          : focusItem?.index === item && focusItem.highlight;
+        const highlighted = focusItem?.index === item && focusItem.highlight;
 
         const editedEvent = getEditedEvent(mEventId, mEvent, timelineSet);
         const getContent = (() =>
@@ -1891,56 +1832,6 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             }
           : undefined;
 
-        let messageContent: React.ReactNode;
-        if (galleryEntries) {
-          const mosaic = galleryEntries.length >= 4;
-          messageContent = (
-            <div className={css.ImageGalleryGrid({ mosaic })}>
-              {galleryEntries.map((entry) => (
-                <div
-                  className={css.ImageGalleryCell({
-                    editing: editId === entry.eventId,
-                  })}
-                  key={entry.eventId}
-                >
-                  {renderRoomMessage(
-                    entry.eventId,
-                    entry.event,
-                    entry.item,
-                    entry.timelineSet,
-                    true,
-                    true
-                  )}
-                </div>
-              ))}
-            </div>
-          );
-        } else if (mEvent.isRedacted()) {
-          messageContent = (
-            <RedactedContent reason={mEvent.getUnsigned().redacted_because?.content.reason} />
-          );
-        } else {
-          messageContent = (
-            <RenderMessageContent
-              displayName={senderDisplayName}
-              msgType={mEvent.getContent().msgtype ?? ''}
-              eventType={mEvent.getType()}
-              ts={mEvent.getTs()}
-              edited={!!editedEvent}
-              getContent={getContent}
-              mediaAutoLoad={mediaAutoLoad}
-              urlPreview={showUrlPreview}
-              htmlReactParserOptions={htmlReactParserOptions}
-              linkifyOpts={linkifyOpts}
-              outlineAttachment={messageLayout === MessageLayout.Bubble}
-              room={room}
-              eventId={mEventId}
-              imageViewerItems={imageViewerItems}
-              imageGalleryCell={galleryCell}
-            />
-          );
-        }
-
         return (
           <Message
             key={mEvent.getId()}
@@ -1948,7 +1839,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             data-message-id={mEventId}
             room={room}
             mEvent={mEvent}
-            forwardSource={galleryContainer ? undefined : forwardSource}
+            forwardSource={forwardSource}
             forwardSelectionMode={selectedForwardCount > 0}
             forwardSelected={!!forwardMessages[mEventId]}
             onToggleForwardSelection={handleToggleForwardSelection}
@@ -1956,19 +1847,18 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             messageLayout={messageLayout}
             collapse={collapse}
             highlight={highlighted}
-            edit={!galleryContainer && editId === mEventId}
+            edit={editId === mEventId}
             canDelete={canRedact || (canDeleteOwn && mEvent.getSender() === mx.getUserId())}
             canSendReaction={canSendReaction}
             canPinEvent={canPinEvent}
             imagePackRooms={imagePackRooms}
-            relations={!galleryContainer && hasReactions ? reactionRelations : undefined}
+            relations={hasReactions ? reactionRelations : undefined}
             onUserClick={handleUserClick}
             onUsernameClick={handleUsernameClick}
             onReplyClick={handleReplyClick}
             onReactionToggle={handleReactionToggle}
             onEditId={handleEdit}
             reply={
-              !galleryCell &&
               replyEventId && (
                 <Reply
                   room={room}
@@ -1984,7 +1874,6 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
               )
             }
             reactions={
-              !galleryContainer &&
               reactionRelations && (
                 <Reactions
                   style={{ marginTop: config.space.S200 }}
@@ -1996,20 +1885,35 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
                 />
               )
             }
-            hideReadReceipts={galleryContainer}
+            hideReadReceipts={false}
             showDeveloperTools={showDeveloperTools}
             memberPowerTag={getMemberPowerTag(senderId)}
             accessibleTagColors={accessiblePowerTagColors}
             legacyUsernameColor={legacyUsernameColor || direct}
             hour24Clock={hour24Clock}
             dateFormatString={dateFormatString}
-            readReceiptUserIds={
-              galleryContainer ? undefined : getInlineReadReceiptUserIds(mEventId)
-            }
-            galleryContainer={galleryContainer}
-            galleryCell={galleryCell}
+            readReceiptUserIds={getInlineReadReceiptUserIds(mEventId)}
           >
-            {messageContent}
+            {mEvent.isRedacted() ? (
+              <RedactedContent reason={mEvent.getUnsigned().redacted_because?.content.reason} />
+            ) : (
+              <RenderMessageContent
+                displayName={senderDisplayName}
+                msgType={mEvent.getContent().msgtype ?? ''}
+                eventType={mEvent.getType()}
+                ts={mEvent.getTs()}
+                edited={!!editedEvent}
+                getContent={getContent}
+                mediaAutoLoad={mediaAutoLoad}
+                urlPreview={showUrlPreview}
+                htmlReactParserOptions={htmlReactParserOptions}
+                linkifyOpts={linkifyOpts}
+                outlineAttachment={messageLayout === MessageLayout.Bubble}
+                room={room}
+                eventId={mEventId}
+                imageViewerItems={imageViewerItems}
+              />
+            )}
           </Message>
         );
       },
@@ -2286,7 +2190,11 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
                     viewerItems={imageViewerItems}
                     viewerItemId={mEventId}
                     renderImage={(p) => (
-                      <Image {...p} loading={mediaAutoLoad ? 'eager' : 'lazy'} decoding="async" />
+                      <Image
+                        {...p}
+                        loading={mediaAutoLoad ? 'eager' : 'lazy'}
+                        decoding="async"
+                      />
                     )}
                     renderViewer={(p) => <ImageViewer {...p} />}
                   />
@@ -2622,7 +2530,6 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     }
   );
 
-  const imageGalleryByItem = getVisibleImageGalleryGroups(timelineIndex, visibleItems);
   let prevEvent: MatrixEvent | undefined;
   let isPrevRendered = false;
   let newDivider = false;
@@ -2643,13 +2550,6 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
       return null;
     }
 
-    const imageGallery = imageGalleryByItem.get(item);
-    if (imageGallery && imageGallery.anchorItem !== item) {
-      prevEvent = mEvent;
-      isPrevRendered = true;
-      return null;
-    }
-
     if (!newDivider && readUptoEventIdRef.current) {
       newDivider = prevEvent?.getId() === readUptoEventIdRef.current;
     }
@@ -2666,20 +2566,17 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
       prevEvent.getType() === mEvent.getType() &&
       minuteDifference(prevEvent.getTs(), mEvent.getTs()) < 2;
 
-    let eventJSX: React.ReactNode = null;
-    if (!reactionOrEditEvent(mEvent)) {
-      imageGalleryRenderEntries = imageGallery?.entries;
-      eventJSX = renderMatrixEvent(
-        mEvent.getType(),
-        typeof mEvent.getStateKey() === 'string',
-        mEventId,
-        mEvent,
-        item,
-        timelineSet,
-        collapsed
-      );
-      imageGalleryRenderEntries = undefined;
-    }
+    const eventJSX = reactionOrEditEvent(mEvent)
+      ? null
+      : renderMatrixEvent(
+          mEvent.getType(),
+          typeof mEvent.getStateKey() === 'string',
+          mEventId,
+          mEvent,
+          item,
+          timelineSet,
+          collapsed
+        );
     prevEvent = mEvent;
     isPrevRendered = !!eventJSX;
 

@@ -8,23 +8,6 @@ export const MessageBaseBubbleCollapsed = style({
   paddingTop: 0,
 });
 
-export const MessageGalleryCell = style({
-  minWidth: 0,
-  width: '100%',
-  marginTop: '0 !important',
-  padding: '0 !important',
-  borderRadius: `${config.radii.R300} !important`,
-});
-
-export const MessageGalleryCellContent = style({
-  width: '100%',
-  minWidth: 0,
-});
-
-export const MessageGalleryCellBody = style({
-  width: '100%',
-});
-
 export const MessageOptionsBase = style([
   DefaultReset,
   {
