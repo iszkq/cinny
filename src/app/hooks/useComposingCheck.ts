@@ -1,27 +1,22 @@
 import { useCallback, useEffect } from 'react';
-import { useAtomValue, useSetAtom } from 'jotai';
-import { lastCompositionEndAtom } from '../state/lastCompositionEnd';
+
+let lastCompositionEnd: number | undefined;
 
 interface TimeStamped {
   readonly timeStamp: number;
 }
 
 export function useCompositionEndTracking(): void {
-  const setLastCompositionEnd = useSetAtom(lastCompositionEndAtom);
-
-  const recordCompositionEnd = useCallback(
-    (evt: TimeStamped) => {
-      setLastCompositionEnd(evt.timeStamp);
-    },
-    [setLastCompositionEnd]
-  );
-
   useEffect(() => {
+    const recordCompositionEnd = (evt: TimeStamped) => {
+      lastCompositionEnd = evt.timeStamp;
+    };
+
     window.addEventListener('compositionend', recordCompositionEnd, { capture: true });
     return () => {
       window.removeEventListener('compositionend', recordCompositionEnd, { capture: true });
     };
-  });
+  }, []);
 }
 
 interface IsComposingLike {
@@ -35,13 +30,12 @@ interface IsComposingLike {
 export function useComposingCheck({
   compositionEndThreshold = 500,
 }: { compositionEndThreshold?: number } = {}): (evt: IsComposingLike) => boolean {
-  const compositionEnd = useAtomValue(lastCompositionEndAtom);
   return useCallback(
     (evt: IsComposingLike): boolean =>
       evt.nativeEvent.isComposing ||
       (evt.keyCode === 229 &&
-        typeof compositionEnd !== 'undefined' &&
-        evt.timeStamp - compositionEnd < compositionEndThreshold),
-    [compositionEndThreshold, compositionEnd]
+        typeof lastCompositionEnd !== 'undefined' &&
+        evt.timeStamp - lastCompositionEnd < compositionEndThreshold),
+    [compositionEndThreshold]
   );
 }

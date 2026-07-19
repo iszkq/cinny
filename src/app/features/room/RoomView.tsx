@@ -26,6 +26,10 @@ import { settingsAtom } from '../../state/settings';
 
 const FN_KEYS_REGEX = /^F\d+$/;
 const shouldFocusMessageField = (evt: KeyboardEvent): boolean => {
+  if (evt.isComposing || evt.keyCode === 229) {
+    return false;
+  }
+
   const { code } = evt;
   if (evt.metaKey || evt.altKey || evt.ctrlKey) {
     return false;

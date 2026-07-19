@@ -1357,42 +1357,6 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     tryAutoMarkAsReadAtLiveBottom();
   }, [tryAutoMarkAsReadAtLiveBottom, unreadInfo]);
 
-  useEffect(() => {
-    if (screenSize !== ScreenSize.Mobile) {
-      return undefined;
-    }
-
-    const syncFocusedInputViewport = () => {
-      const activeEditable =
-        document.activeElement?.getAttribute('data-editable-name') === 'RoomInput';
-      if (!activeEditable) return;
-
-      window.scrollTo(0, 0);
-      const scrollElement = scrollRef.current;
-      if (!scrollElement) return;
-
-      window.requestAnimationFrame(() => {
-        window.scrollTo(0, 0);
-        if (atBottomRef.current) {
-          scrollToBottom(scrollElement);
-        }
-      });
-    };
-
-    const handleFocusIn = () => {
-      window.requestAnimationFrame(syncFocusedInputViewport);
-    };
-
-    // Some Android IMEs temporarily replace the keyboard with a full-screen voice input panel.
-    // Scrolling the page on its visualViewport transitions can detach the IME from the editor
-    // before it commits the transcription. A real editor focus still performs the initial sync.
-    document.addEventListener('focusin', handleFocusIn);
-
-    return () => {
-      document.removeEventListener('focusin', handleFocusIn);
-    };
-  }, [screenSize]);
-
   // Handle up arrow edit
   useKeyDown(
     window,
