@@ -1383,14 +1383,13 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
       window.requestAnimationFrame(syncFocusedInputViewport);
     };
 
+    // Some Android IMEs temporarily replace the keyboard with a full-screen voice input panel.
+    // Scrolling the page on its visualViewport transitions can detach the IME from the editor
+    // before it commits the transcription. A real editor focus still performs the initial sync.
     document.addEventListener('focusin', handleFocusIn);
-    window.visualViewport?.addEventListener('resize', syncFocusedInputViewport);
-    window.visualViewport?.addEventListener('scroll', syncFocusedInputViewport);
 
     return () => {
       document.removeEventListener('focusin', handleFocusIn);
-      window.visualViewport?.removeEventListener('resize', syncFocusedInputViewport);
-      window.visualViewport?.removeEventListener('scroll', syncFocusedInputViewport);
     };
   }, [screenSize]);
 
