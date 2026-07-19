@@ -3,6 +3,7 @@ import React, {
   MouseEventHandler,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -18,11 +19,12 @@ import {
   Spinner,
   Text,
   as,
+  color,
   config,
 } from 'folds';
 import { Editor, Transforms } from 'slate';
 import { ReactEditor } from 'slate-react';
-import { IContent, IMentions, MatrixEvent, RelationType, Room } from 'matrix-js-sdk';
+import { IContent, IMentions, MatrixEvent, MsgType, RelationType, Room } from 'matrix-js-sdk';
 import { isKeyHotkey } from 'is-hotkey';
 import {
   AUTOCOMPLETE_PREFIXES,
@@ -55,6 +57,11 @@ import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { getEditedEvent, getMentionContent, trimReplyFromFormattedBody } from '../../../utils/room';
 import { mobileOrTablet } from '../../../utils/user-agent';
 import { useComposingCheck } from '../../../hooks/useComposingCheck';
+import { useFilePicker } from '../../../hooks/useFilePicker';
+import { safeFile } from '../../../utils/mimeTypes';
+import { encryptFile } from '../../../utils/matrix';
+import { TUploadItem } from '../../../state/room/roomInputDrafts';
+import { getImageMsgContent } from '../msgContent';
 
 type MessageEditorProps = {
   roomId: string;
@@ -66,7 +73,173 @@ type MessageEditorProps = {
 
 const EMOJI_BOARD_REOPEN_SUPPRESS_MS = 400;
 
-export const MessageEditor = as<'div', MessageEditorProps>(
+const getImageReplaceErrorMessage = (error: unknown): string => {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    return '\u5f53\u524d\u7f51\u7edc\u5df2\u65ad\u5f00\uff0c\u65b0\u56fe\u7247\u8fd8\u6ca1\u6709\u66ff\u6362\u6210\u529f\u3002';
+  }
+
+  const matrixError = error as {
+    data?: { error?: string };
+    message?: string;
+  };
+  const detail = matrixError?.data?.error ?? matrixError?.message;
+  return detail
+    ? `\u66ff\u6362\u56fe\u7247\u5931\u8d25\uff1a${detail}`
+    : '\u66ff\u6362\u56fe\u7247\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5\u3002';
+};
+
+const ImageMessageEditor = as<'div', MessageEditorProps>(
+  ({ room, roomId, mEvent, onCancel, ...props }, ref) => {
+    const mx = useMatrixClient();
+    const [selectedFile, setSelectedFile] = useState<File>();
+    const [selectionError, setSelectionError] = useState<string>();
+    const previewUrl = useMemo(
+      () => (selectedFile ? URL.createObjectURL(selectedFile) : undefined),
+      [selectedFile]
+    );
+
+    useEffect(
+      () => () => {
+        if (previewUrl) URL.revokeObjectURL(previewUrl);
+      },
+      [previewUrl]
+    );
+
+    const handleFileSelect = useCallback((file: File) => {
+      const imageFile = safeFile(file);
+      if (!imageFile.type.startsWith('image/')) {
+        setSelectedFile(undefined);
+        setSelectionError(
+          '\u8bf7\u9009\u62e9 JPEG\u3001PNG\u3001GIF\u3001WebP \u6216 AVIF \u56fe\u7247\u3002'
+        );
+        return;
+      }
+
+      setSelectionError(undefined);
+      setSelectedFile(imageFile);
+    }, []);
+    const pickImage = useFilePicker(handleFileSelect, false);
+
+    const [replaceState, replaceImage] = useAsyncCallback(
+      useCallback(async () => {
+        if (!selectedFile) return undefined;
+
+        const uploadItem: TUploadItem = room.hasEncryptionStateEvent()
+          ? {
+              ...(await encryptFile(selectedFile)),
+              metadata: { markedAsSpoiler: false },
+            }
+          : {
+              file: selectedFile,
+              originalFile: selectedFile,
+              encInfo: undefined,
+              metadata: { markedAsSpoiler: false },
+            };
+
+        const upload = await mx.uploadContent(uploadItem.file, {
+          includeFilename: true,
+          name: selectedFile.name,
+          type: selectedFile.type,
+        });
+        const mxc = upload.content_uri;
+        if (!mxc) {
+          throw new Error('Matrix did not return a media URL.');
+        }
+
+        const newContent = await getImageMsgContent(mx, uploadItem, mxc);
+        const replacementContent: IContent = {
+          ...newContent,
+          body: `* ${newContent.body ?? selectedFile.name}`,
+          'm.new_content': newContent,
+          'm.relates_to': {
+            event_id: mEvent.getId(),
+            rel_type: RelationType.Replace,
+          },
+        };
+
+        return mx.sendMessage(roomId, replacementContent as never);
+      }, [mx, mEvent, room, roomId, selectedFile])
+    );
+
+    useEffect(() => {
+      if (replaceState.status === AsyncStatus.Success) {
+        onCancel();
+      }
+    }, [onCancel, replaceState.status]);
+
+    const loading = replaceState.status === AsyncStatus.Loading;
+    const errorMessage =
+      selectionError ??
+      (replaceState.status === AsyncStatus.Error
+        ? getImageReplaceErrorMessage(replaceState.error)
+        : undefined);
+
+    return (
+      <div {...props} ref={ref}>
+        <Box direction="Column" gap="300" style={{ padding: config.space.S300 }}>
+          <Text size="T300">
+            {
+              '\u9009\u62e9\u4e00\u5f20\u65b0\u56fe\u7247\uff0c\u5b8c\u6210\u540e\u4f1a\u5728\u539f\u6d88\u606f\u4f4d\u7f6e\u66ff\u6362\u65e7\u56fe\u7247\u3002'
+            }
+          </Text>
+          {previewUrl && (
+            <img
+              src={previewUrl}
+              alt={selectedFile?.name ?? ''}
+              style={{
+                display: 'block',
+                width: 'auto',
+                height: 'auto',
+                maxWidth: 'min(100%, 360px)',
+                maxHeight: '320px',
+                objectFit: 'contain',
+                borderRadius: config.radii.R300,
+              }}
+            />
+          )}
+          {selectedFile && (
+            <Text size="T200" priority="300">
+              {selectedFile.name}
+            </Text>
+          )}
+          {errorMessage && (
+            <Text size="T300" style={{ color: color.Critical.Main }}>
+              {errorMessage}
+            </Text>
+          )}
+          <Box gap="200" wrap="Wrap">
+            <Chip
+              onClick={() => pickImage('image/*')}
+              variant="SurfaceVariant"
+              radii="Pill"
+              disabled={loading}
+              outlined
+            >
+              <Text size="B300">
+                {selectedFile ? '\u91cd\u65b0\u9009\u62e9' : '\u9009\u62e9\u65b0\u56fe\u7247'}
+              </Text>
+            </Chip>
+            <Chip
+              onClick={() => replaceImage().catch(() => undefined)}
+              variant="Primary"
+              radii="Pill"
+              disabled={!selectedFile || loading}
+              outlined
+              before={loading ? <Spinner variant="Primary" fill="Soft" size="100" /> : undefined}
+            >
+              <Text size="B300">{'\u66ff\u6362\u56fe\u7247'}</Text>
+            </Chip>
+            <Chip onClick={onCancel} variant="SurfaceVariant" radii="Pill" disabled={loading}>
+              <Text size="B300">{'\u53d6\u6d88'}</Text>
+            </Chip>
+          </Box>
+        </Box>
+      </div>
+    );
+  }
+);
+
+const TextMessageEditor = as<'div', MessageEditorProps>(
   ({ room, roomId, mEvent, imagePackRooms, onCancel, ...props }, ref) => {
     const mx = useMatrixClient();
     const editor = useEditor();
@@ -87,10 +260,12 @@ export const MessageEditor = as<'div', MessageEditorProps>(
       string | undefined,
       IMentions | undefined
     ] => {
-      const evtId = mEvent.getId()!;
-      const evtTimeline = room.getTimelineForEvent(evtId);
+      const evtId = mEvent.getId();
+      const evtTimeline = evtId ? room.getTimelineForEvent(evtId) : undefined;
       const editedEvent =
-        evtTimeline && getEditedEvent(evtId, mEvent, evtTimeline.getTimelineSet());
+        evtId && evtTimeline
+          ? getEditedEvent(evtId, mEvent, evtTimeline.getTimelineSet())
+          : undefined;
 
       const content: IContent = editedEvent?.getContent()['m.new_content'] ?? mEvent.getContent();
       const { body, formatted_body: customHtml }: Record<string, unknown> = content;
@@ -414,6 +589,35 @@ export const MessageEditor = as<'div', MessageEditorProps>(
           }
         />
       </div>
+    );
+  }
+);
+
+export const MessageEditor = as<'div', MessageEditorProps>(
+  ({ room, roomId, mEvent, imagePackRooms, onCancel, ...props }, ref) => {
+    if (mEvent.getContent().msgtype === MsgType.Image) {
+      return (
+        <ImageMessageEditor
+          {...props}
+          ref={ref}
+          room={room}
+          roomId={roomId}
+          mEvent={mEvent}
+          onCancel={onCancel}
+        />
+      );
+    }
+
+    return (
+      <TextMessageEditor
+        {...props}
+        ref={ref}
+        room={room}
+        roomId={roomId}
+        mEvent={mEvent}
+        imagePackRooms={imagePackRooms}
+        onCancel={onCancel}
+      />
     );
   }
 );

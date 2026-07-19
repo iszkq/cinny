@@ -242,7 +242,8 @@ const getTimelineImageViewerItems = (linkedTimelines: EventTimeline[]): ViewerIm
       if (!eventId || seenEventIds.has(eventId) || mEvent.isRedacted()) return;
       seenEventIds.add(eventId);
 
-      const content = mEvent.getContent();
+      const editedEvent = getEditedEvent(eventId, mEvent, timeline.getTimelineSet());
+      const content = editedEvent?.getContent()['m.new_content'] ?? mEvent.getContent();
       const url =
         typeof content.file?.url === 'string'
           ? content.file.url
@@ -394,14 +395,22 @@ const getTimelineImageViewerItemsInRange = (
   const items: ViewerImageItem[] = [];
 
   for (let index = start; index < end; index += 1) {
-    const mEvent = getTimelineIndexEntry(timelineIndex, index)?.event;
+    const timelineEntry = getTimelineIndexEntry(timelineIndex, index);
+    const mEvent = timelineEntry?.event;
     const eventId = mEvent?.getId();
-    if (!mEvent || !eventId || seenEventIds.has(eventId) || mEvent.isRedacted()) {
+    if (
+      !timelineEntry ||
+      !mEvent ||
+      !eventId ||
+      seenEventIds.has(eventId) ||
+      mEvent.isRedacted()
+    ) {
       continue;
     }
     seenEventIds.add(eventId);
 
-    const content = mEvent.getContent();
+    const editedEvent = getEditedEvent(eventId, mEvent, timelineEntry.timelineSet);
+    const content = editedEvent?.getContent()['m.new_content'] ?? mEvent.getContent();
     const url =
       typeof content.file?.url === 'string'
         ? content.file.url

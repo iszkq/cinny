@@ -990,7 +990,8 @@ export const canEditEvent = (mx: MatrixClient, mEvent: MatrixEvent) => {
     mEvent.getType() === MessageEvent.RoomMessage &&
     (content.msgtype === MsgType.Text ||
       content.msgtype === MsgType.Emote ||
-      content.msgtype === MsgType.Notice)
+      content.msgtype === MsgType.Notice ||
+      content.msgtype === MsgType.Image)
   );
 };
 
