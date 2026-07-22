@@ -35,6 +35,7 @@ export const AppModal = style({
       minHeight: 'var(--app-height, 100dvh)',
       maxWidth: '100vw',
       maxHeight: 'var(--app-height, 100dvh)',
+      paddingTop: 'var(--safe-area-top, env(safe-area-inset-top, 0px))',
       borderRadius: 0,
     },
   },

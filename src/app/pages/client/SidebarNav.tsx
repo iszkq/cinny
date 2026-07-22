@@ -1,5 +1,5 @@
 import React, { lazy, Suspense, useRef } from 'react';
-import { Scroll } from 'folds';
+import { Scroll, config, toRem } from 'folds';
 
 import {
   Sidebar,
@@ -26,12 +26,33 @@ const LazyBibleTab = ANDROID_APK_BUILD
   ? undefined
   : lazy(async () => ({ default: (await import('./sidebar/BibleTab')).BibleTab }));
 
-export function SidebarNav() {
+type SidebarNavProps = {
+  compactDrawer?: boolean;
+  requestOpenSettings?: () => void;
+  requestOpenDeviceSettings?: () => void;
+};
+
+export function SidebarNav({
+  compactDrawer = false,
+  requestOpenSettings,
+  requestOpenDeviceSettings,
+}: SidebarNavProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const mobileClient = mobileOrTablet();
 
   return (
-    <Sidebar>
+    <Sidebar
+      style={
+        compactDrawer
+          ? {
+              width: `calc(${toRem(76)} + var(--safe-area-left, 0px))`,
+              paddingTop: `calc(${config.space.S200} + var(--safe-area-top, 0px))`,
+              paddingBottom: `calc(${config.space.S200} + var(--safe-area-bottom, 0px))`,
+              paddingLeft: 'var(--safe-area-left, 0px)',
+            }
+          : undefined
+      }
+    >
       <SidebarContent
         scrollable={
           <Scroll ref={scrollRef} variant="Background" size="0">
@@ -58,9 +79,9 @@ export function SidebarNav() {
               )}
               <FavoritesTab />
               <SearchTab />
-              <UnverifiedTab />
+              <UnverifiedTab requestOpenSettings={requestOpenDeviceSettings} />
               <InboxTab />
-              <SettingsTab />
+              <SettingsTab requestOpenSettings={requestOpenSettings} />
             </SidebarStack>
           </>
         }

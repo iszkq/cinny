@@ -71,6 +71,7 @@ import {
   getMentions,
 } from '../../components/editor';
 import { CloudSendMode, EmojiBoard, EmojiBoardTab } from '../../components/emoji-board';
+import * as emojiBoardCss from '../../components/emoji-board/styles.css';
 import {
   getAudioFileUrl,
   getImageFileUrl,
@@ -962,7 +963,15 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const emojiBoardSuppressOpenUntilRef = useRef(0);
     const emojiBoardSkipClickUntilRef = useRef(0);
     const emojiBoardFocusTimerRef = useRef<number>();
+    const emojiBoardPendingOpenCleanupRef = useRef<() => void>();
     emojiBoardOpenRef.current = emojiBoardOpen;
+
+    const cancelPendingEmojiBoardOpen = useCallback(() => {
+      emojiBoardPendingOpenCleanupRef.current?.();
+      emojiBoardPendingOpenCleanupRef.current = undefined;
+    }, []);
+
+    useEffect(() => cancelPendingEmojiBoardOpen, [cancelPendingEmojiBoardOpen]);
 
     useEffect(() => {
       if (!emojiBoardOpen) {
@@ -1603,6 +1612,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
 
     const closeEmojiBoard = useCallback(
       (fromPointerTrigger = false) => {
+        cancelPendingEmojiBoardOpen();
         const now = Date.now();
         if (
           fromPointerTrigger ||
@@ -1622,12 +1632,17 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           }, 0);
         }
       },
-      [editor]
+      [cancelPendingEmojiBoardOpen, editor]
     );
 
     const toggleEmojiBoard = useCallback(() => {
       const now = Date.now();
       const currentOpen = emojiBoardOpenRef.current;
+
+      if (emojiBoardPendingOpenCleanupRef.current) {
+        cancelPendingEmojiBoardOpen();
+        return;
+      }
 
       if (!currentOpen && now < emojiBoardSuppressOpenUntilRef.current) {
         return;
@@ -1645,12 +1660,56 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           ? CloudSendMode.Emoji
           : CloudSendMode.Sticker
       );
-      if (mobileEmojiBoard && ReactEditor.isFocused(editor)) {
+      const editorFocused = ReactEditor.isFocused(editor);
+      if (mobileEmojiBoard && editorFocused) {
         ReactEditor.blur(editor);
       }
       setEmojiBoardTab(EmojiBoardTab.Emoji);
+
+      const viewport = window.visualViewport;
+      const viewportHeight = viewport?.height ?? window.innerHeight;
+      const keyboardLikelyOpen =
+        mobileEmojiBoard &&
+        viewport !== null &&
+        viewport !== undefined &&
+        viewportHeight < window.screen.height * 0.82;
+
+      if (keyboardLikelyOpen && viewport) {
+        const initialHeight = viewportHeight;
+        let settleTimer = 0;
+        let fallbackTimer = 0;
+        let disposed = false;
+        let revealBoard = () => undefined;
+
+        const handleViewportResize = () => {
+          if (viewport.height < initialHeight + 24) return;
+          if (settleTimer) window.clearTimeout(settleTimer);
+          settleTimer = window.setTimeout(revealBoard, 80);
+        };
+
+        const cleanup = () => {
+          disposed = true;
+          viewport.removeEventListener('resize', handleViewportResize);
+          if (settleTimer) window.clearTimeout(settleTimer);
+          if (fallbackTimer) window.clearTimeout(fallbackTimer);
+        };
+        revealBoard = () => {
+          if (disposed) return;
+          viewport.removeEventListener('resize', handleViewportResize);
+          if (settleTimer) window.clearTimeout(settleTimer);
+          if (fallbackTimer) window.clearTimeout(fallbackTimer);
+          emojiBoardPendingOpenCleanupRef.current = undefined;
+          window.requestAnimationFrame(() => setEmojiBoardOpen(true));
+        };
+
+        viewport.addEventListener('resize', handleViewportResize, { passive: true });
+        fallbackTimer = window.setTimeout(revealBoard, 480);
+        emojiBoardPendingOpenCleanupRef.current = cleanup;
+        return;
+      }
+
       setEmojiBoardOpen(true);
-    }, [closeEmojiBoard, editor, mobileEmojiBoard]);
+    }, [cancelPendingEmojiBoardOpen, closeEmojiBoard, editor, mobileEmojiBoard]);
 
     const closeNoteDialog = useCallback(() => {
       if (noteSubmitting) return;
@@ -1892,18 +1951,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         requestClose={closeEmojiBoard}
       />
     ) : (
-      <Box
-        alignItems="Center"
-        justifyContent="Center"
-        style={{
-          width: `min(${toRem(432)}, calc(var(--app-width, 100vw) - 16px))`,
-          height: `min(${toRem(420)}, calc(var(--app-height, 100dvh) - 24px))`,
-          borderRadius: config.radii.R400,
-          background: color.Surface.Container,
-          color: color.Surface.OnContainer,
-          boxShadow: config.shadow.E200,
-        }}
-      >
+      <Box className={emojiBoardCss.Base} alignItems="Center" justifyContent="Center">
         <Text size="T300">正在加载表情…</Text>
       </Box>
     );

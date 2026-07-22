@@ -10,7 +10,11 @@ import { Settings } from '../../../features/settings';
 import { useUserProfile } from '../../../hooks/useUserProfile';
 import { Modal500 } from '../../../components/Modal500';
 
-export function SettingsTab() {
+type SettingsTabProps = {
+  requestOpenSettings?: () => void;
+};
+
+export function SettingsTab({ requestOpenSettings }: SettingsTabProps) {
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
   const userId = mx.getUserId()!;
@@ -23,7 +27,13 @@ export function SettingsTab() {
     ? mxcUrlToHttp(mx, profile.avatarUrl, useAuthentication, 96, 96, 'crop') ?? undefined
     : undefined;
 
-  const openSettings = () => setSettings(true);
+  const openSettings = () => {
+    if (requestOpenSettings) {
+      requestOpenSettings();
+      return;
+    }
+    setSettings(true);
+  };
   const closeSettings = () => setSettings(false);
 
   return (

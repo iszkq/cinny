@@ -18,7 +18,11 @@ import { useCrossSigningActive } from '../../../hooks/useCrossSigning';
 import { Modal500 } from '../../../components/Modal500';
 import { Settings, SettingsPages } from '../../../features/settings';
 
-function UnverifiedIndicator() {
+type UnverifiedIndicatorProps = {
+  requestOpenSettings?: () => void;
+};
+
+function UnverifiedIndicator({ requestOpenSettings }: UnverifiedIndicatorProps) {
   const mx = useMatrixClient();
 
   const crypto = mx.getCrypto();
@@ -56,7 +60,13 @@ function UnverifiedIndicator() {
                 as="button"
                 ref={triggerRef}
                 outlined
-                onClick={() => setSettings(true)}
+                onClick={() => {
+                  if (requestOpenSettings) {
+                    requestOpenSettings();
+                    return;
+                  }
+                  setSettings(true);
+                }}
               >
                 <Icon
                   style={{ color: unverified ? color.Critical.Main : color.Warning.Main }}
@@ -85,10 +95,14 @@ function UnverifiedIndicator() {
   );
 }
 
-export function UnverifiedTab() {
+type UnverifiedTabProps = {
+  requestOpenSettings?: () => void;
+};
+
+export function UnverifiedTab({ requestOpenSettings }: UnverifiedTabProps) {
   const crossSigningActive = useCrossSigningActive();
 
   if (!crossSigningActive) return null;
 
-  return <UnverifiedIndicator />;
+  return <UnverifiedIndicator requestOpenSettings={requestOpenSettings} />;
 }

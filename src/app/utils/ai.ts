@@ -429,7 +429,9 @@ const getAihubmixImageOcrUrl = async (src: string): Promise<string> => {
   if (DATA_URL_RE.test(src)) return src;
 
   try {
-    const response = await fetchMediaWithAuth(src);
+    // Keep the established browser/SW media path on Web and iOS PWA. Android
+    // additionally needs the authenticated/native fallback for WebView media.
+    const response = isAndroidApp() ? await fetchMediaWithAuth(src) : await fetch(src);
     if (!response.ok) {
       throw new Error(`Failed to load image for OCR: ${response.status}`);
     }
@@ -516,7 +518,24 @@ export const transcribeAudioWithAihubmix = async (
   let responseStatus = 0;
   let responseOk = false;
 
-  if (isAndroidApp()) {
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: formData,
+      cache: 'no-store',
+      credentials: 'omit',
+    });
+    responseStatus = response.status;
+    responseOk = response.ok;
+    payload = parseAihubmixPayload<OpenAIAudioTranscriptionResponse>(await response.text());
+  } catch (browserError) {
+    if (!isAndroidApp()) {
+      throw toAihubmixNetworkError(browserError);
+    }
+
     try {
       const { CapacitorHttp } = await import('@capacitor/core');
       const nativeResponse = await CapacitorHttp.post({
@@ -548,17 +567,6 @@ export const transcribeAudioWithAihubmix = async (
     } catch (error) {
       throw toAihubmixNetworkError(error);
     }
-  } else {
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: formData,
-    });
-    responseStatus = response.status;
-    responseOk = response.ok;
-    payload = parseAihubmixPayload<OpenAIAudioTranscriptionResponse>(await response.text());
   }
 
   if (!responseOk) {
@@ -624,7 +632,25 @@ export const recognizeImageTextWithAihubmix = async (
   let responseStatus = 0;
   let responseOk = false;
 
-  if (isAndroidApp()) {
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(requestData),
+      cache: 'no-store',
+      credentials: 'omit',
+    });
+    responseStatus = response.status;
+    responseOk = response.ok;
+    payload = parseAihubmixPayload<OpenAIChatResponse>(await response.text());
+  } catch (browserError) {
+    if (!isAndroidApp()) {
+      throw toAihubmixNetworkError(browserError);
+    }
+
     try {
       const { CapacitorHttp } = await import('@capacitor/core');
       const nativeResponse = await CapacitorHttp.post({
@@ -644,18 +670,6 @@ export const recognizeImageTextWithAihubmix = async (
     } catch (error) {
       throw toAihubmixNetworkError(error);
     }
-  } else {
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify(requestData),
-    });
-    responseStatus = response.status;
-    responseOk = response.ok;
-    payload = parseAihubmixPayload<OpenAIChatResponse>(await response.text());
   }
 
   if (!responseOk) {

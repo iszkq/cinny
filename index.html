@@ -5,7 +5,7 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+      content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content"
     />
     <title>星火</title>
     <meta name="name" content="星火" />
@@ -213,8 +213,14 @@
       (() => {
         const applyViewportSize = () => {
           const viewport = window.visualViewport;
-          const appHeight = Math.round(viewport?.height ?? window.innerHeight);
-          const appWidth = Math.round(viewport?.width ?? window.innerWidth);
+          // iOS pans the visual viewport when a focused input is above the
+          // keyboard. The application shell stays anchored at layout y=0, so
+          // its size must include that offset or the panned viewport exposes a
+          // large blank area below the app.
+          const viewportTop = Math.max(0, viewport?.offsetTop ?? 0);
+          const viewportLeft = Math.max(0, viewport?.offsetLeft ?? 0);
+          const appHeight = Math.round((viewport?.height ?? window.innerHeight) + viewportTop);
+          const appWidth = Math.round((viewport?.width ?? window.innerWidth) + viewportLeft);
 
           document.documentElement.style.setProperty('--app-height', `${appHeight}px`);
           document.documentElement.style.setProperty('--app-width', `${appWidth}px`);

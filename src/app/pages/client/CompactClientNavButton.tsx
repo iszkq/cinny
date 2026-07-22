@@ -5,11 +5,23 @@ import { useScreenSizeContext, ScreenSize } from '../../hooks/useScreenSize';
 import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
 import { stopPropagation } from '../../utils/keyboard';
 import { SidebarNav } from './SidebarNav';
+import { Modal500 } from '../../components/Modal500';
+import { Settings, SettingsPages } from '../../features/settings';
+
+type CompactSettingsState = {
+  initialPage?: SettingsPages;
+};
 
 export function CompactClientNavButton() {
   const screenSize = useScreenSizeContext();
   const [open, setOpen] = useState(false);
+  const [settingsState, setSettingsState] = useState<CompactSettingsState>();
   const closeDrawer = useCallback(() => setOpen(false), []);
+  const closeSettings = useCallback(() => setSettingsState(undefined), []);
+  const openSettings = useCallback((initialPage?: SettingsPages) => {
+    setOpen(false);
+    setSettingsState({ initialPage });
+  }, []);
 
   if (screenSize === ScreenSize.Desktop || isDesktopUpdaterSupported()) {
     return null;
@@ -75,17 +87,25 @@ export function CompactClientNavButton() {
                 direction="Column"
                 style={{
                   height: '100%',
-                  paddingTop: 'env(safe-area-inset-top, 0px)',
-                  paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-                  paddingLeft: 'env(safe-area-inset-left, 0px)',
+                  minHeight: 0,
+                  overflow: 'hidden',
                 }}
               >
-                <SidebarNav />
+                <SidebarNav
+                  compactDrawer
+                  requestOpenSettings={() => openSettings()}
+                  requestOpenDeviceSettings={() => openSettings(SettingsPages.DevicesPage)}
+                />
               </Box>
             </Modal>
           </FocusTrap>
         </div>
       </Overlay>
+      {settingsState && (
+        <Modal500 requestClose={closeSettings}>
+          <Settings initialPage={settingsState.initialPage} requestClose={closeSettings} />
+        </Modal500>
+      )}
     </>
   );
 }
