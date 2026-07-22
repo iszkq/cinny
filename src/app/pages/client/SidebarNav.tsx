@@ -19,6 +19,7 @@ import {
   FavoritesTab,
 } from './sidebar';
 import { CreateTab } from './sidebar/CreateTab';
+import { mobileOrTablet } from '../../utils/user-agent';
 
 const ANDROID_APK_BUILD = import.meta.env.VITE_ANDROID_APP === 'true';
 const LazyBibleTab = ANDROID_APK_BUILD
@@ -27,6 +28,7 @@ const LazyBibleTab = ANDROID_APK_BUILD
 
 export function SidebarNav() {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const mobileClient = mobileOrTablet();
 
   return (
     <Sidebar>
@@ -49,7 +51,7 @@ export function SidebarNav() {
           <>
             <SidebarStackSeparator />
             <SidebarStack>
-              {LazyBibleTab && (
+              {!mobileClient && LazyBibleTab && (
                 <Suspense fallback={null}>
                   <LazyBibleTab />
                 </Suspense>

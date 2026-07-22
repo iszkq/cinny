@@ -8,6 +8,7 @@ import { primeDesktopMediaAssetUrl } from '../../utils/desktopMediaAssetCache';
 import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
 import { releaseObjectUrl, retainObjectUrl } from '../../utils/objectUrlRetainer';
 import { shouldUseObjectUrlForMediaDisplay } from '../../utils/matrix';
+import { mobileOrTablet } from '../../utils/user-agent';
 
 type MediaCandidate = {
   source: string;
@@ -63,16 +64,16 @@ export const useStableMediaUrl = (
   options: UseStableMediaUrlOptions = {}
 ) => {
   const disableObjectUrlCache = options.disableObjectUrlCache ?? false;
+  const mobileDevice = mobileOrTablet();
   const preferObjectUrl =
     options.preferObjectUrl ??
-    (shouldUseObjectUrlForMediaDisplay(src) ||
+    (mobileDevice ||
+      shouldUseObjectUrlForMediaDisplay(src) ||
       shouldUseObjectUrlForMediaDisplay(fallbackSrc));
   const desktopSupported = isDesktopUpdaterSupported();
   const objectUrlCacheEnabled = preferObjectUrl && !disableObjectUrlCache;
   const shouldWaitForPreparedMedia =
-    preferObjectUrl &&
-    Boolean(src || fallbackSrc) &&
-    desktopSupported;
+    preferObjectUrl && Boolean(src || fallbackSrc) && (desktopSupported || mobileDevice);
   const [candidateIndex, setCandidateIndex] = useState(0);
   const [cacheVersion, setCacheVersion] = useState(0);
   const [desktopSrc, setDesktopSrc] = useState<string | undefined>();
@@ -89,14 +90,7 @@ export const useStableMediaUrl = (
         desktopFallbackSrc,
         fallbackSrc
       ),
-    [
-      cacheVersion,
-      desktopFallbackSrc,
-      desktopSrc,
-      fallbackSrc,
-      objectUrlCacheEnabled,
-      src,
-    ]
+    [cacheVersion, desktopFallbackSrc, desktopSrc, fallbackSrc, objectUrlCacheEnabled, src]
   );
 
   const hasPreparedCandidate =
@@ -181,13 +175,11 @@ export const useStableMediaUrl = (
         : undefined,
     ].filter(Boolean) as Array<() => void>;
 
-    if (desktopSupported) {
-      if (src) {
-        void primeCachedMediaObjectUrl(src, 'visible');
-      }
-      if (fallbackSrc && fallbackSrc !== src) {
-        void primeCachedMediaObjectUrl(fallbackSrc, 'background');
-      }
+    if (src) {
+      void primeCachedMediaObjectUrl(src, 'visible');
+    }
+    if (fallbackSrc && fallbackSrc !== src) {
+      void primeCachedMediaObjectUrl(fallbackSrc, 'background');
     }
 
     return () => {
@@ -208,16 +200,25 @@ export const useStableMediaUrl = (
     }, PREFERRED_OBJECT_URL_WAIT_MS);
 
     const preparePreferredUrl = async () => {
-      await Promise.all([
-        src ? primeDesktopMediaAssetUrl(src, 'visible', options.mimeType) : undefined,
-        fallbackSrc && fallbackSrc !== src
-          ? primeDesktopMediaAssetUrl(
-              fallbackSrc,
-              'background',
-              options.fallbackMimeType ?? options.mimeType
-            )
-          : undefined,
-      ]).catch(() => undefined);
+      await Promise.all(
+        desktopSupported
+          ? [
+              src ? primeDesktopMediaAssetUrl(src, 'visible', options.mimeType) : undefined,
+              fallbackSrc && fallbackSrc !== src
+                ? primeDesktopMediaAssetUrl(
+                    fallbackSrc,
+                    'background',
+                    options.fallbackMimeType ?? options.mimeType
+                  )
+                : undefined,
+            ]
+          : [
+              src ? primeCachedMediaObjectUrl(src, 'visible') : undefined,
+              fallbackSrc && fallbackSrc !== src
+                ? primeCachedMediaObjectUrl(fallbackSrc, 'background')
+                : undefined,
+            ]
+      ).catch(() => undefined);
 
       if (disposed) {
         return;

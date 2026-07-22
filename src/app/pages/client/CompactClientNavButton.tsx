@@ -1,14 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import FocusTrap from 'focus-trap-react';
-import {
-  Box,
-  Icon,
-  IconButton,
-  Icons,
-  Modal,
-  Overlay,
-  config,
-} from 'folds';
+import { Box, Icon, IconButton, Icons, Modal, Overlay, color, config } from 'folds';
 import { useScreenSizeContext, ScreenSize } from '../../hooks/useScreenSize';
 import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
 import { stopPropagation } from '../../utils/keyboard';
@@ -72,7 +64,7 @@ export function CompactClientNavButton() {
                 padding: 0,
                 border: 'none',
                 overflow: 'hidden',
-                background: 'transparent',
+                background: color.Background.Container,
                 boxShadow: 'none',
                 borderRadius: `0 ${config.radii.R500} ${config.radii.R500} 0`,
               }}

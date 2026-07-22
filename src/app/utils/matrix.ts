@@ -19,13 +19,11 @@ import { AccountDataEvent } from '../../types/matrix/accountData';
 import { getStateEvent } from './room';
 import { Membership, StateEvent } from '../../types/matrix/room';
 import { getFallbackSession } from '../state/sessions';
+import { isAndroidApp } from './nativePlatform';
 
 const DOMAIN_REGEX = /\b(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}\b/;
 const AUTH_MEDIA_PATH_TO_FALLBACK_PATH: Record<string, string[]> = {
-  '/_matrix/client/v1/media/download': [
-    '/_matrix/media/v3/download',
-    '/_matrix/media/r0/download',
-  ],
+  '/_matrix/client/v1/media/download': ['/_matrix/media/v3/download', '/_matrix/media/r0/download'],
   '/_matrix/client/v1/media/thumbnail': [
     '/_matrix/media/v3/thumbnail',
     '/_matrix/media/r0/thumbnail',
@@ -45,10 +43,52 @@ const removeAllowRedirectParam = (src: string): string => {
   }
 };
 
-export const fetchMediaWithAuth = async (
-  src: string,
+const decodeBase64Bytes = (value: string): Uint8Array => {
+  const binary = window.atob(value.replace(/\s/g, ''));
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
+};
+
+const fetchMediaWithAndroidFallback = async (
+  url: string,
   init?: RequestInit
 ): Promise<Response> => {
+  try {
+    return await fetch(url, init);
+  } catch (browserError) {
+    if (!isAndroidApp() || (init?.method && init.method.toUpperCase() !== 'GET')) {
+      throw browserError;
+    }
+
+    const { CapacitorHttp } = await import('@capacitor/core');
+    const headers: Record<string, string> = {};
+    new Headers(init?.headers).forEach((value, key) => {
+      headers[key] = value;
+    });
+    const nativeResponse = await CapacitorHttp.get({
+      url,
+      headers,
+      responseType: 'arraybuffer',
+      connectTimeout: 30000,
+      readTimeout: 60000,
+    });
+    const body =
+      typeof nativeResponse.data === 'string'
+        ? decodeBase64Bytes(nativeResponse.data)
+        : JSON.stringify(nativeResponse.data ?? '');
+    const response = new Response(body, {
+      status: nativeResponse.status,
+      headers: nativeResponse.headers,
+    });
+    Object.defineProperty(response, 'url', { value: nativeResponse.url || url });
+    return response;
+  }
+};
+
+export const fetchMediaWithAuth = async (src: string, init?: RequestInit): Promise<Response> => {
   const session = getFallbackSession();
   if (!session || !isSessionMediaUrl(src, session.baseUrl)) {
     return fetch(src, init);
@@ -71,8 +111,9 @@ export const fetchMediaWithAuth = async (
 
     for (const headers of requestHeadersList) {
       // eslint-disable-next-line no-await-in-loop
-      const response = await fetch(requestUrl, {
+      const response = await fetchMediaWithAndroidFallback(requestUrl, {
         ...init,
+        method: init?.method ?? 'GET',
         headers,
       }).catch((error) => {
         lastError = error;
@@ -113,9 +154,7 @@ const isSessionMediaUrl = (src: string, baseUrl: string): boolean => {
     return false;
   }
 
-  return AUTH_MEDIA_PATHS.some((path) =>
-    mediaUrl.href.startsWith(new URL(path, baseUrl).href)
-  );
+  return AUTH_MEDIA_PATHS.some((path) => mediaUrl.href.startsWith(new URL(path, baseUrl).href));
 };
 
 const getPublicMediaFallbackUrls = (src: string, baseUrl: string): string[] => {

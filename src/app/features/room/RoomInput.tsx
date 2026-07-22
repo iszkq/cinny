@@ -879,6 +879,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const mx = useMatrixClient();
     const screenSize = useScreenSizeContext();
     const compactScreen = screenSize !== ScreenSize.Desktop;
+    const mobileEmojiBoard = mobileOrTablet() || screenSize === ScreenSize.Mobile;
     const [enterForNewline] = useSetting(settingsAtom, 'enterForNewline');
     const [isMarkdown] = useSetting(settingsAtom, 'isMarkdown');
     const [sendTypingNotifications] = useSetting(settingsAtom, 'sendTypingNotifications');
@@ -948,6 +949,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       useState<AutocompleteQuery<AutocompletePrefix>>();
     const [emojiBoardTab, setEmojiBoardTab] = useState(EmojiBoardTab.Emoji);
     const [emojiBoardOpen, setEmojiBoardOpen] = useState(false);
+    const [emojiBoardReady, setEmojiBoardReady] = useState(false);
     const [cloudAutoSendMode, setCloudAutoSendMode] = useState<
       CloudSendMode.Emoji | CloudSendMode.Sticker
     >(CloudSendMode.Sticker);
@@ -961,6 +963,23 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const emojiBoardSkipClickUntilRef = useRef(0);
     const emojiBoardFocusTimerRef = useRef<number>();
     emojiBoardOpenRef.current = emojiBoardOpen;
+
+    useEffect(() => {
+      if (!emojiBoardOpen) {
+        setEmojiBoardReady(false);
+        return undefined;
+      }
+
+      let secondFrame = 0;
+      const firstFrame = window.requestAnimationFrame(() => {
+        secondFrame = window.requestAnimationFrame(() => setEmojiBoardReady(true));
+      });
+
+      return () => {
+        window.cancelAnimationFrame(firstFrame);
+        if (secondFrame) window.cancelAnimationFrame(secondFrame);
+      };
+    }, [emojiBoardOpen]);
 
     const sendTypingStatus = useTypingStatusUpdater(mx, roomId);
     const mobileAttachmentMenuEnabled = compactScreen && mobileOrTablet();
@@ -1626,9 +1645,12 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           ? CloudSendMode.Emoji
           : CloudSendMode.Sticker
       );
+      if (mobileEmojiBoard && ReactEditor.isFocused(editor)) {
+        ReactEditor.blur(editor);
+      }
       setEmojiBoardTab(EmojiBoardTab.Emoji);
       setEmojiBoardOpen(true);
-    }, [closeEmojiBoard, editor]);
+    }, [closeEmojiBoard, editor, mobileEmojiBoard]);
 
     const closeNoteDialog = useCallback(() => {
       if (noteSubmitting) return;
@@ -1853,6 +1875,63 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         }
       },
       [closePollDialog, mx, replyDraft, roomId, sendTypingStatus, setReplyDraft]
+    );
+
+    const emojiBoardContent = emojiBoardReady ? (
+      <EmojiBoard
+        tab={emojiBoardTab}
+        onTabChange={setEmojiBoardTab}
+        imagePackRooms={imagePackRooms}
+        imagePackMode="personal"
+        returnFocusOnDeactivate={false}
+        cloudAutoSendMode={cloudAutoSendMode}
+        onEmojiSelect={handleEmoticonSelect}
+        onCustomEmojiSelect={handleEmoticonSelect}
+        onCloudEmojiSelect={handleCloudEmojiSelect}
+        onStickerSelect={handleStickerSelect}
+        requestClose={closeEmojiBoard}
+      />
+    ) : (
+      <Box
+        alignItems="Center"
+        justifyContent="Center"
+        style={{
+          width: `min(${toRem(432)}, calc(var(--app-width, 100vw) - 16px))`,
+          height: `min(${toRem(420)}, calc(var(--app-height, 100dvh) - 24px))`,
+          borderRadius: config.radii.R400,
+          background: color.Surface.Container,
+          color: color.Surface.OnContainer,
+          boxShadow: config.shadow.E200,
+        }}
+      >
+        <Text size="T300">正在加载表情…</Text>
+      </Box>
+    );
+
+    const emojiBoardButton = (
+      <IconButton
+        ref={emojiBtnRef}
+        aria-pressed={emojiBoardOpen}
+        onPointerDown={(evt: React.PointerEvent<HTMLButtonElement>) => {
+          emojiBoardTouchTriggerRef.current = Date.now();
+          if (emojiBoardOpen) {
+            evt.preventDefault();
+            evt.stopPropagation();
+            closeEmojiBoard(true);
+          }
+        }}
+        onClick={() => {
+          if (Date.now() < emojiBoardSkipClickUntilRef.current) {
+            return;
+          }
+          toggleEmojiBoard();
+        }}
+        variant="SurfaceVariant"
+        size="300"
+        radii="300"
+      >
+        <Icon src={Icons.Smile} filled={emojiBoardOpen} />
+      </IconButton>
     );
 
     return (
@@ -2094,6 +2173,9 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           editableName="RoomInput"
           editor={editor}
           placeholder="发送消息..."
+          onFocus={() => {
+            if (mobileEmojiBoard && emojiBoardOpen) closeEmojiBoard();
+          }}
           onKeyDown={handleKeyDown}
           onChange={handleEditorChange}
           onPaste={handlePaste}
@@ -2313,52 +2395,20 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
               >
                 <Icon src={Icons.File} />
               </IconButton>
-              <PopOut
-                offset={16}
-                alignOffset={-44}
-                position="Top"
-                align="End"
-                anchor={emojiBoardOpen ? emojiBtnRef.current?.getBoundingClientRect() : undefined}
-                content={
-                  <EmojiBoard
-                    tab={emojiBoardTab}
-                    onTabChange={setEmojiBoardTab}
-                    imagePackRooms={imagePackRooms}
-                    imagePackMode="personal"
-                    returnFocusOnDeactivate={false}
-                    cloudAutoSendMode={cloudAutoSendMode}
-                    onEmojiSelect={handleEmoticonSelect}
-                    onCustomEmojiSelect={handleEmoticonSelect}
-                    onCloudEmojiSelect={handleCloudEmojiSelect}
-                    onStickerSelect={handleStickerSelect}
-                    requestClose={closeEmojiBoard}
-                  />
-                }
-              >
-                <IconButton
-                  ref={emojiBtnRef}
-                  aria-pressed={emojiBoardOpen}
-                  onPointerDown={(evt: React.PointerEvent<HTMLButtonElement>) => {
-                    emojiBoardTouchTriggerRef.current = Date.now();
-                    if (emojiBoardOpen) {
-                      evt.preventDefault();
-                      evt.stopPropagation();
-                      closeEmojiBoard(true);
-                    }
-                  }}
-                  onClick={() => {
-                    if (Date.now() < emojiBoardSkipClickUntilRef.current) {
-                      return;
-                    }
-                    toggleEmojiBoard();
-                  }}
-                  variant="SurfaceVariant"
-                  size="300"
-                  radii="300"
+              {mobileEmojiBoard ? (
+                emojiBoardButton
+              ) : (
+                <PopOut
+                  offset={16}
+                  alignOffset={-44}
+                  position="Top"
+                  align="End"
+                  anchor={emojiBoardOpen ? emojiBtnRef.current?.getBoundingClientRect() : undefined}
+                  content={emojiBoardContent}
                 >
-                  <Icon src={Icons.Smile} filled={emojiBoardOpen} />
-                </IconButton>
-              </PopOut>
+                  {emojiBoardButton}
+                </PopOut>
+              )}
               <IconButton
                 onClick={
                   recording
@@ -2386,6 +2436,18 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
             )
           }
         />
+        {mobileEmojiBoard && emojiBoardOpen && (
+          <Box
+            justifyContent="Center"
+            style={{
+              width: '100%',
+              paddingTop: config.space.S100,
+              overflow: 'hidden',
+            }}
+          >
+            {emojiBoardContent}
+          </Box>
+        )}
       </div>
     );
   }

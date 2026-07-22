@@ -3,7 +3,8 @@ import { AIModel, AISettings, AISkill } from '../state/ai';
 import { trimTrailingSlash } from './common';
 import { getMemberDisplayName } from './room';
 import { MessageEvent } from '../../types/matrix/room';
-import { getMxIdLocalPart } from './matrix';
+import { fetchMediaWithAuth, getMxIdLocalPart } from './matrix';
+import { isAndroidApp } from './nativePlatform';
 
 type OpenAIModelsResponse = {
   data?: unknown;
@@ -125,13 +126,9 @@ const inferSupportsChat = (
   capabilities?: string[],
   modalities?: string[]
 ): boolean => {
-  const tokens = [
-    id,
-    name,
-    type ?? '',
-    ...(capabilities ?? []),
-    ...(modalities ?? []),
-  ].map(normalizeModelToken);
+  const tokens = [id, name, type ?? '', ...(capabilities ?? []), ...(modalities ?? [])].map(
+    normalizeModelToken
+  );
 
   const chatSignals = [
     'chat',
@@ -261,9 +258,7 @@ export const fetchAihubmixModels = async (
   const rawModels = flattenModelPayload(data.data ?? data.models ?? data);
 
   return uniqById(
-    rawModels
-      .map((item) => toAIModel(item))
-      .filter((item): item is AIModel => !!item)
+    rawModels.map((item) => toAIModel(item)).filter((item): item is AIModel => !!item)
   );
 };
 
@@ -424,11 +419,17 @@ const blobToDataUrl = (blob: Blob): Promise<string> =>
     reader.readAsDataURL(blob);
   });
 
+const blobToBase64 = async (blob: Blob): Promise<string> => {
+  const dataUrl = await blobToDataUrl(blob);
+  const separatorIndex = dataUrl.indexOf(',');
+  return separatorIndex >= 0 ? dataUrl.slice(separatorIndex + 1) : dataUrl;
+};
+
 const getAihubmixImageOcrUrl = async (src: string): Promise<string> => {
   if (DATA_URL_RE.test(src)) return src;
 
   try {
-    const response = await fetch(src);
+    const response = await fetchMediaWithAuth(src);
     if (!response.ok) {
       throw new Error(`Failed to load image for OCR: ${response.status}`);
     }
@@ -438,6 +439,26 @@ const getAihubmixImageOcrUrl = async (src: string): Promise<string> => {
     if (HTTP_URL_RE.test(src)) return src;
     throw error;
   }
+};
+
+const parseAihubmixPayload = <T>(value: unknown): T | undefined => {
+  if (value && typeof value === 'object') return value as T;
+  if (typeof value !== 'string' || !value.trim()) return undefined;
+
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return undefined;
+  }
+};
+
+const toAihubmixNetworkError = (error: unknown): Error => {
+  const detail = error instanceof Error ? error.message.trim() : '';
+  return new Error(
+    detail
+      ? `无法连接 AIHubMix，请检查网络或代理后重试。(${detail})`
+      : '无法连接 AIHubMix，请检查网络或代理后重试。'
+  );
 };
 
 export const getAihubmixAudioTranscriptionApiKey = (
@@ -491,26 +512,59 @@ export const transcribeAudioWithAihubmix = async (
   formData.append('language', options.language?.trim() || 'zh');
   formData.append('temperature', `${options.temperature ?? 0.2}`);
 
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: formData,
-  });
-
-  const rawText = await response.text();
   let payload: OpenAIAudioTranscriptionResponse | undefined;
-  try {
-    payload = rawText ? (JSON.parse(rawText) as OpenAIAudioTranscriptionResponse) : undefined;
-  } catch {
-    payload = undefined;
+  let responseStatus = 0;
+  let responseOk = false;
+
+  if (isAndroidApp()) {
+    try {
+      const { CapacitorHttp } = await import('@capacitor/core');
+      const nativeResponse = await CapacitorHttp.post({
+        url: endpoint,
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'multipart/form-data',
+        },
+        dataType: 'formData',
+        data: [
+          { key: 'model', value: model, type: 'string' },
+          { key: 'language', value: options.language?.trim() || 'zh', type: 'string' },
+          { key: 'temperature', value: `${options.temperature ?? 0.2}`, type: 'string' },
+          {
+            key: 'file',
+            value: await blobToBase64(uploadFile),
+            type: 'base64File',
+            contentType: uploadFile.type || 'audio/webm',
+            fileName: uploadFile.name,
+          },
+        ],
+        responseType: 'json',
+        connectTimeout: 30000,
+        readTimeout: 120000,
+      });
+      responseStatus = nativeResponse.status;
+      responseOk = responseStatus >= 200 && responseStatus < 300;
+      payload = parseAihubmixPayload<OpenAIAudioTranscriptionResponse>(nativeResponse.data);
+    } catch (error) {
+      throw toAihubmixNetworkError(error);
+    }
+  } else {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: formData,
+    });
+    responseStatus = response.status;
+    responseOk = response.ok;
+    payload = parseAihubmixPayload<OpenAIAudioTranscriptionResponse>(await response.text());
   }
 
-  if (!response.ok) {
+  if (!responseOk) {
     throw new Error(
       normalizeAihubmixText(extractOpenAICompatibleError(payload)) ??
-        `AI audio transcription failed: ${response.status}`
+        `AI audio transcription failed: ${responseStatus}`
     );
   }
 
@@ -539,54 +593,75 @@ export const recognizeImageTextWithAihubmix = async (
     config?.baseUrl?.trim() || DEFAULT_AIHUBMIX_BASE_URL
   )}/chat/completions`;
   const imageUrl = await getAihubmixImageOcrUrl(imageSrc);
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: config?.model?.trim() || AIHUBMIX_IMAGE_OCR_MODEL,
-      messages: [
-        {
-          role: 'system',
-          content:
-            '\u4f60\u662f\u4e00\u4e2a\u4e25\u683c\u7684\u5168\u91cf OCR \u7eaf\u6587\u672c\u63d0\u53d6\u5668\u3002\u5fc5\u987b\u6309\u4ece\u4e0a\u5230\u4e0b\u3001\u4ece\u5de6\u5230\u53f3\u7684\u9605\u8bfb\u987a\u5e8f\uff0c\u9010\u884c\u8f93\u51fa\u56fe\u7247\u4e2d\u771f\u5b9e\u5b58\u5728\u7684\u6240\u6709\u6587\u5b57\u3002\u4e0d\u8981\u56e0\u4e3a\u6587\u5b57\u91cd\u590d\u3001\u98ce\u683c\u5316\u3001\u5b57\u4f53\u5927\u5c0f\u4e0d\u540c\u6216\u5e95\u90e8\u5c0f\u5b57\u800c\u7701\u7565\uff1b\u62ec\u53f7\u3001\u7ae0\u8282\u53f7\u3001\u65e5\u671f\u3001\u6807\u70b9\u4e5f\u8981\u4fdd\u7559\u3002\u4e0d\u8981\u89e3\u91ca\uff0c\u4e0d\u8981\u8865\u5145\uff0c\u4e0d\u8981\u751f\u6210 Markdown\u3001HTML\u3001XML\u3001JSON \u6216\u4ee3\u7801\u5757\u3002Do not output Markdown image placeholders such as ![](page=0,bbox=[...]), page labels, bbox coordinates, or layout markers.',
-        },
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text:
-                '\u8bf7\u5bf9\u8fd9\u5f20\u56fe\u505a\u9010\u884c\u5168\u91cf OCR\u3002\u8bf7\u7279\u522b\u68c0\u67e5\u9876\u90e8\u5927\u5b57\u3001\u4e2d\u95f4\u5f69\u8272\u5927\u5b57\u3001\u5e95\u90e8\u6a2a\u5e45\u5c0f\u5b57\u548c\u62ec\u53f7\u91cc\u7684\u7ecf\u6587\u7ae0\u8282\u53f7\u3002\u8f93\u51fa\u7eaf\u6587\u672c\uff0c\u4e0d\u8981\u4f7f\u7528 #\u3001<div>\u3001</div>\u3001```\u3001![](page=0,bbox=[...]) \u6216\u4efb\u4f55\u683c\u5f0f\u5316\u3001\u5750\u6807\u3001\u7248\u9762\u6807\u8bb0\u3002',
+  const requestData = {
+    model: config?.model?.trim() || AIHUBMIX_IMAGE_OCR_MODEL,
+    messages: [
+      {
+        role: 'system',
+        content:
+          '\u4f60\u662f\u4e00\u4e2a\u4e25\u683c\u7684\u5168\u91cf OCR \u7eaf\u6587\u672c\u63d0\u53d6\u5668\u3002\u5fc5\u987b\u6309\u4ece\u4e0a\u5230\u4e0b\u3001\u4ece\u5de6\u5230\u53f3\u7684\u9605\u8bfb\u987a\u5e8f\uff0c\u9010\u884c\u8f93\u51fa\u56fe\u7247\u4e2d\u771f\u5b9e\u5b58\u5728\u7684\u6240\u6709\u6587\u5b57\u3002\u4e0d\u8981\u56e0\u4e3a\u6587\u5b57\u91cd\u590d\u3001\u98ce\u683c\u5316\u3001\u5b57\u4f53\u5927\u5c0f\u4e0d\u540c\u6216\u5e95\u90e8\u5c0f\u5b57\u800c\u7701\u7565\uff1b\u62ec\u53f7\u3001\u7ae0\u8282\u53f7\u3001\u65e5\u671f\u3001\u6807\u70b9\u4e5f\u8981\u4fdd\u7559\u3002\u4e0d\u8981\u89e3\u91ca\uff0c\u4e0d\u8981\u8865\u5145\uff0c\u4e0d\u8981\u751f\u6210 Markdown\u3001HTML\u3001XML\u3001JSON \u6216\u4ee3\u7801\u5757\u3002Do not output Markdown image placeholders such as ![](page=0,bbox=[...]), page labels, bbox coordinates, or layout markers.',
+      },
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: '\u8bf7\u5bf9\u8fd9\u5f20\u56fe\u505a\u9010\u884c\u5168\u91cf OCR\u3002\u8bf7\u7279\u522b\u68c0\u67e5\u9876\u90e8\u5927\u5b57\u3001\u4e2d\u95f4\u5f69\u8272\u5927\u5b57\u3001\u5e95\u90e8\u6a2a\u5e45\u5c0f\u5b57\u548c\u62ec\u53f7\u91cc\u7684\u7ecf\u6587\u7ae0\u8282\u53f7\u3002\u8f93\u51fa\u7eaf\u6587\u672c\uff0c\u4e0d\u8981\u4f7f\u7528 #\u3001<div>\u3001</div>\u3001```\u3001![](page=0,bbox=[...]) \u6216\u4efb\u4f55\u683c\u5f0f\u5316\u3001\u5750\u6807\u3001\u7248\u9762\u6807\u8bb0\u3002',
+          },
+          {
+            type: 'image_url',
+            image_url: {
+              url: imageUrl,
+              detail: 'high',
             },
-            {
-              type: 'image_url',
-              image_url: {
-                url: imageUrl,
-                detail: 'high',
-              },
-            },
-          ],
-        },
-      ],
-      temperature: 0,
-    }),
-  });
-
-  const rawText = await response.text();
+          },
+        ],
+      },
+    ],
+    temperature: 0,
+  };
   let payload: OpenAIChatResponse | undefined;
-  try {
-    payload = rawText ? (JSON.parse(rawText) as OpenAIChatResponse) : undefined;
-  } catch {
-    payload = undefined;
+  let responseStatus = 0;
+  let responseOk = false;
+
+  if (isAndroidApp()) {
+    try {
+      const { CapacitorHttp } = await import('@capacitor/core');
+      const nativeResponse = await CapacitorHttp.post({
+        url: endpoint,
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        data: requestData,
+        responseType: 'json',
+        connectTimeout: 30000,
+        readTimeout: 120000,
+      });
+      responseStatus = nativeResponse.status;
+      responseOk = responseStatus >= 200 && responseStatus < 300;
+      payload = parseAihubmixPayload<OpenAIChatResponse>(nativeResponse.data);
+    } catch (error) {
+      throw toAihubmixNetworkError(error);
+    }
+  } else {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(requestData),
+    });
+    responseStatus = response.status;
+    responseOk = response.ok;
+    payload = parseAihubmixPayload<OpenAIChatResponse>(await response.text());
   }
 
-  if (!response.ok) {
+  if (!responseOk) {
     throw new Error(
       normalizeAihubmixText(extractOpenAICompatibleError(payload)) ??
-        `\u56fe\u7247\u6587\u5b57\u8bc6\u522b\u5931\u8d25\uff1a${response.status}`
+        `\u56fe\u7247\u6587\u5b57\u8bc6\u522b\u5931\u8d25\uff1a${responseStatus}`
     );
   }
 

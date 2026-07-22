@@ -48,6 +48,9 @@ import { AuthMetadataProvider } from '../../hooks/useAuthMetadata';
 import { getFallbackSession } from '../../state/sessions';
 import { AutoDiscovery } from './AutoDiscovery';
 import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
+import { isNativeApp } from '../../utils/nativePlatform';
+
+const CLIENT_STORE_PERSIST_INTERVAL_MS = 30_000;
 
 function ClientRootLoading() {
   return (
@@ -182,7 +185,7 @@ type ClientRootProps = {
 };
 export function ClientRoot({ children }: ClientRootProps) {
   const [loading, setLoading] = useState(() => isDesktopUpdaterSupported());
-  const initialSyncPersistedRef = useRef(false);
+  const lastStorePersistedAtRef = useRef(0);
   const { baseUrl, userId } = getFallbackSession() ?? {};
 
   const [loadState, loadMatrix] = useAsyncCallback<MatrixClient, Error, []>(
@@ -205,6 +208,7 @@ export function ClientRoot({ children }: ClientRootProps) {
     if (!mx) return undefined;
 
     const persist = () => {
+      lastStorePersistedAtRef.current = Date.now();
       persistClientStore(mx);
     };
     const handleVisibilityChange = () => {
@@ -214,9 +218,28 @@ export function ClientRoot({ children }: ClientRootProps) {
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('pagehide', persist);
 
+    let disposed = false;
+    let removeNativePauseListener: (() => void) | undefined;
+    if (isNativeApp()) {
+      import('@capacitor/app')
+        .then(async ({ App }) => {
+          const listener = await App.addListener('pause', persist);
+          if (disposed) {
+            listener.remove().catch(() => undefined);
+            return;
+          }
+          removeNativePauseListener = () => {
+            listener.remove().catch(() => undefined);
+          };
+        })
+        .catch(() => undefined);
+    }
+
     return () => {
+      disposed = true;
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('pagehide', persist);
+      removeNativePauseListener?.();
     };
   }, [mx]);
 
@@ -241,8 +264,9 @@ export function ClientRoot({ children }: ClientRootProps) {
           state === SyncState.Syncing ||
           state === SyncState.Catchup
         ) {
-          if (mx && !initialSyncPersistedRef.current) {
-            initialSyncPersistedRef.current = true;
+          const now = Date.now();
+          if (mx && now - lastStorePersistedAtRef.current >= CLIENT_STORE_PERSIST_INTERVAL_MS) {
+            lastStorePersistedAtRef.current = now;
             persistClientStore(mx);
           }
           if (loading) setLoading(false);

@@ -9,5 +9,7 @@ export const mobileOrTablet = (): boolean => {
   const { os, device } = userAgent;
   if (device.type === 'mobile' || device.type === 'tablet') return true;
   if (os.name === 'Android' || os.name === 'iOS') return true;
+  // iPadOS can use a desktop-class Safari user agent and report itself as macOS.
+  if (os.name === 'Mac OS' && window.navigator.maxTouchPoints > 1) return true;
   return false;
 };

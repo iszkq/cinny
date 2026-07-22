@@ -37,7 +37,7 @@ import { useSelectedRoom } from '../../hooks/router/useSelectedRoom';
 import { useInboxNotificationsSelected } from '../../hooks/router/useInbox';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 import { ensurePersonalPackSync } from '../../plugins/custom-emoji';
-import { useWarmAllImagePackMedia } from '../../hooks/useImagePacks';
+import { useWarmAllImagePackMedia, useWarmWebImagePackMedia } from '../../hooks/useImagePacks';
 import { getFallbackSession } from '../../state/sessions';
 import {
   aiSettingsAtom,
@@ -64,6 +64,7 @@ import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
 import { useDesktopUpdater } from '../../hooks/useDesktopUpdater';
 import { sendAppNotification } from '../../utils/notifications';
 import { GlobalImageViewer } from '../../components/image-viewer';
+import { mobileOrTablet } from '../../utils/user-agent';
 
 const EXTERNAL_LINK_SELECTOR = 'a[href]';
 const DESKTOP_UPDATE_AUTO_CHECK_DELAY_MS = 30000;
@@ -793,15 +794,26 @@ function DesktopImagePackMediaWarmFeature() {
   return null;
 }
 
+function WebImagePackMediaWarmFeature() {
+  useWarmWebImagePackMedia();
+
+  return null;
+}
+
 function ImagePackMediaWarmFeature() {
-  return isDesktopUpdaterSupported() ? <DesktopImagePackMediaWarmFeature /> : null;
+  return isDesktopUpdaterSupported() ? (
+    <DesktopImagePackMediaWarmFeature />
+  ) : (
+    <WebImagePackMediaWarmFeature />
+  );
 }
 
 function DelayedImagePackMediaWarmFeature() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    const timerId = window.setTimeout(() => setReady(true), IMAGE_PACK_MEDIA_WARM_START_DELAY_MS);
+    const startDelay = mobileOrTablet() ? 2500 : IMAGE_PACK_MEDIA_WARM_START_DELAY_MS;
+    const timerId = window.setTimeout(() => setReady(true), startDelay);
 
     return () => {
       window.clearTimeout(timerId);

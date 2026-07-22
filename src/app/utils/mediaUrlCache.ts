@@ -1,7 +1,7 @@
 import { revokeObjectUrlWhenPossible } from './objectUrlRetainer';
 import { fetchMediaWithAuth } from './matrix';
 import { getFallbackSession } from '../state/sessions';
-import { isAndroidApp } from './nativePlatform';
+import { mobileOrTablet } from './user-agent';
 
 const LEGACY_PERSISTENT_MEDIA_CACHE = 'cinny-auth-media-v2';
 const PERSISTENT_MEDIA_CACHE_PREFIX = 'cinny-auth-media-v3';
@@ -20,7 +20,7 @@ const getObjectUrlMediaLimits = () => {
       ? undefined
       : (navigator as DeviceMemoryNavigator).deviceMemory;
 
-  if (isAndroidApp()) {
+  if (mobileOrTablet()) {
     if (typeof deviceMemory === 'number' && deviceMemory <= 4) {
       return {
         maxItems: 192,
@@ -94,7 +94,7 @@ const getMediaPreloadConcurrency = () => {
       ? undefined
       : (navigator as DeviceMemoryNavigator).deviceMemory;
 
-  if (isAndroidApp()) {
+  if (mobileOrTablet()) {
     return {
       persistent: 2,
       objectUrl: typeof deviceMemory === 'number' && deviceMemory >= 8 ? 4 : 3,
@@ -121,10 +121,8 @@ const getMediaPreloadConcurrency = () => {
   };
 };
 
-const {
-  maxItems: MAX_OBJECT_URL_MEDIA_ITEMS,
-  maxBytes: MAX_OBJECT_URL_MEDIA_BYTES,
-} = getObjectUrlMediaLimits();
+const { maxItems: MAX_OBJECT_URL_MEDIA_ITEMS, maxBytes: MAX_OBJECT_URL_MEDIA_BYTES } =
+  getObjectUrlMediaLimits();
 const { maxEntries: MAX_PERSISTENT_MEDIA_ENTRIES } = getPersistentMediaLimits();
 const {
   persistent: PERSISTENT_MEDIA_PRELOAD_CONCURRENCY,
@@ -159,10 +157,7 @@ const objectUrlMediaCache = new Map<string, ObjectUrlMediaEntry>();
 const objectUrlMediaUrls = new Set<string>();
 const pendingObjectUrlMedia = new Map<string, Promise<string | undefined>>();
 const queuedObjectUrlMediaTasks = new Map<string, ObjectUrlMediaTask>();
-const objectUrlMediaListeners = new Map<
-  string,
-  Set<(objectUrl: string | undefined) => void>
->();
+const objectUrlMediaListeners = new Map<string, Set<(objectUrl: string | undefined) => void>>();
 const failedMediaRetryAt = new Map<string, number>();
 const visibleObjectUrlMediaQueue: ObjectUrlMediaTask[] = [];
 const backgroundObjectUrlMediaQueue: ObjectUrlMediaTask[] = [];
@@ -379,7 +374,9 @@ const hashNamespace = (value: string): string => {
 
 const getCacheNamespace = (): string => {
   const session = getFallbackSession();
-  return `${session?.baseUrl?.toLowerCase() ?? 'guest'}::${session?.userId?.toLowerCase() ?? 'guest'}`;
+  return `${session?.baseUrl?.toLowerCase() ?? 'guest'}::${
+    session?.userId?.toLowerCase() ?? 'guest'
+  }`;
 };
 
 const getPersistentMediaCacheName = (): string =>
@@ -493,9 +490,7 @@ const fetchAndPersistMedia = async (src: string): Promise<Response | undefined> 
   if (!response.ok) {
     markFailedMediaEntry(
       src,
-      response.status === 404
-        ? FAILED_MEDIA_NOT_FOUND_RETRY_DELAY_MS
-        : FAILED_MEDIA_RETRY_DELAY_MS
+      response.status === 404 ? FAILED_MEDIA_NOT_FOUND_RETRY_DELAY_MS : FAILED_MEDIA_RETRY_DELAY_MS
     );
     return undefined;
   }

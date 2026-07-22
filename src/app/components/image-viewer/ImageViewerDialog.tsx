@@ -28,6 +28,7 @@ import { stopPropagation } from '../../utils/keyboard';
 import { loadImageElement } from '../../utils/dom';
 import { getImageViewerModalStyle } from '../../utils/imageViewerModal';
 import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
+import { mobileOrTablet } from '../../utils/user-agent';
 import {
   closeNativeImagePreviewWindow,
   createNativeImagePreviewId,
@@ -102,7 +103,7 @@ export function ImageViewerDialog({
   ...viewerProps
 }: ImageViewerDialogProps) {
   const screenSize = useScreenSizeContext();
-  const mobile = screenSize === ScreenSize.Mobile;
+  const mobile = mobileOrTablet() || screenSize === ScreenSize.Mobile;
   const desktopNativePreview = isDesktopUpdaterSupported();
   const [imageSize, setImageSize] = useState<{ width?: number; height?: number }>({});
   const [maximized, setMaximized] = useState(false);

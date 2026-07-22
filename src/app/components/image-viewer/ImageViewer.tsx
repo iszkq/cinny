@@ -10,6 +10,7 @@ import { ScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
 import { saveDownloadedFile } from '../../utils/saveDownloadedFile';
 import { recognizeImageTextWithAihubmix, type AihubmixImageOcrConfig } from '../../utils/ai';
 import { copyToClipboard } from '../../utils/dom';
+import { mobileOrTablet } from '../../utils/user-agent';
 
 export type ImageViewerProps = {
   alt: string;
@@ -145,7 +146,7 @@ export const ImageViewer = as<'div', ImageViewerProps>(
     ref
   ) => {
     const screenSize = useScreenSizeContext();
-    const mobile = screenSize === ScreenSize.Mobile;
+    const mobile = mobileOrTablet() || screenSize === ScreenSize.Mobile;
     const [rotation, setRotation] = useState(0);
     const [viewMode, setViewMode] = useState<ViewMode>('fit');
     const { zoom, zoomIn, zoomOut, setZoom } = useZoom(ZOOM_STEP, MIN_ZOOM, MAX_ZOOM);
