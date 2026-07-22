@@ -20,6 +20,7 @@ import {
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { DesktopUpdater } from './DesktopUpdater';
 import { ReleaseNotes } from '../../../components/ReleaseNotes';
+import { PWAInstallButton } from '../../../components/PWAInstallButton';
 import {
   DesktopUpdateReleaseInfo,
   fetchLatestDesktopRelease,
@@ -120,6 +121,15 @@ export function About({ requestClose }: AboutProps) {
                     >
                       <Text size="B300">{'\u8054\u7cfb\u4f5c\u8005'}</Text>
                     </AuthorContactButton>
+                    <PWAInstallButton
+                      variant="Secondary"
+                      fill="Soft"
+                      size="300"
+                      radii="300"
+                      before={<Icon src={Icons.Download} size="100" filled />}
+                    >
+                      <Text size="B300">安装应用</Text>
+                    </PWAInstallButton>
                   </Box>
                 </Box>
               </Box>

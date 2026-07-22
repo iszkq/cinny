@@ -21,6 +21,7 @@ import { isDesktopUpdaterSupported } from './app/utils/desktopUpdater';
 import { applyDesktopStartupPinLock } from './app/utils/pinLock';
 import { isNativeImagePreviewWindow } from './app/utils/nativeImagePreview';
 import { isNativeBibleWindow } from './app/utils/nativeBibleWindow';
+import { initializePWAInstall } from './app/utils/pwaInstall';
 
 document.body.classList.add(configClass, varsClass);
 
@@ -54,6 +55,8 @@ const nativeImagePreviewWindow = isDesktopUpdaterSupported() && isNativeImagePre
 const nativeBibleWindow = isDesktopUpdaterSupported() && isNativeBibleWindow();
 const desktopSubWindow = nativeImagePreviewWindow || nativeBibleWindow;
 const fallbackSession = desktopSubWindow ? undefined : getFallbackSession();
+
+initializePWAInstall();
 
 if (isDesktopUpdaterSupported() && !desktopSubWindow) {
   document.documentElement.dataset.cinnyDesktopApp = 'true';
