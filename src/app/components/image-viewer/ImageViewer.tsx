@@ -183,11 +183,33 @@ export const ImageViewer = as<'div', ImageViewerProps>(
     const [ocrPanelOpen, setOcrPanelOpen] = useState(false);
     const [ocrState, setOcrState] = useState<OcrState>({ status: 'idle' });
     const [ocrCopied, setOcrCopied] = useState(false);
+    const downloadBlobRef = useRef<{ src: string; blob?: Blob; promise: Promise<Blob> }>();
 
-    const handleDownload = async () => {
-      const response = await fetchMediaWithAuth(src);
-      const fileContent = await response.blob();
-      await saveDownloadedFile(fileContent, alt);
+    const loadDownloadBlob = useCallback((): Promise<Blob> => {
+      const cached = downloadBlobRef.current;
+      if (cached?.src === src) return cached.blob ? Promise.resolve(cached.blob) : cached.promise;
+
+      const entry: { src: string; blob?: Blob; promise: Promise<Blob> } = {
+        src,
+        promise: fetchMediaWithAuth(src).then(async (response) => {
+          if (!response.ok) throw new Error(`Failed to download image: ${response.status}`);
+          const blob = await response.blob();
+          entry.blob = blob;
+          return blob;
+        }),
+      };
+      downloadBlobRef.current = entry;
+      return entry.promise;
+    }, [src]);
+
+    const handleDownload = () => {
+      const cachedBlob = downloadBlobRef.current?.src === src && downloadBlobRef.current.blob;
+      if (cachedBlob) {
+        void saveDownloadedFile(cachedBlob, alt);
+        return;
+      }
+
+      void loadDownloadBlob().then((blob) => saveDownloadedFile(blob, alt));
     };
 
     const handleRecognizeText = useCallback(() => {
@@ -525,6 +547,13 @@ export const ImageViewer = as<'div', ImageViewerProps>(
     }, [src]);
 
     useEffect(() => {
+      if (loading) return;
+      // Preload the authenticated blob so iOS can open its native image-save
+      // sheet immediately while the download tap still has user activation.
+      void loadDownloadBlob().catch(() => undefined);
+    }, [loadDownloadBlob, loading]);
+
+    useEffect(() => {
       onOcrPanelOpenChange?.(Boolean(imageOcrConfig && ocrPanelOpen));
       return () => {
         onOcrPanelOpenChange?.(false);
@@ -646,17 +675,6 @@ export const ImageViewer = as<'div', ImageViewerProps>(
                     {alt}
                   </Text>
                 </Box>
-                {!loading && (
-                  <IconButton
-                    variant="Primary"
-                    size="300"
-                    radii="Pill"
-                    onClick={handleDownload}
-                    aria-label={'\u4e0b\u8f7d\u56fe\u7247'}
-                  >
-                    <Icon size="50" src={Icons.Download} />
-                  </IconButton>
-                )}
               </Box>
 
               <Box
@@ -727,6 +745,17 @@ export const ImageViewer = as<'div', ImageViewerProps>(
                     before={<span className={css.ImageViewerOcrGlyph} aria-hidden="true" />}
                   >
                     <Text size="B300">{'\u8bc6\u522b\u6587\u5b57'}</Text>
+                  </Chip>
+                )}
+
+                {!loading && (
+                  <Chip
+                    variant="Primary"
+                    onClick={handleDownload}
+                    radii="Pill"
+                    before={<Icon size="50" src={Icons.Download} />}
+                  >
+                    <Text size="B300">{'\u4e0b\u8f7d'}</Text>
                   </Chip>
                 )}
               </Box>

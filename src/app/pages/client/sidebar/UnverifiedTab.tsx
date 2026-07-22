@@ -60,7 +60,11 @@ function UnverifiedIndicator({ requestOpenSettings }: UnverifiedIndicatorProps) 
                 as="button"
                 ref={triggerRef}
                 outlined
-                onClick={() => {
+                onPointerDown={(evt) => evt.stopPropagation()}
+                onPointerUp={(evt) => evt.stopPropagation()}
+                onClick={(evt) => {
+                  evt.preventDefault();
+                  evt.stopPropagation();
                   if (requestOpenSettings) {
                     requestOpenSettings();
                     return;

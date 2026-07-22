@@ -48,6 +48,7 @@ const PLAY_TIME_THROTTLE_OPS = {
   immediate: true,
 };
 const AUDIO_PLAYBACK_RATES = [1, 1.25, 1.5, 2];
+const AUDIO_DOWNLOAD_TIMEOUT_MS = 45_000;
 
 type RenderMediaControlProps = {
   after: ReactNode;
@@ -74,8 +75,13 @@ export function AudioContent({
   const mx = useMatrixClient();
   const screenSize = useScreenSizeContext();
   const useAuthentication = useMediaAuthentication();
-  const { state: transcriptionState, supported, mode, supportReason, transcribe } =
-    useAudioTranscription(transcriptionId ?? url);
+  const {
+    state: transcriptionState,
+    supported,
+    mode,
+    supportReason,
+    transcribe,
+  } = useAudioTranscription(transcriptionId ?? url);
   const overDurationLimit =
     mode === 'browser' &&
     typeof info.duration === 'number' &&
@@ -89,9 +95,20 @@ export function AudioContent({
     const mediaUrl = mxcUrlToHttp(mx, url, useAuthentication);
     if (!mediaUrl) throw new Error('Invalid media URL');
 
-    return encInfo
-      ? downloadEncryptedMedia(mediaUrl, (encBuf) => decryptFile(encBuf, mimeType, encInfo))
-      : downloadMedia(mediaUrl);
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), AUDIO_DOWNLOAD_TIMEOUT_MS);
+
+    try {
+      return encInfo
+        ? await downloadEncryptedMedia(
+            mediaUrl,
+            (encBuf) => decryptFile(encBuf, mimeType, encInfo),
+            { signal: controller.signal }
+          )
+        : await downloadMedia(mediaUrl, { signal: controller.signal });
+    } finally {
+      window.clearTimeout(timeoutId);
+    }
   }, [mx, url, useAuthentication, mimeType, encInfo]);
 
   const [srcState, loadSrc] = useAsyncCallback(
@@ -148,7 +165,9 @@ export function AudioContent({
     setPlaybackRate(nextRate);
   };
 
-  const playbackRateLabel = `${Number.isInteger(playbackRate) ? playbackRate.toFixed(0) : playbackRate}x`;
+  const playbackRateLabel = `${
+    Number.isInteger(playbackRate) ? playbackRate.toFixed(0) : playbackRate
+  }x`;
   const transcriptionText =
     transcriptionState.status === AsyncStatus.Success ||
     transcriptionState.status === AsyncStatus.Loading ||
@@ -160,10 +179,10 @@ export function AudioContent({
   const helperText = !supported
     ? supportReason ?? '\u5f53\u524d\u6d4f\u89c8\u5668\u6682\u4e0d\u652f\u6301\u8f6c\u5199'
     : overAihubmixFileSizeLimit
-      ? 'AIHubMix \u97f3\u9891\u8f6c\u5199\u76ee\u524d\u6700\u5927\u652f\u6301 25MB'
-      : overDurationLimit
-        ? '\u5f53\u524d\u7248\u672c\u6700\u957f\u652f\u6301 5 \u5206\u949f'
-        : undefined;
+    ? 'AIHubMix \u97f3\u9891\u8f6c\u5199\u76ee\u524d\u6700\u5927\u652f\u6301 25MB'
+    : overDurationLimit
+    ? '\u5f53\u524d\u7248\u672c\u6700\u957f\u652f\u6301 5 \u5206\u949f'
+    : undefined;
   const shouldShowTranscriptionText =
     !!transcriptionText &&
     (transcriptionState.status !== AsyncStatus.Loading || mode === 'browser');
@@ -171,10 +190,10 @@ export function AudioContent({
     transcriptionState.status === AsyncStatus.Loading
       ? '\u8f6c\u5199\u4e2d'
       : transcriptionState.status === AsyncStatus.Success
-        ? '\u91cd\u65b0\u8f6c\u5199'
-        : transcriptionState.status === AsyncStatus.Error
-          ? '\u91cd\u8bd5\u8f6c\u5199'
-          : '\u8f6c\u5199';
+      ? '\u91cd\u65b0\u8f6c\u5199'
+      : transcriptionState.status === AsyncStatus.Error
+      ? '\u91cd\u8bd5\u8f6c\u5199'
+      : '\u8f6c\u5199';
 
   const handleTranscribe = () => {
     transcribe({
@@ -244,7 +263,11 @@ export function AudioContent({
               <Text size="B300">{transcriptionActionLabel}</Text>
             </Chip>
             {helperText && (
-              <Text size="T200" priority="300" style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
+              <Text
+                size="T200"
+                priority="300"
+                style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}
+              >
                 {helperText}
               </Text>
             )}
@@ -282,9 +305,7 @@ export function AudioContent({
             )
           }
         >
-          <Text size="B300">
-            {playing ? '\u6682\u505c' : '\u64ad\u653e'}
-          </Text>
+          <Text size="B300">{playing ? '\u6682\u505c' : '\u64ad\u653e'}</Text>
         </Chip>
         <Text size="T200">{`${secondsToMinutesAndSeconds(
           currentTime

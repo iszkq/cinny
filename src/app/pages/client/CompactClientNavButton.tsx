@@ -15,10 +15,10 @@ export function CompactClientNavButton() {
   const closeDrawer = useCallback(() => setOpen(false), []);
   const openSettings = useCallback(
     (initialPage?: SettingsPages) => {
-      setOpen(false);
-      // Let the drawer's focus trap fully deactivate before mounting settings.
-      // This also prevents iOS from forwarding the same tap to the page below.
-      window.setTimeout(() => requestOpenSettings(initialPage), 0);
+      // Mount settings while the drawer still covers the page. Closing the drawer
+      // on the next frame prevents iOS Safari from forwarding this tap to Home.
+      requestOpenSettings(initialPage);
+      window.requestAnimationFrame(() => setOpen(false));
     },
     [requestOpenSettings]
   );

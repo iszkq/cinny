@@ -73,15 +73,31 @@ import { createJitsiMeetInfo, makeJitsiMeetMessageContent } from '../../utils/ji
 import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
 import { useAgoraVoice } from '../agora-voice';
 import { getAllVersionsRoomCreator } from '../../utils/room';
+import { mobileOrTablet } from '../../utils/user-agent';
+import { dispatchRoomComposerAction, RoomComposerAction } from '../../utils/roomViewEvents';
 
 type RoomMenuProps = {
   room: Room;
   canStartVoiceTest?: boolean;
   onStartVoiceTest?: () => void;
+  showComposerActions?: boolean;
+  canCompose?: boolean;
+  onComposerAction?: (action: RoomComposerAction) => void;
   requestClose: () => void;
 };
 const RoomMenu = forwardRef<HTMLDivElement, RoomMenuProps>(
-  ({ room, canStartVoiceTest, onStartVoiceTest, requestClose }, ref) => {
+  (
+    {
+      room,
+      canStartVoiceTest,
+      onStartVoiceTest,
+      showComposerActions,
+      canCompose,
+      onComposerAction,
+      requestClose,
+    },
+    ref
+  ) => {
     const mx = useMatrixClient();
     const [sendReadReceipts] = useSetting(settingsAtom, 'sendReadReceipts');
     const unread = useRoomUnread(room.roomId, roomToUnreadAtom);
@@ -195,6 +211,38 @@ const RoomMenu = forwardRef<HTMLDivElement, RoomMenuProps>(
               {'\u590d\u5236\u94fe\u63a5'}
             </Text>
           </MenuItem>
+          {showComposerActions && (
+            <>
+              <MenuItem
+                onClick={() => {
+                  onComposerAction?.('poll');
+                  requestClose();
+                }}
+                size="300"
+                after={<Icon size="100" src={Icons.OrderList} />}
+                radii="300"
+                disabled={!canCompose}
+              >
+                <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
+                  {'\u521b\u5efa\u6295\u7968'}
+                </Text>
+              </MenuItem>
+              <MenuItem
+                onClick={() => {
+                  onComposerAction?.('note');
+                  requestClose();
+                }}
+                size="300"
+                after={<Icon size="100" src={Icons.File} />}
+                radii="300"
+                disabled={!canCompose}
+              >
+                <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
+                  {'\u8bb0\u4e8b\u672c'}
+                </Text>
+              </MenuItem>
+            </>
+          )}
           {canStartVoiceTest && (
             <MenuItem
               onClick={handleStartVoiceTest}
@@ -303,6 +351,7 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
   const [peopleDrawer, setPeopleDrawer] = useSetting(settingsAtom, 'isPeopleDrawer');
   const desktopLayout = isDesktopLikeScreenSize(screenSize);
   const compact = isCompactScreenSize(screenSize) && !desktopLayout;
+  const mobileClient = mobileOrTablet() || compact;
   let headerTitleSize: 'H3' | 'H4' | 'H5' = 'H3';
   if (compact) headerTitleSize = 'H4';
   else if (topic) headerTitleSize = 'H5';
@@ -345,6 +394,10 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
 
   const handleStartVoiceTest = () => {
     agoraVoice.startSelfTest().catch(() => undefined);
+  };
+
+  const handleComposerAction = (action: RoomComposerAction) => {
+    dispatchRoomComposerAction(room.roomId, action);
   };
 
   const handleSubmitMeeting = (title: string) => {
@@ -657,6 +710,9 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
                     room={room}
                     canStartVoiceTest={agoraVoice.available}
                     onStartVoiceTest={handleStartVoiceTest}
+                    showComposerActions={!callView && mobileClient}
+                    canCompose={canStartMeeting}
+                    onComposerAction={handleComposerAction}
                     requestClose={() => setMenuAnchor(undefined)}
                   />
                 </FocusTrap>

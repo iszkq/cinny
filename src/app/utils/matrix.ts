@@ -504,9 +504,9 @@ export const mxcUrlToHttp = (
     useAuthentication
   );
 
-export const downloadMedia = async (src: string): Promise<Blob> => {
-  const init: RequestInit = { method: 'GET' };
-  const downloadResponse = await fetchMediaWithAuth(src, init).catch(() => undefined);
+export const downloadMedia = async (src: string, init?: RequestInit): Promise<Blob> => {
+  const requestInit: RequestInit = { ...init, method: 'GET' };
+  const downloadResponse = await fetchMediaWithAuth(src, requestInit).catch(() => undefined);
 
   if (!downloadResponse?.ok) {
     throw new Error('Failed to download media');
@@ -518,9 +518,10 @@ export const downloadMedia = async (src: string): Promise<Blob> => {
 
 export const downloadEncryptedMedia = async (
   src: string,
-  decryptContent: (buf: ArrayBuffer) => Promise<Blob>
+  decryptContent: (buf: ArrayBuffer) => Promise<Blob>,
+  init?: RequestInit
 ): Promise<Blob> => {
-  const encryptedContent = await downloadMedia(src);
+  const encryptedContent = await downloadMedia(src, init);
   const decryptedContent = await decryptContent(await encryptedContent.arrayBuffer());
 
   return decryptedContent;

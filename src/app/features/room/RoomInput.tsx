@@ -123,7 +123,11 @@ import {
   getImageMsgContent,
   getVideoMsgContent,
 } from './msgContent';
-import { dispatchRoomFollowLatest } from '../../utils/roomViewEvents';
+import {
+  dispatchRoomFollowLatest,
+  ROOM_COMPOSER_ACTION,
+  RoomComposerAction,
+} from '../../utils/roomViewEvents';
 import { getMemberDisplayName, getMentionContent, getReplyPreviewBody } from '../../utils/room';
 import { CommandAutocomplete } from './CommandAutocomplete';
 import { Command, SHRUG, TABLEFLIP, UNFLIP, useCommands } from '../../hooks/useCommands';
@@ -958,6 +962,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const autocompleteFrameRef = useRef<number>();
     const suppressEditorRealtimeUpdatesRef = useRef(false);
     const attachmentBtnRef = useRef<HTMLButtonElement>(null);
+
     const emojiBoardOpenRef = useRef(emojiBoardOpen);
     const emojiBoardTouchTriggerRef = useRef(0);
     const emojiBoardSuppressOpenUntilRef = useRef(0);
@@ -1730,6 +1735,25 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       setNoteDialogOpen(true);
     }, []);
 
+    useEffect(() => {
+      const handleComposerAction = (evt: Event) => {
+        const { detail } = evt as CustomEvent<{
+          roomId?: string;
+          action?: RoomComposerAction;
+        }>;
+        if (detail.roomId !== roomId) return;
+
+        if (detail.action === 'poll') {
+          setPollDialog(true);
+        } else if (detail.action === 'note') {
+          handleOpenNoteDialog();
+        }
+      };
+
+      window.addEventListener(ROOM_COMPOSER_ACTION, handleComposerAction);
+      return () => window.removeEventListener(ROOM_COMPOSER_ACTION, handleComposerAction);
+    }, [handleOpenNoteDialog, roomId]);
+
     const handleNoteSubmit: FormEventHandler<HTMLFormElement> = useCallback(
       async (evt) => {
         evt.preventDefault();
@@ -2405,16 +2429,18 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           }
           after={
             <>
-              <IconButton
-                onClick={() => setPollDialog(true)}
-                variant="SurfaceVariant"
-                size="300"
-                radii="300"
-                disabled={recording}
-                aria-disabled={recording}
-              >
-                <Icon src={Icons.OrderList} />
-              </IconButton>
+              {!mobileEmojiBoard && (
+                <IconButton
+                  onClick={() => setPollDialog(true)}
+                  variant="SurfaceVariant"
+                  size="300"
+                  radii="300"
+                  disabled={recording}
+                  aria-disabled={recording}
+                >
+                  <Icon src={Icons.OrderList} />
+                </IconButton>
+              )}
               <IconButton
                 onClick={recording ? stopVoiceRecording : startVoiceRecording}
                 variant={recording ? 'Primary' : 'SurfaceVariant'}
@@ -2432,17 +2458,19 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
               >
                 <Icon src={toolbar ? Icons.AlphabetUnderline : Icons.Alphabet} />
               </IconButton>
-              <IconButton
-                onClick={handleOpenNoteDialog}
-                variant="SurfaceVariant"
-                size="300"
-                radii="300"
-                disabled={recording}
-                aria-disabled={recording}
-                title={NOTE_CN.title}
-              >
-                <Icon src={Icons.File} />
-              </IconButton>
+              {!mobileEmojiBoard && (
+                <IconButton
+                  onClick={handleOpenNoteDialog}
+                  variant="SurfaceVariant"
+                  size="300"
+                  radii="300"
+                  disabled={recording}
+                  aria-disabled={recording}
+                  title={NOTE_CN.title}
+                >
+                  <Icon src={Icons.File} />
+                </IconButton>
+              )}
               {mobileEmojiBoard ? (
                 emojiBoardButton
               ) : (

@@ -40,17 +40,24 @@ public class NativeFileSaverPlugin extends Plugin {
         Uri fileUri = null;
         try {
             byte[] fileBytes = Base64.decode(dataBase64, Base64.DEFAULT);
+            boolean imageFile = mimeType.toLowerCase().startsWith("image/");
+            Uri collection = imageFile
+                ? MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+                : MediaStore.Downloads.EXTERNAL_CONTENT_URI;
+            String relativePath = imageFile
+                ? Environment.DIRECTORY_PICTURES + "/Starfire"
+                : Environment.DIRECTORY_DOWNLOADS + "/Starfire";
             ContentValues values = new ContentValues();
-            values.put(MediaStore.Downloads.DISPLAY_NAME, fileName);
-            values.put(MediaStore.Downloads.MIME_TYPE, mimeType);
+            values.put(MediaStore.MediaColumns.DISPLAY_NAME, fileName);
+            values.put(MediaStore.MediaColumns.MIME_TYPE, mimeType);
             values.put(
-                MediaStore.Downloads.RELATIVE_PATH,
-                Environment.DIRECTORY_DOWNLOADS + "/Starfire"
+                MediaStore.MediaColumns.RELATIVE_PATH,
+                relativePath
             );
-            values.put(MediaStore.Downloads.IS_PENDING, 1);
+            values.put(MediaStore.MediaColumns.IS_PENDING, 1);
 
             ContentResolver resolver = getContext().getContentResolver();
-            fileUri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+            fileUri = resolver.insert(collection, values);
             if (fileUri == null) throw new IllegalStateException("Unable to create download file.");
 
             try (OutputStream output = resolver.openOutputStream(fileUri, "w")) {
@@ -60,17 +67,18 @@ public class NativeFileSaverPlugin extends Plugin {
             }
 
             values.clear();
-            values.put(MediaStore.Downloads.IS_PENDING, 0);
+            values.put(MediaStore.MediaColumns.IS_PENDING, 0);
             resolver.update(fileUri, values, null, null);
 
             JSObject result = new JSObject();
             result.put("uri", fileUri.toString());
             result.put("fileName", fileName);
             String savedName = fileName;
+            String savedLocation = imageFile ? "手机相册" : "下载/Starfire";
             getActivity().runOnUiThread(
                 () -> Toast.makeText(
                     getContext(),
-                    "已保存到 下载/Starfire：" + savedName,
+                    "已保存到" + savedLocation + "：" + savedName,
                     Toast.LENGTH_LONG
                 ).show()
             );
