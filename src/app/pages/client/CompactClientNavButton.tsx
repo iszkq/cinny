@@ -5,23 +5,23 @@ import { useScreenSizeContext, ScreenSize } from '../../hooks/useScreenSize';
 import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
 import { stopPropagation } from '../../utils/keyboard';
 import { SidebarNav } from './SidebarNav';
-import { Modal500 } from '../../components/Modal500';
-import { Settings, SettingsPages } from '../../features/settings';
-
-type CompactSettingsState = {
-  initialPage?: SettingsPages;
-};
+import { SettingsPages } from '../../features/settings';
+import { useMobileSettings } from './MobileSettings';
 
 export function CompactClientNavButton() {
   const screenSize = useScreenSizeContext();
   const [open, setOpen] = useState(false);
-  const [settingsState, setSettingsState] = useState<CompactSettingsState>();
+  const requestOpenSettings = useMobileSettings();
   const closeDrawer = useCallback(() => setOpen(false), []);
-  const closeSettings = useCallback(() => setSettingsState(undefined), []);
-  const openSettings = useCallback((initialPage?: SettingsPages) => {
-    setOpen(false);
-    setSettingsState({ initialPage });
-  }, []);
+  const openSettings = useCallback(
+    (initialPage?: SettingsPages) => {
+      setOpen(false);
+      // Let the drawer's focus trap fully deactivate before mounting settings.
+      // This also prevents iOS from forwarding the same tap to the page below.
+      window.setTimeout(() => requestOpenSettings(initialPage), 0);
+    },
+    [requestOpenSettings]
+  );
 
   if (screenSize === ScreenSize.Desktop || isDesktopUpdaterSupported()) {
     return null;
@@ -101,11 +101,6 @@ export function CompactClientNavButton() {
           </FocusTrap>
         </div>
       </Overlay>
-      {settingsState && (
-        <Modal500 requestClose={closeSettings}>
-          <Settings initialPage={settingsState.initialPage} requestClose={closeSettings} />
-        </Modal500>
-      )}
     </>
   );
 }

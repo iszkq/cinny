@@ -646,6 +646,17 @@ export const ImageViewer = as<'div', ImageViewerProps>(
                     {alt}
                   </Text>
                 </Box>
+                {!loading && (
+                  <IconButton
+                    variant="Primary"
+                    size="300"
+                    radii="Pill"
+                    onClick={handleDownload}
+                    aria-label={'\u4e0b\u8f7d\u56fe\u7247'}
+                  >
+                    <Icon size="50" src={Icons.Download} />
+                  </IconButton>
+                )}
               </Box>
 
               <Box
@@ -716,17 +727,6 @@ export const ImageViewer = as<'div', ImageViewerProps>(
                     before={<span className={css.ImageViewerOcrGlyph} aria-hidden="true" />}
                   >
                     <Text size="B300">{'\u8bc6\u522b\u6587\u5b57'}</Text>
-                  </Chip>
-                )}
-
-                {!loading && (
-                  <Chip
-                    variant="Primary"
-                    onClick={handleDownload}
-                    radii="Pill"
-                    before={<Icon size="50" src={Icons.Download} />}
-                  >
-                    <Text size="B300">{'\u4e0b\u8f7d'}</Text>
                   </Chip>
                 )}
               </Box>

@@ -21,6 +21,7 @@ import { SecretStorageRecoveryKey, SecretStorageRecoveryPassphrase } from './Sec
 import { useMatrixClient } from '../hooks/useMatrixClient';
 import { AsyncStatus, useAsyncCallback } from '../hooks/useAsyncCallback';
 import { storePrivateKey } from '../../client/secretStorageKeys';
+import { decryptAllTimelineEvent } from '../utils/room';
 
 export enum ManualVerificationMethod {
   RecoveryPassphrase = 'passphrase',
@@ -29,6 +30,7 @@ export enum ManualVerificationMethod {
 
 const CROSS_SIGNING_SYNC_RETRY_DELAYS_MS = [0, 600, 1500, 3000] as const;
 const BACKUP_INFO_RETRY_DELAYS_MS = [0, 500, 1200, 2400] as const;
+const BACKUP_RESTORE_FOREGROUND_TIMEOUT_MS = 15000;
 
 const wait = (ms: number): Promise<void> =>
   new Promise((resolve) => {
@@ -39,10 +41,7 @@ const isTransientVerificationError = (error: Error): boolean =>
   error.message.includes('importCrossSigningKeys failed to import the keys') ||
   error.message.includes('downloadKeys is not a function');
 
-const waitForCrossSigningKeysReady = async (
-  crypto: CryptoApi,
-  userId: string
-) => {
+const waitForCrossSigningKeysReady = async (crypto: CryptoApi, userId: string) => {
   let latestStatus = await crypto.getCrossSigningStatus();
   if (latestStatus.publicKeysOnDevice) {
     return latestStatus;
@@ -89,7 +88,9 @@ const getBackupRestoreNotice = (error: Error): string | undefined => {
   }
 
   if (
-    error.message.includes('loadSessionBackupPrivateKeyFromSecretStorage: unable to get backup version') ||
+    error.message.includes(
+      'loadSessionBackupPrivateKeyFromSecretStorage: unable to get backup version'
+    ) ||
     error.message.includes('No backup info available')
   ) {
     return '设备验证已完成，但当前暂时还没读取到消息备份信息。请稍等片刻，旧消息会在备份信息同步后继续恢复；若长时间没有变化，再重试一次。';
@@ -99,7 +100,9 @@ const getBackupRestoreNotice = (error: Error): string | undefined => {
     error.message.includes(
       'loadSessionBackupPrivateKeyFromSecretStorage: decryption key does not match backup info'
     ) ||
-    error.message.includes('getBackupDecryptor: key backup on server does not match the decryption key')
+    error.message.includes(
+      'getBackupDecryptor: key backup on server does not match the decryption key'
+    )
   ) {
     return '设备验证已完成，但当前服务器上的消息备份与这把恢复密钥不匹配。请在已验证设备上重新开启消息备份后再试。';
   }
@@ -288,6 +291,36 @@ export function ManualVerificationTile({
         await waitForBackupVersionReady(crypto);
         await crypto.loadSessionBackupPrivateKeyFromSecretStorage();
         await crypto.checkKeyBackupAndEnable();
+
+        const restoreTask = crypto.restoreKeyBackup().then(async () => {
+          await Promise.allSettled(
+            mx
+              .getRooms()
+              .map((room) =>
+                decryptAllTimelineEvent(mx, room.getLiveTimeline(), { retryFailures: true })
+              )
+          );
+        });
+        const restoreResultPromise = restoreTask.then(
+          () => ({ status: 'completed' as const }),
+          (restoreError: unknown) => ({
+            status: 'error' as const,
+            restoreError,
+          })
+        );
+        const restoreResult = await Promise.race([
+          restoreResultPromise,
+          wait(BACKUP_RESTORE_FOREGROUND_TIMEOUT_MS).then(() => ({
+            status: 'background' as const,
+          })),
+        ]);
+
+        if (restoreResult.status === 'error') {
+          throw restoreResult.restoreError;
+        }
+        if (restoreResult.status === 'background') {
+          return '设备验证已完成，旧消息正在后台恢复，已进入过的房间会逐步重新解密。';
+        }
       } catch (error) {
         const backupRestoreNotice =
           error instanceof Error ? getBackupRestoreNotice(error) : undefined;

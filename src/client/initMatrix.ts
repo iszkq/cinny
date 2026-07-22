@@ -70,10 +70,10 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
   return mx;
 };
 
-// Room state is enough to render the room list. Keeping timelines out of the
-// first response makes accounts with many rooms usable much sooner; opening a
-// room automatically paginates its recent messages from the returned token.
-const WEB_INITIAL_SYNC_LIMIT = 0;
+// Match the SDK's safe default: enough recent events to paint the room and a
+// reliable backward-pagination token, while older history keeps loading on
+// demand instead of blocking the whole account's first sync.
+const WEB_INITIAL_SYNC_LIMIT = 8;
 
 export const startClient = async (mx: MatrixClient) => {
   await mx.startClient({

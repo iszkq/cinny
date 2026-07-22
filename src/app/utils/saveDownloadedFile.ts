@@ -1,5 +1,17 @@
 import FileSaver from 'file-saver';
+import { registerPlugin } from '@capacitor/core';
 import { isDesktopUpdaterSupported } from './desktopUpdater';
+import { isAndroidApp } from './nativePlatform';
+
+type NativeFileSaverPlugin = {
+  save(options: {
+    fileName: string;
+    mimeType: string;
+    dataBase64: string;
+  }): Promise<{ uri: string; fileName: string }>;
+};
+
+const NativeFileSaver = registerPlugin<NativeFileSaverPlugin>('NativeFileSaver');
 
 const blobToBase64 = (blob: Blob): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -24,6 +36,16 @@ const blobToBase64 = (blob: Blob): Promise<string> =>
   });
 
 export const saveDownloadedFile = async (fileContent: Blob, fileName: string): Promise<void> => {
+  if (isAndroidApp()) {
+    const dataBase64 = await blobToBase64(fileContent);
+    await NativeFileSaver.save({
+      fileName,
+      mimeType: fileContent.type || 'application/octet-stream',
+      dataBase64,
+    });
+    return;
+  }
+
   if (!isDesktopUpdaterSupported()) {
     FileSaver.saveAs(fileContent, fileName);
     return;

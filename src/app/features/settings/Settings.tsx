@@ -116,7 +116,7 @@ export function Settings({ initialPage, requestClose }: SettingsProps) {
   const screenSize = useScreenSizeContext();
   const compact = !isDesktopLikeScreenSize(screenSize);
   const [activePage, setActivePage] = useState<SettingsPages | undefined>(() => {
-    if (initialPage) return initialPage;
+    if (initialPage !== undefined) return initialPage;
     return compact ? undefined : SettingsPages.GeneralPage;
   });
   const menuItems = useSettingsMenuItems();
@@ -176,11 +176,7 @@ export function Settings({ initialPage, requestClose }: SettingsProps) {
                       <NavButton type="button" onClick={() => setActivePage(item.page)}>
                         <NavItemContent>
                           <Box as="span" grow="Yes" alignItems="Center" gap="200">
-                            <Icon
-                              src={item.icon}
-                              size="100"
-                              filled={activePage === item.page}
-                            />
+                            <Icon src={item.icon} size="100" filled={activePage === item.page} />
                             <Box as="span" grow="Yes">
                               <Text size="Inherit" as="span" truncate>
                                 {item.name}

@@ -49,6 +49,7 @@ import { getFallbackSession } from '../../state/sessions';
 import { AutoDiscovery } from './AutoDiscovery';
 import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
 import { isNativeApp } from '../../utils/nativePlatform';
+import { MobileSettingsProvider } from './MobileSettings';
 
 const CLIENT_STORE_PERSIST_INTERVAL_MS = 30_000;
 
@@ -319,7 +320,7 @@ export function ClientRoot({ children }: ClientRootProps) {
                 <CapabilitiesProvider value={serverConfigs.capabilities ?? {}}>
                   <MediaConfigProvider value={serverConfigs.mediaConfig ?? {}}>
                     <AuthMetadataProvider value={serverConfigs.authMetadata}>
-                      {children}
+                      <MobileSettingsProvider>{children}</MobileSettingsProvider>
                     </AuthMetadataProvider>
                   </MediaConfigProvider>
                 </CapabilitiesProvider>
