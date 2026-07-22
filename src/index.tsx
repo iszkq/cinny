@@ -11,8 +11,6 @@ enableMapSet();
 import './index.css';
 
 import { trimTrailingSlash } from './app/utils/common';
-import App from './app/pages/App';
-
 // import i18n (needs to be bundled ;))
 import './app/i18n';
 import { pushSessionToSW } from './sw-session';
@@ -22,6 +20,7 @@ import { applyDesktopStartupPinLock } from './app/utils/pinLock';
 import { isNativeImagePreviewWindow } from './app/utils/nativeImagePreview';
 import { isNativeBibleWindow } from './app/utils/nativeBibleWindow';
 import { initializePWAInstall } from './app/utils/pwaInstall';
+import { DownloadPage } from './app/pages/download';
 
 document.body.classList.add(configClass, varsClass);
 
@@ -32,6 +31,7 @@ const LazyNativeImagePreviewWindow = lazy(async () => ({
 const LazyNativeBibleWindow = lazy(async () => ({
   default: (await import('./app/components/bible/NativeBibleWindow')).NativeBibleWindow,
 }));
+const LazyApp = lazy(() => import('./app/pages/App'));
 
 function RootStartupFallback() {
   return (
@@ -55,6 +55,7 @@ const nativeImagePreviewWindow = isDesktopUpdaterSupported() && isNativeImagePre
 const nativeBibleWindow = isDesktopUpdaterSupported() && isNativeBibleWindow();
 const desktopSubWindow = nativeImagePreviewWindow || nativeBibleWindow;
 const fallbackSession = desktopSubWindow ? undefined : getFallbackSession();
+const webDownloadPage = /(?:^|\/)download\/?$/i.test(window.location.pathname);
 
 initializePWAInstall();
 
@@ -95,6 +96,32 @@ if (!desktopSubWindow && 'serviceWorker' in navigator) {
   });
 }
 
+const renderRootApp = () => {
+  if (webDownloadPage) return <DownloadPage />;
+
+  if (nativeImagePreviewWindow) {
+    return (
+      <Suspense fallback={<RootStartupFallback />}>
+        <LazyNativeImagePreviewWindow />
+      </Suspense>
+    );
+  }
+
+  if (nativeBibleWindow) {
+    return (
+      <Suspense fallback={<RootStartupFallback />}>
+        <LazyNativeBibleWindow />
+      </Suspense>
+    );
+  }
+
+  return (
+    <Suspense fallback={<RootStartupFallback />}>
+      <LazyApp />
+    </Suspense>
+  );
+};
+
 const mountApp = () => {
   const rootContainer = document.getElementById('root');
 
@@ -104,19 +131,7 @@ const mountApp = () => {
   }
 
   const root = createRoot(rootContainer);
-  root.render(
-    nativeImagePreviewWindow ? (
-      <Suspense fallback={<RootStartupFallback />}>
-        <LazyNativeImagePreviewWindow />
-      </Suspense>
-    ) : nativeBibleWindow ? (
-      <Suspense fallback={<RootStartupFallback />}>
-        <LazyNativeBibleWindow />
-      </Suspense>
-    ) : (
-      <App />
-    )
-  );
+  root.render(renderRootApp());
 };
 
 mountApp();

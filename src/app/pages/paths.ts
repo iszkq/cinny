@@ -1,4 +1,5 @@
 export const ROOT_PATH = '/';
+export const DOWNLOAD_PATH = '/download/';
 
 export type LoginPathSearchParams = {
   username?: string;

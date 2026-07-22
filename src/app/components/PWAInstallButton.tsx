@@ -42,7 +42,7 @@ const getInstallGuide = (platform: PWAInstallPlatform, inAppBrowser: boolean): I
         '点击浏览器右上角菜单。',
         platform === 'ios'
           ? '选择“在 Safari 中打开”。'
-          : '选择“在浏览器中打开”，推荐使用 Chrome 或 Edge。',
+          : '选择“在浏览器中打开”或“在系统浏览器中打开”。',
         `回到 ${APP_DISPLAY_NAME} 后，再点击“安装应用”。`,
       ],
     };
@@ -66,20 +66,20 @@ const getInstallGuide = (platform: PWAInstallPlatform, inAppBrowser: boolean): I
       title: `将${APP_DISPLAY_NAME}添加到主屏幕`,
       description: '当前浏览器没有提供一键安装窗口，可以从浏览器菜单手动添加。',
       steps: [
-        '推荐使用最新版 Chrome 或 Edge 打开当前页面。',
         '点击浏览器右上角菜单。',
-        '选择“安装应用”或“添加到主屏幕”。',
+        '选择“安装应用”“添加到主屏幕”或“添加页面到”。',
+        '不同品牌浏览器的菜单名称可能不同；完成后从手机桌面打开即可。',
       ],
     };
   }
 
   return {
     title: `安装${APP_DISPLAY_NAME}桌面应用`,
-    description: '当前浏览器没有提供一键安装窗口，可以从浏览器菜单手动安装。',
+    description: '当前浏览器没有提供一键安装窗口，可以尝试浏览器菜单或选择桌面客户端。',
     steps: [
-      '请使用最新版 Chrome 或 Edge，并退出 InPrivate/无痕模式。',
-      '点击浏览器右上角菜单。',
-      '选择“应用”→“将此站点作为应用安装”。',
+      '先退出 InPrivate/无痕模式，再打开浏览器菜单。',
+      '查找“安装应用”“添加到程序坞”或“将此站点作为应用安装”。',
+      '如果当前浏览器不支持 PWA，请在下载中心选择 Windows 客户端或继续使用网页版。',
     ],
   };
 };
