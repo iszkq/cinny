@@ -1,4 +1,5 @@
 /* eslint-disable import/first */
+import './polyfills';
 import React, { Suspense, lazy } from 'react';
 import { createRoot } from 'react-dom/client';
 import { enableMapSet } from 'immer';
@@ -20,7 +21,7 @@ import { applyDesktopStartupPinLock } from './app/utils/pinLock';
 import { isNativeImagePreviewWindow } from './app/utils/nativeImagePreview';
 import { isNativeBibleWindow } from './app/utils/nativeBibleWindow';
 import { initializePWAInstall } from './app/utils/pwaInstall';
-import { initializeAndroidAppShell } from './app/utils/nativePlatform';
+import { initializeAndroidAppShell, isAndroidApp } from './app/utils/nativePlatform';
 import { DownloadPage } from './app/pages/download';
 
 document.body.classList.add(configClass, varsClass);
@@ -67,7 +68,7 @@ if (isDesktopUpdaterSupported() && !desktopSubWindow) {
 }
 
 // Register Service Worker
-if (!desktopSubWindow && 'serviceWorker' in navigator) {
+if (!desktopSubWindow && !isAndroidApp() && 'serviceWorker' in navigator) {
   const swUrl =
     import.meta.env.MODE === 'production'
       ? `${trimTrailingSlash(import.meta.env.BASE_URL)}/sw.js`

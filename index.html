@@ -172,6 +172,22 @@
       (() => {
         window.global ||= window;
 
+        if (typeof Promise.withResolvers !== 'function') {
+          Object.defineProperty(Promise, 'withResolvers', {
+            configurable: true,
+            writable: true,
+            value: function withResolvers() {
+              let resolve;
+              let reject;
+              const promise = new Promise((promiseResolve, promiseReject) => {
+                resolve = promiseResolve;
+                reject = promiseReject;
+              });
+              return { promise, resolve, reject };
+            },
+          });
+        }
+
         const darkThemeIds = new Set(['dark-theme', 'butter-theme']);
         let bootTheme = 'light';
 

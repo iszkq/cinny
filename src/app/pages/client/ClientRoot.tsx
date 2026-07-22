@@ -15,7 +15,14 @@ import {
 } from 'folds';
 import { HttpApiEvent, HttpApiEventHandlerMap, MatrixClient, SyncState } from 'matrix-js-sdk';
 import FocusTrap from 'focus-trap-react';
-import React, { MouseEventHandler, ReactNode, useCallback, useEffect, useState } from 'react';
+import React, {
+  MouseEventHandler,
+  ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import {
   clearCacheAndReload,
   clearResourceCaches,
@@ -24,6 +31,7 @@ import {
   clearLoginData,
   initClient,
   logoutClient,
+  persistClientStore,
   startClient,
 } from '../../../client/initMatrix';
 import { SplashScreen } from '../../components/splash-screen';
@@ -174,6 +182,7 @@ type ClientRootProps = {
 };
 export function ClientRoot({ children }: ClientRootProps) {
   const [loading, setLoading] = useState(() => isDesktopUpdaterSupported());
+  const initialSyncPersistedRef = useRef(false);
   const { baseUrl, userId } = getFallbackSession() ?? {};
 
   const [loadState, loadMatrix] = useAsyncCallback<MatrixClient, Error, []>(
@@ -193,6 +202,25 @@ export function ClientRoot({ children }: ClientRootProps) {
   useLogoutListener(mx);
 
   useEffect(() => {
+    if (!mx) return undefined;
+
+    const persist = () => {
+      persistClientStore(mx);
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') persist();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pagehide', persist);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pagehide', persist);
+    };
+  }, [mx]);
+
+  useEffect(() => {
     if (loadState.status === AsyncStatus.Idle) {
       loadMatrix();
     }
@@ -208,16 +236,19 @@ export function ClientRoot({ children }: ClientRootProps) {
     mx,
     useCallback(
       (state) => {
-        if (!loading) return;
         if (
           state === SyncState.Prepared ||
           state === SyncState.Syncing ||
           state === SyncState.Catchup
         ) {
-          setLoading(false);
+          if (mx && !initialSyncPersistedRef.current) {
+            initialSyncPersistedRef.current = true;
+            persistClientStore(mx);
+          }
+          if (loading) setLoading(false);
         }
       },
-      [loading]
+      [loading, mx]
     )
   );
 

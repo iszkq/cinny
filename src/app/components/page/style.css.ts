@@ -9,7 +9,20 @@ import {
 } from '../../theme/appearance';
 
 export const PageSurface = style({
+  width: '100%',
+  height: '100%',
+  minWidth: 0,
+  minHeight: 0,
+  overflow: 'hidden',
   background: `var(${CONTENT_BG_VAR}, ${color.Surface.Container})`,
+});
+
+export const PageRoot = style({
+  width: '100%',
+  height: '100%',
+  minWidth: 0,
+  minHeight: 0,
+  overflow: 'hidden',
 });
 
 export const PageNav = recipe({

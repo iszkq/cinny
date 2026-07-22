@@ -6,6 +6,40 @@ export const ModalWide = style({
   minHeight: '90vh',
 });
 
+export const AppModalCenter = style({
+  minWidth: 0,
+  minHeight: 0,
+  overflow: 'hidden',
+  '@media': {
+    'screen and (max-width: 750px)': {
+      width: '100vw',
+      height: 'var(--app-height, 100dvh)',
+      padding: 0,
+      alignItems: 'stretch',
+      justifyContent: 'stretch',
+    },
+  },
+});
+
+export const AppModal = style({
+  minWidth: 0,
+  minHeight: 0,
+  maxWidth: 'calc(100vw - 24px)',
+  maxHeight: 'calc(var(--app-height, 100dvh) - 24px)',
+  overflow: 'hidden',
+  '@media': {
+    'screen and (max-width: 750px)': {
+      width: '100vw',
+      height: 'var(--app-height, 100dvh)',
+      minWidth: '100vw',
+      minHeight: 'var(--app-height, 100dvh)',
+      maxWidth: '100vw',
+      maxHeight: 'var(--app-height, 100dvh)',
+      borderRadius: 0,
+    },
+  },
+});
+
 export const ImageViewerBackdrop = style({
   background: 'rgba(248, 250, 252, 0.36)',
   backdropFilter: 'none !important',

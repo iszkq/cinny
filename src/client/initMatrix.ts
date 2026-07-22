@@ -80,6 +80,9 @@ export const startClient = async (mx: MatrixClient) => {
   });
 };
 
+export const persistClientStore = (mx: MatrixClient): Promise<void> =>
+  mx.store.save(true).catch(() => undefined);
+
 const clearAllServiceWorkerCaches = async () => {
   if (typeof window === 'undefined' || typeof window.caches === 'undefined') {
     return;

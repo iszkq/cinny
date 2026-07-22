@@ -30,7 +30,7 @@ export function PageRoot({ nav, children }: PageRootProps) {
   return (
     <Box
       grow="Yes"
-      className={ContainerColor({ variant: 'Background' })}
+      className={classNames(ContainerColor({ variant: 'Background' }), css.PageRoot)}
       style={{ position: 'relative', minWidth: 0 }}
     >
       {nav}
@@ -61,9 +61,9 @@ export function PageNav({
   const isMobile = screenSize === ScreenSize.Mobile && !desktopLayout;
   const [desktopPageNavWidth, setDesktopPageNavWidth] = useAtom(desktopPageNavWidthAtom);
   const [resizing, setResizing] = useState(false);
-  const resizeRef = useRef<
-    { pointerId: number; startX: number; startWidth: number } | undefined
-  >(undefined);
+  const resizeRef = useRef<{ pointerId: number; startX: number; startWidth: number } | undefined>(
+    undefined
+  );
 
   const handleResizePointerDown: PointerEventHandler<HTMLDivElement> = (evt) => {
     if (!resizable || !desktopLayout) return;
@@ -85,9 +85,7 @@ export function PageNav({
     const state = resizeRef.current;
     if (!state || evt.pointerId !== state.pointerId) return;
 
-    setDesktopPageNavWidth(
-      clampDesktopPageNavWidth(state.startWidth + evt.clientX - state.startX)
-    );
+    setDesktopPageNavWidth(clampDesktopPageNavWidth(state.startWidth + evt.clientX - state.startX));
   };
 
   const handleResizePointerEnd: PointerEventHandler<HTMLDivElement> = (evt) => {

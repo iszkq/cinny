@@ -8,10 +8,7 @@ import { useZoom } from '../../hooks/useZoom';
 import { fetchMediaWithAuth } from '../../utils/matrix';
 import { ScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
 import { saveDownloadedFile } from '../../utils/saveDownloadedFile';
-import {
-  recognizeImageTextWithAihubmix,
-  type AihubmixImageOcrConfig,
-} from '../../utils/ai';
+import { recognizeImageTextWithAihubmix, type AihubmixImageOcrConfig } from '../../utils/ai';
 import { copyToClipboard } from '../../utils/dom';
 
 export type ImageViewerProps = {
@@ -601,10 +598,10 @@ export const ImageViewer = as<'div', ImageViewerProps>(
     const imageCursor = panEnabled
       ? cursor
       : mouseSwipeEnabled
-        ? swiping
-          ? 'grabbing'
-          : 'grab'
-        : 'default';
+      ? swiping
+        ? 'grabbing'
+        : 'grab'
+      : 'default';
     const handleImageMouseDown = (
       panEnabled ? onMouseDown : mouseSwipeEnabled ? handleSwipeMouseDown : undefined
     ) as React.MouseEventHandler<HTMLImageElement> | undefined;
@@ -643,54 +640,94 @@ export const ImageViewer = as<'div', ImageViewerProps>(
                 >
                   <Icon size="50" src={Icons.Cross} />
                 </IconButton>
-                <Text size="T300" truncate title={alt}>
-                  {alt}
-                </Text>
+                <Box grow="Yes" style={{ minWidth: 0 }}>
+                  <Text size="T300" truncate title={alt}>
+                    {alt}
+                  </Text>
+                </Box>
               </Box>
 
               <Box
+                className={css.ImageViewerMobileToolbar}
                 alignItems="Center"
-                gap="200"
-                justifyContent="SpaceBetween"
-                style={{ width: '100%', minWidth: 0, flexWrap: 'wrap' }}
+                gap="100"
+                style={{ width: '100%', minWidth: 0 }}
               >
-                <Box alignItems="Center" gap="200" style={{ minWidth: 0 }}>
-                  <Chip
-                    variant={displayRotation !== 0 ? 'Success' : 'SurfaceVariant'}
-                    radii="Pill"
-                    onClick={() => setRotation(0)}
-                  >
-                    <Text size="B300">{`${displayRotation}\u00b0`}</Text>
-                  </Chip>
-                </Box>
-
-                <Box
-                  alignItems="Center"
-                  gap="200"
-                  style={{ flexWrap: 'wrap', justifyContent: 'flex-end' }}
+                <IconButton
+                  variant={zoom < 1 ? 'Success' : 'SurfaceVariant'}
+                  outlined={zoom < 1}
+                  size="300"
+                  radii="Pill"
+                  onClick={zoomOut}
+                  aria-label={'\u7f29\u5c0f'}
                 >
-                  <Chip variant="SurfaceVariant" radii="Pill" onClick={rotateLeft}>
-                    <Text size="B300">{'\u5de6\u8f6c'}</Text>
-                  </Chip>
-                  <Chip variant="SurfaceVariant" radii="Pill" onClick={rotateRight}>
-                    <Text size="B300">{'\u53f3\u8f6c'}</Text>
-                  </Chip>
+                  <Icon size="50" src={Icons.Minus} />
+                </IconButton>
 
-                  {imageOcrConfig && (
-                    <Chip
-                      className={classNames(
-                        css.ImageViewerOcrButton,
-                        ocrState.status === 'success' && css.ImageViewerOcrButtonSuccess
-                      )}
-                      variant={ocrState.status === 'success' ? 'Success' : 'SurfaceVariant'}
-                      radii="Pill"
-                      onClick={handleRecognizeText}
-                      before={<span className={css.ImageViewerOcrGlyph} aria-hidden="true" />}
-                    >
-                      <Text size="B300">{'\u8bc6\u522b\u6587\u5b57'}</Text>
-                    </Chip>
-                  )}
-                </Box>
+                <Chip variant="SurfaceVariant" radii="Pill" onClick={() => setZoom(1)}>
+                  <Text size="B300">{Math.round(zoom * 100)}%</Text>
+                </Chip>
+
+                <IconButton
+                  variant={zoom > 1 ? 'Success' : 'SurfaceVariant'}
+                  outlined={zoom > 1}
+                  size="300"
+                  radii="Pill"
+                  onClick={zoomIn}
+                  aria-label={'\u653e\u5927'}
+                >
+                  <Icon size="50" src={Icons.Plus} />
+                </IconButton>
+
+                <Chip
+                  variant={viewMode === 'actual' ? 'Success' : 'SurfaceVariant'}
+                  radii="Pill"
+                  onClick={toggleViewMode}
+                >
+                  <Text size="B300">{viewMode === 'fit' ? '\u9002\u5e94' : '\u539f\u56fe'}</Text>
+                </Chip>
+
+                <Chip variant="SurfaceVariant" radii="Pill" onClick={rotateLeft}>
+                  <Text size="B300">{'\u5de6\u8f6c'}</Text>
+                </Chip>
+
+                <Chip
+                  variant={displayRotation !== 0 ? 'Success' : 'SurfaceVariant'}
+                  radii="Pill"
+                  onClick={() => setRotation(0)}
+                >
+                  <Text size="B300">{`${displayRotation}\u00b0`}</Text>
+                </Chip>
+
+                <Chip variant="SurfaceVariant" radii="Pill" onClick={rotateRight}>
+                  <Text size="B300">{'\u53f3\u8f6c'}</Text>
+                </Chip>
+
+                {imageOcrConfig && (
+                  <Chip
+                    className={classNames(
+                      css.ImageViewerOcrButton,
+                      ocrState.status === 'success' && css.ImageViewerOcrButtonSuccess
+                    )}
+                    variant={ocrState.status === 'success' ? 'Success' : 'SurfaceVariant'}
+                    radii="Pill"
+                    onClick={handleRecognizeText}
+                    before={<span className={css.ImageViewerOcrGlyph} aria-hidden="true" />}
+                  >
+                    <Text size="B300">{'\u8bc6\u522b\u6587\u5b57'}</Text>
+                  </Chip>
+                )}
+
+                {!loading && (
+                  <Chip
+                    variant="Primary"
+                    onClick={handleDownload}
+                    radii="Pill"
+                    before={<Icon size="50" src={Icons.Download} />}
+                  >
+                    <Text size="B300">{'\u4e0b\u8f7d'}</Text>
+                  </Chip>
+                )}
               </Box>
             </Box>
           ) : (
@@ -777,8 +814,8 @@ export const ImageViewer = as<'div', ImageViewerProps>(
                     radii="300"
                     onClick={handleRecognizeText}
                     before={<span className={css.ImageViewerOcrGlyph} aria-hidden="true" />}
-                    >
-                      <Text size="B300">{'\u8bc6\u522b\u6587\u5b57'}</Text>
+                  >
+                    <Text size="B300">{'\u8bc6\u522b\u6587\u5b57'}</Text>
                   </Chip>
                 )}
 
@@ -891,9 +928,7 @@ export const ImageViewer = as<'div', ImageViewerProps>(
                   ...displayImageSizeStyle,
                   transform: `translate(${translateX}px, ${translateY}px) rotate(${rotation}deg) scale(${zoom})`,
                   transition:
-                    swiping || cursor === 'grabbing' || touchInteractionActive
-                      ? 'none'
-                      : undefined,
+                    swiping || cursor === 'grabbing' || touchInteractionActive ? 'none' : undefined,
                   touchAction: 'none',
                   WebkitTouchCallout: 'default',
                 }}
@@ -985,9 +1020,7 @@ export const ImageViewer = as<'div', ImageViewerProps>(
                     radii="300"
                     onClick={handleCopyOcrText}
                   >
-                    <Text size="B300">
-                      {ocrCopied ? '\u5df2\u590d\u5236' : '\u590d\u5236'}
-                    </Text>
+                    <Text size="B300">{ocrCopied ? '\u5df2\u590d\u5236' : '\u590d\u5236'}</Text>
                   </Button>
                 )}
                 {ocrState.status === 'error' && (

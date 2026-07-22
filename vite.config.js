@@ -11,6 +11,11 @@ import fs from 'fs';
 import path from 'path';
 import buildConfig from './build.config';
 
+const androidAppBuild = process.env.VITE_ANDROID_APP === 'true';
+const androidBibleDisabledModule = path
+  .resolve('src/app/utils/androidBibleDisabled.ts')
+  .replace(/\\/g, '/');
+
 const copyFiles = {
   targets: [
     {
@@ -104,6 +109,20 @@ export default defineConfig({
       // Allow serving files from one level up to the project root
       allow: ['..'],
     },
+  },
+  resolve: {
+    alias: androidAppBuild
+      ? [
+          {
+            find: './app/components/bible/NativeBibleWindow',
+            replacement: androidBibleDisabledModule,
+          },
+          {
+            find: './sidebar/BibleTab',
+            replacement: androidBibleDisabledModule,
+          },
+        ]
+      : [],
   },
   plugins: [
     serverMatrixSdkCryptoWasm('/node_modules/.vite/deps/pkg/matrix_sdk_crypto_wasm_bg.wasm'),

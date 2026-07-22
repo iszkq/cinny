@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { lazy, Suspense, useRef } from 'react';
 import { Scroll } from 'folds';
 
 import {
@@ -16,10 +16,14 @@ import {
   SettingsTab,
   UnverifiedTab,
   SearchTab,
-  BibleTab,
   FavoritesTab,
 } from './sidebar';
 import { CreateTab } from './sidebar/CreateTab';
+
+const ANDROID_APK_BUILD = import.meta.env.VITE_ANDROID_APP === 'true';
+const LazyBibleTab = ANDROID_APK_BUILD
+  ? undefined
+  : lazy(async () => ({ default: (await import('./sidebar/BibleTab')).BibleTab }));
 
 export function SidebarNav() {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -45,7 +49,11 @@ export function SidebarNav() {
           <>
             <SidebarStackSeparator />
             <SidebarStack>
-              <BibleTab />
+              {LazyBibleTab && (
+                <Suspense fallback={null}>
+                  <LazyBibleTab />
+                </Suspense>
+              )}
               <FavoritesTab />
               <SearchTab />
               <UnverifiedTab />

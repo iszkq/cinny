@@ -110,6 +110,10 @@ export const selectFile = <M extends boolean | undefined = undefined>(
     };
 
     const focusHandler = () => {
+      // Android file and camera activities can return focus before their result is
+      // delivered to the WebView. Resolving here would silently discard that file.
+      if (document.documentElement.dataset.cinnyAndroidApp === 'true') return;
+
       window.setTimeout(() => {
         if (
           !settled &&

@@ -2,6 +2,7 @@ import React, { ReactNode } from 'react';
 import FocusTrap from 'focus-trap-react';
 import { Modal, Overlay, OverlayBackdrop, OverlayCenter } from 'folds';
 import { stopPropagation } from '../utils/keyboard';
+import { AppModal, AppModalCenter } from '../styles/Modal.css';
 
 type Modal500Props = {
   requestClose: () => void;
@@ -10,7 +11,7 @@ type Modal500Props = {
 export function Modal500({ requestClose, children }: Modal500Props) {
   return (
     <Overlay open backdrop={<OverlayBackdrop />}>
-      <OverlayCenter>
+      <OverlayCenter className={AppModalCenter}>
         <FocusTrap
           focusTrapOptions={{
             initialFocus: false,
@@ -19,7 +20,7 @@ export function Modal500({ requestClose, children }: Modal500Props) {
             escapeDeactivates: stopPropagation,
           }}
         >
-          <Modal size="500" variant="Background">
+          <Modal className={AppModal} size="500" variant="Background">
             {children}
           </Modal>
         </FocusTrap>

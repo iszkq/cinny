@@ -1,4 +1,4 @@
-import { style } from '@vanilla-extract/css';
+import { globalStyle, style } from '@vanilla-extract/css';
 import { DefaultReset, config } from 'folds';
 
 export const ImageViewer = style([
@@ -43,7 +43,9 @@ export const ImageViewerHeader = style([
         paddingRight: `max(${config.space.S200}, env(safe-area-inset-right, 0px))`,
       },
       'screen and (max-width: 750px)': {
-        paddingTop: 'calc(env(safe-area-inset-top, 0px) + 24px)',
+        height: 'auto',
+        minHeight: 0,
+        paddingTop: `max(${config.space.S200}, env(safe-area-inset-top, 0px))`,
         paddingLeft: `max(${config.space.S200}, env(safe-area-inset-left, 0px))`,
         paddingRight: `max(${config.space.S200}, env(safe-area-inset-right, 0px))`,
         paddingBottom: config.space.S200,
@@ -51,6 +53,27 @@ export const ImageViewerHeader = style([
     },
   },
 ]);
+
+export const ImageViewerMobileToolbar = style([
+  DefaultReset,
+  {
+    overflowX: 'auto',
+    overflowY: 'hidden',
+    overscrollBehaviorX: 'contain',
+    WebkitOverflowScrolling: 'touch',
+    scrollbarWidth: 'none',
+    paddingBottom: 2,
+    selectors: {
+      '&::-webkit-scrollbar': {
+        display: 'none',
+      },
+    },
+  },
+]);
+
+globalStyle(`${ImageViewerMobileToolbar} > *`, {
+  flexShrink: 0,
+});
 
 export const ImageViewerHeaderDraggable = style({
   cursor: 'grab',
@@ -73,8 +96,7 @@ export const ImageViewerContent = style([
     minHeight: 0,
     overflow: 'hidden',
     padding: config.space.S300,
-    background:
-      'linear-gradient(180deg, rgba(255, 255, 255, 0.42), rgba(241, 245, 249, 0.38))',
+    background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.42), rgba(241, 245, 249, 0.38))',
     '@media': {
       'screen and (max-width: 750px)': {
         padding: config.space.S100,
@@ -172,8 +194,7 @@ export const ImageViewerLoading = style([
     inset: 0,
     zIndex: 3,
     pointerEvents: 'none',
-    background:
-      'linear-gradient(180deg, rgba(255, 255, 255, 0.2), rgba(226, 232, 240, 0.42))',
+    background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.2), rgba(226, 232, 240, 0.42))',
   },
 ]);
 
@@ -330,8 +351,7 @@ export const WindowRestoreGlyph = style({
       border: '1.6px solid currentColor',
       borderRadius: '3px',
       background: 'currentColor',
-      clipPath:
-        'polygon(0 0, 100% 0, 100% 1.6px, 1.6px 1.6px, 1.6px 100%, 0 100%)',
+      clipPath: 'polygon(0 0, 100% 0, 100% 1.6px, 1.6px 1.6px, 1.6px 100%, 0 100%)',
     },
   },
 });

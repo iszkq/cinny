@@ -178,3 +178,10 @@ select:-webkit-autofill:focus {
 audio:not([controls]) {
   display: none !important;
 }
+
+/* Older Android WebViews render large translucent surfaces slowly. The APK uses
+   solid surfaces so scrolling settings and media panels stays responsive. */
+html[data-cinny-android-app='true'] * {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
