@@ -1,4 +1,5 @@
 import { revokeObjectUrlWhenPossible } from './objectUrlRetainer';
+import { isAndroidApp } from './nativePlatform';
 
 type DeviceMemoryNavigator = Navigator & {
   deviceMemory?: number;
@@ -14,6 +15,20 @@ const getSessionMediaLimits = () => {
     typeof navigator === 'undefined'
       ? undefined
       : (navigator as DeviceMemoryNavigator).deviceMemory;
+
+  if (isAndroidApp()) {
+    if (typeof deviceMemory === 'number' && deviceMemory <= 4) {
+      return {
+        maxItems: 48,
+        maxBytes: 32 * 1024 * 1024,
+      };
+    }
+
+    return {
+      maxItems: 96,
+      maxBytes: 64 * 1024 * 1024,
+    };
+  }
 
   if (typeof deviceMemory === 'number') {
     if (deviceMemory <= 4) {

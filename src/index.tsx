@@ -20,6 +20,7 @@ import { applyDesktopStartupPinLock } from './app/utils/pinLock';
 import { isNativeImagePreviewWindow } from './app/utils/nativeImagePreview';
 import { isNativeBibleWindow } from './app/utils/nativeBibleWindow';
 import { initializePWAInstall } from './app/utils/pwaInstall';
+import { initializeAndroidAppShell } from './app/utils/nativePlatform';
 import { DownloadPage } from './app/pages/download';
 
 document.body.classList.add(configClass, varsClass);
@@ -58,6 +59,7 @@ const fallbackSession = desktopSubWindow ? undefined : getFallbackSession();
 const webDownloadPage = /(?:^|\/)download\/?$/i.test(window.location.pathname);
 
 initializePWAInstall();
+initializeAndroidAppShell().catch(() => undefined);
 
 if (isDesktopUpdaterSupported() && !desktopSubWindow) {
   document.documentElement.dataset.cinnyDesktopApp = 'true';

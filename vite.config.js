@@ -124,7 +124,7 @@ export default defineConfig({
       injectRegister: false,
       manifest: false,
       injectManifest: {
-        injectionPoint: undefined,
+        maximumFileSizeToCacheInBytes: 12 * 1024 * 1024,
       },
       devOptions: {
         enabled: true,

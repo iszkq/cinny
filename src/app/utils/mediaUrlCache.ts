@@ -1,6 +1,7 @@
 import { revokeObjectUrlWhenPossible } from './objectUrlRetainer';
 import { fetchMediaWithAuth } from './matrix';
 import { getFallbackSession } from '../state/sessions';
+import { isAndroidApp } from './nativePlatform';
 
 const LEGACY_PERSISTENT_MEDIA_CACHE = 'cinny-auth-media-v2';
 const PERSISTENT_MEDIA_CACHE_PREFIX = 'cinny-auth-media-v3';
@@ -18,6 +19,27 @@ const getObjectUrlMediaLimits = () => {
     typeof navigator === 'undefined'
       ? undefined
       : (navigator as DeviceMemoryNavigator).deviceMemory;
+
+  if (isAndroidApp()) {
+    if (typeof deviceMemory === 'number' && deviceMemory <= 4) {
+      return {
+        maxItems: 192,
+        maxBytes: 48 * 1024 * 1024,
+      };
+    }
+
+    if (typeof deviceMemory === 'number' && deviceMemory >= 8) {
+      return {
+        maxItems: 768,
+        maxBytes: 128 * 1024 * 1024,
+      };
+    }
+
+    return {
+      maxItems: 512,
+      maxBytes: 96 * 1024 * 1024,
+    };
+  }
 
   if (typeof deviceMemory === 'number') {
     if (deviceMemory <= 4) {
@@ -71,6 +93,13 @@ const getMediaPreloadConcurrency = () => {
     typeof navigator === 'undefined'
       ? undefined
       : (navigator as DeviceMemoryNavigator).deviceMemory;
+
+  if (isAndroidApp()) {
+    return {
+      persistent: 2,
+      objectUrl: typeof deviceMemory === 'number' && deviceMemory >= 8 ? 4 : 3,
+    };
+  }
 
   if (typeof deviceMemory === 'number' && deviceMemory <= 4) {
     return {

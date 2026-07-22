@@ -1,4 +1,5 @@
 import { isDesktopUpdaterSupported } from './desktopUpdater';
+import { isNativeApp } from './nativePlatform';
 
 type BeforeInstallPromptChoice = {
   outcome: 'accepted' | 'dismissed';
@@ -97,7 +98,7 @@ export const getPWAInstallSnapshot = (): PWAInstallSnapshot => {
     inAppBrowser: isInAppBrowser(),
     installed: isStandalone(),
     platform: getPlatform(),
-    supported: !isDesktopUpdaterSupported(),
+    supported: !isDesktopUpdaterSupported() && !isNativeApp(),
   };
 };
 

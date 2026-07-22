@@ -15,6 +15,11 @@ if (!version) {
 
 const root = path.resolve(__dirname, '..');
 const newVersionTag = `v${version}`;
+const [androidMajor = 0, androidMinor = 0, androidPatch = 0] = version
+  .split(/[.+-]/)
+  .slice(0, 3)
+  .map((segment) => Number.parseInt(segment, 10) || 0);
+const androidVersionCode = androidMajor * 1_000_000 + androidMinor * 1_000 + androidPatch;
 
 const updateFile = (relativePath, transform, successMessage) => {
   const absPath = path.join(root, relativePath);
@@ -54,6 +59,15 @@ updateFile(
   'src-tauri/tauri.conf.json',
   (content) => content.replace(/"version": "\d+\.\d+\.\d+"/, `"version": "${version}"`),
   `Updated src-tauri/tauri.conf.json -> ${version}`
+);
+
+updateFile(
+  'android/app/build.gradle',
+  (content) =>
+    content
+      .replace(/^\s*versionCode\s+\d+$/m, `        versionCode ${androidVersionCode}`)
+      .replace(/^\s*versionName\s+"[^"]+"$/m, `        versionName "${version}"`),
+  `Updated android/app/build.gradle -> ${version} (${androidVersionCode})`
 );
 
 [
