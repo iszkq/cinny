@@ -1,4 +1,4 @@
-import React, { ReactNode, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import classNames from 'classnames';
 import { Box, Button, Icon, Icons, Spinner, Text } from 'folds';
 import { APP_DISPLAY_NAME, APP_LOGO_URL, APP_TAGLINE, APP_VERSION } from '../../constants/branding';
@@ -9,218 +9,51 @@ import {
   fetchLatestDesktopRelease,
   normalizeDesktopUpdateVersion,
 } from '../../utils/desktopUpdater';
+import iosInstallGuideImage from './assets/ios-install-guide.png';
+import windowsInstallGuideImage from './assets/windows-install-guide.png';
 import * as css from './DownloadPage.css';
 
 const RELEASE_PAGE_URL = `${PROJECT_SOURCE_URL}/releases/latest`;
 const APPLE_ADD_TO_HOME_SCREEN_URL =
   'https://support.apple.com/zh-cn/guide/iphone/iph42ab2f3a7/ios';
 
-type GuideStepProps = {
-  number: number;
-  title: string;
-  description: string;
-  children: ReactNode;
-};
+function GuideArtwork({ src, alt, type }: { src: string; alt: string; type: 'ios' | 'windows' }) {
+  const dimensions = type === 'ios' ? { width: 1024, height: 1536 } : { width: 1590, height: 989 };
 
-function GuideStep({ number, title, description, children }: GuideStepProps) {
   return (
-    <article className={css.GuideStep}>
-      <Box className={css.GuideStepHeading} alignItems="Start" gap="200">
-        <span className={css.StepNumber}>{number}</span>
-        <Box direction="Column" gap="50">
-          <Text size="H4">{title}</Text>
-          <Text size="T200" priority="300">
-            {description}
-          </Text>
-        </Box>
-      </Box>
-      <div className={css.GuideVisual}>{children}</div>
-    </article>
-  );
-}
-
-function WindowFrame({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <div className={css.WindowFrame}>
-      <div className={css.WindowTitleBar}>
-        <span className={css.WindowAppDot} />
-        <span>{title}</span>
-        <span className={css.WindowControls}>— · □ · ×</span>
+    <figure className={css.GuideArtworkFigure}>
+      <div className={css.GuideArtworkScroller}>
+        <a href={src} target="_blank" rel="noreferrer" aria-label={`${alt}，点击查看原图`}>
+          <img
+            className={classNames(
+              css.GuideArtwork,
+              type === 'ios' ? css.IosGuideArtwork : css.WindowsGuideArtwork
+            )}
+            src={src}
+            alt={alt}
+            width={dimensions.width}
+            height={dimensions.height}
+            loading="eager"
+            decoding="async"
+          />
+        </a>
       </div>
-      <div className={css.WindowBody}>{children}</div>
-    </div>
+      <Text className={css.GuideArtworkHint} size="T200" priority="300" align="Center">
+        可左右滑动查看完整图示，点击图片可打开原图
+      </Text>
+    </figure>
   );
 }
 
 function WindowsGuide() {
   return (
-    <div className={css.GuideGrid}>
-      <GuideStep number={1} title="下载安装包" description="点击页面上方的 Windows 主按钮。">
-        <div className={css.DownloadIllustration}>
-          <div className={css.DownloadFileIcon}>
-            <Icon src={Icons.Download} size="300" />
-          </div>
-          <Box direction="Column" gap="50">
-            <Text size="L400">Starfire_x64-setup.exe</Text>
-            <Text size="T200" priority="300">
-              最新正式版 · 64 位
-            </Text>
-          </Box>
-          <span className={css.MockPrimaryButton}>立即下载</span>
-        </div>
-      </GuideStep>
-
-      <GuideStep number={2} title="运行安装程序" description="打开文件，按提示点击“下一步”。">
-        <WindowFrame title="Starfire 安装">
-          <div className={css.InstallerLayout}>
-            <div className={css.InstallerBrand}>
-              <img src={APP_LOGO_URL} alt="" />
-            </div>
-            <Box className={css.InstallerContent} direction="Column" gap="200">
-              <Text size="H4">欢迎使用星火安装向导</Text>
-              <Text size="T200" priority="300">
-                安装向导会将星火安装到你的电脑。
-              </Text>
-              <Box className={css.MockButtonRow} justifyContent="End" gap="100">
-                <span className={css.MockMutedButton}>取消</span>
-                <span className={css.MockOutlineButton}>下一步</span>
-              </Box>
-            </Box>
-          </div>
-        </WindowFrame>
-      </GuideStep>
-
-      <GuideStep number={3} title="登录你的账号" description="选择家服务器，输入账号和密码。">
-        <WindowFrame title="星火">
-          <Box className={css.LoginMock} direction="Column" gap="150">
-            <Box alignItems="Center" gap="150">
-              <img src={APP_LOGO_URL} alt="" />
-              <Text size="H3">星火</Text>
-            </Box>
-            <span className={css.MockField}>选择家服务器 · ⌄</span>
-            <span className={css.MockField}>用户名</span>
-            <span className={classNames(css.MockPrimaryButton, css.MockWideButton)}>登录</span>
-          </Box>
-        </WindowFrame>
-      </GuideStep>
-
-      <GuideStep number={4} title="以后自动更新" description="也可在“设置 → 关于”中手动检查。">
-        <WindowFrame title="设置 · 关于">
-          <Box className={css.UpdateMock} direction="Column" gap="200">
-            <Box alignItems="Center" gap="150">
-              <img src={APP_LOGO_URL} alt="" />
-              <Box direction="Column">
-                <Text size="H4">{APP_DISPLAY_NAME}</Text>
-                <Text size="T200" priority="300">
-                  当前版本会自动保持最新
-                </Text>
-              </Box>
-            </Box>
-            <Box className={css.UpdateStatus} alignItems="Center" justifyContent="SpaceBetween">
-              <Box direction="Column">
-                <Text size="L400">桌面更新</Text>
-                <Text size="T200" priority="300">
-                  自动检查正式版本
-                </Text>
-              </Box>
-              <span className={css.MockOutlineButton}>检查更新</span>
-            </Box>
-          </Box>
-        </WindowFrame>
-      </GuideStep>
-    </div>
-  );
-}
-
-function SafariBar({ children }: { children?: ReactNode }) {
-  return (
-    <div className={css.PhoneMock}>
-      <div className={css.PhoneStatus}>9:41 · Wi-Fi · ▰</div>
-      <div className={css.SafariAddress}>🔒 chat.221819.best ↻</div>
-      <div className={css.PhonePage}>
-        <Box alignItems="Center" gap="100">
-          <img src={APP_LOGO_URL} alt="" />
-          <Text size="L400">星火</Text>
-        </Box>
-        {children ?? (
-          <>
-            <span className={css.PhoneTextLine} />
-            <span className={css.PhoneField} />
-            <span className={css.PhoneField} />
-          </>
-        )}
-      </div>
-      <div className={css.SafariToolbar}>
-        ‹ · › · <span>□↑</span> · ▢ · •••
-      </div>
-    </div>
+    <GuideArtwork src={windowsInstallGuideImage} alt="Windows 客户端安装四步图示" type="windows" />
   );
 }
 
 function IosGuide() {
   return (
-    <div className={css.GuideGrid}>
-      <GuideStep
-        number={1}
-        title="使用 Safari 打开"
-        description="微信、QQ 内置浏览器不能完整安装。"
-      >
-        <SafariBar />
-      </GuideStep>
-
-      <GuideStep number={2} title="打开共享菜单" description="轻点 Safari 的“•••”，再选择“共享”。">
-        <div className={css.IosActionVisual}>
-          <div className={css.SafariToolbarLarge}>
-            ‹ · › · □↑ · ▢ · <span>•••</span>
-          </div>
-          <div className={css.IosMenu}>
-            <span>书签 · ☆</span>
-            <span>下载项 · ↓</span>
-            <strong>共享 · □↑</strong>
-          </div>
-        </div>
-      </GuideStep>
-
-      <GuideStep number={3} title="添加到主屏幕" description="向下滚动并选择“添加到主屏幕”。">
-        <div className={css.ShareSheet}>
-          <div className={css.ShareApps}>◉ · ● · ✉ · ●</div>
-          <span>拷贝 · ▣</span>
-          <span>加入阅读列表 · ∞</span>
-          <strong>添加到主屏幕 · ⊞</strong>
-          <span>在页面上查找 · ⌕</span>
-        </div>
-      </GuideStep>
-
-      <GuideStep
-        number={4}
-        title="确认添加"
-        description="保留“作为网页 App 打开”，轻点右上角“添加”。"
-      >
-        <div className={css.AddHomeVisual}>
-          <div className={css.AddHomeSheet}>
-            <div className={css.AddHomeHeader}>
-              取消 · 添加到主屏幕 · <strong>添加</strong>
-            </div>
-            <Box alignItems="Center" gap="150">
-              <img src={APP_LOGO_URL} alt="" />
-              <Box direction="Column">
-                <Text size="L400">星火</Text>
-                <Text size="T200" priority="300">
-                  chat.221819.best
-                </Text>
-              </Box>
-            </Box>
-            <div className={css.AddHomeSwitch}>
-              作为网页 App 打开 · <span>●</span>
-            </div>
-          </div>
-          <div className={css.HomeScreenMock}>
-            <img src={APP_LOGO_URL} alt="" />
-            <span>星火</span>
-          </div>
-        </div>
-      </GuideStep>
-    </div>
+    <GuideArtwork src={iosInstallGuideImage} alt="iPhone 和 iPad 添加到主屏幕四步图示" type="ios" />
   );
 }
 
@@ -285,10 +118,11 @@ export function DownloadPage() {
   const version = latestRelease?.version
     ? normalizeDesktopUpdateVersion(latestRelease.version)
     : APP_VERSION;
-  const windowsDownloadUrl = latestRelease?.downloadUrl ?? RELEASE_PAGE_URL;
-  const androidDownloadUrl = latestRelease?.androidDownloadUrl ?? RELEASE_PAGE_URL;
-  const directWindowsDownload = Boolean(latestRelease?.downloadUrl);
-  const directAndroidDownload = Boolean(latestRelease?.androidDownloadUrl);
+  const releaseAssetBaseUrl = `${PROJECT_SOURCE_URL}/releases/download/v${version}`;
+  const windowsDownloadUrl =
+    latestRelease?.downloadUrl ?? `${releaseAssetBaseUrl}/Starfire_${version}_x64-setup.exe`;
+  const androidDownloadUrl =
+    latestRelease?.androidDownloadUrl ?? `${releaseAssetBaseUrl}/Starfire-v${version}.apk`;
 
   return (
     <div ref={viewportRef} className={css.PageViewport}>
@@ -322,6 +156,15 @@ export function DownloadPage() {
                 size="T300"
               >
                 Windows 安装
+              </Text>
+              <Text
+                as="a"
+                className={css.HeaderLink}
+                href="#android-guide"
+                onClick={handleSectionLink('android-guide')}
+                size="T300"
+              >
+                Android
               </Text>
               <Text
                 as="a"
@@ -394,9 +237,7 @@ export function DownloadPage() {
                     </Box>
                     <Icon src={Icons.Download} size="200" />
                   </Box>
-                  <span className={css.PrimaryDownloadLabel}>
-                    {directWindowsDownload ? '立即下载 EXE' : '打开最新发布页'}
-                  </span>
+                  <span className={css.PrimaryDownloadLabel}>立即下载 EXE</span>
                 </a>
 
                 <a
@@ -415,9 +256,7 @@ export function DownloadPage() {
                     </Box>
                     <Icon src={Icons.Download} size="200" />
                   </Box>
-                  <span className={css.PrimaryDownloadLabel}>
-                    {directAndroidDownload ? '立即下载 APK' : '打开最新发布页'}
-                  </span>
+                  <span className={css.PrimaryDownloadLabel}>立即下载 APK</span>
                 </a>
 
                 <Box className={css.ReleaseLine} alignItems="Center" gap="100">

@@ -404,6 +404,62 @@ export const GuidePanelHeader = style({
   },
 });
 
+export const GuideArtworkFigure = style({
+  display: 'flex',
+  flexDirection: 'column',
+  gap: config.space.S200,
+  margin: 0,
+});
+
+export const GuideArtworkScroller = style({
+  width: '100%',
+  overflowX: 'auto',
+  overflowY: 'hidden',
+  background: '#fff',
+  border: '1px solid rgba(70, 88, 112, 0.16)',
+  borderRadius: toRem(16),
+  boxShadow: '0 14px 36px rgba(46, 60, 80, 0.1)',
+  scrollbarWidth: 'thin',
+  WebkitOverflowScrolling: 'touch',
+});
+globalStyle(`${GuideArtworkScroller} > a`, {
+  display: 'block',
+  width: '100%',
+});
+
+export const GuideArtwork = style({
+  display: 'block',
+  width: '100%',
+  height: 'auto',
+});
+
+export const WindowsGuideArtwork = style({
+  '@media': {
+    'screen and (max-width: 750px)': {
+      minWidth: toRem(720),
+    },
+  },
+});
+
+export const IosGuideArtwork = style({
+  maxWidth: toRem(1000),
+  margin: '0 auto',
+  '@media': {
+    'screen and (max-width: 750px)': {
+      minWidth: toRem(620),
+    },
+  },
+});
+
+export const GuideArtworkHint = style({
+  display: 'none',
+  '@media': {
+    'screen and (max-width: 750px)': {
+      display: 'block',
+    },
+  },
+});
+
 export const GuidePlatformIcon = style({
   display: 'inline-flex',
   alignItems: 'center',

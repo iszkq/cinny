@@ -129,66 +129,122 @@ export function PWAInstallButton({ children, ...buttonProps }: PWAInstallButtonP
       </Button>
 
       {guideOpen && (
-        <Overlay open backdrop={<OverlayBackdrop />}>
-          <OverlayCenter>
-            <FocusTrap
-              focusTrapOptions={{
-                initialFocus: false,
-                onDeactivate: () => setGuideOpen(false),
-                clickOutsideDeactivates: true,
-                escapeDeactivates: stopPropagation,
+        <Overlay
+          open
+          container={document.body}
+          backdrop={
+            <OverlayBackdrop
+              style={{
+                position: 'fixed',
+                backgroundColor: 'rgba(12, 20, 32, 0.58)',
+                backdropFilter: 'blur(4px)',
               }}
-            >
-              <Dialog
-                variant="Surface"
-                style={{
-                  width: `min(${toRem(420)}, calc(100vw - ${toRem(32)}))`,
-                  maxHeight: 'calc(var(--app-height, 100dvh) - 32px)',
+            />
+          }
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 100000,
+            padding: `max(${toRem(12)}, env(safe-area-inset-top, 0px)) max(${toRem(
+              12
+            )}, env(safe-area-inset-right, 0px)) max(${toRem(
+              12
+            )}, env(safe-area-inset-bottom, 0px)) max(${toRem(
+              12
+            )}, env(safe-area-inset-left, 0px))`,
+          }}
+        >
+          <OverlayCenter style={{ width: '100%', height: '100%', minHeight: 0 }}>
+            <Box style={{ width: '100%', maxWidth: toRem(440), maxHeight: '100%' }}>
+              <FocusTrap
+                focusTrapOptions={{
+                  initialFocus: false,
+                  onDeactivate: () => setGuideOpen(false),
+                  clickOutsideDeactivates: true,
+                  escapeDeactivates: stopPropagation,
                 }}
               >
-                <Header
-                  style={{
-                    padding: `0 ${config.space.S200} 0 ${config.space.S400}`,
-                    borderBottomWidth: config.borderWidth.B300,
-                  }}
+                <Dialog
                   variant="Surface"
-                  size="500"
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    width: '100%',
+                    maxWidth: '100%',
+                    maxHeight: 'min(36rem, 100%)',
+                    overflow: 'hidden',
+                    color: '#172033',
+                    backgroundColor: '#fff',
+                    border: '1px solid rgba(87, 103, 124, 0.2)',
+                    borderRadius: toRem(16),
+                    boxShadow: '0 24px 80px rgba(12, 20, 32, 0.28)',
+                  }}
                 >
-                  <Box grow="Yes">
-                    <Text size="H4">{guide.title}</Text>
-                  </Box>
-                  <IconButton
-                    aria-label="关闭安装说明"
-                    size="300"
-                    radii="300"
-                    onClick={() => setGuideOpen(false)}
+                  <Header
+                    style={{
+                      flexShrink: 0,
+                      padding: `0 ${config.space.S200} 0 ${config.space.S400}`,
+                      backgroundColor: '#fff',
+                      borderBottomWidth: config.borderWidth.B300,
+                    }}
+                    variant="Surface"
+                    size="500"
                   >
-                    <Icon src={Icons.Cross} />
-                  </IconButton>
-                </Header>
-                <Box style={{ padding: config.space.S400 }} direction="Column" gap="400">
-                  <Text size="T300" priority="300">
-                    {guide.description}
-                  </Text>
-                  <Box as="ol" direction="Column" gap="300" style={{ margin: 0, paddingLeft: 24 }}>
-                    {guide.steps.map((step) => (
-                      <Text as="li" size="T300" key={step}>
-                        {step}
-                      </Text>
-                    ))}
-                  </Box>
-                  <Button
-                    type="button"
-                    variant="Primary"
-                    size="400"
-                    radii="300"
-                    onClick={() => setGuideOpen(false)}
+                    <Box grow="Yes">
+                      <Text size="H4">{guide.title}</Text>
+                    </Box>
+                    <IconButton
+                      aria-label="关闭安装说明"
+                      size="300"
+                      radii="300"
+                      onClick={() => setGuideOpen(false)}
+                    >
+                      <Icon src={Icons.Cross} />
+                    </IconButton>
+                  </Header>
+                  <Box
+                    style={{
+                      padding: config.space.S400,
+                      overflowY: 'auto',
+                      backgroundColor: '#fff',
+                    }}
+                    direction="Column"
+                    gap="400"
                   >
-                    <Text size="B400">我知道了</Text>
-                  </Button>
-                </Box>
-              </Dialog>
-            </FocusTrap>
+                    <Text size="T300" priority="300">
+                      {guide.description}
+                    </Text>
+                    <Box
+                      as="ol"
+                      direction="Column"
+                      gap="300"
+                      style={{ margin: 0, paddingLeft: 24 }}
+                    >
+                      {guide.steps.map((step) => (
+                        <Text as="li" size="T300" key={step}>
+                          {step}
+                        </Text>
+                      ))}
+                    </Box>
+                    <Button
+                      type="button"
+                      variant="Primary"
+                      size="400"
+                      radii="300"
+                      onClick={() => setGuideOpen(false)}
+                      style={{
+                        width: '100%',
+                        justifyContent: 'center',
+                        color: '#fff',
+                        backgroundColor: '#2167e8',
+                      }}
+                    >
+                      <Text size="B400">我知道了</Text>
+                    </Button>
+                  </Box>
+                </Dialog>
+              </FocusTrap>
+            </Box>
           </OverlayCenter>
         </Overlay>
       )}
