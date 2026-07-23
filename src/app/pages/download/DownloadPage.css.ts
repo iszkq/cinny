@@ -12,6 +12,7 @@ export const PageViewport = style({
   overflowX: 'hidden',
   overflowY: 'auto',
   scrollBehavior: 'smooth',
+  scrollbarWidth: 'thin',
   overscrollBehaviorY: 'contain',
   WebkitOverflowScrolling: 'touch',
   background:

@@ -26,6 +26,55 @@ import { DownloadPage } from './app/pages/download';
 
 document.body.classList.add(configClass, varsClass);
 
+const retryingStylesheets = new WeakSet<HTMLLinkElement>();
+
+const retryFailedStylesheet = (link: HTMLLinkElement) => {
+  if (retryingStylesheets.has(link)) return;
+
+  retryingStylesheets.add(link);
+  const retryLink = link.cloneNode(false) as HTMLLinkElement;
+  const retryUrl = new URL(link.href, window.location.href);
+  retryUrl.searchParams.set('cinny-style-retry', Date.now().toString());
+  retryLink.href = retryUrl.href;
+
+  retryLink.addEventListener(
+    'load',
+    () => {
+      link.remove();
+      document.documentElement.dataset.cinnyStylesRecovered = 'true';
+    },
+    { once: true }
+  );
+  retryLink.addEventListener(
+    'error',
+    () => {
+      retryLink.remove();
+      retryingStylesheets.delete(link);
+    },
+    { once: true }
+  );
+
+  link.after(retryLink);
+};
+
+const recoverFailedStylesheets = () => {
+  document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"][href]').forEach((link) => {
+    if (link.sheet === null) retryFailedStylesheet(link);
+  });
+};
+
+document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"][href]').forEach((link) => {
+  link.addEventListener('error', () => retryFailedStylesheet(link), { once: true });
+});
+
+if (document.readyState === 'complete') {
+  window.setTimeout(recoverFailedStylesheets, 0);
+} else {
+  window.addEventListener('load', () => recoverFailedStylesheets(), { once: true });
+}
+window.addEventListener('pageshow', () => window.setTimeout(recoverFailedStylesheets, 250));
+window.addEventListener('online', recoverFailedStylesheets);
+
 const LazyNativeImagePreviewWindow = lazy(async () => ({
   default: (await import('./app/components/image-viewer/NativeImagePreviewWindow'))
     .NativeImagePreviewWindow,
