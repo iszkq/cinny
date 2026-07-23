@@ -47,6 +47,7 @@ export type DesktopUpdateReleaseInfo = {
   date?: string;
   body?: string;
   downloadUrl?: string;
+  androidDownloadUrl?: string;
   releasePageUrl?: string;
 };
 
@@ -237,12 +238,22 @@ const parseLatestDesktopRelease = (payload: {
     installerAsset && typeof installerAsset.browser_download_url === 'string'
       ? installerAsset.browser_download_url
       : undefined;
+  const androidAsset = assets.find((asset) => {
+    if (!asset || typeof asset !== 'object') return false;
+    const name = 'name' in asset ? asset.name : undefined;
+    return typeof name === 'string' && /\.apk$/i.test(name) && !/-debug\.apk$/i.test(name);
+  }) as { browser_download_url?: unknown } | undefined;
+  const androidDownloadUrl =
+    androidAsset && typeof androidAsset.browser_download_url === 'string'
+      ? androidAsset.browser_download_url
+      : undefined;
 
   return {
     version: payload.tag_name.replace(/^v/i, ''),
     body: typeof payload.body === 'string' ? payload.body : undefined,
     date: typeof payload.published_at === 'string' ? payload.published_at : undefined,
     downloadUrl,
+    androidDownloadUrl,
     releasePageUrl: typeof payload.html_url === 'string' ? payload.html_url : undefined,
   };
 };
@@ -262,6 +273,7 @@ const mergeLatestDesktopReleaseInfo = (
     return {
       ...githubRelease,
       downloadUrl: githubRelease.downloadUrl ?? manifestRelease.downloadUrl,
+      androidDownloadUrl: githubRelease.androidDownloadUrl,
       releasePageUrl: githubRelease.releasePageUrl ?? manifestRelease.releasePageUrl,
     };
   }
@@ -271,6 +283,7 @@ const mergeLatestDesktopReleaseInfo = (
     date: githubRelease.date ?? manifestRelease.date,
     body: githubRelease.body ?? manifestRelease.body,
     downloadUrl: manifestRelease.downloadUrl ?? githubRelease.downloadUrl,
+    androidDownloadUrl: githubRelease.androidDownloadUrl,
     releasePageUrl: githubRelease.releasePageUrl ?? manifestRelease.releasePageUrl,
   };
 };

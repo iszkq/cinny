@@ -33,6 +33,7 @@ import {
   closeNativeImagePreviewWindow,
   createNativeImagePreviewId,
   emitNativeImagePreviewPayload,
+  focusNativeImagePreviewWindow,
   getTransferableImagePreviewSrc,
   listenNativeImagePreviewAction,
   openNativeImagePreviewWindow,
@@ -43,6 +44,7 @@ type ImageViewerDialogProps = Omit<
   'maximized' | 'onMinimize' | 'onOcrPanelOpenChange' | 'onToggleMaximized' | 'onWindowDragStart'
 > & {
   open: boolean;
+  focusRequestKey?: number;
   renderViewer: (props: ImageViewerProps) => ReactNode;
 };
 
@@ -69,6 +71,8 @@ type LatestNativePreviewInput = {
   onPrev?: () => void;
   onNext?: () => void;
   requestClose: () => void;
+  originalLoadFailed?: boolean;
+  onRetryOriginal?: () => void;
 };
 
 const WINDOW_EDGE_PADDING_PX = 16;
@@ -100,6 +104,7 @@ export function ImageViewerDialog({
   alt,
   loading,
   requestClose,
+  focusRequestKey,
   renderViewer,
   ...viewerProps
 }: ImageViewerDialogProps) {
@@ -124,6 +129,8 @@ export function ImageViewerDialog({
     onPrev: viewerProps.onPrev,
     onNext: viewerProps.onNext,
     requestClose,
+    originalLoadFailed: viewerProps.originalLoadFailed,
+    onRetryOriginal: viewerProps.onRetryOriginal,
   });
   const [nativePreviewActive, setNativePreviewActive] = useState(false);
 
@@ -212,6 +219,7 @@ export function ImageViewerDialog({
       canPrev: input.canPrev,
       canNext: input.canNext,
       imageOcrConfig: input.imageOcrConfig,
+      originalLoadFailed: input.originalLoadFailed,
     };
   }, []);
 
@@ -226,6 +234,8 @@ export function ImageViewerDialog({
       onPrev: viewerProps.onPrev,
       onNext: viewerProps.onNext,
       requestClose,
+      originalLoadFailed: viewerProps.originalLoadFailed,
+      onRetryOriginal: viewerProps.onRetryOriginal,
     };
   }, [
     alt,
@@ -236,6 +246,8 @@ export function ImageViewerDialog({
     viewerProps.canPrev,
     viewerProps.imageOcrConfig,
     viewerProps.onNext,
+    viewerProps.onRetryOriginal,
+    viewerProps.originalLoadFailed,
     viewerProps.onPrev,
   ]);
 
@@ -319,6 +331,10 @@ export function ImageViewerDialog({
         }
         if (action.type === 'next') {
           input.onNext?.();
+          return;
+        }
+        if (action.type === 'retry') {
+          input.onRetryOriginal?.();
         }
       });
       if (cancelled) {
@@ -408,7 +424,15 @@ export function ImageViewerDialog({
     viewerProps.canNext,
     viewerProps.canPrev,
     viewerProps.imageOcrConfig,
+    viewerProps.originalLoadFailed,
   ]);
+
+  useEffect(() => {
+    const nativePreview = nativePreviewRef.current;
+    if (!open || !nativePreview || focusRequestKey === undefined) return;
+
+    focusNativeImagePreviewWindow(nativePreview.label).catch(() => undefined);
+  }, [focusRequestKey, nativePreviewActive, open]);
 
   useEffect(() => {
     if (!open || mobile || minimized || nativePreviewActive) return undefined;

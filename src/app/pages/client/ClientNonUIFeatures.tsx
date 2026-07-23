@@ -65,6 +65,9 @@ import { useDesktopUpdater } from '../../hooks/useDesktopUpdater';
 import { sendAppNotification } from '../../utils/notifications';
 import { GlobalImageViewer } from '../../components/image-viewer';
 import { mobileOrTablet } from '../../utils/user-agent';
+import { isAndroidApp } from '../../utils/nativePlatform';
+import { checkForAndroidUpdate, type PendingAndroidUpdate } from '../../utils/androidUpdater';
+import { AndroidUpdatePrompt } from '../../components/AndroidUpdatePrompt';
 
 const EXTERNAL_LINK_SELECTOR = 'a[href]';
 const DESKTOP_UPDATE_AUTO_CHECK_DELAY_MS = 30000;
@@ -76,6 +79,8 @@ const UNREAD_BADGE_COLOR = '#989898';
 const HIGHLIGHT_BADGE_COLOR = '#45B83B';
 const TASKBAR_BADGE_ICON_SIZE = 64;
 const IMAGE_PACK_MEDIA_WARM_START_DELAY_MS = 15000;
+const ANDROID_UPDATE_AUTO_CHECK_DELAY_MS = 25_000;
+const ANDROID_UPDATE_AUTO_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 const taskbarBadgeIconCache = new Map<string, Uint8Array>();
 let activeTaskbarBadgeColor: string | undefined;
@@ -408,6 +413,43 @@ function DesktopAutoUpdateFeature() {
   }, [pendingUpdate?.version]);
 
   return <DesktopUpdatePrompt open={promptOpen} requestClose={() => setPromptOpen(false)} />;
+}
+
+function AndroidAutoUpdateFeature() {
+  const [pendingUpdate, setPendingUpdate] = useState<PendingAndroidUpdate>();
+  const checkingRef = useRef(false);
+
+  useEffect(() => {
+    if (!isAndroidApp()) return undefined;
+
+    const checkUpdate = () => {
+      if (checkingRef.current || document.visibilityState !== 'visible') return;
+      checkingRef.current = true;
+      checkForAndroidUpdate()
+        .then((update) => {
+          if (update) setPendingUpdate(update);
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          checkingRef.current = false;
+        });
+    };
+
+    const initialTimer = window.setTimeout(checkUpdate, ANDROID_UPDATE_AUTO_CHECK_DELAY_MS);
+    const interval = window.setInterval(checkUpdate, ANDROID_UPDATE_AUTO_CHECK_INTERVAL_MS);
+    const handleVisibilityChange = () => checkUpdate();
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.clearTimeout(initialTimer);
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
+  return (
+    <AndroidUpdatePrompt update={pendingUpdate} requestClose={() => setPendingUpdate(undefined)} />
+  );
 }
 
 function PersonalPackSyncFeature() {
@@ -1076,6 +1118,7 @@ export function ClientNonUIFeatures({ children }: ClientNonUIFeaturesProps) {
       <DesktopExternalLinkFeature />
       <DesktopPinLockShortcutFeature />
       <DesktopAutoUpdateFeature />
+      <AndroidAutoUpdateFeature />
       <AccountPinPolicyFeature />
       <PersonalPackSyncFeature />
       <AppearanceSettingsAccountDataFeature />

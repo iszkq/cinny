@@ -32,6 +32,9 @@ const AUTH_MEDIA_PATH_TO_FALLBACK_PATH: Record<string, string[]> = {
 const AUTH_MEDIA_PATHS = Object.keys(AUTH_MEDIA_PATH_TO_FALLBACK_PATH);
 const MATRIX_MEDIA_PATH_MATCHER =
   /^\/_matrix\/(?:client\/[^/]+\/media|media\/[^/]+)\/(?:download|thumbnail)\//i;
+const MEDIA_BROWSER_REQUEST_TIMEOUT_MS = 25_000;
+const MEDIA_NATIVE_CONNECT_TIMEOUT_MS = 15_000;
+const MEDIA_NATIVE_READ_TIMEOUT_MS = 45_000;
 
 const removeAllowRedirectParam = (src: string): string => {
   try {
@@ -52,46 +55,85 @@ const decodeBase64Bytes = (value: string): Uint8Array => {
   return bytes;
 };
 
+const fetchWithTimeout = async (url: string, init?: RequestInit): Promise<Response> => {
+  const controller = new AbortController();
+  const handleAbort = () => controller.abort(init?.signal?.reason);
+  if (init?.signal?.aborted) {
+    handleAbort();
+  } else {
+    init?.signal?.addEventListener('abort', handleAbort, { once: true });
+  }
+  const timeoutId = window.setTimeout(() => controller.abort(), MEDIA_BROWSER_REQUEST_TIMEOUT_MS);
+
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    window.clearTimeout(timeoutId);
+    init?.signal?.removeEventListener('abort', handleAbort);
+  }
+};
+
+const fetchMediaWithAndroidNativeHttp = async (
+  url: string,
+  init?: RequestInit
+): Promise<Response> => {
+  const { CapacitorHttp } = await import('@capacitor/core');
+  const headers: Record<string, string> = {};
+  new Headers(init?.headers).forEach((value, key) => {
+    headers[key] = value;
+  });
+  const nativeResponse = await CapacitorHttp.get({
+    url,
+    headers,
+    responseType: 'arraybuffer',
+    connectTimeout: MEDIA_NATIVE_CONNECT_TIMEOUT_MS,
+    readTimeout: MEDIA_NATIVE_READ_TIMEOUT_MS,
+  });
+  const body =
+    typeof nativeResponse.data === 'string'
+      ? decodeBase64Bytes(nativeResponse.data)
+      : JSON.stringify(nativeResponse.data ?? '');
+  const response = new Response(body, {
+    status: nativeResponse.status,
+    headers: nativeResponse.headers,
+  });
+  Object.defineProperty(response, 'url', { value: nativeResponse.url || url });
+  return response;
+};
+
 const fetchMediaWithAndroidFallback = async (
   url: string,
   init?: RequestInit
 ): Promise<Response> => {
+  const method = init?.method?.toUpperCase() ?? 'GET';
+  const nativeEligible = isAndroidApp() && method === 'GET' && /^https?:\/\//i.test(url);
+
+  if (nativeEligible) {
+    try {
+      return await fetchMediaWithAndroidNativeHttp(url, init);
+    } catch (nativeError) {
+      try {
+        return await fetchWithTimeout(url, init);
+      } catch {
+        throw nativeError;
+      }
+    }
+  }
+
   try {
-    return await fetch(url, init);
+    return await fetchWithTimeout(url, init);
   } catch (browserError) {
-    if (!isAndroidApp() || (init?.method && init.method.toUpperCase() !== 'GET')) {
+    if (!isAndroidApp() || method !== 'GET') {
       throw browserError;
     }
-
-    const { CapacitorHttp } = await import('@capacitor/core');
-    const headers: Record<string, string> = {};
-    new Headers(init?.headers).forEach((value, key) => {
-      headers[key] = value;
-    });
-    const nativeResponse = await CapacitorHttp.get({
-      url,
-      headers,
-      responseType: 'arraybuffer',
-      connectTimeout: 30000,
-      readTimeout: 60000,
-    });
-    const body =
-      typeof nativeResponse.data === 'string'
-        ? decodeBase64Bytes(nativeResponse.data)
-        : JSON.stringify(nativeResponse.data ?? '');
-    const response = new Response(body, {
-      status: nativeResponse.status,
-      headers: nativeResponse.headers,
-    });
-    Object.defineProperty(response, 'url', { value: nativeResponse.url || url });
-    return response;
+    return fetchMediaWithAndroidNativeHttp(url, init);
   }
 };
 
 export const fetchMediaWithAuth = async (src: string, init?: RequestInit): Promise<Response> => {
   const session = getFallbackSession();
   if (!session || !isSessionMediaUrl(src, session.baseUrl)) {
-    return fetch(src, init);
+    return fetchMediaWithAndroidFallback(src, init);
   }
 
   const baseHeaders = new Headers(init?.headers);

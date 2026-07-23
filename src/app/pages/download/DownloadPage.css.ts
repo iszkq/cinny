@@ -1,9 +1,23 @@
 import { DefaultReset, color, config, toRem } from 'folds';
 import { style, styleVariants } from '@vanilla-extract/css';
 
+export const PageViewport = style({
+  width: '100%',
+  height: '100%',
+  minHeight: 0,
+  overflowX: 'hidden',
+  overflowY: 'auto',
+  scrollBehavior: 'smooth',
+  overscrollBehaviorY: 'contain',
+  WebkitOverflowScrolling: 'touch',
+  background:
+    'radial-gradient(circle at 12% 8%, rgba(83, 177, 123, 0.10), transparent 28rem), radial-gradient(circle at 88% 22%, rgba(80, 125, 255, 0.08), transparent 32rem)',
+});
+
 export const Page = style({
-  minHeight: '100%',
-  background: color.Background.Container,
+  width: '100%',
+  minHeight: '100dvh',
+  background: 'transparent',
   color: color.Background.OnContainer,
 });
 
@@ -81,7 +95,9 @@ export const Main = style({
   width: '100%',
   maxWidth: toRem(1120),
   margin: 'auto',
-  padding: `${config.space.S700} ${config.space.S400} ${toRem(100)}`,
+  padding: `${config.space.S700} ${config.space.S400} max(${toRem(
+    72
+  )}, env(safe-area-inset-bottom))`,
   '@media': {
     'screen and (max-width: 750px)': {
       padding: `${config.space.S300} ${config.space.S200} ${toRem(72)}`,
@@ -129,10 +145,64 @@ export const Hero = style({
   },
 });
 
+export const HeroGrid = style({
+  position: 'relative',
+  zIndex: 1,
+  display: 'grid',
+  gridTemplateColumns: 'minmax(0, 1.55fr) minmax(260px, 0.75fr)',
+  gap: toRem(44),
+  alignItems: 'end',
+  '@media': {
+    'screen and (max-width: 820px)': {
+      gridTemplateColumns: 'minmax(0, 1fr)',
+      gap: toRem(32),
+    },
+  },
+});
+
 export const HeroContent = style({
   position: 'relative',
   zIndex: 1,
   maxWidth: toRem(660),
+});
+
+export const HeroAside = style({
+  display: 'flex',
+  flexDirection: 'column',
+  gap: config.space.S300,
+  minWidth: 0,
+  padding: toRem(26),
+  background: `color-mix(in srgb, ${color.Surface.Container} 88%, transparent)`,
+  border: `1px solid ${color.Surface.ContainerLine}`,
+  borderRadius: toRem(22),
+  boxShadow: '0 18px 52px rgba(20, 50, 34, 0.10)',
+  backdropFilter: 'blur(18px)',
+  WebkitBackdropFilter: 'blur(18px)',
+});
+
+export const ReleaseEyebrow = style({
+  color: color.Primary.Main,
+  fontSize: toRem(11),
+  fontWeight: 720,
+  letterSpacing: '0.14em',
+});
+
+export const ReleaseStatusList = style({
+  display: 'flex',
+  flexWrap: 'wrap',
+  gap: config.space.S100,
+});
+
+export const ReleaseStatusItem = style({
+  display: 'inline-flex',
+  alignItems: 'center',
+  padding: `${toRem(7)} ${toRem(10)}`,
+  color: color.Success.OnContainer,
+  background: color.Success.Container,
+  border: `1px solid ${color.Success.ContainerLine}`,
+  borderRadius: config.radii.Pill,
+  fontSize: toRem(12),
+  fontWeight: 600,
 });
 
 export const HeroLogo = style([
@@ -333,6 +403,7 @@ export const InfoStrip = style({
 
 export const Footer = style({
   paddingTop: toRem(72),
+  paddingBottom: toRem(12),
   textAlign: 'center',
   opacity: 0.72,
 });

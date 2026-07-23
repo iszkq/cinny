@@ -52,6 +52,8 @@ type RenderViewerProps = {
   canNext?: boolean;
   onPrev?: () => void;
   onNext?: () => void;
+  originalLoadFailed?: boolean;
+  onRetryOriginal?: () => void;
 };
 export type ViewerImageItem = GlobalViewerImageItem;
 type RenderImageProps = {
@@ -170,7 +172,8 @@ export const ImageContent = as<'div', ImageContentProps>(
         mediaEncInfo?: EncryptedAttachmentInfo,
         width?: number,
         height?: number,
-        resizeMethod?: string
+        resizeMethod?: string,
+        retryFailed = false
       ) => {
         const mediaUrl = isHttpUrl(mediaMxcUrl)
           ? mediaMxcUrl
@@ -185,7 +188,7 @@ export const ImageContent = as<'div', ImageContentProps>(
           return mediaUrl;
         }
 
-        const preparedMediaUrl = await primeCachedMediaObjectUrl(mediaUrl, 'visible');
+        const preparedMediaUrl = await primeCachedMediaObjectUrl(mediaUrl, 'visible', retryFailed);
         if (preparedMediaUrl) {
           return preparedMediaUrl;
         }
@@ -311,7 +314,15 @@ export const ImageContent = as<'div', ImageContentProps>(
         items,
         initialSrc: previewSrc,
         resolveSource: (item) =>
-          prepareMediaSrc(item.url, item.mimeType ?? FALLBACK_MIMETYPE, item.encInfo),
+          prepareMediaSrc(
+            item.url,
+            item.mimeType ?? FALLBACK_MIMETYPE,
+            item.encInfo,
+            undefined,
+            undefined,
+            undefined,
+            true
+          ),
         imageOcrConfig,
         renderViewer,
       });

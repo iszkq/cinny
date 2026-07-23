@@ -1,6 +1,6 @@
 import React, { ReactNode, useEffect, useState } from 'react';
 import classNames from 'classnames';
-import { Box, Button, Icon, Icons, Scroll, Spinner, Text } from 'folds';
+import { Box, Button, Icon, Icons, Spinner, Text } from 'folds';
 import { APP_DISPLAY_NAME, APP_LOGO_URL, APP_TAGLINE, APP_VERSION } from '../../constants/branding';
 import { PROJECT_SOURCE_URL } from '../../constants/projectInfo';
 import { PWAInstallButton } from '../../components/PWAInstallButton';
@@ -12,6 +12,8 @@ import {
 import * as css from './DownloadPage.css';
 
 const RELEASE_PAGE_URL = `${PROJECT_SOURCE_URL}/releases/latest`;
+const APPLE_ADD_TO_HOME_SCREEN_URL =
+  'https://support.apple.com/zh-cn/guide/iphone/iph42ab2f3a7/ios';
 
 type ChannelCardProps = {
   actions: ReactNode;
@@ -115,9 +117,11 @@ export function DownloadPage() {
     : APP_VERSION;
   const windowsDownloadUrl = latestRelease?.downloadUrl ?? RELEASE_PAGE_URL;
   const directWindowsDownload = Boolean(latestRelease?.downloadUrl);
+  const androidDownloadUrl = latestRelease?.androidDownloadUrl ?? RELEASE_PAGE_URL;
+  const directAndroidDownload = Boolean(latestRelease?.androidDownloadUrl);
 
   return (
-    <Scroll variant="Background" visibility="Hover" size="300" hideTrack>
+    <div className={css.PageViewport}>
       <Box className={css.Page} direction="Column">
         <header className={css.Header}>
           <Box className={css.HeaderInner} alignItems="Center" justifyContent="SpaceBetween">
@@ -153,37 +157,51 @@ export function DownloadPage() {
 
         <main className={css.Main}>
           <section className={css.Hero}>
-            <Box className={css.HeroContent} direction="Column" gap="500">
-              <img className={css.HeroLogo} src={APP_LOGO_URL} alt={`${APP_DISPLAY_NAME} Logo`} />
-              <Box direction="Column" gap="300">
-                <h1 className={css.HeroTitle}>在你喜欢的设备上使用{APP_DISPLAY_NAME}</h1>
-                <p className={css.HeroDescription}>
-                  Windows 客户端、网页应用与移动端 PWA
-                  使用同一套账号和消息数据。选择适合你的方式，安装后即可开始使用。
-                </p>
+            <div className={css.HeroGrid}>
+              <Box className={css.HeroContent} direction="Column" gap="500">
+                <img className={css.HeroLogo} src={APP_LOGO_URL} alt={`${APP_DISPLAY_NAME} Logo`} />
+                <Box direction="Column" gap="300">
+                  <h1 className={css.HeroTitle}>一个账号，随时在所有设备继续聊天</h1>
+                  <p className={css.HeroDescription}>
+                    Windows 与 Android 提供正式安装包，iPhone、iPad 和其他电脑可安装网页应用。
+                    数据仍保存在你的 Matrix 家服务器中，切换设备无需迁移聊天记录。
+                  </p>
+                </Box>
+                <Box gap="200" wrap="Wrap" alignItems="Center">
+                  <Button as="a" href="#downloads" variant="Primary" size="500" radii="Pill">
+                    <Text size="B400">选择我的设备</Text>
+                  </Button>
+                  <Button
+                    as="a"
+                    href={import.meta.env.BASE_URL}
+                    variant="Secondary"
+                    fill="Soft"
+                    size="500"
+                    radii="Pill"
+                  >
+                    <Text size="B400">直接打开网页版</Text>
+                  </Button>
+                </Box>
               </Box>
-              <Box gap="200" wrap="Wrap" alignItems="Center">
-                <Button as="a" href="#downloads" variant="Primary" size="500" radii="Pill">
-                  <Text size="B400">选择下载方式</Text>
-                </Button>
-                <Button
-                  as="a"
-                  href={import.meta.env.BASE_URL}
-                  variant="Secondary"
-                  fill="Soft"
-                  size="500"
-                  radii="Pill"
-                >
-                  <Text size="B400">直接使用网页版</Text>
-                </Button>
-              </Box>
-              <span className={css.HeroMeta}>
-                {!releaseLoaded && <Spinner size="100" variant="Secondary" />}
-                <Text as="span" size="T200">
-                  当前版本 v{version} · 自动更新 · Matrix 开放协议
+              <aside className={css.HeroAside}>
+                <span className={css.ReleaseEyebrow}>LATEST RELEASE</span>
+                <Text size="H2">v{version}</Text>
+                <Text size="T300" priority="300" style={{ lineHeight: 1.7 }}>
+                  页面会实时读取 GitHub 最新正式版，下载按钮始终指向当前安装包。
                 </Text>
-              </span>
-            </Box>
+                <div className={css.ReleaseStatusList}>
+                  <span className={css.ReleaseStatusItem}>Windows 自动更新</span>
+                  <span className={css.ReleaseStatusItem}>Android 覆盖安装</span>
+                  <span className={css.ReleaseStatusItem}>iOS 网页 App</span>
+                </div>
+                <span className={css.HeroMeta}>
+                  {!releaseLoaded && <Spinner size="100" variant="Secondary" />}
+                  <Text as="span" size="T200">
+                    Matrix 开放协议 · 多端同步
+                  </Text>
+                </span>
+              </aside>
+            </div>
           </section>
 
           <section className={css.Section} id="downloads">
@@ -192,8 +210,8 @@ export function DownloadPage() {
                 选择下载渠道
               </Text>
               <Text priority="300" style={{ lineHeight: 1.7 }}>
-                桌面端推荐安装 Windows
-                客户端；手机和平板无需等待应用商店版本，可以直接把网页应用添加到主屏幕。
+                电脑优先安装 Windows 客户端，Android 直接安装正式 APK；iPhone 和 iPad 使用 Safari
+                添加到主屏幕即可获得独立应用体验。
               </Text>
             </Box>
 
@@ -276,18 +294,42 @@ export function DownloadPage() {
 
               <ChannelCard
                 title="Android"
+                badge="正式 APK"
                 icon={Icons.Phone}
                 iconTone="android"
-                description="通过浏览器安装到手机主屏幕"
+                description={`Android 8.0 及以上 · 最新版 v${version}`}
                 bullets={[
-                  '不需要单独下载 APK',
-                  '支持 Chrome、Edge、Firefox、三星浏览器等',
-                  '安装后以独立应用窗口运行',
+                  '正式签名安装包，更新时直接覆盖旧版本',
+                  '应用内自动发现新版本并引导安装',
+                  '账号、聊天记录和本地设置会继续保留',
                 ]}
                 actions={
-                  <Button as="a" href="#android-manual" variant="Primary" size="400" radii="300">
-                    <Text size="B300">Android 安装步骤</Text>
-                  </Button>
+                  <>
+                    <Button
+                      as="a"
+                      href={androidDownloadUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      variant="Primary"
+                      size="400"
+                      radii="300"
+                      before={<Icon src={Icons.Download} size="100" />}
+                    >
+                      <Text size="B300">
+                        {directAndroidDownload ? '下载 Android 正式版' : '打开最新发布页'}
+                      </Text>
+                    </Button>
+                    <Button
+                      as="a"
+                      href="#android-manual"
+                      variant="Secondary"
+                      fill="Soft"
+                      size="400"
+                      radii="300"
+                    >
+                      <Text size="B300">安装说明</Text>
+                    </Button>
+                  </>
                 }
               />
 
@@ -297,9 +339,9 @@ export function DownloadPage() {
                 iconTone="ios"
                 description="通过 Safari 添加到主屏幕"
                 bullets={[
-                  '无需 App Store，即加即用',
-                  '桌面图标和独立应用窗口',
-                  '账号与网页版、桌面端保持一致',
+                  '适配新版 Safari 右下角“更多”菜单',
+                  '作为网页 App 打开，拥有桌面图标和独立窗口',
+                  '无需 App Store，账号与其他端保持一致',
                 ]}
                 actions={
                   <Button as="a" href="#ios-manual" variant="Primary" size="400" radii="300">
@@ -345,12 +387,12 @@ export function DownloadPage() {
               </div>
               <div className={css.ManualAnchor} id="android-manual">
                 <ManualCard
-                  title="Android 添加到主屏幕"
+                  title="Android 正式版安装与更新"
                   steps={[
-                    '使用系统浏览器打开星火下载页面；微信或 QQ 内打开时，先选择“在浏览器中打开”。',
-                    '打开浏览器菜单，查找“安装应用”“添加到主屏幕”或“添加页面到”。',
-                    '确认名称和图标后完成添加。不同品牌浏览器的菜单名称可能略有不同。',
-                    '回到手机桌面，点击星火图标即可独立运行。',
+                    '点击上方“下载 Android 正式版”，获取页面标注的最新 APK。微信或 QQ 内打开时，请先选择“在浏览器中打开”。',
+                    '首次安装时，系统可能要求允许浏览器“安装未知应用”；授权后返回并继续安装。',
+                    '如果手机上安装的是早期调试版，首次迁移到正式签名版可能需要卸载一次；从本正式版开始，后续更新可直接覆盖且保留数据。',
+                    '应用发现新版后会弹出更新提示，点击下载并安装，按 Android 系统提示确认即可。',
                   ]}
                 />
               </div>
@@ -358,10 +400,10 @@ export function DownloadPage() {
                 <ManualCard
                   title="iPhone / iPad 添加到主屏幕"
                   steps={[
-                    '使用 Safari 打开星火下载页面。',
-                    '点击 Safari 工具栏中的“分享”按钮。',
-                    '向下滚动并选择“添加到主屏幕”。',
-                    '确认名称后点击右上角“添加”，然后从主屏幕打开星火。',
+                    '使用 Safari 打开星火网站；微信、QQ 等内置浏览器不支持完整的网页 App 安装。',
+                    '在新版 Safari 中轻点右下角“更多（···）”，再选择“共享”。如果工具栏直接显示共享图标，也可以直接轻点。',
+                    '向下滚动操作列表并选择“添加到主屏幕”；若没有该项，请到列表底部“编辑操作”中将它加入。',
+                    '保留“作为网页 App 打开”，确认名称后轻点右上角“添加”，以后从主屏幕启动。',
                   ]}
                 />
               </div>
@@ -384,9 +426,8 @@ export function DownloadPage() {
               <Box className={css.ManualCard} direction="Column" gap="200">
                 <Text size="H4">版本更新</Text>
                 <Text size="T300" priority="300" style={{ lineHeight: 1.7 }}>
-                  Windows 客户端支持自动更新；PWA
-                  和网页版会自动使用网站最新版本。如果页面更新异常，可以在“设置 →
-                  关于”中清理资源缓存。
+                  Windows 客户端与 Android 正式版都会在应用内检查更新；PWA
+                  和网页版自动使用网站最新版。如果页面更新异常，可在“设置 → 关于”中清理资源缓存。
                 </Text>
               </Box>
               <Box className={css.ManualCard} direction="Column" gap="200">
@@ -399,6 +440,19 @@ export function DownloadPage() {
             </Box>
 
             <Box justifyContent="Center" gap="200" wrap="Wrap" style={{ marginTop: 28 }}>
+              <Button
+                as="a"
+                href={APPLE_ADD_TO_HOME_SCREEN_URL}
+                target="_blank"
+                rel="noreferrer"
+                variant="Secondary"
+                fill="Soft"
+                size="400"
+                radii="300"
+                after={<Icon src={Icons.External} size="100" />}
+              >
+                <Text size="B300">Apple 官方安装说明</Text>
+              </Button>
               <Button
                 as="a"
                 href={RELEASE_PAGE_URL}
@@ -435,6 +489,6 @@ export function DownloadPage() {
           </footer>
         </main>
       </Box>
-    </Scroll>
+    </div>
   );
 }

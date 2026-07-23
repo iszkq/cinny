@@ -27,6 +27,8 @@ export type ImageViewerProps = {
   canNext?: boolean;
   onPrev?: () => void;
   onNext?: () => void;
+  originalLoadFailed?: boolean;
+  onRetryOriginal?: () => void;
 };
 
 type ViewMode = 'fit' | 'actual';
@@ -141,6 +143,8 @@ export const ImageViewer = as<'div', ImageViewerProps>(
       canNext,
       onPrev,
       onNext,
+      originalLoadFailed,
+      onRetryOriginal,
       ...props
     },
     ref
@@ -1016,6 +1020,30 @@ export const ImageViewer = as<'div', ImageViewerProps>(
                   <Text size="T200" priority="300">
                     {'原图正在加载...'}
                   </Text>
+                </Box>
+              )}
+              {!loading && originalLoadFailed && (
+                <Box
+                  className={css.ImageViewerLoading}
+                  alignItems="Center"
+                  justifyContent="Center"
+                  direction="Column"
+                  gap="200"
+                >
+                  <Text size="T200" priority="300">
+                    {'原图加载失败，当前保留预览图'}
+                  </Text>
+                  {onRetryOriginal && (
+                    <Button
+                      variant="Secondary"
+                      fill="Soft"
+                      size="300"
+                      radii="300"
+                      onClick={onRetryOriginal}
+                    >
+                      <Text size="B300">{'重新加载原图'}</Text>
+                    </Button>
+                  )}
                 </Box>
               )}
             </Box>

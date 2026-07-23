@@ -215,6 +215,14 @@ function NativeImagePreviewWindowContent() {
         requestClose={handleClose}
         canPrev={payload.canPrev}
         canNext={payload.canNext}
+        originalLoadFailed={payload.originalLoadFailed}
+        onRetryOriginal={
+          payload.originalLoadFailed
+            ? () => {
+                emitNativeImagePreviewAction({ previewId, type: 'retry' }).catch(() => undefined);
+              }
+            : undefined
+        }
         onPrev={
           payload.canPrev
             ? () => {

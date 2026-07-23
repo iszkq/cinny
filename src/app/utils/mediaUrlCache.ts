@@ -688,12 +688,16 @@ export const subscribeCachedMediaObjectUrl = (
 
 export const primeCachedMediaObjectUrl = (
   src?: string,
-  priority: MediaCachePriority = 'visible'
+  priority: MediaCachePriority = 'visible',
+  retryFailed = false
 ): Promise<string | undefined> | undefined => {
   syncPersistentMediaNamespace();
 
   if (!src) {
     return undefined;
+  }
+  if (retryFailed) {
+    clearFailedMediaEntry(src);
   }
   if (!canRetryFailedMediaEntry(src)) {
     return Promise.resolve(undefined);

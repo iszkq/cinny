@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { IImageInfo } from '../../../types/matrix/common';
 import { ImageUsage, PackImage, PackImageReader } from '../../plugins/custom-emoji';
 import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
-import { isHttpUrl, isMxcUrl } from '../../utils/matrix';
+import { fetchMediaWithAuth, isHttpUrl, isMxcUrl } from '../../utils/matrix';
 
 export const REMOTE_STICKER_INDEX_URL = 'https://image.527012.xyz/index.json';
 
@@ -81,7 +81,7 @@ const getFreshIndexUrl = (): string => {
 };
 
 const fetchRemoteStickerIndexWithBrowser = async (url: string): Promise<RemoteStickerIndex> => {
-  const response = await fetch(url, { cache: 'default' });
+  const response = await fetchMediaWithAuth(url, { cache: 'default' });
   if (!response.ok) {
     throw new Error(`Failed to load remote sticker index: ${response.status}`);
   }

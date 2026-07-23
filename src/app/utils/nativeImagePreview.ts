@@ -9,12 +9,13 @@ export type NativeImagePreviewPayload = {
   loading?: boolean;
   canPrev?: boolean;
   canNext?: boolean;
+  originalLoadFailed?: boolean;
   imageOcrConfig?: AihubmixImageOcrConfig;
 };
 
 export type NativeImagePreviewAction = {
   previewId: string;
-  type: 'close' | 'prev' | 'next';
+  type: 'close' | 'prev' | 'next' | 'retry';
 };
 
 export type NativeImagePreviewWindowHandle = {
@@ -303,6 +304,16 @@ export const emitNativeImagePreviewPayload = async (
 ): Promise<void> => {
   const { emitTo } = await import('@tauri-apps/api/event');
   await emitTo(label, NATIVE_IMAGE_PREVIEW_UPDATE_EVENT, payload);
+};
+
+export const focusNativeImagePreviewWindow = async (label: string): Promise<void> => {
+  const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow');
+  const previewWindow = await WebviewWindow.getByLabel(label);
+  if (!previewWindow) return;
+
+  await previewWindow.unminimize().catch(() => undefined);
+  await previewWindow.show().catch(() => undefined);
+  await previewWindow.setFocus();
 };
 
 export const listenNativeImagePreviewAction = async (
