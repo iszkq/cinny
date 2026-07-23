@@ -20,6 +20,7 @@ export type NativeImagePreviewAction = {
 export type NativeImagePreviewWindowHandle = {
   label: string;
   unlistenReady: () => void;
+  unlistenDestroyed: () => void;
 };
 
 type EventPayload<T> = {
@@ -104,7 +105,8 @@ const closeNativeImagePreviewWindowByLabel = async (label: string): Promise<void
 
 export const openNativeImagePreviewWindow = async (
   payload: NativeImagePreviewPayload,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  onDestroyed?: () => void
 ): Promise<NativeImagePreviewWindowHandle | undefined> => {
   if (!isDesktopUpdaterSupported()) return undefined;
 
@@ -116,6 +118,7 @@ export const openNativeImagePreviewWindow = async (
   let previewWindow: InstanceType<typeof WebviewWindow> | undefined;
   let windowCreated: Promise<void> | undefined;
   let disposeWindowCreationListeners: () => void = () => undefined;
+  let disposeDestroyedListener: () => void = () => undefined;
 
   let initialPayloadSettled = false;
   let resolveInitialPayload: () => void = () => undefined;
@@ -198,11 +201,17 @@ export const openNativeImagePreviewWindow = async (
 
     let unlistenDestroyed: (() => void) | undefined;
     let destroyedListenerDisposed = false;
+    disposeDestroyedListener = () => {
+      destroyedListenerDisposed = true;
+      unlistenDestroyed?.();
+      unlistenDestroyed = undefined;
+    };
     const windowDestroyed = new Promise<never>((_resolve, reject) => {
       openingWindow
-        .once('tauri://destroyed', () =>
-          reject(new Error('Image preview window closed before it was ready.'))
-        )
+        .once('tauri://destroyed', () => {
+          onDestroyed?.();
+          reject(new Error('Image preview window closed before it was ready.'));
+        })
         .then((nextUnlisten) => {
           if (destroyedListenerDisposed) {
             nextUnlisten();
@@ -252,16 +261,16 @@ export const openNativeImagePreviewWindow = async (
         window.clearTimeout(readyTimeout);
       }
       removeAbortListener();
-      destroyedListenerDisposed = true;
-      unlistenDestroyed?.();
     }
 
     return {
       label,
       unlistenReady,
+      unlistenDestroyed: disposeDestroyedListener,
     };
   } catch {
     unlistenReady();
+    disposeDestroyedListener();
 
     const disposePreviewWindow = async () => {
       const currentPreviewWindow = previewWindow;

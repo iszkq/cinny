@@ -191,6 +191,8 @@ const MODAL_CONTENT_STYLE: CSSProperties = {
 const NATIVE_MODAL_CONTENT_STYLE: CSSProperties = {
   ...MODAL_CONTENT_STYLE,
   height: '100%',
+  boxSizing: 'border-box',
+  overflow: 'hidden',
   padding: `${toRem(16)} ${toRem(18)} ${toRem(18)}`,
 };
 const NATIVE_WINDOW_FRAME_STYLE: CSSProperties = {
@@ -1546,6 +1548,9 @@ export function BibleExperienceModal({
         gridTemplateColumns: 'auto minmax(0, 1fr) auto',
         gap: toRem(12),
         alignItems: 'center',
+        flexShrink: 0,
+        position: 'relative',
+        zIndex: 2,
         cursor: nativeBibleWindow ? 'grab' : undefined,
         touchAction: nativeBibleWindow ? 'none' : undefined,
         userSelect: nativeBibleWindow ? 'none' : undefined,
@@ -1702,10 +1707,16 @@ export function BibleExperienceModal({
   const browseToolPanelContent = selectedBook ? (
     <>
       <Box wrap="Wrap" gap="100" style={SEGMENT_STYLE}>
-        <BiblePillButton active={activeTestament === 'old'} onClick={() => setActiveTestament('old')}>
+        <BiblePillButton
+          active={activeTestament === 'old'}
+          onClick={() => setActiveTestament('old')}
+        >
           {CN.old}
         </BiblePillButton>
-        <BiblePillButton active={activeTestament === 'new'} onClick={() => setActiveTestament('new')}>
+        <BiblePillButton
+          active={activeTestament === 'new'}
+          onClick={() => setActiveTestament('new')}
+        >
           {CN.new}
         </BiblePillButton>
       </Box>
@@ -1763,34 +1774,35 @@ export function BibleExperienceModal({
       </Box>
     </>
   ) : null;
-  const toolPanel = showToolPanel && selectedBook ? (
-    <div style={toolPanelShellStyle}>
-      <div style={toolPanelHeaderStyle}>
-        <Box wrap="Wrap" gap="100" style={SEGMENT_STYLE}>
-          <BiblePillButton
-            active={toolPanelView === 'browse'}
-            onClick={() => handleToolPanelTrigger('browse')}
-          >
-            {CN.openBrowse}
-          </BiblePillButton>
-          <BiblePillButton
-            active={toolPanelView === 'search'}
-            onClick={() => handleToolPanelTrigger('search')}
-          >
-            {CN.openSearch}
-          </BiblePillButton>
-        </Box>
-        {compactLayout && (
-          <IconButton onClick={() => setToolPanelOpen(false)} size="300" radii="300">
-            <Icon src={Icons.Cross} />
-          </IconButton>
-        )}
+  const toolPanel =
+    showToolPanel && selectedBook ? (
+      <div style={toolPanelShellStyle}>
+        <div style={toolPanelHeaderStyle}>
+          <Box wrap="Wrap" gap="100" style={SEGMENT_STYLE}>
+            <BiblePillButton
+              active={toolPanelView === 'browse'}
+              onClick={() => handleToolPanelTrigger('browse')}
+            >
+              {CN.openBrowse}
+            </BiblePillButton>
+            <BiblePillButton
+              active={toolPanelView === 'search'}
+              onClick={() => handleToolPanelTrigger('search')}
+            >
+              {CN.openSearch}
+            </BiblePillButton>
+          </Box>
+          {compactLayout && (
+            <IconButton onClick={() => setToolPanelOpen(false)} size="300" radii="300">
+              <Icon src={Icons.Cross} />
+            </IconButton>
+          )}
+        </div>
+        <div style={toolPanelContentStyle}>
+          {toolPanelView === 'search' ? searchToolPanelContent : browseToolPanelContent}
+        </div>
       </div>
-      <div style={toolPanelContentStyle}>
-        {toolPanelView === 'search' ? searchToolPanelContent : browseToolPanelContent}
-      </div>
-    </div>
-  ) : null;
+    ) : null;
 
   const mainWindowContent = (
     <SequenceCard variant="SurfaceVariant" direction="Column" gap="0" style={mainModalCardStyle}>
@@ -2134,10 +2146,7 @@ export function BibleExperienceModal({
                     {CN.insert}
                   </BiblePillButton>
                 )}
-                <BiblePillButton
-                  onClick={handleClearSelected}
-                  disabled={selectedKeys.length === 0}
-                >
+                <BiblePillButton onClick={handleClearSelected} disabled={selectedKeys.length === 0}>
                   {CN.reset}
                 </BiblePillButton>
               </Box>

@@ -56,6 +56,7 @@ type NativePreviewRef = {
   label: string;
   unlistenAction: () => void;
   unlistenReady: () => void;
+  unlistenDestroyed: () => void;
 };
 
 type LatestNativePreviewInput = {
@@ -137,6 +138,7 @@ export function ImageViewerDialog({
 
     nativePreview.unlistenAction();
     nativePreview.unlistenReady();
+    nativePreview.unlistenDestroyed();
     nativePreviewRef.current = undefined;
     setNativePreviewActive(false);
 
@@ -282,10 +284,25 @@ export function ImageViewerDialog({
     const previewId = createNativeImagePreviewId();
     let unlistenAction: (() => void) | undefined;
     let unlistenReady: (() => void) | undefined;
+    let unlistenDestroyed: (() => void) | undefined;
+    let closeHandled = false;
     const releaseActionListener = () => {
       const listener = unlistenAction;
       unlistenAction = undefined;
       listener?.();
+    };
+    const handleNativeClosed = () => {
+      if (cancelled || closeHandled) return;
+      closeHandled = true;
+
+      if (nativePreviewRef.current?.previewId === previewId) {
+        closeNativePreview(false);
+      } else {
+        releaseActionListener();
+        unlistenReady?.();
+        unlistenDestroyed?.();
+      }
+      latestNativeInputRef.current.requestClose();
     };
 
     const openNativePreview = async () => {
@@ -293,10 +310,7 @@ export function ImageViewerDialog({
         const input = latestNativeInputRef.current;
 
         if (action.type === 'close') {
-          if (nativePreviewRef.current?.previewId === previewId) {
-            closeNativePreview(false);
-          }
-          input.requestClose();
+          handleNativeClosed();
           return;
         }
         if (action.type === 'prev') {
@@ -318,7 +332,11 @@ export function ImageViewerDialog({
         return;
       }
 
-      const nativePreview = await openNativeImagePreviewWindow(payload, openAbortController.signal);
+      const nativePreview = await openNativeImagePreviewWindow(
+        payload,
+        openAbortController.signal,
+        handleNativeClosed
+      );
       if (!nativePreview) {
         releaseActionListener();
         if (!cancelled) {
@@ -330,16 +348,19 @@ export function ImageViewerDialog({
       if (cancelled) {
         releaseActionListener();
         nativePreview.unlistenReady();
+        nativePreview.unlistenDestroyed();
         await closeNativeImagePreviewWindow(nativePreview.label).catch(() => undefined);
         return;
       }
 
       unlistenReady = nativePreview.unlistenReady;
+      unlistenDestroyed = nativePreview.unlistenDestroyed;
       nativePreviewRef.current = {
         previewId,
         label: nativePreview.label,
         unlistenAction: releaseActionListener,
         unlistenReady,
+        unlistenDestroyed,
       };
       setNativePreviewActive(true);
     };
@@ -347,6 +368,7 @@ export function ImageViewerDialog({
     openNativePreview().catch(() => {
       releaseActionListener();
       unlistenReady?.();
+      unlistenDestroyed?.();
       nativePreviewRef.current = undefined;
       setNativePreviewActive(false);
       if (!cancelled) {
