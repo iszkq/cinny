@@ -2,14 +2,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useCachedMediaUrls } from './useCachedMediaUrl';
 import { isDesktopUpdaterSupported } from '../utils/desktopUpdater';
 import { shouldUseObjectUrlForMediaDisplay } from '../utils/matrix';
+import { invalidateCachedMediaUrl, primeCachedMediaObjectUrl } from '../utils/mediaUrlCache';
 
 const AVATAR_RETRY_DELAY_MS = 250;
 
-const clearTimer = (timerRef: { current: number | undefined }) => {
-  if (typeof timerRef.current === 'number') {
-    window.clearTimeout(timerRef.current);
-    timerRef.current = undefined;
+const clearTimer = (timer: number | undefined): undefined => {
+  if (typeof timer === 'number') {
+    window.clearTimeout(timer);
   }
+  return undefined;
 };
 
 export const useResilientAvatarMedia = (src?: string) => {
@@ -37,7 +38,7 @@ export const useResilientAvatarMedia = (src?: string) => {
       return;
     }
 
-    clearTimer(retryTimerRef);
+    retryTimerRef.current = clearTimer(retryTimerRef.current);
     setCandidateIndex(0);
     setRetryNonce(0);
     setShowFallback(false);
@@ -45,23 +46,26 @@ export const useResilientAvatarMedia = (src?: string) => {
   }, [candidateKey, desktopSupported]);
 
   useEffect(() => {
-    if (desktopSupported) {
-      return;
-    }
-
-    clearTimer(retryTimerRef);
+    if (desktopSupported) return;
+    retryTimerRef.current = clearTimer(retryTimerRef.current);
     setWebError(false);
+    setRetryNonce(0);
+    retriedSrcRef.current = undefined;
+  }, [desktopSupported, src]);
+
+  useEffect(() => {
+    if (!desktopSupported && webDisplaySrc) setWebError(false);
   }, [desktopSupported, webDisplaySrc]);
 
   useEffect(
     () => () => {
-      clearTimer(retryTimerRef);
+      retryTimerRef.current = clearTimer(retryTimerRef.current);
     },
     []
   );
 
   const handleLoad = useCallback(() => {
-    clearTimer(retryTimerRef);
+    retryTimerRef.current = clearTimer(retryTimerRef.current);
     setWebError(false);
     setShowFallback(false);
     if (displaySrc) {
@@ -70,9 +74,20 @@ export const useResilientAvatarMedia = (src?: string) => {
   }, [displaySrc]);
 
   const handleError = useCallback(() => {
-    clearTimer(retryTimerRef);
+    retryTimerRef.current = clearTimer(retryTimerRef.current);
 
     if (!desktopSupported) {
+      if (src && retriedSrcRef.current !== src) {
+        retriedSrcRef.current = src;
+        setWebError(false);
+        retryTimerRef.current = window.setTimeout(() => {
+          invalidateCachedMediaUrl(src).then(() => {
+            setRetryNonce((value) => value + 1);
+            primeCachedMediaObjectUrl(src, 'visible', true);
+          });
+        }, AVATAR_RETRY_DELAY_MS);
+        return;
+      }
       setWebError(true);
       return;
     }
@@ -93,12 +108,12 @@ export const useResilientAvatarMedia = (src?: string) => {
     }
 
     setShowFallback(true);
-  }, [candidateIndex, candidates.length, desktopSupported, displaySrc]);
+  }, [candidateIndex, candidates.length, desktopSupported, displaySrc, src]);
 
   return {
     displaySrc,
     showFallback: desktopSupported ? !displaySrc || showFallback : !displaySrc || webError,
-    imageKey: desktopSupported ? `${displaySrc ?? 'empty'}-${retryNonce}` : undefined,
+    imageKey: `${displaySrc ?? 'empty'}-${retryNonce}`,
     handleLoad,
     handleError,
   };

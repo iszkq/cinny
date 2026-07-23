@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   getCachedMediaObjectUrl,
+  invalidateCachedMediaUrl,
   primeCachedMediaObjectUrl,
   subscribeCachedMediaObjectUrl,
 } from '../utils/mediaUrlCache';
@@ -53,9 +54,32 @@ export const useCachedMediaUrls = (
       });
     });
 
+    let disposed = false;
     let fallbackTimer: number | undefined;
-    const primeObjectUrl = () => {
-      void primeCachedMediaObjectUrl(src, desktopSupported ? 'background' : 'visible');
+    let retryTimer: number | undefined;
+    let retryCount = 0;
+    const primeObjectUrl = (retryFailed = false) => {
+      const primePromise = primeCachedMediaObjectUrl(
+        src,
+        desktopSupported ? 'background' : 'visible',
+        retryFailed
+      );
+      if (!primePromise) return;
+
+      primePromise.then((objectUrl) => {
+        if (disposed || objectUrl || desktopSupported || retryCount >= 2) return;
+
+        retryCount += 1;
+        retryTimer = window.setTimeout(
+          () => {
+            retryTimer = undefined;
+            invalidateCachedMediaUrl(src).then(() => {
+              if (!disposed) primeObjectUrl(true);
+            });
+          },
+          retryCount === 1 ? 400 : 1200
+        );
+      });
     };
 
     if (desktopSupported) {
@@ -65,8 +89,12 @@ export const useCachedMediaUrls = (
     }
 
     return () => {
+      disposed = true;
       if (typeof fallbackTimer === 'number') {
         window.clearTimeout(fallbackTimer);
+      }
+      if (typeof retryTimer === 'number') {
+        window.clearTimeout(retryTimer);
       }
       unsubscribe();
     };
@@ -89,7 +117,7 @@ export const useCachedMediaUrls = (
         return;
       }
 
-      void desktopAssetPromise.then((assetUrl) => {
+      desktopAssetPromise.then((assetUrl) => {
         if (disposed) {
           return;
         }

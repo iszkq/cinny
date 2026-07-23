@@ -1699,7 +1699,7 @@ export const Message = as<'div', MessageProps>(
             userId={senderId}
             src={
               senderAvatarMxc
-                ? mxcUrlToHttp(mx, senderAvatarMxc, useAuthentication, 48, 48, 'crop') ?? undefined
+                ? mxcUrlToHttp(mx, senderAvatarMxc, useAuthentication, 96, 96, 'crop') ?? undefined
                 : undefined
             }
             alt={senderDisplayName}

@@ -99,6 +99,25 @@ self.addEventListener('activate', (event: ExtendableEvent) => {
   );
 });
 
+self.addEventListener('notificationclick', (event: NotificationEvent) => {
+  event.notification.close();
+  const targetUrl =
+    typeof event.notification.data?.url === 'string'
+      ? event.notification.data.url
+      : self.registration.scope;
+
+  event.waitUntil(
+    self.clients
+      .matchAll({ type: 'window', includeUncontrolled: true })
+      .then(async (windowClients) => {
+        const matchingClient = windowClients.find((client) => client.url === targetUrl);
+        if (matchingClient) return matchingClient.focus();
+        if (windowClients[0]) return windowClients[0].focus();
+        return self.clients.openWindow(targetUrl);
+      })
+  );
+});
+
 /**
  * Receive session updates from clients
  */
@@ -116,10 +135,7 @@ self.addEventListener('message', (event: ExtendableMessageEvent) => {
 
 const MEDIA_PATHS = ['/_matrix/client/v1/media/download', '/_matrix/client/v1/media/thumbnail'];
 const AUTH_MEDIA_PATH_TO_FALLBACK_PATH: Record<string, string[]> = {
-  '/_matrix/client/v1/media/download': [
-    '/_matrix/media/v3/download',
-    '/_matrix/media/r0/download',
-  ],
+  '/_matrix/client/v1/media/download': ['/_matrix/media/v3/download', '/_matrix/media/r0/download'],
   '/_matrix/client/v1/media/thumbnail': [
     '/_matrix/media/v3/thumbnail',
     '/_matrix/media/r0/thumbnail',

@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-import { isDesktopUpdaterSupported } from '../utils/desktopUpdater';
-import { getDesktopNotificationState } from '../utils/notifications';
+import { getAppNotificationState } from '../utils/notifications';
 
 export { getNotificationState } from '../utils/notifications';
 
@@ -8,11 +7,11 @@ export function usePermissionState(name: PermissionName, initialValue: Permissio
   const [permissionState, setPermissionState] = useState<PermissionState>(initialValue);
 
   useEffect(() => {
-    if (name === 'notifications' && isDesktopUpdaterSupported()) {
+    if (name === 'notifications') {
       let cancelled = false;
 
-      const syncDesktopPermission = () => {
-        getDesktopNotificationState()
+      const syncNotificationPermission = () => {
+        getAppNotificationState()
           .then((state) => {
             if (!cancelled) {
               setPermissionState(state);
@@ -21,14 +20,14 @@ export function usePermissionState(name: PermissionName, initialValue: Permissio
           .catch(() => undefined);
       };
 
-      syncDesktopPermission();
+      syncNotificationPermission();
 
       const handleFocus = () => {
-        syncDesktopPermission();
+        syncNotificationPermission();
       };
       const handleVisibilityChange = () => {
         if (document.visibilityState === 'visible') {
-          syncDesktopPermission();
+          syncNotificationPermission();
         }
       };
 
@@ -41,6 +40,8 @@ export function usePermissionState(name: PermissionName, initialValue: Permissio
         document.removeEventListener('visibilitychange', handleVisibilityChange);
       };
     }
+
+    if (!navigator.permissions?.query) return undefined;
 
     let permissionStatus: PermissionStatus;
 

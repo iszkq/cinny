@@ -9,6 +9,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(NativeFileSaverPlugin.class);
         registerPlugin(AndroidUpdaterPlugin.class);
+        registerPlugin(NativeNotificationsPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

@@ -19,6 +19,7 @@ import {
 } from '../../../../client/initMatrix';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { DesktopUpdater } from './DesktopUpdater';
+import { AndroidUpdater } from './AndroidUpdater';
 import { ReleaseNotes } from '../../../components/ReleaseNotes';
 import { DOWNLOAD_PATH } from '../../../pages/paths';
 import { getOriginBaseUrl, withOriginBaseUrl } from '../../../pages/pathUtils';
@@ -235,6 +236,7 @@ export function About({ requestClose }: AboutProps) {
               </Box>
 
               <DesktopUpdater />
+              <AndroidUpdater />
             </Box>
           </PageContent>
         </Scroll>

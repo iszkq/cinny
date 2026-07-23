@@ -12,7 +12,12 @@ import { useEmailNotifications } from '../../../hooks/useEmailNotifications';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { isDesktopUpdaterSupported } from '../../../utils/desktopUpdater';
-import { requestNotificationPermission as requestAppNotificationPermission } from '../../../utils/notifications';
+import {
+  requestNotificationPermission as requestAppNotificationPermission,
+  sendAppNotification,
+} from '../../../utils/notifications';
+import { isAndroidApp } from '../../../utils/nativePlatform';
+import { isIOS } from '../../../utils/user-agent';
 
 function EmailNotification() {
   const mx = useMatrixClient();
@@ -66,7 +71,8 @@ function EmailNotification() {
           )}
           {result && result.email && (
             <>
-              {'\u5c06\u901a\u77e5\u53d1\u9001\u5230\u4f60\u7684\u90ae\u7bb1\u3002'} {`("${result.email}")`}
+              {'\u5c06\u901a\u77e5\u53d1\u9001\u5230\u4f60\u7684\u90ae\u7bb1\u3002'}{' '}
+              {`("${result.email}")`}
             </>
           )}
           {result === null && (
@@ -74,7 +80,8 @@ function EmailNotification() {
               {'\u53d1\u751f\u4e86\u610f\u5916\u9519\u8bef\uff01'}
             </Text>
           )}
-          {result === undefined && '\u5c06\u901a\u77e5\u53d1\u9001\u5230\u4f60\u7684\u90ae\u7bb1\u3002'}
+          {result === undefined &&
+            '\u5c06\u901a\u77e5\u53d1\u9001\u5230\u4f60\u7684\u90ae\u7bb1\u3002'}
         </>
       }
       after={
@@ -99,9 +106,11 @@ export function SystemNotification() {
     'isNotificationSounds'
   );
   const desktopSupported = isDesktopUpdaterSupported();
+  const androidApp = isAndroidApp();
+  const iosWebApp = !desktopSupported && !androidApp && isIOS();
 
   useEffect(() => {
-    if (notifPermission !== 'granted' && showNotifications) {
+    if (notifPermission === 'denied' && showNotifications) {
       setShowNotifications(false);
     }
   }, [notifPermission, setShowNotifications, showNotifications]);
@@ -110,6 +119,39 @@ export function SystemNotification() {
     const permission = await requestAppNotificationPermission();
     setShowNotifications(permission === 'granted');
   };
+
+  const handleTestNotification = async () => {
+    await sendAppNotification({
+      title: '星火通知测试',
+      body: '系统通知已正常连接。',
+      silent: false,
+    });
+  };
+
+  let deniedDescription =
+    'Notification' in window
+      ? '\u901a\u77e5\u6743\u9650\u5df2\u88ab\u7981\u7528\uff0c\u8bf7\u5728\u6d4f\u89c8\u5668\u5730\u5740\u680f\u6216\u7ad9\u70b9\u6743\u9650\u8bbe\u7f6e\u91cc\u5141\u8bb8\u901a\u77e5\u3002'
+      : '\u5f53\u524d\u7cfb\u7edf\u4e0d\u652f\u6301\u901a\u77e5\u529f\u80fd\u3002';
+  if (desktopSupported) {
+    deniedDescription =
+      '\u684c\u9762\u901a\u77e5\u6743\u9650\u5df2\u88ab\u7981\u7528\uff0c\u8bf7\u5728\u7cfb\u7edf\u901a\u77e5\u8bbe\u7f6e\u91cc\u5141\u8bb8\u661f\u706b\u684c\u9762\u7248\u53d1\u9001\u901a\u77e5\u3002';
+  } else if (androidApp) {
+    deniedDescription =
+      '\u901a\u77e5\u6743\u9650\u5df2\u88ab\u7981\u7528\uff0c\u8bf7\u5728 Android \u7cfb\u7edf\u8bbe\u7f6e\u4e2d\u5141\u8bb8\u661f\u706b\u53d1\u9001\u901a\u77e5\u3002';
+  }
+
+  let enabledDescription =
+    '\u5f53\u6709\u65b0\u6d88\u606f\u5230\u8fbe\u65f6\uff0c\u663e\u793a\u7cfb\u7edf\u901a\u77e5\u3002\u9996\u6b21\u542f\u7528\u65f6\u6d4f\u89c8\u5668\u4f1a\u5f39\u51fa\u6743\u9650\u8bf7\u6c42\u3002';
+  if (desktopSupported) {
+    enabledDescription =
+      '\u5f53\u6709\u65b0\u6d88\u606f\u5230\u8fbe\u65f6\uff0c\u663e\u793a\u684c\u9762\u901a\u77e5\u3002\u9996\u6b21\u542f\u7528\u65f6\u4f1a\u7531\u7cfb\u7edf\u5f39\u51fa\u901a\u77e5\u6743\u9650\u8bf7\u6c42\u3002';
+  } else if (androidApp) {
+    enabledDescription =
+      '\u4f7f\u7528 Android \u539f\u751f\u7cfb\u7edf\u901a\u77e5\u3002\u5e94\u7528\u5728\u8fd0\u884c\u6216\u4ecd\u5728\u540e\u53f0\u540c\u6b65\u65f6\uff0c\u65b0\u6d88\u606f\u4f1a\u663e\u793a\u5728\u901a\u77e5\u680f\u3002';
+  } else if (iosWebApp) {
+    enabledDescription =
+      '\u4f7f\u7528 iPhone/iPad \u7cfb\u7edf\u901a\u77e5\u3002\u8bf7\u5148\u7528 Safari \u5c06\u661f\u706b\u6dfb\u52a0\u5230\u4e3b\u5c4f\u5e55\uff0c\u518d\u5728\u4e3b\u5c4f\u5e55\u5e94\u7528\u4e2d\u542f\u7528\u3002';
+  }
 
   return (
     <Box direction="Column" gap="100">
@@ -121,22 +163,14 @@ export function SystemNotification() {
         gap="400"
       >
         <SettingTile
-          title={'\u684c\u9762\u901a\u77e5'}
+          title={'\u7cfb\u7edf\u901a\u77e5'}
           description={
             notifPermission === 'denied' ? (
               <Text as="span" style={{ color: color.Critical.Main }} size="T200">
-                {desktopSupported
-                  ? '\u684c\u9762\u901a\u77e5\u6743\u9650\u5df2\u88ab\u7981\u7528\uff0c\u8bf7\u5728\u7cfb\u7edf\u901a\u77e5\u8bbe\u7f6e\u91cc\u5141\u8bb8\u661f\u706b\u684c\u9762\u7248\u53d1\u9001\u901a\u77e5\u3002'
-                  : 'Notification' in window
-                    ? '\u901a\u77e5\u6743\u9650\u5df2\u88ab\u7981\u7528\uff0c\u8bf7\u5728\u6d4f\u89c8\u5668\u5730\u5740\u680f\u6216\u7ad9\u70b9\u6743\u9650\u8bbe\u7f6e\u91cc\u5141\u8bb8\u901a\u77e5\u3002'
-                    : '\u5f53\u524d\u7cfb\u7edf\u4e0d\u652f\u6301\u901a\u77e5\u529f\u80fd\u3002'}
+                {deniedDescription}
               </Text>
             ) : (
-              <span>
-                {desktopSupported
-                  ? '\u5f53\u6709\u65b0\u6d88\u606f\u5230\u8fbe\u65f6\uff0c\u663e\u793a\u684c\u9762\u901a\u77e5\u3002\u9996\u6b21\u542f\u7528\u65f6\u4f1a\u7531\u7cfb\u7edf\u5f39\u51fa\u901a\u77e5\u6743\u9650\u8bf7\u6c42\u3002'
-                  : '\u5f53\u6709\u65b0\u6d88\u606f\u5230\u8fbe\u65f6\uff0c\u663e\u793a\u684c\u9762\u901a\u77e5\u3002\u9996\u6b21\u542f\u7528\u65f6\u6d4f\u89c8\u5668\u4f1a\u5f39\u51fa\u6743\u9650\u8bf7\u6c42\u3002'}
-              </span>
+              <span>{enabledDescription}</span>
             )
           }
           after={
@@ -153,6 +187,22 @@ export function SystemNotification() {
             )
           }
         />
+        <SettingTile
+          title={'\u6d4b\u8bd5\u901a\u77e5'}
+          description={
+            '\u53d1\u9001\u4e00\u6761\u672c\u673a\u6d4b\u8bd5\u901a\u77e5\uff0c\u7528\u4e8e\u786e\u8ba4\u6743\u9650\u548c\u7cfb\u7edf\u901a\u77e5\u901a\u9053\u6b63\u5e38\u3002'
+          }
+          after={
+            <Button
+              size="300"
+              radii="300"
+              disabled={notifPermission !== 'granted' || !showNotifications}
+              onClick={handleTestNotification}
+            >
+              <Text size="B300">{'\u53d1\u9001\u6d4b\u8bd5'}</Text>
+            </Button>
+          }
+        />
       </SequenceCard>
       <SequenceCard
         className={SequenceCardStyle}
@@ -162,7 +212,9 @@ export function SystemNotification() {
       >
         <SettingTile
           title={'\u901a\u77e5\u58f0\u97f3'}
-          description={'\u5f53\u6709\u65b0\u6d88\u606f\u5230\u8fbe\u65f6\u64ad\u653e\u63d0\u793a\u97f3\u3002'}
+          description={
+            '\u5f53\u6709\u65b0\u6d88\u606f\u5230\u8fbe\u65f6\u64ad\u653e\u63d0\u793a\u97f3\u3002'
+          }
           after={<Switch value={isNotificationSounds} onChange={setIsNotificationSounds} />}
         />
       </SequenceCard>

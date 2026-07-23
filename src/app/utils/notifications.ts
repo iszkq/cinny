@@ -1,5 +1,11 @@
 import { MatrixClient, MatrixEvent } from 'matrix-js-sdk';
 import { isDesktopUpdaterSupported } from './desktopUpdater';
+import { isAndroidApp } from './nativePlatform';
+import {
+  getNativeNotificationPermission,
+  requestNativeNotificationPermission,
+  showNativeNotification,
+} from './nativeNotifications';
 import { setOptimisticRoomReadMarker } from './room';
 
 export type AppNotificationPermission = PermissionState;
@@ -326,6 +332,10 @@ export const getNotificationState = (): AppNotificationPermission => {
     return 'prompt';
   }
 
+  if (isAndroidApp()) {
+    return 'prompt';
+  }
+
   if (canUseWebNotifications()) {
     return normalizePermission(window.Notification.permission);
   }
@@ -333,7 +343,15 @@ export const getNotificationState = (): AppNotificationPermission => {
   return 'denied';
 };
 
-export const getDesktopNotificationState = async (): Promise<AppNotificationPermission> => {
+export const getAppNotificationState = async (): Promise<AppNotificationPermission> => {
+  if (isAndroidApp()) {
+    try {
+      return await getNativeNotificationPermission();
+    } catch {
+      return 'denied';
+    }
+  }
+
   if (!isDesktopUpdaterSupported()) {
     return getNotificationState();
   }
@@ -348,7 +366,17 @@ export const getDesktopNotificationState = async (): Promise<AppNotificationPerm
   }
 };
 
+export const getDesktopNotificationState = getAppNotificationState;
+
 export const requestNotificationPermission = async (): Promise<AppNotificationPermission> => {
+  if (isAndroidApp()) {
+    try {
+      return await requestNativeNotificationPermission();
+    } catch {
+      return 'denied';
+    }
+  }
+
   if (isDesktopUpdaterSupported()) {
     try {
       const permission = await invokeDesktopNotificationCommand<string>(
@@ -455,8 +483,20 @@ export const sendAppNotification = async ({
   silent,
   onClick,
 }: AppNotificationOptions): Promise<Notification | void> => {
+  if (isAndroidApp()) {
+    const permission = await getAppNotificationState();
+    if (permission !== 'granted') return undefined;
+
+    try {
+      await showNativeNotification({ title, body, silent });
+    } catch {
+      // Notification delivery must not interrupt Matrix message processing.
+    }
+    return undefined;
+  }
+
   if (isDesktopUpdaterSupported()) {
-    const permission = await getDesktopNotificationState();
+    const permission = await getAppNotificationState();
     if (permission !== 'granted') {
       return undefined;
     }
@@ -480,19 +520,43 @@ export const sendAppNotification = async ({
     return undefined;
   }
 
-  const notification = new window.Notification(title, {
-    icon,
-    badge,
-    body,
-    silent,
-  });
+  try {
+    const notification = new window.Notification(title, {
+      icon,
+      badge,
+      body,
+      silent,
+    });
 
-  if (onClick) {
-    notification.onclick = () => {
-      onClick();
-      notification.close();
-    };
+    if (onClick) {
+      notification.onclick = () => {
+        onClick();
+        notification.close();
+      };
+    }
+
+    return notification;
+  } catch {
+    // iOS/iPadOS installed web apps expose Notification permission but require the
+    // Service Worker registration to create the visible system notification.
   }
 
-  return notification;
+  if ('serviceWorker' in navigator) {
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      await registration.showNotification(title, {
+        icon,
+        badge,
+        body,
+        silent,
+        data: {
+          url: window.location.href,
+        },
+      });
+    } catch {
+      // Ignore unsupported Service Worker notification implementations.
+    }
+  }
+
+  return undefined;
 };

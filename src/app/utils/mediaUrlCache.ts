@@ -617,6 +617,18 @@ export const getCachedMediaObjectUrl = (src?: string): string | undefined => {
   return (src && touchObjectUrlMediaEntry(src)?.objectUrl) || undefined;
 };
 
+export const invalidateCachedMediaUrl = async (src?: string): Promise<void> => {
+  syncPersistentMediaNamespace();
+  if (!src) return;
+
+  removeObjectUrlMediaEntry(src);
+  clearFailedMediaEntry(src);
+  persistedMediaUrls.delete(src);
+
+  const mediaCache = await getMediaCache().catch(() => undefined);
+  await mediaCache?.delete(src).catch(() => false);
+};
+
 export const getPreparedMediaUrl = async (
   src?: string,
   priority: MediaCachePriority = 'visible',
