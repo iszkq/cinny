@@ -1,4 +1,4 @@
-import React, { ReactNode, useEffect, useState } from 'react';
+import React, { ReactNode, useEffect, useRef, useState } from 'react';
 import classNames from 'classnames';
 import { Box, Button, Icon, Icons, Spinner, Text } from 'folds';
 import { APP_DISPLAY_NAME, APP_LOGO_URL, APP_TAGLINE, APP_VERSION } from '../../constants/branding';
@@ -15,83 +15,253 @@ const RELEASE_PAGE_URL = `${PROJECT_SOURCE_URL}/releases/latest`;
 const APPLE_ADD_TO_HOME_SCREEN_URL =
   'https://support.apple.com/zh-cn/guide/iphone/iph42ab2f3a7/ios';
 
-type ChannelCardProps = {
-  actions: ReactNode;
-  badge?: string;
-  bullets: string[];
-  description: string;
-  icon: typeof Icons.Monitor;
-  iconTone: keyof typeof css.ChannelIcon;
+type GuideStepProps = {
+  number: number;
   title: string;
+  description: string;
+  children: ReactNode;
 };
 
-function ChannelCard({
-  actions,
-  badge,
-  bullets,
-  description,
-  icon,
-  iconTone,
-  title,
-}: ChannelCardProps) {
+function GuideStep({ number, title, description, children }: GuideStepProps) {
   return (
-    <Box className={css.ChannelCard} direction="Column" gap="400">
-      <Box alignItems="Center" gap="300">
-        <Box className={classNames(css.ChannelIconBase, css.ChannelIcon[iconTone])} shrink="No">
-          <Icon src={icon} size="300" />
-        </Box>
-        <Box grow="Yes" direction="Column" gap="100" style={{ minWidth: 0 }}>
-          <Box alignItems="Center" gap="100" wrap="Wrap">
-            <Text size="H4">{title}</Text>
-            {badge && <span className={css.Badge}>{badge}</span>}
-          </Box>
+    <article className={css.GuideStep}>
+      <Box className={css.GuideStepHeading} alignItems="Start" gap="200">
+        <span className={css.StepNumber}>{number}</span>
+        <Box direction="Column" gap="50">
+          <Text size="H4">{title}</Text>
           <Text size="T200" priority="300">
             {description}
           </Text>
         </Box>
       </Box>
-      <Box as="ul" className={css.BulletList} direction="Column" gap="100">
-        {bullets.map((bullet) => (
-          <Text as="li" size="T300" key={bullet}>
-            {bullet}
-          </Text>
-        ))}
-      </Box>
-      <Box className={css.CardActions} gap="200" wrap="Wrap">
-        {actions}
-      </Box>
-    </Box>
+      <div className={css.GuideVisual}>{children}</div>
+    </article>
   );
 }
 
-function ManualCard({ title, steps }: { title: string; steps: string[] }) {
+function WindowFrame({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <Box className={css.ManualCard} direction="Column" gap="400">
-      <Text size="H4">{title}</Text>
-      <Box direction="Column" gap="300">
-        {steps.map((step, index) => (
-          <Box alignItems="Start" gap="200" key={step}>
-            <span className={css.StepNumber}>{index + 1}</span>
-            <Text size="T300" style={{ lineHeight: 1.65 }}>
-              {step}
+    <div className={css.WindowFrame}>
+      <div className={css.WindowTitleBar}>
+        <span className={css.WindowAppDot} />
+        <span>{title}</span>
+        <span className={css.WindowControls}>— · □ · ×</span>
+      </div>
+      <div className={css.WindowBody}>{children}</div>
+    </div>
+  );
+}
+
+function WindowsGuide() {
+  return (
+    <div className={css.GuideGrid}>
+      <GuideStep number={1} title="下载安装包" description="点击页面上方的 Windows 主按钮。">
+        <div className={css.DownloadIllustration}>
+          <div className={css.DownloadFileIcon}>
+            <Icon src={Icons.Download} size="300" />
+          </div>
+          <Box direction="Column" gap="50">
+            <Text size="L400">Starfire_x64-setup.exe</Text>
+            <Text size="T200" priority="300">
+              最新正式版 · 64 位
             </Text>
           </Box>
-        ))}
-      </Box>
-    </Box>
+          <span className={css.MockPrimaryButton}>立即下载</span>
+        </div>
+      </GuideStep>
+
+      <GuideStep number={2} title="运行安装程序" description="打开文件，按提示点击“下一步”。">
+        <WindowFrame title="Starfire 安装">
+          <div className={css.InstallerLayout}>
+            <div className={css.InstallerBrand}>
+              <img src={APP_LOGO_URL} alt="" />
+            </div>
+            <Box className={css.InstallerContent} direction="Column" gap="200">
+              <Text size="H4">欢迎使用星火安装向导</Text>
+              <Text size="T200" priority="300">
+                安装向导会将星火安装到你的电脑。
+              </Text>
+              <Box className={css.MockButtonRow} justifyContent="End" gap="100">
+                <span className={css.MockMutedButton}>取消</span>
+                <span className={css.MockOutlineButton}>下一步</span>
+              </Box>
+            </Box>
+          </div>
+        </WindowFrame>
+      </GuideStep>
+
+      <GuideStep number={3} title="登录你的账号" description="选择家服务器，输入账号和密码。">
+        <WindowFrame title="星火">
+          <Box className={css.LoginMock} direction="Column" gap="150">
+            <Box alignItems="Center" gap="150">
+              <img src={APP_LOGO_URL} alt="" />
+              <Text size="H3">星火</Text>
+            </Box>
+            <span className={css.MockField}>选择家服务器 · ⌄</span>
+            <span className={css.MockField}>用户名</span>
+            <span className={classNames(css.MockPrimaryButton, css.MockWideButton)}>登录</span>
+          </Box>
+        </WindowFrame>
+      </GuideStep>
+
+      <GuideStep number={4} title="以后自动更新" description="也可在“设置 → 关于”中手动检查。">
+        <WindowFrame title="设置 · 关于">
+          <Box className={css.UpdateMock} direction="Column" gap="200">
+            <Box alignItems="Center" gap="150">
+              <img src={APP_LOGO_URL} alt="" />
+              <Box direction="Column">
+                <Text size="H4">{APP_DISPLAY_NAME}</Text>
+                <Text size="T200" priority="300">
+                  当前版本会自动保持最新
+                </Text>
+              </Box>
+            </Box>
+            <Box className={css.UpdateStatus} alignItems="Center" justifyContent="SpaceBetween">
+              <Box direction="Column">
+                <Text size="L400">桌面更新</Text>
+                <Text size="T200" priority="300">
+                  自动检查正式版本
+                </Text>
+              </Box>
+              <span className={css.MockOutlineButton}>检查更新</span>
+            </Box>
+          </Box>
+        </WindowFrame>
+      </GuideStep>
+    </div>
+  );
+}
+
+function SafariBar({ children }: { children?: ReactNode }) {
+  return (
+    <div className={css.PhoneMock}>
+      <div className={css.PhoneStatus}>9:41 · Wi-Fi · ▰</div>
+      <div className={css.SafariAddress}>🔒 chat.221819.best ↻</div>
+      <div className={css.PhonePage}>
+        <Box alignItems="Center" gap="100">
+          <img src={APP_LOGO_URL} alt="" />
+          <Text size="L400">星火</Text>
+        </Box>
+        {children ?? (
+          <>
+            <span className={css.PhoneTextLine} />
+            <span className={css.PhoneField} />
+            <span className={css.PhoneField} />
+          </>
+        )}
+      </div>
+      <div className={css.SafariToolbar}>
+        ‹ · › · <span>□↑</span> · ▢ · •••
+      </div>
+    </div>
+  );
+}
+
+function IosGuide() {
+  return (
+    <div className={css.GuideGrid}>
+      <GuideStep
+        number={1}
+        title="使用 Safari 打开"
+        description="微信、QQ 内置浏览器不能完整安装。"
+      >
+        <SafariBar />
+      </GuideStep>
+
+      <GuideStep number={2} title="打开共享菜单" description="轻点 Safari 的“•••”，再选择“共享”。">
+        <div className={css.IosActionVisual}>
+          <div className={css.SafariToolbarLarge}>
+            ‹ · › · □↑ · ▢ · <span>•••</span>
+          </div>
+          <div className={css.IosMenu}>
+            <span>书签 · ☆</span>
+            <span>下载项 · ↓</span>
+            <strong>共享 · □↑</strong>
+          </div>
+        </div>
+      </GuideStep>
+
+      <GuideStep number={3} title="添加到主屏幕" description="向下滚动并选择“添加到主屏幕”。">
+        <div className={css.ShareSheet}>
+          <div className={css.ShareApps}>◉ · ● · ✉ · ●</div>
+          <span>拷贝 · ▣</span>
+          <span>加入阅读列表 · ∞</span>
+          <strong>添加到主屏幕 · ⊞</strong>
+          <span>在页面上查找 · ⌕</span>
+        </div>
+      </GuideStep>
+
+      <GuideStep
+        number={4}
+        title="确认添加"
+        description="保留“作为网页 App 打开”，轻点右上角“添加”。"
+      >
+        <div className={css.AddHomeVisual}>
+          <div className={css.AddHomeSheet}>
+            <div className={css.AddHomeHeader}>
+              取消 · 添加到主屏幕 · <strong>添加</strong>
+            </div>
+            <Box alignItems="Center" gap="150">
+              <img src={APP_LOGO_URL} alt="" />
+              <Box direction="Column">
+                <Text size="L400">星火</Text>
+                <Text size="T200" priority="300">
+                  chat.221819.best
+                </Text>
+              </Box>
+            </Box>
+            <div className={css.AddHomeSwitch}>
+              作为网页 App 打开 · <span>●</span>
+            </div>
+          </div>
+          <div className={css.HomeScreenMock}>
+            <img src={APP_LOGO_URL} alt="" />
+            <span>星火</span>
+          </div>
+        </div>
+      </GuideStep>
+    </div>
   );
 }
 
 export function DownloadPage() {
+  const viewportRef = useRef<HTMLDivElement>(null);
   const [latestRelease, setLatestRelease] = useState<DesktopUpdateReleaseInfo>();
   const [releaseLoaded, setReleaseLoaded] = useState(false);
+
+  const scrollToSection = (id: string, smooth = true) => {
+    const viewport = viewportRef.current;
+    const target = document.getElementById(id);
+    if (!viewport || !target) return;
+
+    const viewportTop = viewport.getBoundingClientRect().top;
+    const targetTop = target.getBoundingClientRect().top;
+    const top = viewport.scrollTop + targetTop - viewportTop - 72;
+    viewport.scrollTo({ top: Math.max(0, top), behavior: smooth ? 'smooth' : 'auto' });
+  };
+
+  const handleSectionLink =
+    (id: string): React.MouseEventHandler<HTMLAnchorElement> =>
+    (evt) => {
+      evt.preventDefault();
+      window.history.replaceState(null, '', `#${id}`);
+      window.scrollTo(0, 0);
+      scrollToSection(id);
+    };
 
   useEffect(() => {
     const previousTitle = document.title;
     document.title = `下载 ${APP_DISPLAY_NAME}`;
+    window.scrollTo(0, 0);
+
+    const hashId = decodeURIComponent(window.location.hash.slice(1));
+    const frame = window.requestAnimationFrame(() => {
+      if (hashId) scrollToSection(hashId, false);
+    });
 
     return () => {
       document.title = previousTitle;
+      window.cancelAnimationFrame(frame);
     };
   }, []);
 
@@ -116,12 +286,12 @@ export function DownloadPage() {
     ? normalizeDesktopUpdateVersion(latestRelease.version)
     : APP_VERSION;
   const windowsDownloadUrl = latestRelease?.downloadUrl ?? RELEASE_PAGE_URL;
-  const directWindowsDownload = Boolean(latestRelease?.downloadUrl);
   const androidDownloadUrl = latestRelease?.androidDownloadUrl ?? RELEASE_PAGE_URL;
+  const directWindowsDownload = Boolean(latestRelease?.downloadUrl);
   const directAndroidDownload = Boolean(latestRelease?.androidDownloadUrl);
 
   return (
-    <div className={css.PageViewport}>
+    <div ref={viewportRef} className={css.PageViewport}>
       <Box className={css.Page} direction="Column">
         <header className={css.Header}>
           <Box className={css.HeaderInner} alignItems="Center" justifyContent="SpaceBetween">
@@ -130,355 +300,364 @@ export function DownloadPage() {
               <Box direction="Column">
                 <Text size="H4">{APP_DISPLAY_NAME}</Text>
                 <Text size="T200" priority="300">
-                  应用下载中心
+                  官方下载中心
                 </Text>
               </Box>
             </a>
             <Box className={css.HeaderNav} alignItems="Center" gap="400">
-              <Text as="a" className={css.HeaderLink} href="#downloads" size="T300">
-                下载渠道
-              </Text>
-              <Text as="a" className={css.HeaderLink} href="#manual" size="T300">
-                使用手册
+              <Text
+                as="a"
+                className={css.HeaderLink}
+                href="#downloads"
+                onClick={handleSectionLink('downloads')}
+                size="T300"
+              >
+                下载应用
               </Text>
               <Text
                 as="a"
                 className={css.HeaderLink}
-                href={PROJECT_SOURCE_URL}
-                target="_blank"
-                rel="noreferrer"
+                href="#windows-guide"
+                onClick={handleSectionLink('windows-guide')}
                 size="T300"
               >
-                GitHub
+                Windows 安装
+              </Text>
+              <Text
+                as="a"
+                className={css.HeaderLink}
+                href="#ios-guide"
+                onClick={handleSectionLink('ios-guide')}
+                size="T300"
+              >
+                iPhone / iPad
               </Text>
             </Box>
           </Box>
         </header>
 
         <main className={css.Main}>
-          <section className={css.Hero}>
+          <section className={css.Hero} id="downloads">
             <div className={css.HeroGrid}>
               <Box className={css.HeroContent} direction="Column" gap="500">
-                <img className={css.HeroLogo} src={APP_LOGO_URL} alt={`${APP_DISPLAY_NAME} Logo`} />
+                <span className={css.HeroKicker}>星火全平台客户端</span>
                 <Box direction="Column" gap="300">
-                  <h1 className={css.HeroTitle}>一个账号，随时在所有设备继续聊天</h1>
+                  <h1 className={css.HeroTitle}>下载星火，继续你的每一次对话</h1>
                   <p className={css.HeroDescription}>
-                    Windows 与 Android 提供正式安装包，iPhone、iPad 和其他电脑可安装网页应用。
-                    数据仍保存在你的 Matrix 家服务器中，切换设备无需迁移聊天记录。
+                    Windows 和 Android 使用正式安装包；iPhone、iPad 可直接添加到主屏幕。
                   </p>
                 </Box>
-                <Box gap="200" wrap="Wrap" alignItems="Center">
-                  <Button as="a" href="#downloads" variant="Primary" size="500" radii="Pill">
-                    <Text size="B400">选择我的设备</Text>
-                  </Button>
+                <Box className={css.HeroTrustRow} gap="200" wrap="Wrap">
+                  <span>✓ 正式签名</span>
+                  <span>✓ 支持覆盖更新</span>
+                  <span>✓ 多端消息同步</span>
+                </Box>
+                <Box gap="200" wrap="Wrap">
                   <Button
                     as="a"
                     href={import.meta.env.BASE_URL}
                     variant="Secondary"
                     fill="Soft"
-                    size="500"
+                    size="400"
                     radii="Pill"
                   >
-                    <Text size="B400">直接打开网页版</Text>
+                    <Text size="B300">先打开网页版</Text>
+                  </Button>
+                  <Button
+                    as="a"
+                    href="#guides"
+                    onClick={handleSectionLink('guides')}
+                    variant="Secondary"
+                    fill="None"
+                    size="400"
+                    radii="Pill"
+                  >
+                    <Text size="B300">查看安装图示</Text>
                   </Button>
                 </Box>
               </Box>
-              <aside className={css.HeroAside}>
-                <span className={css.ReleaseEyebrow}>LATEST RELEASE</span>
-                <Text size="H2">v{version}</Text>
-                <Text size="T300" priority="300" style={{ lineHeight: 1.7 }}>
-                  页面会实时读取 GitHub 最新正式版，下载按钮始终指向当前安装包。
-                </Text>
-                <div className={css.ReleaseStatusList}>
-                  <span className={css.ReleaseStatusItem}>Windows 自动更新</span>
-                  <span className={css.ReleaseStatusItem}>Android 覆盖安装</span>
-                  <span className={css.ReleaseStatusItem}>iOS 网页 App</span>
-                </div>
-                <span className={css.HeroMeta}>
+
+              <div className={css.PrimaryDownloadStack}>
+                <a
+                  className={classNames(css.PrimaryDownloadCard, css.WindowsDownloadCard)}
+                  href={windowsDownloadUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <Box alignItems="Center" gap="300">
+                    <span className={css.PrimaryPlatformIcon}>
+                      <Icon src={Icons.Monitor} size="300" />
+                    </span>
+                    <Box grow="Yes" direction="Column" gap="50">
+                      <Text size="H3">Windows 客户端</Text>
+                      <Text size="T200">v{version} · 64 位安装包</Text>
+                    </Box>
+                    <Icon src={Icons.Download} size="200" />
+                  </Box>
+                  <span className={css.PrimaryDownloadLabel}>
+                    {directWindowsDownload ? '立即下载 EXE' : '打开最新发布页'}
+                  </span>
+                </a>
+
+                <a
+                  className={classNames(css.PrimaryDownloadCard, css.AndroidDownloadCard)}
+                  href={androidDownloadUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <Box alignItems="Center" gap="300">
+                    <span className={css.PrimaryPlatformIcon}>
+                      <Icon src={Icons.Phone} size="300" />
+                    </span>
+                    <Box grow="Yes" direction="Column" gap="50">
+                      <Text size="H3">Android 正式版</Text>
+                      <Text size="T200">v{version} · APK 覆盖安装</Text>
+                    </Box>
+                    <Icon src={Icons.Download} size="200" />
+                  </Box>
+                  <span className={css.PrimaryDownloadLabel}>
+                    {directAndroidDownload ? '立即下载 APK' : '打开最新发布页'}
+                  </span>
+                </a>
+
+                <Box className={css.ReleaseLine} alignItems="Center" gap="100">
                   {!releaseLoaded && <Spinner size="100" variant="Secondary" />}
-                  <Text as="span" size="T200">
-                    Matrix 开放协议 · 多端同步
+                  <span className={css.ReleasePulse} />
+                  <Text size="T200" priority="300">
+                    下载按钮实时指向 GitHub 最新正式版 v{version}
                   </Text>
-                </span>
-              </aside>
+                </Box>
+              </div>
             </div>
           </section>
 
-          <section className={css.Section} id="downloads">
-            <Box className={css.SectionHeading} direction="Column" gap="200">
+          <section className={css.SecondarySection}>
+            <Box className={css.SectionHeading} direction="Column" gap="100">
               <Text as="h2" size="H2">
-                选择下载渠道
+                其他安装方式
               </Text>
-              <Text priority="300" style={{ lineHeight: 1.7 }}>
-                电脑优先安装 Windows 客户端，Android 直接安装正式 APK；iPhone 和 iPad 使用 Safari
-                添加到主屏幕即可获得独立应用体验。
+              <Text size="T300" priority="300">
+                手机没有对应安装包时，也可以把网页安装成独立应用。
               </Text>
             </Box>
+            <div className={css.SecondaryGrid}>
+              <article className={css.SecondaryCard}>
+                <span className={classNames(css.SecondaryIcon, css.IosIcon)}>
+                  <Icon src={Icons.Phone} size="300" />
+                </span>
+                <Box grow="Yes" direction="Column" gap="100">
+                  <Text size="H4">iPhone / iPad</Text>
+                  <Text size="T200" priority="300">
+                    Safari 添加到主屏幕，无需 App Store
+                  </Text>
+                </Box>
+                <Button
+                  as="a"
+                  href="#ios-guide"
+                  onClick={handleSectionLink('ios-guide')}
+                  variant="Primary"
+                  size="400"
+                  radii="300"
+                >
+                  <Text size="B300">查看图示教程</Text>
+                </Button>
+              </article>
 
-            <Box className={css.ChannelGrid} style={{ marginTop: 28 }}>
-              <ChannelCard
-                title="Windows 客户端"
-                badge="推荐"
-                icon={Icons.Monitor}
-                iconTone="windows"
-                description={`64 位 Windows · 最新版 v${version}`}
-                bullets={[
-                  '独立运行，不受浏览器扩展影响',
-                  '支持自动检查和安装更新',
-                  '适合长期在线和重度使用',
-                ]}
-                actions={
-                  <>
-                    <Button
-                      as="a"
-                      href={windowsDownloadUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      variant="Primary"
-                      size="400"
-                      radii="300"
-                      before={<Icon src={Icons.Download} size="100" />}
-                    >
-                      <Text size="B300">
-                        {directWindowsDownload ? '下载 Windows 安装包' : '打开最新发布页'}
-                      </Text>
-                    </Button>
-                    <Button
-                      as="a"
-                      href="#windows-manual"
-                      variant="Secondary"
-                      fill="Soft"
-                      size="400"
-                      radii="300"
-                    >
-                      <Text size="B300">安装说明</Text>
-                    </Button>
-                  </>
-                }
-              />
-
-              <ChannelCard
-                title="网页应用（PWA）"
-                badge="免下载安装包"
-                icon={Icons.Globe}
-                iconTone="web"
-                description="Windows、macOS、Linux 与主流移动浏览器"
-                bullets={[
-                  '从桌面或开始菜单独立打开',
-                  '自动使用网站最新版本',
-                  '无需管理员权限，安装更轻量',
-                ]}
-                actions={
-                  <>
-                    <PWAInstallButton
-                      variant="Primary"
-                      size="400"
-                      radii="300"
-                      before={<Icon src={Icons.Download} size="100" />}
-                    >
-                      <Text size="B300">安装网页应用</Text>
-                    </PWAInstallButton>
-                    <Button
-                      as="a"
-                      href="#pwa-manual"
-                      variant="Secondary"
-                      fill="Soft"
-                      size="400"
-                      radii="300"
-                    >
-                      <Text size="B300">查看手动步骤</Text>
-                    </Button>
-                  </>
-                }
-              />
-
-              <ChannelCard
-                title="Android"
-                badge="正式 APK"
-                icon={Icons.Phone}
-                iconTone="android"
-                description={`Android 8.0 及以上 · 最新版 v${version}`}
-                bullets={[
-                  '正式签名安装包，更新时直接覆盖旧版本',
-                  '应用内自动发现新版本并引导安装',
-                  '账号、聊天记录和本地设置会继续保留',
-                ]}
-                actions={
-                  <>
-                    <Button
-                      as="a"
-                      href={androidDownloadUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      variant="Primary"
-                      size="400"
-                      radii="300"
-                      before={<Icon src={Icons.Download} size="100" />}
-                    >
-                      <Text size="B300">
-                        {directAndroidDownload ? '下载 Android 正式版' : '打开最新发布页'}
-                      </Text>
-                    </Button>
-                    <Button
-                      as="a"
-                      href="#android-manual"
-                      variant="Secondary"
-                      fill="Soft"
-                      size="400"
-                      radii="300"
-                    >
-                      <Text size="B300">安装说明</Text>
-                    </Button>
-                  </>
-                }
-              />
-
-              <ChannelCard
-                title="iPhone 与 iPad"
-                icon={Icons.Phone}
-                iconTone="ios"
-                description="通过 Safari 添加到主屏幕"
-                bullets={[
-                  '适配新版 Safari 右下角“更多”菜单',
-                  '作为网页 App 打开，拥有桌面图标和独立窗口',
-                  '无需 App Store，账号与其他端保持一致',
-                ]}
-                actions={
-                  <Button as="a" href="#ios-manual" variant="Primary" size="400" radii="300">
-                    <Text size="B300">iOS 安装步骤</Text>
+              <article className={css.SecondaryCard}>
+                <span className={classNames(css.SecondaryIcon, css.WebIcon)}>
+                  <Icon src={Icons.Globe} size="300" />
+                </span>
+                <Box grow="Yes" direction="Column" gap="100">
+                  <Text size="H4">网页应用（PWA）</Text>
+                  <Text size="T200" priority="300">
+                    macOS、Linux 和支持 PWA 的浏览器
+                  </Text>
+                </Box>
+                <Box gap="100" wrap="Wrap">
+                  <PWAInstallButton variant="Primary" size="400" radii="300">
+                    <Text size="B300">安装网页应用</Text>
+                  </PWAInstallButton>
+                  <Button
+                    as="a"
+                    href="#pwa-guide"
+                    onClick={handleSectionLink('pwa-guide')}
+                    variant="Secondary"
+                    fill="Soft"
+                    size="400"
+                    radii="300"
+                  >
+                    <Text size="B300">手动步骤</Text>
                   </Button>
-                }
-              />
-            </Box>
+                </Box>
+              </article>
+            </div>
           </section>
 
-          <section className={css.Section} id="manual">
-            <Box className={css.SectionHeading} direction="Column" gap="200">
-              <Text as="h2" size="H2">
-                安装与使用手册
+          <section className={css.GuidesSection} id="guides">
+            <Box className={css.GuidesHeading} direction="Column" gap="150" alignItems="Center">
+              <span className={css.SectionKicker}>图示安装指南</span>
+              <Text as="h2" size="H1" align="Center">
+                照着图做，几分钟完成安装
               </Text>
-              <Text priority="300" style={{ lineHeight: 1.7 }}>
-                按照设备选择对应步骤。安装只会创建应用入口，不会改变服务器上的账号和消息数据。
+              <Text size="T300" priority="300" align="Center">
+                选择你的设备，按 1 → 4 的顺序操作。
               </Text>
             </Box>
 
-            <Box className={css.ManualGrid} style={{ marginTop: 28 }}>
-              <div className={css.ManualAnchor} id="windows-manual">
-                <ManualCard
-                  title="Windows 客户端安装"
-                  steps={[
-                    '点击“下载 Windows 安装包”，从 GitHub Releases 获取最新版安装程序。',
-                    '打开下载的 Starfire 安装程序，按照系统提示完成安装。',
-                    '从开始菜单或桌面打开星火，选择家服务器后登录。',
-                    '客户端会自动检查更新；也可以在“设置 → 关于”中手动检查。',
-                  ]}
-                />
-              </div>
-              <div className={css.ManualAnchor} id="pwa-manual">
-                <ManualCard
-                  title="电脑安装网页应用"
-                  steps={[
-                    '在支持网页应用的浏览器中打开当前下载页面。',
-                    '点击“安装网页应用”；如果没有弹窗，请打开浏览器菜单中的“安装应用”或“添加到程序坞”。',
-                    '确认安装后，可从桌面、开始菜单或程序坞独立打开星火。',
-                    '如果浏览器不支持安装，可以继续使用网页版或选择 Windows 客户端。',
-                  ]}
-                />
-              </div>
-              <div className={css.ManualAnchor} id="android-manual">
-                <ManualCard
-                  title="Android 正式版安装与更新"
-                  steps={[
-                    '点击上方“下载 Android 正式版”，获取页面标注的最新 APK。微信或 QQ 内打开时，请先选择“在浏览器中打开”。',
-                    '首次安装时，系统可能要求允许浏览器“安装未知应用”；授权后返回并继续安装。',
-                    '如果手机上安装的是早期调试版，首次迁移到正式签名版可能需要卸载一次；从本正式版开始，后续更新可直接覆盖且保留数据。',
-                    '应用发现新版后会弹出更新提示，点击下载并安装，按 Android 系统提示确认即可。',
-                  ]}
-                />
-              </div>
-              <div className={css.ManualAnchor} id="ios-manual">
-                <ManualCard
-                  title="iPhone / iPad 添加到主屏幕"
-                  steps={[
-                    '使用 Safari 打开星火网站；微信、QQ 等内置浏览器不支持完整的网页 App 安装。',
-                    '在新版 Safari 中轻点右下角“更多（···）”，再选择“共享”。如果工具栏直接显示共享图标，也可以直接轻点。',
-                    '向下滚动操作列表并选择“添加到主屏幕”；若没有该项，请到列表底部“编辑操作”中将它加入。',
-                    '保留“作为网页 App 打开”，确认名称后轻点右上角“添加”，以后从主屏幕启动。',
-                  ]}
-                />
-              </div>
-            </Box>
+            <section className={css.GuidePanel} id="windows-guide">
+              <Box className={css.GuidePanelHeader} alignItems="Center" gap="300">
+                <span className={classNames(css.GuidePlatformIcon, css.WindowsGuideIcon)}>
+                  <Icon src={Icons.Monitor} size="300" />
+                </span>
+                <Box grow="Yes" direction="Column" gap="50">
+                  <Text as="h3" size="H2">
+                    Windows 客户端安装
+                  </Text>
+                  <Text size="T200" priority="300">
+                    推荐使用 · 自动检查更新
+                  </Text>
+                </Box>
+                <Button
+                  as="a"
+                  href={windowsDownloadUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  variant="Primary"
+                  size="400"
+                  radii="300"
+                  before={<Icon src={Icons.Download} size="100" />}
+                >
+                  <Text size="B300">下载 Windows 安装包</Text>
+                </Button>
+              </Box>
+              <WindowsGuide />
+            </section>
+
+            <section className={css.GuidePanel} id="ios-guide">
+              <Box className={css.GuidePanelHeader} alignItems="Center" gap="300">
+                <span className={classNames(css.GuidePlatformIcon, css.IosGuideIcon)}>
+                  <Icon src={Icons.Phone} size="300" />
+                </span>
+                <Box grow="Yes" direction="Column" gap="50">
+                  <Text as="h3" size="H2">
+                    iPhone / iPad 添加到主屏幕
+                  </Text>
+                  <Text size="T200" priority="300">
+                    适配新版 Safari“更多 → 共享”流程
+                  </Text>
+                </Box>
+                <Button
+                  as="a"
+                  href={APPLE_ADD_TO_HOME_SCREEN_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  variant="Secondary"
+                  fill="Soft"
+                  size="400"
+                  radii="300"
+                  after={<Icon src={Icons.External} size="100" />}
+                >
+                  <Text size="B300">Apple 官方说明</Text>
+                </Button>
+              </Box>
+              <IosGuide />
+            </section>
+
+            <div className={css.CompactGuideGrid}>
+              <article className={css.CompactGuide} id="android-guide">
+                <Box alignItems="Center" gap="200">
+                  <span className={classNames(css.GuidePlatformIcon, css.AndroidGuideIcon)}>
+                    <Icon src={Icons.Phone} size="200" />
+                  </span>
+                  <Text size="H3">Android APK</Text>
+                </Box>
+                <div className={css.CompactSteps}>
+                  <span>
+                    <b>1</b> 点击“立即下载 APK”
+                  </span>
+                  <span>
+                    <b>2</b> 允许浏览器安装未知应用
+                  </span>
+                  <span>
+                    <b>3</b> 按系统提示覆盖安装
+                  </span>
+                </div>
+                <Button
+                  as="a"
+                  href={androidDownloadUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  variant="Primary"
+                  size="400"
+                  radii="300"
+                  before={<Icon src={Icons.Download} size="100" />}
+                >
+                  <Text size="B300">下载 Android APK</Text>
+                </Button>
+              </article>
+
+              <article className={css.CompactGuide} id="pwa-guide">
+                <Box alignItems="Center" gap="200">
+                  <span className={classNames(css.GuidePlatformIcon, css.WebGuideIcon)}>
+                    <Icon src={Icons.Globe} size="200" />
+                  </span>
+                  <Text size="H3">电脑安装网页应用</Text>
+                </Box>
+                <div className={css.CompactSteps}>
+                  <span>
+                    <b>1</b> 使用 Chrome、Edge 或 Safari 打开
+                  </span>
+                  <span>
+                    <b>2</b> 点击浏览器地址栏的安装图标
+                  </span>
+                  <span>
+                    <b>3</b> 确认后从桌面独立启动
+                  </span>
+                </div>
+                <PWAInstallButton variant="Primary" size="400" radii="300">
+                  <Text size="B300">安装网页应用</Text>
+                </PWAInstallButton>
+              </article>
+            </div>
           </section>
 
-          <section className={css.Section}>
-            <Box className={css.InfoStrip} alignItems="Start" gap="300">
-              <Icon src={Icons.Info} size="300" />
-              <Box direction="Column" gap="100">
-                <Text size="L400">首次使用</Text>
-                <Text size="T300" style={{ lineHeight: 1.7 }}>
-                  打开应用后选择你的 Matrix
-                  家服务器，输入用户名和密码登录。不同安装渠道使用相同账号，历史消息和房间会在登录后同步；加密消息请确保已设置并妥善保存恢复密钥。
+          <section className={css.SupportStrip}>
+            <Box alignItems="Start" gap="300">
+              <span className={css.SupportIcon}>
+                <Icon src={Icons.Info} size="200" />
+              </span>
+              <Box grow="Yes" direction="Column" gap="100">
+                <Text size="H4">安装不会影响聊天数据</Text>
+                <Text size="T300" priority="300">
+                  同一账号登录后会继续同步房间和消息；覆盖安装 Android 新版也会保留本地设置。
                 </Text>
               </Box>
-            </Box>
-
-            <Box className={css.ChannelGrid} style={{ marginTop: 28 }}>
-              <Box className={css.ManualCard} direction="Column" gap="200">
-                <Text size="H4">版本更新</Text>
-                <Text size="T300" priority="300" style={{ lineHeight: 1.7 }}>
-                  Windows 客户端与 Android 正式版都会在应用内检查更新；PWA
-                  和网页版自动使用网站最新版。如果页面更新异常，可在“设置 → 关于”中清理资源缓存。
-                </Text>
+              <Box gap="100" wrap="Wrap">
+                <Button
+                  as="a"
+                  href={RELEASE_PAGE_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  variant="Secondary"
+                  fill="Soft"
+                  size="300"
+                  radii="300"
+                >
+                  <Text size="B300">GitHub Releases</Text>
+                </Button>
+                <Button
+                  as="a"
+                  href={PROJECT_SOURCE_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  variant="Secondary"
+                  fill="Soft"
+                  size="300"
+                  radii="300"
+                >
+                  <Text size="B300">项目源代码</Text>
+                </Button>
               </Box>
-              <Box className={css.ManualCard} direction="Column" gap="200">
-                <Text size="H4">卸载方式</Text>
-                <Text size="T300" priority="300" style={{ lineHeight: 1.7 }}>
-                  Windows 客户端可从系统“已安装的应用”卸载；PWA
-                  可在应用窗口菜单或浏览器应用管理页面中卸载。卸载前请确认加密恢复密钥已经备份。
-                </Text>
-              </Box>
-            </Box>
-
-            <Box justifyContent="Center" gap="200" wrap="Wrap" style={{ marginTop: 28 }}>
-              <Button
-                as="a"
-                href={APPLE_ADD_TO_HOME_SCREEN_URL}
-                target="_blank"
-                rel="noreferrer"
-                variant="Secondary"
-                fill="Soft"
-                size="400"
-                radii="300"
-                after={<Icon src={Icons.External} size="100" />}
-              >
-                <Text size="B300">Apple 官方安装说明</Text>
-              </Button>
-              <Button
-                as="a"
-                href={RELEASE_PAGE_URL}
-                target="_blank"
-                rel="noreferrer"
-                variant="Secondary"
-                fill="Soft"
-                size="400"
-                radii="300"
-                after={<Icon src={Icons.External} size="100" />}
-              >
-                <Text size="B300">GitHub Releases</Text>
-              </Button>
-              <Button
-                as="a"
-                href={PROJECT_SOURCE_URL}
-                target="_blank"
-                rel="noreferrer"
-                variant="Secondary"
-                fill="Soft"
-                size="400"
-                radii="300"
-                after={<Icon src={Icons.External} size="100" />}
-              >
-                <Text size="B300">项目源代码</Text>
-              </Button>
             </Box>
           </section>
 
