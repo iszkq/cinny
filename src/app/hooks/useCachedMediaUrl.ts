@@ -28,9 +28,7 @@ export const useCachedMediaUrls = (
   src: string | undefined
 ): { desktopUrl: string | undefined; objectUrl: string | undefined } => {
   const desktopSupported = isDesktopUpdaterSupported();
-  const [cachedState, setCachedState] = useState<CachedMediaState>(() =>
-    getCachedMediaState(src)
-  );
+  const [cachedState, setCachedState] = useState<CachedMediaState>(() => getCachedMediaState(src));
   const [desktopUrl, setDesktopUrl] = useState<string | undefined>(() =>
     desktopSupported ? getCachedDesktopMediaAssetUrl(src) : undefined
   );
@@ -44,10 +42,6 @@ export const useCachedMediaUrls = (
 
     const unsubscribe = subscribeCachedMediaObjectUrl(src, (objectUrl) => {
       setCachedState((prevState) => {
-        if (prevState.src === src && prevState.url && objectUrl === undefined) {
-          return prevState;
-        }
-
         if (prevState.src === src && prevState.url === objectUrl) {
           return prevState;
         }

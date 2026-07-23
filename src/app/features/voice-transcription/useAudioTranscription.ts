@@ -129,14 +129,16 @@ const getAudioTranscriptionSupport = (
     return {
       supported: false,
       mode: 'none',
-      reason: '\u5f53\u524d Chrome \u73af\u5883\u7f3a\u5c11\u5fc5\u8981\u7684\u8bed\u97f3\u80fd\u529b\u3002',
+      reason:
+        '\u5f53\u524d Chrome \u73af\u5883\u7f3a\u5c11\u5fc5\u8981\u7684\u8bed\u97f3\u80fd\u529b\u3002',
     };
   }
 
   return {
     supported: true,
     mode: 'browser',
-    reason: '\u6d4f\u89c8\u5668\u539f\u751f\u666e\u901a\u8bdd\u8f6c\u5199\uff08\u6700\u957f 5 \u5206\u949f\uff09',
+    reason:
+      '\u6d4f\u89c8\u5668\u539f\u751f\u666e\u901a\u8bdd\u8f6c\u5199\uff08\u6700\u957f 5 \u5206\u949f\uff09',
   };
 };
 
@@ -288,10 +290,7 @@ const transcribeAudioSegment = async (
     let fatalError = false;
 
     const getVisibleText = () =>
-      combineTranscript(
-        settledText,
-        combineTranscript(sessionConfirmedText, sessionPendingText)
-      );
+      combineTranscript(settledText, combineTranscript(sessionConfirmedText, sessionPendingText));
 
     const finish = (callback: () => void) => {
       if (settled) return;
@@ -542,6 +541,7 @@ export const useAudioTranscription = (id: string | undefined) => {
   const aiSettings = useAtomValue(aiSettingsAtom);
   const clientConfig = useClientConfig();
   const defaultAihubmixApiKey = clientConfig.audioTranscription?.defaultAihubmixApiKey;
+  const defaultAihubmixBaseUrl = clientConfig.audioTranscription?.baseUrl?.trim();
   const support = getAudioTranscriptionSupport(aiSettings, defaultAihubmixApiKey);
   const [state, setState] = useState<AudioTranscriptionState>(() =>
     id ? getAudioTranscriptionState(id) : IDLE_STATE
@@ -594,13 +594,19 @@ export const useAudioTranscription = (id: string | undefined) => {
 
         const promise = getBlob()
           .then((blob) =>
-            transcribeAudioWithAihubmix(aiSettings, blob, {
-              apiKey: defaultAihubmixApiKey,
-              model: AIHUBMIX_AUDIO_TRANSCRIPTION_MODEL,
-              language: 'zh',
-              temperature: 0.2,
-              filename: 'voice-message.webm',
-            })
+            transcribeAudioWithAihubmix(
+              defaultAihubmixBaseUrl
+                ? { ...aiSettings, baseUrl: defaultAihubmixBaseUrl }
+                : aiSettings,
+              blob,
+              {
+                apiKey: defaultAihubmixApiKey,
+                model: AIHUBMIX_AUDIO_TRANSCRIPTION_MODEL,
+                language: 'zh',
+                temperature: 0.2,
+                filename: 'voice-message.webm',
+              }
+            )
           )
           .then((text) => {
             setAudioTranscriptionState(id, {
@@ -725,7 +731,15 @@ export const useAudioTranscription = (id: string | undefined) => {
       pendingTranscriptions.set(id, promise);
       return promise;
     },
-    [aiSettings, defaultAihubmixApiKey, id, support.mode, support.reason, support.supported]
+    [
+      aiSettings,
+      defaultAihubmixApiKey,
+      defaultAihubmixBaseUrl,
+      id,
+      support.mode,
+      support.reason,
+      support.supported,
+    ]
   );
 
   return {

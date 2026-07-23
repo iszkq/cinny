@@ -45,7 +45,7 @@ public class NativeFileSaverPlugin extends Plugin {
                 ? MediaStore.Images.Media.EXTERNAL_CONTENT_URI
                 : MediaStore.Downloads.EXTERNAL_CONTENT_URI;
             String relativePath = imageFile
-                ? Environment.DIRECTORY_PICTURES + "/Starfire"
+                ? Environment.DIRECTORY_DCIM + "/Camera"
                 : Environment.DIRECTORY_DOWNLOADS + "/Starfire";
             ContentValues values = new ContentValues();
             values.put(MediaStore.MediaColumns.DISPLAY_NAME, fileName);
@@ -74,7 +74,7 @@ public class NativeFileSaverPlugin extends Plugin {
             result.put("uri", fileUri.toString());
             result.put("fileName", fileName);
             String savedName = fileName;
-            String savedLocation = imageFile ? "手机相册" : "下载/Starfire";
+            String savedLocation = imageFile ? "默认相册" : "下载/Starfire";
             getActivity().runOnUiThread(
                 () -> Toast.makeText(
                     getContext(),

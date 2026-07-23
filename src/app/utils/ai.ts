@@ -458,8 +458,8 @@ const toAihubmixNetworkError = (error: unknown): Error => {
   const detail = error instanceof Error ? error.message.trim() : '';
   return new Error(
     detail
-      ? `无法连接 AIHubMix，请检查网络或代理后重试。(${detail})`
-      : '无法连接 AIHubMix，请检查网络或代理后重试。'
+      ? `无法直连 AIHubMix。当前网络可能阻断了服务域名；请切换网络，或配置一个本地可直连的 AI 基础地址后重试。(${detail})`
+      : '无法直连 AIHubMix。当前网络可能阻断了服务域名；请切换网络，或配置一个本地可直连的 AI 基础地址后重试。'
   );
 };
 

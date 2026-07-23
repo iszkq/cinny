@@ -102,7 +102,7 @@ import {
   useIntersectionObserver,
 } from '../../hooks/useIntersectionObserver';
 import { markAsRead, ROOM_MARKED_AS_READ } from '../../utils/notifications';
-import { ROOM_FOLLOW_LATEST } from '../../utils/roomViewEvents';
+import { ROOM_COMPOSER_VIEWPORT_CHANGE, ROOM_FOLLOW_LATEST } from '../../utils/roomViewEvents';
 import { useDebounce } from '../../hooks/useDebounce';
 import { getResizeObserverEntry, useResizeObserver } from '../../hooks/useResizeObserver';
 import * as css from './RoomTimeline.css';
@@ -200,7 +200,8 @@ const getTimelineReplyRelation = (mEvent: MatrixEvent): TimelineReplyRelation =>
       : undefined;
 
   return {
-    replyEventId: mEvent.replyEventId ?? (typeof replyEventId === 'string' ? replyEventId : undefined),
+    replyEventId:
+      mEvent.replyEventId ?? (typeof replyEventId === 'string' ? replyEventId : undefined),
     threadRootId: mEvent.threadRootId ?? threadRootId,
   };
 };
@@ -398,13 +399,7 @@ const getTimelineImageViewerItemsInRange = (
     const timelineEntry = getTimelineIndexEntry(timelineIndex, index);
     const mEvent = timelineEntry?.event;
     const eventId = mEvent?.getId();
-    if (
-      !timelineEntry ||
-      !mEvent ||
-      !eventId ||
-      seenEventIds.has(eventId) ||
-      mEvent.isRedacted()
-    ) {
+    if (!timelineEntry || !mEvent || !eventId || seenEventIds.has(eventId) || mEvent.isRedacted()) {
       continue;
     }
     seenEventIds.add(eventId);
@@ -415,10 +410,9 @@ const getTimelineImageViewerItemsInRange = (
       typeof content.file?.url === 'string'
         ? content.file.url
         : typeof content.url === 'string'
-          ? content.url
-          : undefined;
-    const mimeType =
-      typeof content.info?.mimetype === 'string' ? content.info.mimetype : undefined;
+        ? content.url
+        : undefined;
+    const mimeType = typeof content.info?.mimetype === 'string' ? content.info.mimetype : undefined;
     const info =
       content.info && typeof content.info === 'object'
         ? (content.info as ViewerImageItem['info'])
@@ -733,6 +727,7 @@ const UNREAD_SYNC_STATES = new Set<SyncState>([
   SyncState.Syncing,
 ]);
 const READ_AT_BOTTOM_THRESHOLD = 8;
+const COMPOSER_VIEWPORT_ANCHOR_DURATION_MS = 1200;
 
 const isScrollAtBottom = (scrollElement: HTMLElement): boolean =>
   scrollElement.scrollHeight - scrollElement.scrollTop - scrollElement.offsetHeight <=
@@ -827,6 +822,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     count: 0,
     smooth: true,
   });
+  const composerViewportAnchorUntilRef = useRef(0);
 
   const [focusItem, setFocusItem] = useState<
     | {
@@ -974,13 +970,10 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
 
     for (let index = visibleMessages.length - 1; index >= 0; index -= 1) {
       const target = visibleMessages[index];
-      const readers = Array.from(new Set(room.getUsersReadUpTo(target.event)))
-        .filter(
-          (readerId) =>
-            readerId !== myUserId &&
-            !assignedUsers.has(readerId) &&
-            !ignoredUsersSet.has(readerId)
-        );
+      const readers = Array.from(new Set(room.getUsersReadUpTo(target.event))).filter(
+        (readerId) =>
+          readerId !== myUserId && !assignedUsers.has(readerId) && !ignoredUsersSet.has(readerId)
+      );
 
       if (readers.length === 0) continue;
 
@@ -1236,13 +1229,81 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
         const scrollElement = getScrollElement();
         if (!editorBaseEntry || !scrollElement) return;
 
-        if (atBottomRef.current) {
+        if (atBottomRef.current || composerViewportAnchorUntilRef.current > Date.now()) {
           scrollToBottom(scrollElement);
+          setAtBottom(true);
         }
       };
     }, [getScrollElement, roomInputRef]),
     useCallback(() => roomInputRef.current, [roomInputRef])
   );
+
+  useEffect(() => {
+    if (screenSize !== ScreenSize.Mobile || typeof window === 'undefined') return undefined;
+
+    const viewport = window.visualViewport;
+    const pendingFrames = new Set<number>();
+    const pendingTimers = new Set<number>();
+
+    const keepLatestVisible = () => {
+      if (composerViewportAnchorUntilRef.current <= Date.now()) return;
+      const scrollElement = getScrollElement();
+      if (!scrollElement || !atLiveEndRef.current) return;
+
+      scrollToBottom(scrollElement);
+      setAtBottom(true);
+    };
+
+    const scheduleKeepLatestVisible = () => {
+      const frame = window.requestAnimationFrame(() => {
+        pendingFrames.delete(frame);
+        keepLatestVisible();
+      });
+      pendingFrames.add(frame);
+
+      // Mobile keyboards animate through several viewport sizes. Following a few settled frames
+      // prevents the final resize from hiding the newest message again.
+      [80, 240, 480].forEach((delay) => {
+        const timer = window.setTimeout(() => {
+          pendingTimers.delete(timer);
+          keepLatestVisible();
+        }, delay);
+        pendingTimers.add(timer);
+      });
+    };
+
+    const handleComposerViewportChange = (evt: Event) => {
+      const customEvent = evt as CustomEvent<{ roomId?: string }>;
+      if (customEvent.detail?.roomId !== room.roomId) return;
+      if (
+        !atLiveEndRef.current ||
+        (!atBottomRef.current && composerViewportAnchorUntilRef.current <= Date.now())
+      ) {
+        return;
+      }
+
+      composerViewportAnchorUntilRef.current = Date.now() + COMPOSER_VIEWPORT_ANCHOR_DURATION_MS;
+      scheduleKeepLatestVisible();
+    };
+
+    const handleViewportResize = () => {
+      if (composerViewportAnchorUntilRef.current > Date.now()) {
+        scheduleKeepLatestVisible();
+      }
+    };
+
+    window.addEventListener(ROOM_COMPOSER_VIEWPORT_CHANGE, handleComposerViewportChange);
+    window.addEventListener('resize', handleViewportResize, { passive: true });
+    viewport?.addEventListener('resize', handleViewportResize, { passive: true });
+
+    return () => {
+      window.removeEventListener(ROOM_COMPOSER_VIEWPORT_CHANGE, handleComposerViewportChange);
+      window.removeEventListener('resize', handleViewportResize);
+      viewport?.removeEventListener('resize', handleViewportResize);
+      pendingFrames.forEach((frame) => window.cancelAnimationFrame(frame));
+      pendingTimers.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, [getScrollElement, room.roomId, screenSize]);
 
   const tryAutoMarkAsRead = useCallback(() => {
     if (eventId && atLiveEndRef.current) {
@@ -1264,13 +1325,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     if (!isScrollAtBottom(scrollElement)) return;
 
     tryAutoMarkAsRead();
-  }, [
-    getScrollElement,
-    latestRenderedEventId,
-    liveTimelineLinked,
-    rangeAtEnd,
-    tryAutoMarkAsRead,
-  ]);
+  }, [getScrollElement, latestRenderedEventId, liveTimelineLinked, rangeAtEnd, tryAutoMarkAsRead]);
 
   useEffect(() => {
     const scrollElement = getScrollElement();
@@ -2190,11 +2245,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
                     viewerItems={imageViewerItems}
                     viewerItemId={mEventId}
                     renderImage={(p) => (
-                      <Image
-                        {...p}
-                        loading={mediaAutoLoad ? 'eager' : 'lazy'}
-                        decoding="async"
-                      />
+                      <Image {...p} loading={mediaAutoLoad ? 'eager' : 'lazy'} decoding="async" />
                     )}
                     renderViewer={(p) => <ImageViewer {...p} />}
                   />

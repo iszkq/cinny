@@ -149,10 +149,7 @@ const scheduleWebImagePackMediaWarm = (
   const objectUrls = Array.from(
     getImagePackPrimaryMediaUrls(mx, useAuthentication, packs, usages)
   ).slice(0, options.objectWarmLimit);
-  const objectUrlSet = new Set(objectUrls);
-  const persistentUrls = Array.from(
-    getImagePackMediaUrls(mx, useAuthentication, packs, usages)
-  ).filter((mediaUrl) => !objectUrlSet.has(mediaUrl));
+  const persistentUrls = Array.from(getImagePackMediaUrls(mx, useAuthentication, packs, usages));
 
   const scheduleBatch = (
     urls: string[],
@@ -182,6 +179,9 @@ const scheduleWebImagePackMediaWarm = (
   scheduleBatch(objectUrls, options.objectWarmDelayMs, (mediaUrl) => {
     void primeCachedMediaObjectUrl(mediaUrl, 'background');
   });
+  // Runtime blob URLs disappear when the WebView is restarted. Persist every personal/default
+  // pack item as well, including the priority items above, so Android and iOS can paint them from
+  // local storage on the next launch.
   scheduleBatch(persistentUrls, options.persistentWarmDelayMs, (mediaUrl) => {
     void primePersistentMediaUrl(mediaUrl, 'background');
   });

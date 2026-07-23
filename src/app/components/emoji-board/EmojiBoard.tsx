@@ -652,6 +652,7 @@ type EmojiBoardProps = {
   imagePackMode?: ImagePackMode;
   requestClose: () => void;
   returnFocusOnDeactivate?: boolean;
+  closeOnOutsideClick?: boolean;
   onEmojiSelect?: (unicode: string, shortcode: string) => void;
   onCustomEmojiSelect?: (mxc: string, shortcode: string) => void;
   onCloudEmojiSelect?: (url: string, shortcode: string, info?: IImageInfo) => void;
@@ -668,6 +669,7 @@ export function EmojiBoard({
   imagePackMode = 'contextual',
   requestClose,
   returnFocusOnDeactivate,
+  closeOnOutsideClick = true,
   onEmojiSelect,
   onCustomEmojiSelect,
   onCloudEmojiSelect,
@@ -1050,7 +1052,7 @@ export function EmojiBoard({
         returnFocusOnDeactivate,
         initialFocus: false,
         onDeactivate: requestClose,
-        clickOutsideDeactivates: true,
+        clickOutsideDeactivates: closeOnOutsideClick,
         allowOutsideClick: true,
         isKeyForward: (evt: KeyboardEvent) =>
           !editableActiveElement() && isKeyHotkey(['arrowdown', 'arrowright'], evt),

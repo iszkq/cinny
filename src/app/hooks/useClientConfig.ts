@@ -33,6 +33,8 @@ export type ClientConfig = {
 
   audioTranscription?: {
     defaultAihubmixApiKey?: string;
+    /** Optional deployment relay/base URL, useful when aihubmix.com is not directly reachable. */
+    baseUrl?: string;
   };
 
   imageOcr?: {

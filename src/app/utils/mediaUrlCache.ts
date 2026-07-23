@@ -235,7 +235,12 @@ const trimObjectUrlMediaCache = () => {
     (objectUrlMediaCache.size > MAX_OBJECT_URL_MEDIA_ITEMS ||
       objectUrlMediaBytes > MAX_OBJECT_URL_MEDIA_BYTES)
   ) {
-    const oldestKey = objectUrlMediaCache.keys().next().value;
+    // A subscribed entry is currently rendered (avatars and emoji subscribe before priming).
+    // Revoking it here can leave an <img> pointing at an already-invalid blob URL until the
+    // next React render. Skip visible entries and trim them after their last subscriber leaves.
+    const oldestKey = Array.from(objectUrlMediaCache.keys()).find(
+      (src) => (objectUrlMediaListeners.get(src)?.size ?? 0) === 0
+    );
     if (!oldestKey) {
       return;
     }
@@ -428,6 +433,7 @@ const cleanupLegacyMediaCaches = async () => {
           .map((key) => caches.delete(key))
       )
     )
+    .then(() => undefined)
     .finally(() => {
       legacyCacheCleanupPromise = undefined;
     });
@@ -445,17 +451,48 @@ const getMediaCache = async (): Promise<Cache | undefined> => {
   return caches.open(getPersistentMediaCacheName());
 };
 
-const trimPersistentMediaCache = async (mediaCache: Cache) => {
+const trimPersistentMediaCache = async (
+  mediaCache: Cache,
+  maxEntries = MAX_PERSISTENT_MEDIA_ENTRIES
+) => {
   const cachedRequests = await mediaCache.keys();
-  if (cachedRequests.length <= MAX_PERSISTENT_MEDIA_ENTRIES) {
+  if (cachedRequests.length <= maxEntries) {
     return;
   }
 
   await Promise.all(
     cachedRequests
-      .slice(0, cachedRequests.length - MAX_PERSISTENT_MEDIA_ENTRIES)
+      .slice(0, cachedRequests.length - maxEntries)
       .map((request) => mediaCache.delete(request))
   );
+};
+
+const persistMediaResponse = async (
+  mediaCache: Cache,
+  src: string,
+  response: Response
+): Promise<boolean> => {
+  try {
+    // Make room before writing. WebView Cache Storage may reject the new response before a
+    // post-write trim gets a chance to run.
+    await trimPersistentMediaCache(mediaCache, Math.max(0, MAX_PERSISTENT_MEDIA_ENTRIES - 1));
+    await mediaCache.put(src, response.clone());
+    return true;
+  } catch {
+    try {
+      // Quotas are byte based while Cache Storage exposes no cheap response-size index. Reclaim a
+      // small LRU batch and retry once; rendering must still succeed if the device refuses it.
+      const cachedRequests = await mediaCache.keys();
+      const reclaimCount = Math.max(1, Math.ceil(cachedRequests.length * 0.1));
+      await Promise.all(
+        cachedRequests.slice(0, reclaimCount).map((request) => mediaCache.delete(request))
+      );
+      await mediaCache.put(src, response.clone());
+      return true;
+    } catch {
+      return false;
+    }
+  }
 };
 
 const touchPersistentMediaEntry = async (mediaCache: Cache, src: string, response: Response) => {
@@ -464,14 +501,14 @@ const touchPersistentMediaEntry = async (mediaCache: Cache, src: string, respons
 };
 
 const matchPersistentMedia = async (src: string): Promise<Response | undefined> => {
-  const mediaCache = await getMediaCache();
+  const mediaCache = await getMediaCache().catch(() => undefined);
   if (!mediaCache) {
     return undefined;
   }
 
   const cachedResponse = await mediaCache.match(src);
   if (cachedResponse) {
-    await touchPersistentMediaEntry(mediaCache, src, cachedResponse.clone());
+    await touchPersistentMediaEntry(mediaCache, src, cachedResponse.clone()).catch(() => undefined);
     persistedMediaUrls.add(src);
   }
 
@@ -497,12 +534,13 @@ const fetchAndPersistMedia = async (src: string): Promise<Response | undefined> 
 
   clearFailedMediaEntry(src);
 
-  const mediaCache = await getMediaCache();
+  const mediaCache = await getMediaCache().catch(() => undefined);
   if (mediaCache) {
-    await mediaCache.put(src, response.clone());
-    await trimPersistentMediaCache(mediaCache);
+    const persisted = await persistMediaResponse(mediaCache, src, response);
+    if (persisted) {
+      persistedMediaUrls.add(src);
+    }
   }
-  persistedMediaUrls.add(src);
 
   return response;
 };

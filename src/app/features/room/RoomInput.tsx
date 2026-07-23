@@ -124,6 +124,7 @@ import {
   getVideoMsgContent,
 } from './msgContent';
 import {
+  dispatchRoomComposerViewportChange,
   dispatchRoomFollowLatest,
   ROOM_COMPOSER_ACTION,
   RoomComposerAction,
@@ -1617,6 +1618,9 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
 
     const closeEmojiBoard = useCallback(
       (fromPointerTrigger = false) => {
+        if (mobileEmojiBoard && emojiBoardOpenRef.current) {
+          dispatchRoomComposerViewportChange(roomId);
+        }
         cancelPendingEmojiBoardOpen();
         const now = Date.now();
         if (
@@ -1637,7 +1641,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           }, 0);
         }
       },
-      [cancelPendingEmojiBoardOpen, editor]
+      [cancelPendingEmojiBoardOpen, editor, mobileEmojiBoard, roomId]
     );
 
     const toggleEmojiBoard = useCallback(() => {
@@ -1660,6 +1664,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       }
 
       emojiBoardSuppressOpenUntilRef.current = 0;
+      dispatchRoomComposerViewportChange(roomId);
       setCloudAutoSendMode(
         !isEmptyEditor(editor) || ReactEditor.isFocused(editor) || editor.selection !== null
           ? CloudSendMode.Emoji
@@ -1714,7 +1719,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       }
 
       setEmojiBoardOpen(true);
-    }, [cancelPendingEmojiBoardOpen, closeEmojiBoard, editor, mobileEmojiBoard]);
+    }, [cancelPendingEmojiBoardOpen, closeEmojiBoard, editor, mobileEmojiBoard, roomId]);
 
     const closeNoteDialog = useCallback(() => {
       if (noteSubmitting) return;
@@ -1844,13 +1849,11 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         setSendStatus(
           '\u4e0a\u4e00\u5f20\u4e91\u7aef\u8d34\u7eb8\u8fd8\u5728\u51c6\u5907\u4e2d...'
         );
-        closeEmojiBoard();
         return;
       }
 
       if (!remoteSticker && !matrixSticker) {
         setSendError('贴纸地址无效，请检查远程表情索引。');
-        closeEmojiBoard();
         return;
       }
 
@@ -1864,7 +1867,6 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         setSendStatus(undefined);
       }
       setSendError(undefined);
-      closeEmojiBoard();
       try {
         const pendingContent: IContent = {
           body: getStickerEventBody(label),
@@ -1967,6 +1969,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         imagePackRooms={imagePackRooms}
         imagePackMode="personal"
         returnFocusOnDeactivate={false}
+        closeOnOutsideClick={!mobileEmojiBoard}
         cloudAutoSendMode={cloudAutoSendMode}
         onEmojiSelect={handleEmoticonSelect}
         onCustomEmojiSelect={handleEmoticonSelect}
@@ -2246,6 +2249,9 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           editor={editor}
           placeholder="发送消息..."
           onFocus={() => {
+            if (mobileEmojiBoard) {
+              dispatchRoomComposerViewportChange(roomId);
+            }
             if (mobileEmojiBoard && emojiBoardOpen) closeEmojiBoard();
           }}
           onKeyDown={handleKeyDown}
