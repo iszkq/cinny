@@ -23,6 +23,7 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
 import java.io.File;
+import java.util.Locale;
 
 @CapacitorPlugin(name = "AndroidUpdater")
 public class AndroidUpdaterPlugin extends Plugin {
@@ -377,7 +378,7 @@ public class AndroidUpdaterPlugin extends Plugin {
         }
 
         fileName = fileName.replaceAll("[\\\\/:*?\"<>|]", "_").trim();
-        if (!fileName.toLowerCase().endsWith(".apk")) fileName += ".apk";
+        if (!fileName.toLowerCase(Locale.ROOT).endsWith(".apk")) fileName += ".apk";
 
         try {
             File downloadsDirectory = getContext().getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
