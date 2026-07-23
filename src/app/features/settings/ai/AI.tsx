@@ -1,16 +1,5 @@
 import React, { FormEventHandler, useMemo, useState } from 'react';
-import {
-  Box,
-  Button,
-  Icon,
-  IconButton,
-  Icons,
-  Input,
-  Scroll,
-  Spinner,
-  Text,
-  config,
-} from 'folds';
+import { Box, Button, Icon, IconButton, Icons, Input, Scroll, Spinner, Text, config } from 'folds';
 import { useAtom } from 'jotai';
 import { Page, PageContent, PageHeader } from '../../../components/page';
 import { SequenceCard } from '../../../components/sequence-card';
@@ -19,6 +8,10 @@ import { SettingTile } from '../../../components/setting-tile';
 import { AISkill, aiSettingsAtom } from '../../../state/ai';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { fetchAihubmixModels, isChatModel } from '../../../utils/ai';
+import {
+  AIHUBMIX_PREFERRED_BASE_URL,
+  AIHUBMIX_PREFERRED_MODELS_API_URL,
+} from '../../../constants/aihubmix';
 
 type AIProps = {
   requestClose: () => void;
@@ -27,8 +20,10 @@ type AIProps = {
 const CN = {
   title: 'AI \u52a9\u624b',
   provider: '\u63a5\u5165\u65b9\u5f0f',
-  providerDesc: '\u5f53\u524d\u5148\u652f\u6301 AIHubMix\uff0c\u5efa\u8bae\u7528 OpenAI \u517c\u5bb9\u63a5\u53e3\u6a21\u5f0f\u3002',
-  accountSyncHint: '\u4fdd\u5b58\u914d\u7f6e\u3001\u521b\u5efa\u6216\u5220\u9664 Skill \u540e\u4f1a\u81ea\u52a8\u5199\u5165\u5f53\u524d\u8d26\u53f7\u3002',
+  providerDesc:
+    '当前支持 AIHubMix，默认使用官方优选线路 api.inferera.com；网络故障时自动回退 aihubmix.com。',
+  accountSyncHint:
+    '\u4fdd\u5b58\u914d\u7f6e\u3001\u521b\u5efa\u6216\u5220\u9664 Skill \u540e\u4f1a\u81ea\u52a8\u5199\u5165\u5f53\u524d\u8d26\u53f7\u3002',
   apiKey: 'API Key',
   apiBaseUrl: '\u804a\u5929\u63a5\u53e3 Base URL',
   modelsApiUrl: '\u6a21\u578b\u5217\u8868 URL',
@@ -43,22 +38,24 @@ const CN = {
   noModels: '\u8bf7\u5148\u62c9\u53d6\u6a21\u578b\u5217\u8868',
   noSkills: '\u8fd8\u6ca1\u6709\u521b\u5efa\u4efb\u4f55 Skill',
   currentSkills: '\u5df2\u521b\u5efa Skill',
-  roomContext: '\u9ed8\u8ba4\u4f1a\u9644\u5e26\u5f53\u524d\u623f\u95f4\u6700\u8fd1\u804a\u5929\u4e0a\u4e0b\u6587',
+  roomContext:
+    '\u9ed8\u8ba4\u4f1a\u9644\u5e26\u5f53\u524d\u623f\u95f4\u6700\u8fd1\u804a\u5929\u4e0a\u4e0b\u6587',
   chatOnlyHint:
     'Skill \u521b\u5efa\u5668\u53ea\u4f7f\u7528\u53ef\u804a\u5929\u6a21\u578b\uff0c\u4ee5\u907f\u514d\u8c03\u7528 /chat/completions \u65f6\u62a5\u9519\u3002',
 } as const;
 
 const makeSkillId = () => `skill_${Date.now()}`;
 
-const normalizeCommand = (value: string): string => value.trim().replace(/^\//, '').replace(/\s+/g, '');
+const normalizeCommand = (value: string): string =>
+  value.trim().replace(/^\//, '').replace(/\s+/g, '');
 
 const buildDefaultCommand = (name: string): string => normalizeCommand(name) || 'assistant';
 
 const removeSkill = (skills: AISkill[], id: string): AISkill[] =>
   skills.filter((skill) => skill.id !== id);
 
-const DEFAULT_BASE_URL = 'https://aihubmix.com/v1';
-const DEFAULT_MODELS_API_URL = 'https://aihubmix.com/api/v1/models';
+const DEFAULT_BASE_URL = AIHUBMIX_PREFERRED_BASE_URL;
+const DEFAULT_MODELS_API_URL = AIHUBMIX_PREFERRED_MODELS_API_URL;
 
 export function AI({ requestClose }: AIProps) {
   const [settings, setSettings] = useAtom(aiSettingsAtom);
@@ -73,9 +70,8 @@ export function AI({ requestClose }: AIProps) {
   const [baseUrlInput, setBaseUrlInput] = useState(settings.baseUrl);
   const [modelsUrlInput, setModelsUrlInput] = useState(settings.modelsApiUrl);
 
-  const [modelsState, loadModels] = useAsyncCallback(
-    async (modelsApiUrl: string, apiKey: string) =>
-      fetchAihubmixModels(modelsApiUrl, apiKey)
+  const [modelsState, loadModels] = useAsyncCallback(async (modelsApiUrl: string, apiKey: string) =>
+    fetchAihubmixModels(modelsApiUrl, apiKey)
   );
 
   const chatModels = useMemo(
@@ -119,7 +115,9 @@ export function AI({ requestClose }: AIProps) {
         }
         setStatusText(
           models.length > 0
-            ? `\u5df2\u540c\u6b65 ${models.length} \u4e2a\u6a21\u578b\uff0c\u5176\u4e2d ${models.filter(isChatModel).length} \u4e2a\u53ef\u7528\u4e8e Skill`
+            ? `\u5df2\u540c\u6b65 ${models.length} \u4e2a\u6a21\u578b\uff0c\u5176\u4e2d ${
+                models.filter(isChatModel).length
+              } \u4e2a\u53ef\u7528\u4e8e Skill`
             : '\u63a5\u53e3\u8fd4\u56de 0 \u4e2a\u6a21\u578b\uff0c\u8bf7\u68c0\u67e5 URL \u6216 API Key \u662f\u5426\u6b63\u786e'
         );
       })
@@ -235,9 +233,7 @@ export function AI({ requestClose }: AIProps) {
                         }
                       >
                         <Text size="B300">
-                          {modelsState.status === AsyncStatus.Loading
-                            ? CN.syncing
-                            : CN.fetchModels}
+                          {modelsState.status === AsyncStatus.Loading ? CN.syncing : CN.fetchModels}
                         </Text>
                       </Button>
                     </Box>
@@ -290,7 +286,9 @@ export function AI({ requestClose }: AIProps) {
                           padding: `0 ${config.space.S300}`,
                         }}
                       >
-                        <option value="">{chatModels[0] ? '\u8bf7\u9009\u62e9' : CN.noModels}</option>
+                        <option value="">
+                          {chatModels[0] ? '\u8bf7\u9009\u62e9' : CN.noModels}
+                        </option>
                         {chatModels.map((model) => (
                           <option key={model.id} value={model.id}>
                             {model.name}

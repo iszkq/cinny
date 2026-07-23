@@ -1,13 +1,21 @@
 {
   "defaultHomeserver": 0,
-  "homeserverList": ["mtx01.cc", "converser.eu", "matrix.org", "mozilla.org", "unredacted.org", "xmr.se"],
+  "homeserverList": [
+    "mtx01.cc",
+    "converser.eu",
+    "matrix.org",
+    "mozilla.org",
+    "unredacted.org",
+    "xmr.se"
+  ],
   "allowCustomHomeservers": true,
   "audioTranscription": {
-    "defaultAihubmixApiKey": "sk-ORD4wbVuj5ThPB0x52633eCc417c43A39b94D49123A7F719"
+    "defaultAihubmixApiKey": "sk-ORD4wbVuj5ThPB0x52633eCc417c43A39b94D49123A7F719",
+    "baseUrl": "https://api.inferera.com/v1"
   },
   "imageOcr": {
     "defaultAihubmixApiKey": "sk-ORD4wbVuj5ThPB0x52633eCc417c43A39b94D49123A7F719",
-    "baseUrl": "https://aihubmix.com/v1",
+    "baseUrl": "https://api.inferera.com/v1",
     "model": "glm-ocr"
   },
   "agoraVoice": {

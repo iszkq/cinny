@@ -5,6 +5,11 @@ import { getMemberDisplayName } from './room';
 import { MessageEvent } from '../../types/matrix/room';
 import { fetchMediaWithAuth, getMxIdLocalPart } from './matrix';
 import { isAndroidApp } from './nativePlatform';
+import {
+  AIHUBMIX_PREFERRED_BASE_URL,
+  getAihubmixEndpointCandidates,
+  getAihubmixUrlCandidates,
+} from '../constants/aihubmix';
 
 type OpenAIModelsResponse = {
   data?: unknown;
@@ -36,8 +41,11 @@ export type AihubmixImageOcrConfig = {
   model?: string;
 };
 
-const DEFAULT_AIHUBMIX_BASE_URL = 'https://aihubmix.com/v1';
 const DATA_URL_RE = /^data:/i;
+const RETRYABLE_AIHUBMIX_STATUSES = new Set([408, 425, 502, 503, 504]);
+
+const shouldRetryAihubmixStatus = (status: number): boolean =>
+  RETRYABLE_AIHUBMIX_STATUSES.has(status) || status >= 500;
 
 const uniqById = (models: AIModel[]): AIModel[] => {
   const seen = new Set<string>();
@@ -238,26 +246,78 @@ const toAIModel = (item: Record<string, unknown> | string): AIModel | undefined 
   };
 };
 
+type AihubmixModelsAttempt = {
+  models?: AIModel[];
+  retryableError?: string;
+  terminalStatus?: number;
+};
+
+const fetchAihubmixModelsFromEndpoint = async (
+  endpoint: string,
+  apiKey?: string
+): Promise<AihubmixModelsAttempt> => {
+  let response: Response;
+  try {
+    response = await fetch(endpoint, {
+      headers: {
+        Accept: 'application/json',
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+      },
+    });
+  } catch (error) {
+    return {
+      retryableError: `${endpoint}: ${
+        error instanceof Error && error.message ? error.message : 'network error'
+      }`,
+    };
+  }
+
+  if (!response.ok) {
+    if (!shouldRetryAihubmixStatus(response.status)) {
+      return { terminalStatus: response.status };
+    }
+    return { retryableError: `${new URL(endpoint).host}: HTTP ${response.status}` };
+  }
+
+  try {
+    const data = (await response.json()) as OpenAIModelsResponse;
+    const rawModels = flattenModelPayload(data.data ?? data.models ?? data);
+
+    return {
+      models: uniqById(
+        rawModels.map((item) => toAIModel(item)).filter((item): item is AIModel => !!item)
+      ),
+    };
+  } catch (error) {
+    return {
+      retryableError: `${new URL(endpoint).host}: invalid models response (${
+        error instanceof Error && error.message ? error.message : 'parse error'
+      })`,
+    };
+  }
+};
+
 export const fetchAihubmixModels = async (
   modelsApiUrl: string,
   apiKey?: string
 ): Promise<AIModel[]> => {
   const trimmedApiKey = apiKey?.trim();
-  const response = await fetch(modelsApiUrl, {
-    headers: {
-      Accept: 'application/json',
-      ...(trimmedApiKey ? { Authorization: `Bearer ${trimmedApiKey}` } : {}),
-    },
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to fetch models: ${response.status}`);
+  const errors: string[] = [];
+
+  // Official routes are attempted sequentially so an HTTP result is never raced or duplicated.
+  // eslint-disable-next-line no-restricted-syntax
+  for (const endpoint of getAihubmixUrlCandidates(modelsApiUrl)) {
+    // eslint-disable-next-line no-await-in-loop
+    const attempt = await fetchAihubmixModelsFromEndpoint(endpoint, trimmedApiKey);
+    if (attempt.models) return attempt.models;
+    if (attempt.terminalStatus) {
+      throw new Error(`Failed to fetch models: ${attempt.terminalStatus}`);
+    }
+    if (attempt.retryableError) errors.push(attempt.retryableError);
   }
 
-  const data = (await response.json()) as OpenAIModelsResponse;
-  const rawModels = flattenModelPayload(data.data ?? data.models ?? data);
-
-  return uniqById(
-    rawModels.map((item) => toAIModel(item)).filter((item): item is AIModel => !!item)
+  throw new Error(
+    `Failed to fetch AIHubMix models from all available routes. ${errors.join(' | ')}`
   );
 };
 
@@ -458,8 +518,8 @@ const toAihubmixNetworkError = (error: unknown): Error => {
   const detail = error instanceof Error ? error.message.trim() : '';
   return new Error(
     detail
-      ? `无法直连 AIHubMix。当前网络可能阻断了服务域名；请切换网络，或配置一个本地可直连的 AI 基础地址后重试。(${detail})`
-      : '无法直连 AIHubMix。当前网络可能阻断了服务域名；请切换网络，或配置一个本地可直连的 AI 基础地址后重试。'
+      ? `AIHubMix 优选线路和标准线路均无法连接，请检查网络后重试。(${detail})`
+      : 'AIHubMix 优选线路和标准线路均无法连接，请检查网络后重试。'
   );
 };
 
@@ -547,6 +607,56 @@ const getAndroidNativeHeaders = (headers: Record<string, string>): Record<string
   ...headers,
 });
 
+type AihubmixRouteRequest<T> = {
+  endpoints: string[];
+  browserRequest: (endpoint: string) => Promise<AihubmixRequestResult<T>>;
+  nativeRequest?: (endpoint: string) => Promise<AihubmixRequestResult<T>>;
+};
+
+const requestAihubmixAcrossRoutes = async <T>({
+  endpoints,
+  browserRequest,
+  nativeRequest,
+}: AihubmixRouteRequest<T>): Promise<AihubmixRequestResult<T>> => {
+  const errors: string[] = [];
+  let lastRetryableResponse: AihubmixRequestResult<T> | undefined;
+
+  // Keep route and transport attempts sequential to avoid duplicate billable AI requests.
+  // eslint-disable-next-line no-restricted-syntax
+  for (const endpoint of endpoints) {
+    let browserFailed = false;
+
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      const response = await browserRequest(endpoint);
+      if (response.ok || !shouldRetryAihubmixStatus(response.status)) return response;
+
+      lastRetryableResponse = response;
+      errors.push(`${new URL(endpoint).host}: HTTP ${response.status}`);
+    } catch (error) {
+      browserFailed = true;
+      errors.push(`${new URL(endpoint).host} browser: ${getErrorDetail(error)}`);
+    }
+
+    if (browserFailed && isAndroidApp() && nativeRequest) {
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        const response = await nativeRequest(endpoint);
+        if (response.ok || !shouldRetryAihubmixStatus(response.status)) return response;
+
+        lastRetryableResponse = response;
+        errors.push(`${new URL(endpoint).host} native: HTTP ${response.status}`);
+      } catch (error) {
+        errors.push(`${new URL(endpoint).host} native: ${getErrorDetail(error)}`);
+      }
+    }
+  }
+
+  if (lastRetryableResponse) return lastRetryableResponse;
+
+  throw new Error(errors.join(' | ') || 'No AIHubMix route is available.');
+};
+
 export const getAihubmixAudioTranscriptionApiKey = (
   settings: Pick<AISettings, 'apiKey'>,
   defaultApiKey?: string
@@ -581,7 +691,10 @@ export const transcribeAudioWithAihubmix = async (
     throw new Error('AIHubMix audio transcription currently supports files up to 25MB.');
   }
 
-  const endpoint = `${trimTrailingSlash(settings.baseUrl)}/audio/transcriptions`;
+  const endpoints = getAihubmixEndpointCandidates(
+    settings.baseUrl || AIHUBMIX_PREFERRED_BASE_URL,
+    '/audio/transcriptions'
+  );
   const formData = new FormData();
   const fileName = options.filename?.trim() || 'voice-message.webm';
   const model = options.model?.trim() || AIHUBMIX_AUDIO_TRANSCRIPTION_MODEL;
@@ -598,70 +711,69 @@ export const transcribeAudioWithAihubmix = async (
   formData.append('language', options.language?.trim() || 'zh');
   formData.append('temperature', `${options.temperature ?? 0.2}`);
 
-  let payload: OpenAIAudioTranscriptionResponse | undefined;
-  let responseStatus = 0;
-  let responseOk = false;
+  let uploadBase64Promise: Promise<string> | undefined;
+  const getUploadBase64 = () => {
+    uploadBase64Promise ??= blobToBase64(uploadFile);
+    return uploadBase64Promise;
+  };
+
+  let response: AihubmixRequestResult<OpenAIAudioTranscriptionResponse>;
 
   try {
-    const browserResponse = await requestAihubmixInBrowser<OpenAIAudioTranscriptionResponse>({
-      endpoint,
-      headers: { Authorization: `Bearer ${apiKey}` },
-      body: formData,
-      timeoutMs: 120000,
-    });
-    responseStatus = browserResponse.status;
-    responseOk = browserResponse.ok;
-    payload = browserResponse.payload;
-  } catch (browserError) {
-    if (!isAndroidApp()) {
-      throw toAihubmixNetworkError(browserError);
-    }
-
-    try {
-      const { CapacitorHttp } = await import('@capacitor/core');
-      const nativeResponse = await CapacitorHttp.post({
-        url: endpoint,
-        headers: getAndroidNativeHeaders({
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'multipart/form-data',
+    response = await requestAihubmixAcrossRoutes<OpenAIAudioTranscriptionResponse>({
+      endpoints,
+      browserRequest: (endpoint) =>
+        requestAihubmixInBrowser<OpenAIAudioTranscriptionResponse>({
+          endpoint,
+          headers: { Authorization: `Bearer ${apiKey}` },
+          body: formData,
+          timeoutMs: 120000,
         }),
-        dataType: 'formData',
-        data: [
-          { key: 'model', value: model, type: 'string' },
-          { key: 'language', value: options.language?.trim() || 'zh', type: 'string' },
-          { key: 'temperature', value: `${options.temperature ?? 0.2}`, type: 'string' },
-          {
-            key: 'file',
-            value: await blobToBase64(uploadFile),
-            type: 'base64File',
-            contentType: uploadFile.type || 'audio/webm',
-            fileName: uploadFile.name,
-          },
-        ],
-        responseType: 'json',
-        connectTimeout: 30000,
-        readTimeout: 120000,
-      });
-      responseStatus = nativeResponse.status;
-      responseOk = responseStatus >= 200 && responseStatus < 300;
-      payload = parseAihubmixPayload<OpenAIAudioTranscriptionResponse>(nativeResponse.data);
-    } catch (nativeError) {
-      throw toAihubmixNetworkError(
-        new Error(
-          `browser: ${getErrorDetail(browserError)}; native: ${getErrorDetail(nativeError)}`
-        )
-      );
-    }
+      nativeRequest: async (endpoint) => {
+        const { CapacitorHttp } = await import('@capacitor/core');
+        const nativeResponse = await CapacitorHttp.post({
+          url: endpoint,
+          headers: getAndroidNativeHeaders({
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': 'multipart/form-data',
+          }),
+          dataType: 'formData',
+          data: [
+            { key: 'model', value: model, type: 'string' },
+            { key: 'language', value: options.language?.trim() || 'zh', type: 'string' },
+            { key: 'temperature', value: `${options.temperature ?? 0.2}`, type: 'string' },
+            {
+              key: 'file',
+              value: await getUploadBase64(),
+              type: 'base64File',
+              contentType: uploadFile.type || 'audio/webm',
+              fileName: uploadFile.name,
+            },
+          ],
+          responseType: 'json',
+          connectTimeout: 30000,
+          readTimeout: 120000,
+        });
+
+        return {
+          status: nativeResponse.status,
+          ok: nativeResponse.status >= 200 && nativeResponse.status < 300,
+          payload: parseAihubmixPayload<OpenAIAudioTranscriptionResponse>(nativeResponse.data),
+        };
+      },
+    });
+  } catch (error) {
+    throw toAihubmixNetworkError(error);
   }
 
-  if (!responseOk) {
+  if (!response.ok) {
     throw new Error(
-      normalizeAihubmixText(extractOpenAICompatibleError(payload)) ??
-        `AI audio transcription failed: ${responseStatus}`
+      normalizeAihubmixText(extractOpenAICompatibleError(response.payload)) ??
+        `AI audio transcription failed: ${response.status}`
     );
   }
 
-  const transcriptionText = normalizeAihubmixText(payload?.text);
+  const transcriptionText = normalizeAihubmixText(response.payload?.text);
 
   if (!transcriptionText) {
     throw new Error('The audio transcription response did not contain any text.');
@@ -682,9 +794,10 @@ export const recognizeImageTextWithAihubmix = async (
     );
   }
 
-  const endpoint = `${trimTrailingSlash(
-    config?.baseUrl?.trim() || DEFAULT_AIHUBMIX_BASE_URL
-  )}/chat/completions`;
+  const endpoints = getAihubmixEndpointCandidates(
+    config?.baseUrl?.trim() || AIHUBMIX_PREFERRED_BASE_URL,
+    '/chat/completions'
+  );
   const imageUrl = await getAihubmixImageOcrUrl(imageSrc);
   const requestData = {
     model: config?.model?.trim() || AIHUBMIX_IMAGE_OCR_MODEL,
@@ -713,65 +826,58 @@ export const recognizeImageTextWithAihubmix = async (
     ],
     temperature: 0,
   };
-  let payload: OpenAIChatResponse | undefined;
-  let responseStatus = 0;
-  let responseOk = false;
+  let response: AihubmixRequestResult<OpenAIChatResponse>;
 
   try {
-    const browserResponse = await requestAihubmixInBrowser<OpenAIChatResponse>({
-      endpoint,
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify(requestData),
-      timeoutMs: 120000,
-    });
-    responseStatus = browserResponse.status;
-    responseOk = browserResponse.ok;
-    payload = browserResponse.payload;
-  } catch (browserError) {
-    if (!isAndroidApp()) {
-      throw toAihubmixNetworkError(browserError);
-    }
-
-    try {
-      const { CapacitorHttp } = await import('@capacitor/core');
-      const nativeResponse = await CapacitorHttp.post({
-        url: endpoint,
-        headers: getAndroidNativeHeaders({
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
+    response = await requestAihubmixAcrossRoutes<OpenAIChatResponse>({
+      endpoints,
+      browserRequest: (endpoint) =>
+        requestAihubmixInBrowser<OpenAIChatResponse>({
+          endpoint,
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify(requestData),
+          timeoutMs: 120000,
         }),
-        data: requestData,
-        responseType: 'json',
-        connectTimeout: 30000,
-        readTimeout: 120000,
-      });
-      responseStatus = nativeResponse.status;
-      responseOk = responseStatus >= 200 && responseStatus < 300;
-      payload = parseAihubmixPayload<OpenAIChatResponse>(nativeResponse.data);
-    } catch (nativeError) {
-      throw toAihubmixNetworkError(
-        new Error(
-          `browser: ${getErrorDetail(browserError)}; native: ${getErrorDetail(nativeError)}`
-        )
-      );
-    }
+      nativeRequest: async (endpoint) => {
+        const { CapacitorHttp } = await import('@capacitor/core');
+        const nativeResponse = await CapacitorHttp.post({
+          url: endpoint,
+          headers: getAndroidNativeHeaders({
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${apiKey}`,
+          }),
+          data: requestData,
+          responseType: 'json',
+          connectTimeout: 30000,
+          readTimeout: 120000,
+        });
+
+        return {
+          status: nativeResponse.status,
+          ok: nativeResponse.status >= 200 && nativeResponse.status < 300,
+          payload: parseAihubmixPayload<OpenAIChatResponse>(nativeResponse.data),
+        };
+      },
+    });
+  } catch (error) {
+    throw toAihubmixNetworkError(error);
   }
 
-  if (!responseOk) {
+  if (!response.ok) {
     throw new Error(
-      normalizeAihubmixText(extractOpenAICompatibleError(payload)) ??
-        `\u56fe\u7247\u6587\u5b57\u8bc6\u522b\u5931\u8d25\uff1a${responseStatus}`
+      normalizeAihubmixText(extractOpenAICompatibleError(response.payload)) ??
+        `\u56fe\u7247\u6587\u5b57\u8bc6\u522b\u5931\u8d25\uff1a${response.status}`
     );
   }
 
-  if (!payload) {
+  if (!response.payload) {
     throw new Error('OCR \u54cd\u5e94\u91cc\u6ca1\u6709\u6587\u672c\u3002');
   }
 
-  const recognizedText = sanitizeImageOcrText(extractChatText(payload));
+  const recognizedText = sanitizeImageOcrText(extractChatText(response.payload));
   if (!recognizedText) {
     throw new Error('\u6ca1\u6709\u8bc6\u522b\u5230\u6587\u5b57\u3002');
   }

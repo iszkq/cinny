@@ -3,6 +3,11 @@ import {
   CinnyAISettingsContent,
   CinnyAISettingsSkillContent,
 } from '../../types/matrix/accountData';
+import {
+  AIHUBMIX_PREFERRED_BASE_URL,
+  AIHUBMIX_PREFERRED_MODELS_API_URL,
+  getAihubmixUrlCandidates,
+} from '../constants/aihubmix';
 
 const STORAGE_KEY = 'ai-settings';
 const LEGACY_MODELS_API_URL = 'https://aihubmix.com/api/v1/models?type=llm';
@@ -41,8 +46,8 @@ export type AISettings = {
 const defaultAISettings: AISettings = {
   provider: 'aihubmix',
   apiKey: '',
-  baseUrl: 'https://aihubmix.com/v1',
-  modelsApiUrl: 'https://aihubmix.com/api/v1/models',
+  baseUrl: AIHUBMIX_PREFERRED_BASE_URL,
+  modelsApiUrl: AIHUBMIX_PREFERRED_MODELS_API_URL,
   models: [],
   skills: [],
 };
@@ -111,12 +116,13 @@ const normalizeAIModel = (model: AIModel): AIModel | undefined => {
 const getAISettingsSyncShape = (
   settings: Partial<AISettings> | CinnyAISettingsContent
 ): Omit<CinnyAISettingsContent, 'version' | 'updatedAt'> => {
-  const baseUrl = getTrimmedString(settings.baseUrl) ?? defaultAISettings.baseUrl;
+  const configuredBaseUrl = getTrimmedString(settings.baseUrl) ?? defaultAISettings.baseUrl;
+  const baseUrl = getAihubmixUrlCandidates(configuredBaseUrl)[0] ?? defaultAISettings.baseUrl;
   const modelsApiUrl = getTrimmedString(settings.modelsApiUrl);
   const normalizedModelsApiUrl =
     !modelsApiUrl || modelsApiUrl === LEGACY_MODELS_API_URL
       ? defaultAISettings.modelsApiUrl
-      : modelsApiUrl;
+      : getAihubmixUrlCandidates(modelsApiUrl)[0] ?? modelsApiUrl;
 
   return {
     provider: 'aihubmix',
