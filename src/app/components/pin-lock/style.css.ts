@@ -1,4 +1,4 @@
-import { DefaultReset, color, config, toRem } from 'folds';
+import { DefaultReset, config, toRem } from 'folds';
 import { style } from '@vanilla-extract/css';
 
 export const DialogViewport = style({
@@ -21,6 +21,17 @@ export const EmbeddedOverlay = style({
   paddingBottom: `max(${config.space.S300}, env(safe-area-inset-bottom, 0px))`,
   paddingLeft: `max(${config.space.S300}, env(safe-area-inset-left, 0px))`,
   background: 'rgba(18, 24, 20, 0.38)',
+  overflowY: 'auto',
+  WebkitOverflowScrolling: 'touch',
+  '@media': {
+    'screen and (max-width: 750px)': {
+      alignItems: 'flex-start',
+      paddingTop: `max(${config.space.S200}, env(safe-area-inset-top, 0px))`,
+      paddingRight: `max(${config.space.S200}, env(safe-area-inset-right, 0px))`,
+      paddingBottom: `max(${config.space.S200}, env(safe-area-inset-bottom, 0px))`,
+      paddingLeft: `max(${config.space.S200}, env(safe-area-inset-left, 0px))`,
+    },
+  },
 });
 
 export const Card = style({
@@ -36,9 +47,11 @@ export const Card = style({
   '@media': {
     'screen and (max-width: 750px)': {
       width: '100%',
-      maxHeight: 'min(100vh - 24px, 44rem)',
+      maxHeight:
+        'calc(var(--app-height, 100dvh) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 16px)',
       padding: config.space.S400,
       borderRadius: toRem(20),
+      marginBlock: 'auto',
     },
   },
 });
@@ -82,11 +95,22 @@ export const ActionRow = style({
 });
 
 export const ScreenShell = style({
-  minHeight: 'calc(var(--app-height, 100dvh) - 1px)',
+  width: '100%',
+  minWidth: 0,
+  minHeight: 0,
   paddingTop: `max(${config.space.S500}, env(safe-area-inset-top, 0px))`,
   paddingRight: `max(${config.space.S300}, env(safe-area-inset-right, 0px))`,
   paddingBottom: `max(${config.space.S500}, env(safe-area-inset-bottom, 0px))`,
   paddingLeft: `max(${config.space.S300}, env(safe-area-inset-left, 0px))`,
+  overflowY: 'auto',
+  WebkitOverflowScrolling: 'touch',
+  '@media': {
+    'screen and (max-width: 750px)': {
+      justifyContent: 'flex-start',
+      paddingTop: `max(${config.space.S300}, env(safe-area-inset-top, 0px))`,
+      paddingBottom: `max(${config.space.S300}, env(safe-area-inset-bottom, 0px))`,
+    },
+  },
 });
 
 export const ScreenCard = style({
@@ -97,10 +121,14 @@ export const ScreenCard = style({
   background:
     'linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(247, 250, 247, 0.98) 100%)',
   boxShadow: '0 32px 84px rgba(29, 38, 32, 0.18)',
+  maxHeight:
+    'calc(var(--app-height, 100dvh) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 32px)',
+  overflowY: 'auto',
   '@media': {
     'screen and (max-width: 750px)': {
       padding: config.space.S400,
       borderRadius: toRem(24),
+      marginBlock: 'auto',
     },
   },
 });

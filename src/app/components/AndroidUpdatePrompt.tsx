@@ -4,6 +4,8 @@ import {
   Box,
   Button,
   Dialog,
+  Icon,
+  Icons,
   Overlay,
   OverlayBackdrop,
   OverlayCenter,
@@ -17,6 +19,8 @@ import { normalizeDesktopUpdateVersion } from '../utils/desktopUpdater';
 import { stopPropagation } from '../utils/keyboard';
 import { ReleaseNotes } from './ReleaseNotes';
 
+const STARFIRE_DOWNLOAD_PAGE_URL = 'https://chat.221819.best/download/';
+
 type AndroidUpdatePromptProps = {
   update?: PendingAndroidUpdate;
   requestClose: () => void;
@@ -24,6 +28,7 @@ type AndroidUpdatePromptProps = {
 
 export function AndroidUpdatePrompt({ update, requestClose }: AndroidUpdatePromptProps) {
   const [installing, setInstalling] = useState(false);
+  const [installFailed, setInstallFailed] = useState(false);
   const [message, setMessage] = useState<string>();
 
   if (!update) return null;
@@ -32,12 +37,14 @@ export function AndroidUpdatePrompt({ update, requestClose }: AndroidUpdatePromp
     if (installing) return;
 
     setInstalling(true);
+    setInstallFailed(false);
     setMessage('正在下载正式安装包，完成后会打开 Android 系统安装界面。');
     installAndroidUpdate(update)
       .then(() => {
         setMessage('安装界面已打开，请按系统提示完成覆盖更新。');
       })
       .catch((error) => {
+        setInstallFailed(true);
         setMessage(error instanceof Error ? error.message : '更新失败，请稍后重试。');
       })
       .finally(() => {
@@ -87,6 +94,9 @@ export function AndroidUpdatePrompt({ update, requestClose }: AndroidUpdatePromp
                     </Text>
                   </Box>
                   <ReleaseNotes body={update.body} emptyText="本次版本包含体验优化与问题修复。" />
+                  <Text size="T200" priority="300">
+                    安装包托管于 GitHub；部分网络可能下载较慢或失败，可开启代理后重试。
+                  </Text>
                   {message && <Text size="T300">{message}</Text>}
                 </Box>
                 <Box
@@ -106,6 +116,21 @@ export function AndroidUpdatePrompt({ update, requestClose }: AndroidUpdatePromp
                   >
                     <Text size="B300">稍后</Text>
                   </Button>
+                  {installFailed && (
+                    <Button
+                      as="a"
+                      href={STARFIRE_DOWNLOAD_PAGE_URL}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      variant="Secondary"
+                      fill="Soft"
+                      size="300"
+                      radii="300"
+                      before={<Icon src={Icons.Download} size="100" />}
+                    >
+                      <Text size="B300">前往下载页</Text>
+                    </Button>
+                  )}
                   <Button
                     variant="Primary"
                     size="300"

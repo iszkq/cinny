@@ -7,26 +7,21 @@ export const ModalWide = style({
 });
 
 export const AppModalCenter = style({
-  minWidth: 0,
-  minHeight: 0,
-  overflow: 'hidden',
   '@media': {
     'screen and (max-width: 750px)': {
       width: '100vw',
       height: 'var(--app-height, 100dvh)',
+      minWidth: 0,
+      minHeight: 0,
       padding: 0,
       alignItems: 'stretch',
       justifyContent: 'stretch',
+      overflow: 'hidden',
     },
   },
 });
 
 export const AppModal = style({
-  minWidth: 0,
-  minHeight: 0,
-  maxWidth: 'calc(100vw - 24px)',
-  maxHeight: 'calc(var(--app-height, 100dvh) - 24px)',
-  overflow: 'hidden',
   '@media': {
     'screen and (max-width: 750px)': {
       width: '100vw',
@@ -37,6 +32,7 @@ export const AppModal = style({
       maxHeight: 'var(--app-height, 100dvh)',
       paddingTop: 'var(--safe-area-top, env(safe-area-inset-top, 0px))',
       borderRadius: 0,
+      overflow: 'hidden',
     },
   },
 });

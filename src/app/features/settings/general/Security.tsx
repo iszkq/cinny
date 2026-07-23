@@ -19,7 +19,6 @@ import {
   getAccountPinKey,
   getAccountPinLabel,
   isAccountPinPolicyEnabled,
-  isDesktopPinLockSupported,
   isPinCodeFormatValid,
   lockScreenForAccount,
   supportsPinLock,
@@ -43,12 +42,7 @@ type ChangePinDialogProps = {
   requestClose: () => void;
 };
 
-function ChangePinDialog({
-  baseUrl,
-  userId,
-  syncPolicy,
-  requestClose,
-}: ChangePinDialogProps) {
+function ChangePinDialog({ baseUrl, userId, syncPolicy, requestClose }: ChangePinDialogProps) {
   const mx = useMatrixClient();
   const [currentPin, setCurrentPin] = useState('');
   const [nextPin, setNextPin] = useState('');
@@ -181,7 +175,6 @@ export function Security({ requestClose }: SecurityProps) {
   const userId = mx.getUserId();
   const baseUrl = session?.baseUrl;
   const pinSupported = supportsPinLock();
-  const desktopPinSupported = isDesktopPinLockSupported();
   const policyEnabled = isAccountPinPolicyEnabled(
     policyEvent?.getContent<CinnyAccountPinPolicyContent>()
   );
@@ -192,7 +185,7 @@ export function Security({ requestClose }: SecurityProps) {
   );
   const accountPinEnabled = policyEnabled || localPinEnabled;
 
-  if (!desktopPinSupported || !userId || !baseUrl) {
+  if (!userId || !baseUrl) {
     return null;
   }
 
@@ -209,9 +202,11 @@ export function Security({ requestClose }: SecurityProps) {
           title="PIN 保护"
           description={
             pinSupported ? (
-              accountPinEnabled
-                ? '当前账号已开启账号级 PIN 策略。其他新设备登录同一账号时，也必须先设置本机 PIN 才能进入。'
-                : '开启后，这个账号在每台设备上都需要先设置各自的本机 PIN。PIN 码本身只保存在本地，不会同步到服务器。'
+              accountPinEnabled ? (
+                '当前账号已开启账号级 PIN 策略。其他新设备登录同一账号时，也必须先设置本机 PIN 才能进入。'
+              ) : (
+                '开启后，这个账号在每台设备上都需要先设置各自的本机 PIN。PIN 码本身只保存在本地，不会同步到服务器。'
+              )
             ) : (
               <Text as="span" size="T200" style={{ color: color.Critical.Main }}>
                 当前环境不支持本机 PIN 加密能力，暂时无法启用 PIN 保护。

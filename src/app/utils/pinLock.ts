@@ -362,10 +362,7 @@ export const enableAccountPin = async (
   return config;
 };
 
-export const verifyPinConfig = async (
-  pin: string,
-  config: AccountPinConfig
-): Promise<boolean> => {
+export const verifyPinConfig = async (pin: string, config: AccountPinConfig): Promise<boolean> => {
   try {
     const hash = await derivePinHash(pin, config.salt, config.iterations);
     return hash === config.hash;
@@ -493,7 +490,13 @@ export const syncAccountPinPolicy = async (
     }
 
     if (!isSamePinConfig(localConfig, remotePolicy.config)) {
-      await enableAccountPinPolicy(baseUrl, userId, accessToken, localConfig.updatedAt, localConfig);
+      await enableAccountPinPolicy(
+        baseUrl,
+        userId,
+        accessToken,
+        localConfig.updatedAt,
+        localConfig
+      );
     }
 
     return true;
@@ -511,7 +514,7 @@ export const resolveAccountPinLoginRequirement = async (
   userId: string,
   accessToken: string
 ): Promise<AccountPinLoginRequirement> => {
-  if (!isDesktopPinLockSupported()) {
+  if (!supportsPinLock()) {
     return 'none';
   }
 
@@ -528,7 +531,13 @@ export const resolveAccountPinLoginRequirement = async (
       }
 
       if (localConfig) {
-        await enableAccountPinPolicy(baseUrl, userId, accessToken, localConfig.updatedAt, localConfig);
+        await enableAccountPinPolicy(
+          baseUrl,
+          userId,
+          accessToken,
+          localConfig.updatedAt,
+          localConfig
+        );
         return 'prompt';
       }
 
@@ -549,10 +558,7 @@ export const markAccountPinVerified = (baseUrl: string, userId: string) => {
   recentlyVerifiedAccountKey = getAccountPinKey(baseUrl, userId);
 };
 
-export const consumeRecentAccountPinVerification = (
-  baseUrl: string,
-  userId: string
-): boolean => {
+export const consumeRecentAccountPinVerification = (baseUrl: string, userId: string): boolean => {
   const accountKey = getAccountPinKey(baseUrl, userId);
   if (recentlyVerifiedAccountKey !== accountKey) {
     return false;

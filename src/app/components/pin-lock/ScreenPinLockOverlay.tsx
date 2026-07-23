@@ -15,12 +15,9 @@ import {
   getAccountPinPolicyConfig,
   isAccountPinPolicyEnabled,
   isAccountScreenLocked,
-  isDesktopPinLockSupported,
+  supportsPinLock,
 } from '../../utils/pinLock';
-import {
-  AccountDataEvent,
-  CinnyAccountPinPolicyContent,
-} from '../../../types/matrix/accountData';
+import { AccountDataEvent, CinnyAccountPinPolicyContent } from '../../../types/matrix/accountData';
 import { SplashScreen } from '../splash-screen';
 import { AccountPinForm } from './AccountPinDialog';
 import * as css from './style.css';
@@ -29,8 +26,7 @@ const copy = {
   entryTitle: '\u9a8c\u8bc1 PIN \u5e76\u8fdb\u5165',
   entryDescription:
     '\u5f53\u524d\u8d26\u6237\u5df2\u542f\u7528 PIN \u4fdd\u62a4\u3002\u8f93\u5165\u4f60\u5df2\u7ecf\u8bbe\u7f6e\u7684 PIN \u7801\u540e\uff0c\u624d\u80fd\u7ee7\u7eed\u8fdb\u5165\u5f53\u524d\u8d26\u6237\u3002',
-  entryEyebrow:
-    '\u8d26\u6237\u7ea7 PIN \u9a8c\u8bc1',
+  entryEyebrow: '\u8d26\u6237\u7ea7 PIN \u9a8c\u8bc1',
   fallbackEntryEyebrow: 'PIN \u9a8c\u8bc1',
   entryButton: '\u9a8c\u8bc1\u5e76\u8fdb\u5165',
   lockTitle: '\u5df2\u9501\u5b9a',
@@ -98,6 +94,7 @@ export function ScreenPinLockGate({ children }: ScreenPinLockGateProps) {
 
   const userId = mx.getUserId();
   const baseUrl = session?.baseUrl;
+  const pinLockSupported = supportsPinLock();
   const [verifiedAccountKey, setVerifiedAccountKey] = useState<string | undefined>(() => {
     if (!baseUrl || !userId) {
       return undefined;
@@ -108,16 +105,28 @@ export function ScreenPinLockGate({ children }: ScreenPinLockGateProps) {
       : undefined;
   });
 
-  if (!isDesktopPinLockSupported() || !userId || !baseUrl) {
-    return <>{children}</>;
-  }
-
-  const accountKey = getAccountPinKey(baseUrl, userId);
-  const accountLabel = getAccountPinLabel(baseUrl, userId);
+  const accountKey = baseUrl && userId ? getAccountPinKey(baseUrl, userId) : undefined;
   const policyContent = policyEvent?.getContent<CinnyAccountPinPolicyContent>();
   const policyEnabled = isAccountPinPolicyEnabled(policyContent);
   const remotePinConfig = getAccountPinPolicyConfig(policyContent);
-  const localPinConfig = getAccountPinConfig(baseUrl, userId);
+  const localPinConfig = baseUrl && userId ? getAccountPinConfig(baseUrl, userId) : undefined;
+
+  const handleVerifySuccess = useCallback(() => {
+    if (!accountKey || !baseUrl || !userId) return;
+
+    if (remotePinConfig) {
+      cacheAccountPinConfig(baseUrl, userId, remotePinConfig);
+    }
+
+    setVerifiedAccountKey(accountKey);
+    clearScreenLock();
+  }, [accountKey, baseUrl, remotePinConfig, userId]);
+
+  if (!pinLockSupported || !userId || !baseUrl || !accountKey) {
+    return children;
+  }
+
+  const accountLabel = getAccountPinLabel(baseUrl, userId);
   let activePinConfig = localPinConfig;
   if (policyEvent) {
     activePinConfig = policyEnabled ? remotePinConfig ?? localPinConfig : undefined;
@@ -126,15 +135,6 @@ export function ScreenPinLockGate({ children }: ScreenPinLockGateProps) {
     Boolean(activePinConfig) && screenLockState.locked && isAccountScreenLocked(baseUrl, userId);
   const entryVerificationRequired =
     Boolean(activePinConfig) && verifiedAccountKey !== accountKey && !manuallyLocked;
-
-  const handleVerifySuccess = useCallback(() => {
-    if (remotePinConfig) {
-      cacheAccountPinConfig(baseUrl, userId, remotePinConfig);
-    }
-
-    setVerifiedAccountKey(accountKey);
-    clearScreenLock();
-  }, [accountKey, baseUrl, remotePinConfig, userId]);
 
   if (entryVerificationRequired && activePinConfig) {
     return (
@@ -176,7 +176,7 @@ export function ScreenPinLockGate({ children }: ScreenPinLockGateProps) {
     );
   }
 
-  return <>{children}</>;
+  return children;
 }
 
 export const ScreenPinLockOverlay = ScreenPinLockGate;

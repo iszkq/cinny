@@ -54,8 +54,8 @@ import {
 import {
   applyAccountPinPolicyContent,
   hasAccountPin,
-  isDesktopPinLockSupported,
   lockScreenForAccount,
+  supportsPinLock,
   syncAccountPinPolicy,
 } from '../../utils/pinLock';
 import { blobToDataUrl, dataUrlToFile, isDataUrl } from '../../utils/dataUrl';
@@ -790,7 +790,7 @@ function AccountPinPolicyFeature() {
   const session = getFallbackSession();
 
   useEffect(() => {
-    if (!isDesktopPinLockSupported()) {
+    if (!supportsPinLock()) {
       return undefined;
     }
 
