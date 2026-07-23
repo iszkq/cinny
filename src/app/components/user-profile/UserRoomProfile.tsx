@@ -5,7 +5,7 @@ import { EventType, IContent, MsgType } from 'matrix-js-sdk';
 import { UserHero, UserHeroName } from './UserHero';
 import { getMxIdLocalPart, getMxIdServer, mxcUrlToHttp } from '../../utils/matrix';
 import { sanitizeText } from '../../utils/sanitize';
-import { getMemberAvatarMxc, getMemberDisplayName } from '../../utils/room';
+import { getMemberAvatarMxc, getMemberDisplayName, getMentionContent } from '../../utils/room';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 import { usePowerLevels } from '../../hooks/usePowerLevels';
@@ -25,7 +25,6 @@ import { CreatorChip } from './CreatorChip';
 import { getDirectCreatePath, withSearchParam } from '../../pages/pathUtils';
 import { DirectCreateSearchParams } from '../../pages/paths';
 import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
-import { getMentionContent } from '../../utils/room';
 
 type UserRoomProfileProps = {
   userId: string;
@@ -61,7 +60,10 @@ export function UserRoomProfile({ userId }: UserRoomProfileProps) {
   const displayName = getMemberDisplayName(room, userId);
   const mentionName = displayName ?? getMxIdLocalPart(userId) ?? userId;
   const avatarMxc = getMemberAvatarMxc(room, userId);
-  const avatarUrl = (avatarMxc && mxcUrlToHttp(mx, avatarMxc, useAuthentication)) ?? undefined;
+  const avatarUrl =
+    (avatarMxc && mxcUrlToHttp(mx, avatarMxc, useAuthentication, 96, 96, 'crop')) ?? undefined;
+  const avatarOriginalUrl =
+    (avatarMxc && mxcUrlToHttp(mx, avatarMxc, useAuthentication)) ?? undefined;
 
   const presence = useUserPresence(userId);
 
@@ -97,14 +99,14 @@ export function UserRoomProfile({ userId }: UserRoomProfileProps) {
   };
 
   const mentionSending = mentionState.status === AsyncStatus.Loading;
-  const mentionError =
-    mentionState.status === AsyncStatus.Error ? mentionState.error : undefined;
+  const mentionError = mentionState.status === AsyncStatus.Error ? mentionState.error : undefined;
 
   return (
     <Box direction="Column">
       <UserHero
         userId={userId}
         avatarUrl={avatarUrl}
+        avatarOriginalUrl={avatarOriginalUrl}
         presence={presence && presence.lastActiveTs !== 0 ? presence : undefined}
       />
       <Box direction="Column" gap="500" style={{ padding: config.space.S400 }}>

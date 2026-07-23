@@ -69,16 +69,33 @@ export function AndroidUpdatePrompt({ update, requestClose }: AndroidUpdatePromp
                 overflow: 'hidden',
               }}
             >
-              <Box direction="Column" gap="400" style={{ padding: toRem(20), overflowY: 'auto' }}>
-                <Box direction="Column" gap="100">
-                  <Text size="H4">发现 Android 新版本</Text>
-                  <Text size="T300" priority="300">
-                    {`v${APP_VERSION} → v${normalizeDesktopUpdateVersion(update.version)}`}
-                  </Text>
+              <Box direction="Column" style={{ maxHeight: 'min(86vh, 42rem)', minHeight: 0 }}>
+                <Box
+                  direction="Column"
+                  gap="400"
+                  style={{
+                    padding: toRem(20),
+                    paddingBottom: toRem(12),
+                    overflowY: 'auto',
+                    minHeight: 0,
+                  }}
+                >
+                  <Box direction="Column" gap="100">
+                    <Text size="H4">发现 Android 新版本</Text>
+                    <Text size="T300" priority="300">
+                      {`v${APP_VERSION} → v${normalizeDesktopUpdateVersion(update.version)}`}
+                    </Text>
+                  </Box>
+                  <ReleaseNotes body={update.body} emptyText="本次版本包含体验优化与问题修复。" />
+                  {message && <Text size="T300">{message}</Text>}
                 </Box>
-                <ReleaseNotes body={update.body} emptyText="本次版本包含体验优化与问题修复。" />
-                {message && <Text size="T300">{message}</Text>}
-                <Box gap="200" wrap="Wrap" justifyContent="End">
+                <Box
+                  shrink="No"
+                  gap="200"
+                  wrap="Wrap"
+                  justifyContent="End"
+                  style={{ padding: `${toRem(12)} ${toRem(20)} ${toRem(20)}` }}
+                >
                   <Button
                     variant="Secondary"
                     fill="Soft"
