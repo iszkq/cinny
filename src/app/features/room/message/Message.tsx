@@ -108,6 +108,7 @@ import {
   PackImage,
 } from '../../../plugins/custom-emoji';
 import { AccountDataEvent, CinnyFavoriteItemsContent } from '../../../../types/matrix/accountData';
+import { nameInitials } from '../../../utils/common';
 import {
   ensureFavoritesRoom,
   favoriteMessageToRoom,
@@ -1697,13 +1698,14 @@ export const Message = as<'div', MessageProps>(
         >
           <UserAvatar
             userId={senderId}
+            fallbackWhileLoading
             src={
               senderAvatarMxc
                 ? mxcUrlToHttp(mx, senderAvatarMxc, useAuthentication, 96, 96, 'crop') ?? undefined
                 : undefined
             }
             alt={senderDisplayName}
-            renderFallback={() => <Icon size="200" src={Icons.User} filled />}
+            renderFallback={() => <Text size="B300">{nameInitials(senderDisplayName)}</Text>}
           />
         </Avatar>
       </AvatarBase>
