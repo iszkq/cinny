@@ -51,10 +51,13 @@ function NativeImagePreviewWindowContent() {
   const [maximized, setMaximized] = useState(false);
 
   const emitCloseAction = useCallback(() => {
-    if (!previewId || closeEmittedRef.current) return;
+    const currentPreviewId = payload?.previewId ?? previewId;
+    if (!currentPreviewId || closeEmittedRef.current) return;
     closeEmittedRef.current = true;
-    emitNativeImagePreviewAction({ previewId, type: 'close' }).catch(() => undefined);
-  }, [previewId]);
+    emitNativeImagePreviewAction({ previewId: currentPreviewId, type: 'close' }).catch(
+      () => undefined
+    );
+  }, [payload?.previewId, previewId]);
 
   const handleClose = useCallback(() => {
     if (closingRef.current) return;
@@ -138,7 +141,8 @@ function NativeImagePreviewWindowContent() {
         listen(
           NATIVE_IMAGE_PREVIEW_UPDATE_EVENT,
           (event: EventPayload<NativeImagePreviewPayload>) => {
-            if (event.payload?.previewId !== previewId) return;
+            if (!event.payload?.previewId) return;
+            closeEmittedRef.current = false;
             setPayload(event.payload);
           }
         )
@@ -219,21 +223,27 @@ function NativeImagePreviewWindowContent() {
         onRetryOriginal={
           payload.originalLoadFailed
             ? () => {
-                emitNativeImagePreviewAction({ previewId, type: 'retry' }).catch(() => undefined);
+                emitNativeImagePreviewAction({ previewId: payload.previewId, type: 'retry' }).catch(
+                  () => undefined
+                );
               }
             : undefined
         }
         onPrev={
           payload.canPrev
             ? () => {
-                emitNativeImagePreviewAction({ previewId, type: 'prev' }).catch(() => undefined);
+                emitNativeImagePreviewAction({ previewId: payload.previewId, type: 'prev' }).catch(
+                  () => undefined
+                );
               }
             : undefined
         }
         onNext={
           payload.canNext
             ? () => {
-                emitNativeImagePreviewAction({ previewId, type: 'next' }).catch(() => undefined);
+                emitNativeImagePreviewAction({ previewId: payload.previewId, type: 'next' }).catch(
+                  () => undefined
+                );
               }
             : undefined
         }

@@ -29,6 +29,7 @@ type EventPayload<T> = {
 };
 
 export const NATIVE_IMAGE_PREVIEW_QUERY_PARAM = 'cinnyImagePreview';
+export const NATIVE_IMAGE_PREVIEW_WINDOW_LABEL = 'image-preview';
 export const NATIVE_IMAGE_PREVIEW_READY_EVENT = 'cinny://image-preview-ready';
 export const NATIVE_IMAGE_PREVIEW_UPDATE_EVENT = 'cinny://image-preview-update';
 export const NATIVE_IMAGE_PREVIEW_ACTION_EVENT = 'cinny://image-preview-action';
@@ -37,6 +38,7 @@ const DATA_URL_RE = /^data:/i;
 const BLOB_URL_RE = /^blob:/i;
 const NATIVE_IMAGE_PREVIEW_READY_TIMEOUT_MS = 15_000;
 let nativePreviewWindowSeq = 0;
+let latestNativeImagePreviewPayload: NativeImagePreviewPayload | undefined;
 
 const getNativePreviewWindowUrl = (previewId: string): string => {
   const url = new URL(window.location.href);
@@ -91,8 +93,7 @@ export const createNativeImagePreviewId = (): string => {
   return `${Date.now().toString(36)}-${nativePreviewWindowSeq.toString(36)}`;
 };
 
-export const getNativeImagePreviewWindowLabel = (previewId: string): string =>
-  `image-preview-${previewId}`;
+export const getNativeImagePreviewWindowLabel = (): string => NATIVE_IMAGE_PREVIEW_WINDOW_LABEL;
 
 const closeNativeImagePreviewWindowByLabel = async (label: string): Promise<void> => {
   const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow');
@@ -110,12 +111,13 @@ export const openNativeImagePreviewWindow = async (
   onDestroyed?: () => void
 ): Promise<NativeImagePreviewWindowHandle | undefined> => {
   if (!isDesktopUpdaterSupported()) return undefined;
+  latestNativeImagePreviewPayload = payload;
 
   const [{ WebviewWindow }, { emitTo, listen }] = await Promise.all([
     import('@tauri-apps/api/webviewWindow'),
     import('@tauri-apps/api/event'),
   ]);
-  const label = getNativeImagePreviewWindowLabel(payload.previewId);
+  const label = getNativeImagePreviewWindowLabel();
   let previewWindow: InstanceType<typeof WebviewWindow> | undefined;
   let windowCreated: Promise<void> | undefined;
   let disposeWindowCreationListeners: () => void = () => undefined;
@@ -134,11 +136,30 @@ export const openNativeImagePreviewWindow = async (
     callback();
   };
 
+  const existingWindow = await WebviewWindow.getByLabel(label);
+  if (existingWindow) {
+    let unlistenDestroyed: () => void = () => undefined;
+    if (onDestroyed) {
+      unlistenDestroyed = await existingWindow.once('tauri://destroyed', onDestroyed);
+    }
+
+    await emitTo(label, NATIVE_IMAGE_PREVIEW_UPDATE_EVENT, payload);
+    await existingWindow.unminimize().catch(() => undefined);
+    await existingWindow.show().catch(() => undefined);
+    await existingWindow.setFocus().catch(() => undefined);
+
+    return {
+      label,
+      unlistenReady: () => undefined,
+      unlistenDestroyed,
+    };
+  }
+
   const unlistenReady = await listen(
     NATIVE_IMAGE_PREVIEW_READY_EVENT,
     (event: EventPayload<{ previewId?: string }>) => {
       if (event.payload?.previewId !== payload.previewId) return;
-      emitTo(label, NATIVE_IMAGE_PREVIEW_UPDATE_EVENT, payload)
+      emitTo(label, NATIVE_IMAGE_PREVIEW_UPDATE_EVENT, latestNativeImagePreviewPayload ?? payload)
         .then(() => settleInitialPayload(resolveInitialPayload))
         .catch((error) => settleInitialPayload(() => rejectInitialPayload(error)));
     }
@@ -161,6 +182,7 @@ export const openNativeImagePreviewWindow = async (
       center: true,
       focus: false,
       visible: false,
+      alwaysOnTop: true,
       dragDropEnabled: false,
     });
     const openingWindow = previewWindow;

@@ -1139,7 +1139,20 @@ export function BibleExperienceModal({
     if (typeof node.focus === 'function') {
       node.focus({ preventScroll: true });
     }
-    node.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    const scrollContainer = verseScrollRef.current;
+    if (scrollContainer) {
+      const containerRect = scrollContainer.getBoundingClientRect();
+      const verseRect = node.getBoundingClientRect();
+      const centeredTop =
+        scrollContainer.scrollTop +
+        verseRect.top -
+        containerRect.top -
+        (containerRect.height - verseRect.height) / 2;
+      scrollContainer.scrollTo({
+        top: Math.max(0, centeredTop),
+        behavior: 'smooth',
+      });
+    }
     setFocusedVerseKey(pendingFocusVerseKey);
     setPendingFocusVerseKey(undefined);
   }, [pageVerses, pendingFocusVerseKey]);
@@ -1549,8 +1562,9 @@ export function BibleExperienceModal({
         gap: toRem(12),
         alignItems: 'center',
         flexShrink: 0,
-        position: 'relative',
-        zIndex: 2,
+        position: nativeBibleWindow ? 'sticky' : 'relative',
+        top: nativeBibleWindow ? 0 : undefined,
+        zIndex: nativeBibleWindow ? 10 : 2,
         cursor: nativeBibleWindow ? 'grab' : undefined,
         touchAction: nativeBibleWindow ? 'none' : undefined,
         userSelect: nativeBibleWindow ? 'none' : undefined,

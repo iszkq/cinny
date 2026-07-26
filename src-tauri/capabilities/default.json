@@ -1,7 +1,7 @@
 {
   "identifier": "default",
   "description": "Default desktop capability for the main 星火 window.",
-  "windows": ["main", "image-preview-*", "bible-window", "cinny-external-*"],
+  "windows": ["main", "image-preview", "image-preview-*", "bible-window", "cinny-external-*"],
   "permissions": [
     "core:default",
     "core:event:allow-emit-to",
