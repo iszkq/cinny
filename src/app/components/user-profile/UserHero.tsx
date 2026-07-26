@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Avatar, Box, Icon, Icons, Text } from 'folds';
+import { Avatar, Box, Text } from 'folds';
 import { useSetAtom } from 'jotai';
 import classNames from 'classnames';
 import * as css from './styles.css';
@@ -17,6 +17,7 @@ import {
   primePersistentMediaUrl,
 } from '../../utils/mediaUrlCache';
 import { imageViewerSessionAtom } from '../../state/imageViewer';
+import { nameInitials } from '../../utils/common';
 
 const AVATAR_PREVIEW_RETRY_DELAY_MS = 400;
 
@@ -27,13 +28,21 @@ const wait = (delayMs: number): Promise<void> =>
 
 type UserHeroProps = {
   userId: string;
+  displayName?: string;
   avatarUrl?: string;
   avatarOriginalUrl?: string;
   presence?: UserPresence;
 };
-export function UserHero({ userId, avatarUrl, avatarOriginalUrl, presence }: UserHeroProps) {
+export function UserHero({
+  userId,
+  displayName,
+  avatarUrl,
+  avatarOriginalUrl,
+  presence,
+}: UserHeroProps) {
   const coverMedia = useResilientAvatarMedia(avatarUrl);
   const setImageViewerSession = useSetAtom(imageViewerSessionAtom);
+  const fallbackName = displayName ?? getMxIdLocalPart(userId) ?? userId;
 
   useEffect(() => {
     primePersistentMediaUrl(avatarOriginalUrl, 'background');
@@ -105,9 +114,10 @@ export function UserHero({ userId, avatarUrl, avatarOriginalUrl, presence }: Use
             <UserAvatar
               className={css.UserHeroAvatarImg}
               userId={userId}
+              fallbackWhileLoading
               src={avatarUrl}
-              alt={userId}
-              renderFallback={() => <Icon size="500" src={Icons.User} filled />}
+              alt={fallbackName}
+              renderFallback={() => <span>{nameInitials(fallbackName)}</span>}
             />
           </Avatar>
         </AvatarPresence>

@@ -1705,7 +1705,7 @@ export const Message = as<'div', MessageProps>(
                 : undefined
             }
             alt={senderDisplayName}
-            renderFallback={() => <Text size="B300">{nameInitials(senderDisplayName)}</Text>}
+            renderFallback={() => <span>{nameInitials(senderDisplayName)}</span>}
           />
         </Avatar>
       </AvatarBase>

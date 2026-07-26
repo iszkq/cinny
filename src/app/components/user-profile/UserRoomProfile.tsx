@@ -105,6 +105,7 @@ export function UserRoomProfile({ userId }: UserRoomProfileProps) {
     <Box direction="Column">
       <UserHero
         userId={userId}
+        displayName={displayName}
         avatarUrl={avatarUrl}
         avatarOriginalUrl={avatarOriginalUrl}
         presence={presence && presence.lastActiveTs !== 0 ? presence : undefined}

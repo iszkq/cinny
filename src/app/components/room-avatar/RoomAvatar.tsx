@@ -24,7 +24,7 @@ export function RoomAvatar({
   roomId,
   src,
   alt,
-  fallbackWhileLoading = false,
+  fallbackWhileLoading = true,
   renderFallback,
 }: RoomAvatarProps) {
   const {
