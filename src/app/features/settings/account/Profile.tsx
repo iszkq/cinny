@@ -57,6 +57,7 @@ import {
 } from '../../../utils/avatar';
 import { DEFAULT_AVATAR_FRAMES, DefaultAvatarFrame, loadDefaultAvatarFrame } from './avatarFrames';
 import { useAccountData } from '../../../hooks/useAccountData';
+import { useCachedMediaUrl } from '../../../hooks/useCachedMediaUrl';
 import { AccountDataEvent, CinnyAvatarFrameContent } from '../../../../types/matrix/accountData';
 import * as css from './Profile.css';
 
@@ -363,12 +364,14 @@ function ProfileAvatarFrame({ profile, userId }: ProfileProps) {
     typeof storedFrame.baseAvatarUrl === 'string';
   const baseAvatarMxc = storedFrameMatchesAvatar ? storedFrame.baseAvatarUrl : undefined;
   const currentFrameId = storedFrameMatchesAvatar ? storedFrame.frameId : undefined;
-  const baseAvatarUrl = baseAvatarMxc
-    ? mxcUrlToHttp(mx, baseAvatarMxc, useAuthentication, 96, 96, 'crop') ?? undefined
+  const baseAvatarHttpUrl = baseAvatarMxc
+    ? mxcUrlToHttp(mx, baseAvatarMxc, useAuthentication) ?? undefined
     : undefined;
-  const currentAvatarUrl = profile.avatarUrl
-    ? mxcUrlToHttp(mx, profile.avatarUrl, useAuthentication, 96, 96, 'crop') ?? undefined
+  const currentAvatarHttpUrl = profile.avatarUrl
+    ? mxcUrlToHttp(mx, profile.avatarUrl, useAuthentication) ?? undefined
     : undefined;
+  const baseAvatarUrl = useCachedMediaUrl(baseAvatarHttpUrl);
+  const currentAvatarUrl = useCachedMediaUrl(currentAvatarHttpUrl);
 
   const [draftFrameId, setDraftFrameId] = useState<string>();
   const [draftFrameFile, setDraftFrameFile] = useState<File>();
@@ -619,6 +622,14 @@ function ProfileAvatarFrame({ profile, userId }: ProfileProps) {
           </Box>
           <Text size="T200" priority="300">
             如果当前图片已带框，请选“分离当前旧头像框”；如果它只是普通头像，请选“当前头像本来无框”。这一步只建立基础头像，之后即可自由切换且不会叠加。
+          </Text>
+        </Box>
+      )}
+      {profile.avatarUrl && baseAvatarMxc && !baseAvatarUrl && (
+        <Box gap="100" alignItems="Center">
+          <Spinner size="100" variant="Secondary" fill="Solid" />
+          <Text size="T200" priority="300">
+            正在载入头像预览…
           </Text>
         </Box>
       )}

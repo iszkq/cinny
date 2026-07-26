@@ -182,7 +182,6 @@ export const openNativeImagePreviewWindow = async (
       center: true,
       focus: false,
       visible: false,
-      alwaysOnTop: true,
       dragDropEnabled: false,
     });
     const openingWindow = previewWindow;
