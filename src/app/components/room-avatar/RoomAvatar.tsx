@@ -13,8 +13,13 @@ type RoomAvatarProps = {
   renderFallback: () => ReactNode;
 };
 export function RoomAvatar({ roomId, src, alt, renderFallback }: RoomAvatarProps) {
-  const { displaySrc, imageKey, showFallback, handleLoad: handleMediaLoad, handleError } =
-    useResilientAvatarMedia(src);
+  const {
+    displaySrc,
+    imageKey,
+    showFallback,
+    handleLoad: handleMediaLoad,
+    handleError,
+  } = useResilientAvatarMedia(src, true);
 
   const handleLoad: ReactEventHandler<HTMLImageElement> = (evt) => {
     evt.currentTarget.setAttribute('data-image-loaded', 'true');

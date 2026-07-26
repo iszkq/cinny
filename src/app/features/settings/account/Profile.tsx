@@ -18,11 +18,11 @@ import {
   Overlay,
   OverlayBackdrop,
   OverlayCenter,
-  Modal,
   Dialog,
   Header,
   config,
   Spinner,
+  color,
 } from 'folds';
 import FocusTrap from 'focus-trap-react';
 import { SequenceCard } from '../../../components/sequence-card';
@@ -33,16 +33,22 @@ import { UserProfile, useUserProfile } from '../../../hooks/useUserProfile';
 import { getMxIdLocalPart, mxcUrlToHttp } from '../../../utils/matrix';
 import { UserAvatar } from '../../../components/user-avatar';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
-import { nameInitials } from '../../../utils/common';
+import { bytesToSize, nameInitials } from '../../../utils/common';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { useFilePicker } from '../../../hooks/useFilePicker';
 import { useObjectURL } from '../../../hooks/useObjectURL';
 import { stopPropagation } from '../../../utils/keyboard';
-import { ImageEditor } from '../../../components/image-editor';
-import { ModalWide } from '../../../styles/Modal.css';
 import { createUploadAtom, UploadSuccess } from '../../../state/upload';
 import { CompactUploadCardRenderer } from '../../../components/upload-card';
 import { useCapabilities } from '../../../hooks/useCapabilities';
+import {
+  AVATAR_ACCEPT,
+  AVATAR_FRAME_ACCEPT,
+  AVATAR_MAX_FILE_SIZE,
+  composeAvatarWithFrame,
+  validateAvatarFile,
+  validateAvatarFrameFile,
+} from '../../../utils/avatar';
 
 type ProfileProps = {
   profile: UserProfile;
@@ -61,16 +67,54 @@ function ProfileAvatar({ profile, userId }: ProfileProps) {
     : undefined;
 
   const [imageFile, setImageFile] = useState<File>();
+  const [uploadFile, setUploadFile] = useState<File>();
+  const [avatarError, setAvatarError] = useState<string>();
+  const [processingFrame, setProcessingFrame] = useState(false);
   const imageFileURL = useObjectURL(imageFile);
   const uploadAtom = useMemo(() => {
-    if (imageFile) return createUploadAtom(imageFile);
+    if (uploadFile) return createUploadAtom(uploadFile);
     return undefined;
-  }, [imageFile]);
+  }, [uploadFile]);
 
-  const pickFile = useFilePicker(setImageFile, false);
+  const handleSelectAvatar = useCallback((file: File) => {
+    const error = validateAvatarFile(file);
+    setAvatarError(error);
+    setImageFile(error ? undefined : file);
+    setUploadFile(undefined);
+  }, []);
+  const pickFile = useFilePicker(handleSelectAvatar, false);
+
+  const handleSelectFrame = useCallback(
+    async (frame: File) => {
+      if (!imageFile) return;
+      const error = validateAvatarFrameFile(frame);
+      if (error) {
+        setAvatarError(error);
+        return;
+      }
+
+      setAvatarError(undefined);
+      setProcessingFrame(true);
+      try {
+        const framedAvatar = await composeAvatarWithFrame(imageFile, frame);
+        setUploadFile(framedAvatar);
+        setImageFile(undefined);
+      } catch (errorValue) {
+        setAvatarError(
+          errorValue instanceof Error ? errorValue.message : '头像框合成失败，请重试。'
+        );
+      } finally {
+        setProcessingFrame(false);
+      }
+    },
+    [imageFile]
+  );
+  const pickFrame = useFilePicker(handleSelectFrame, false);
 
   const handleRemoveUpload = useCallback(() => {
     setImageFile(undefined);
+    setUploadFile(undefined);
+    setAvatarError(undefined);
   }, []);
 
   const handleUploaded = useCallback(
@@ -90,9 +134,9 @@ function ProfileAvatar({ profile, userId }: ProfileProps) {
   return (
     <SettingTile
       title={
-          <Text as="span" size="L400">
-            {'\u5934\u50cf'}
-          </Text>
+        <Text as="span" size="L400">
+          {'\u5934\u50cf'}
+        </Text>
       }
       after={
         <Avatar size="500" radii="300">
@@ -112,10 +156,70 @@ function ProfileAvatar({ profile, userId }: ProfileProps) {
             onComplete={handleUploaded}
           />
         </Box>
+      ) : imageFile && imageFileURL ? (
+        <Box gap="300" direction="Column">
+          <Box gap="300" alignItems="Center">
+            <Avatar size="500" radii="300">
+              <UserAvatar
+                userId={userId}
+                src={imageFileURL}
+                alt="新头像预览"
+                renderFallback={() => <Text size="H4">?</Text>}
+              />
+            </Avatar>
+            <Box direction="Column" gap="100">
+              <Text size="B300">{imageFile.name}</Text>
+              <Text size="T200" priority="300">
+                动态头像会保留原始动画；头像框会直接合成进头像文件。
+              </Text>
+            </Box>
+          </Box>
+          <Box gap="200" wrap="Wrap">
+            <Button
+              onClick={() => {
+                setAvatarError(undefined);
+                setUploadFile(imageFile);
+                setImageFile(undefined);
+              }}
+              size="300"
+              variant="Success"
+              radii="300"
+              disabled={processingFrame}
+            >
+              <Text size="B300">直接使用</Text>
+            </Button>
+            <Button
+              onClick={() => pickFrame(AVATAR_FRAME_ACCEPT)}
+              size="300"
+              variant="Secondary"
+              fill="Soft"
+              outlined
+              radii="300"
+              disabled={processingFrame}
+              before={
+                processingFrame ? (
+                  <Spinner size="100" variant="Secondary" fill="Solid" />
+                ) : undefined
+              }
+            >
+              <Text size="B300">{processingFrame ? '正在合成' : '添加头像框'}</Text>
+            </Button>
+            <Button
+              onClick={handleRemoveUpload}
+              size="300"
+              variant="Secondary"
+              fill="None"
+              radii="300"
+              disabled={processingFrame}
+            >
+              <Text size="B300">取消</Text>
+            </Button>
+          </Box>
+        </Box>
       ) : (
         <Box gap="200">
           <Button
-            onClick={() => pickFile('image/*')}
+            onClick={() => pickFile(AVATAR_ACCEPT)}
             size="300"
             variant="Secondary"
             fill="Soft"
@@ -140,27 +244,15 @@ function ProfileAvatar({ profile, userId }: ProfileProps) {
         </Box>
       )}
 
-      {imageFileURL && (
-        <Overlay open={false} backdrop={<OverlayBackdrop />}>
-          <OverlayCenter>
-            <FocusTrap
-              focusTrapOptions={{
-                initialFocus: false,
-                onDeactivate: handleRemoveUpload,
-                clickOutsideDeactivates: true,
-                escapeDeactivates: stopPropagation,
-              }}
-            >
-              <Modal className={ModalWide} variant="Surface" size="500">
-                <ImageEditor
-                  name={imageFile?.name ?? 'Unnamed'}
-                  url={imageFileURL}
-                  requestClose={handleRemoveUpload}
-                />
-              </Modal>
-            </FocusTrap>
-          </OverlayCenter>
-        </Overlay>
+      {!imageFile && !uploadAtom && (
+        <Text size="T200" priority="300">
+          支持 JPG、PNG、GIF、WebP，最大 {bytesToSize(AVATAR_MAX_FILE_SIZE)}。动态头像会直接播放。
+        </Text>
+      )}
+      {avatarError && (
+        <Text size="T200" style={{ color: color.Critical.Main }}>
+          {avatarError}
+        </Text>
       )}
 
       <Overlay open={alertRemove} backdrop={<OverlayBackdrop />}>
@@ -192,7 +284,9 @@ function ProfileAvatar({ profile, userId }: ProfileProps) {
               <Box style={{ padding: config.space.S400 }} direction="Column" gap="400">
                 <Box direction="Column" gap="200">
                   <Text priority="400">
-                    {'\u786e\u5b9a\u8981\u79fb\u9664\u5f53\u524d\u4e2a\u4eba\u5934\u50cf\u5417\uff1f'}
+                    {
+                      '\u786e\u5b9a\u8981\u79fb\u9664\u5f53\u524d\u4e2a\u4eba\u5934\u50cf\u5417\uff1f'
+                    }
                   </Text>
                 </Box>
                 <Button variant="Critical" onClick={handleRemoveAvatar}>

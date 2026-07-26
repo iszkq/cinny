@@ -299,6 +299,25 @@ export const shouldUseObjectUrlForMediaDisplay = (src: string | undefined): bool
   }
 };
 
+export const getOriginalMediaUrl = (src: string | undefined): string | undefined => {
+  if (!src || !isHttpUrl(src)) return src;
+
+  try {
+    const mediaUrl = new URL(src);
+    if (!MATRIX_MEDIA_PATH_MATCHER.test(mediaUrl.pathname)) return src;
+    if (!mediaUrl.pathname.includes('/thumbnail/')) return src;
+
+    mediaUrl.pathname = mediaUrl.pathname.replace('/thumbnail/', '/download/');
+    mediaUrl.searchParams.delete('width');
+    mediaUrl.searchParams.delete('height');
+    mediaUrl.searchParams.delete('method');
+    mediaUrl.searchParams.delete('animated');
+    return mediaUrl.toString();
+  } catch {
+    return src;
+  }
+};
+
 export const getImageInfo = (img: HTMLImageElement, fileOrBlob: File | Blob): IImageInfo => {
   const info: IImageInfo = {};
   info.w = img.naturalWidth || img.width;

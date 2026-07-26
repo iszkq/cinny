@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useCachedMediaUrls } from './useCachedMediaUrl';
 import { isDesktopUpdaterSupported } from '../utils/desktopUpdater';
-import { shouldUseObjectUrlForMediaDisplay } from '../utils/matrix';
+import { getOriginalMediaUrl, shouldUseObjectUrlForMediaDisplay } from '../utils/matrix';
 import { invalidateCachedMediaUrl, primeCachedMediaObjectUrl } from '../utils/mediaUrlCache';
 
 const AVATAR_RETRY_DELAY_MS = 250;
@@ -13,10 +13,14 @@ const clearTimer = (timer: number | undefined): undefined => {
   return undefined;
 };
 
-export const useResilientAvatarMedia = (src?: string) => {
+export const useResilientAvatarMedia = (src?: string, preferOriginal = false) => {
+  const mediaSrc = useMemo(
+    () => (preferOriginal ? getOriginalMediaUrl(src) : src),
+    [preferOriginal, src]
+  );
   const desktopSupported = isDesktopUpdaterSupported();
-  const { desktopUrl, objectUrl } = useCachedMediaUrls(src);
-  const directUrl = shouldUseObjectUrlForMediaDisplay(src) ? undefined : src;
+  const { desktopUrl, objectUrl } = useCachedMediaUrls(mediaSrc);
+  const directUrl = shouldUseObjectUrlForMediaDisplay(mediaSrc) ? undefined : mediaSrc;
   const candidates = useMemo(
     () => Array.from(new Set([desktopUrl, objectUrl, directUrl].filter(Boolean) as string[])),
     [desktopUrl, directUrl, objectUrl]
@@ -51,7 +55,7 @@ export const useResilientAvatarMedia = (src?: string) => {
     setWebError(false);
     setRetryNonce(0);
     retriedSrcRef.current = undefined;
-  }, [desktopSupported, src]);
+  }, [desktopSupported, mediaSrc]);
 
   useEffect(() => {
     if (!desktopSupported && webDisplaySrc) setWebError(false);
@@ -77,13 +81,13 @@ export const useResilientAvatarMedia = (src?: string) => {
     retryTimerRef.current = clearTimer(retryTimerRef.current);
 
     if (!desktopSupported) {
-      if (src && retriedSrcRef.current !== src) {
-        retriedSrcRef.current = src;
+      if (mediaSrc && retriedSrcRef.current !== mediaSrc) {
+        retriedSrcRef.current = mediaSrc;
         setWebError(false);
         retryTimerRef.current = window.setTimeout(() => {
-          invalidateCachedMediaUrl(src).then(() => {
+          invalidateCachedMediaUrl(mediaSrc).then(() => {
             setRetryNonce((value) => value + 1);
-            primeCachedMediaObjectUrl(src, 'visible', true);
+            primeCachedMediaObjectUrl(mediaSrc, 'visible', true);
           });
         }, AVATAR_RETRY_DELAY_MS);
         return;
@@ -108,7 +112,7 @@ export const useResilientAvatarMedia = (src?: string) => {
     }
 
     setShowFallback(true);
-  }, [candidateIndex, candidates.length, desktopSupported, displaySrc, src]);
+  }, [candidateIndex, candidates.length, desktopSupported, displaySrc, mediaSrc]);
 
   return {
     displaySrc,

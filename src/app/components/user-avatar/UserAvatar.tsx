@@ -13,8 +13,13 @@ type UserAvatarProps = {
   renderFallback: () => ReactNode;
 };
 export function UserAvatar({ className, userId, src, alt, renderFallback }: UserAvatarProps) {
-  const { displaySrc, imageKey, showFallback, handleLoad: handleMediaLoad, handleError } =
-    useResilientAvatarMedia(src);
+  const {
+    displaySrc,
+    imageKey,
+    showFallback,
+    handleLoad: handleMediaLoad,
+    handleError,
+  } = useResilientAvatarMedia(src, true);
 
   const handleLoad: ReactEventHandler<HTMLImageElement> = (evt) => {
     evt.currentTarget.setAttribute('data-image-loaded', 'true');
