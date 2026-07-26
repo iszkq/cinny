@@ -57,9 +57,9 @@ export const AvatarFramePreviewImage = style({
 });
 
 export const AvatarFramePreviewImageInset = style({
-  inset: '3%',
-  width: '94%',
-  height: '94%',
+  inset: 0,
+  width: '100%',
+  height: '100%',
 });
 
 export const AvatarFramePreviewOverlay = style({

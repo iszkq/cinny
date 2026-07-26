@@ -10,7 +10,8 @@ export const AVATAR_FRAME_RECOMMENDED_DIMENSION = 512;
 
 const STATIC_AVATAR_SIZE = 512;
 const ANIMATED_AVATAR_SIZE = 256;
-const AVATAR_CONTENT_RATIO = 0.94;
+const AVATAR_CONTENT_RATIO = 1;
+const AVATAR_FRAME_CLEAR_CENTER_RATIO = 0.94;
 const LEGACY_AVATAR_RECOVERY_RATIO = 0.75;
 const MAX_GIF_FRAMES = 240;
 const MAX_DECODED_GIF_PIXELS = 80_000_000;
@@ -197,7 +198,7 @@ export const validateAvatarFrameImage = async (file: File): Promise<string | und
   let centerPixels = 0;
   let transparentCenterPixels = 0;
   const center = sampleSize / 2;
-  const centerRadius = (sampleSize * AVATAR_CONTENT_RATIO) / 2;
+  const centerRadius = (sampleSize * AVATAR_FRAME_CLEAR_CENTER_RATIO) / 2;
 
   for (let y = 0; y < sampleSize; y += 1) {
     for (let x = 0; x < sampleSize; x += 1) {
