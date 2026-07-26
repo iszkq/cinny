@@ -5,6 +5,10 @@ on:
     branches:
       - dev
 
+concurrency:
+  group: netlify-dev
+  cancel-in-progress: true
+
 jobs:
   deploy-to-netlify:
     name: Deploy to Netlify
@@ -15,7 +19,7 @@ jobs:
       - name: Setup node
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
         with:
-          node-version-file: ".node-version"
+          node-version-file: '.node-version'
           package-manager-cache: false
       - name: Install dependencies
         run: npm install
@@ -36,4 +40,4 @@ jobs:
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
           NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID_DEV }}
-        timeout-minutes: 1
+        timeout-minutes: 5

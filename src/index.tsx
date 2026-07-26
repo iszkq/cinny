@@ -26,6 +26,82 @@ import { DownloadPage } from './app/pages/download';
 
 document.body.classList.add(configClass, varsClass);
 
+const RESOURCE_RECOVERY_KEY = 'cinny-resource-recovery-attempt';
+const RESOURCE_RECOVERY_COOLDOWN = 60_000;
+let resourceReloadScheduled = false;
+
+const isResourceLoadError = (error: unknown): boolean => {
+  const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+  return /dynamically imported module|importing a module script failed|loading chunk|chunkloaderror|failed to fetch.*module|module script/i.test(
+    message
+  );
+};
+
+const clearBrowserResourceCaches = async () => {
+  if (!('caches' in window)) return;
+
+  const cacheKeys = await window.caches.keys().catch(() => []);
+  await Promise.all(cacheKeys.map((key) => window.caches.delete(key).catch(() => false)));
+};
+
+const recentlyAttemptedResourceRecovery = (): boolean => {
+  try {
+    const attemptedAt = Number(window.sessionStorage.getItem(RESOURCE_RECOVERY_KEY));
+    return Number.isFinite(attemptedAt) && Date.now() - attemptedAt < RESOURCE_RECOVERY_COOLDOWN;
+  } catch {
+    return resourceReloadScheduled;
+  }
+};
+
+const markResourceRecoveryAttempt = () => {
+  resourceReloadScheduled = true;
+  try {
+    window.sessionStorage.setItem(RESOURCE_RECOVERY_KEY, Date.now().toString());
+  } catch {
+    // sessionStorage can be unavailable in privacy-restricted webviews.
+  }
+};
+
+const resetResourceRecoveryAttempt = () => {
+  resourceReloadScheduled = false;
+  try {
+    window.sessionStorage.removeItem(RESOURCE_RECOVERY_KEY);
+  } catch {
+    // sessionStorage can be unavailable in privacy-restricted webviews.
+  }
+};
+
+const reloadWithFreshResources = async () => {
+  resetResourceRecoveryAttempt();
+  await clearBrowserResourceCaches();
+  window.location.reload();
+};
+
+const recoverResourceLoad = async <T,>(error: unknown): Promise<T> => {
+  if (
+    !isResourceLoadError(error) ||
+    resourceReloadScheduled ||
+    recentlyAttemptedResourceRecovery()
+  ) {
+    throw error;
+  }
+
+  markResourceRecoveryAttempt();
+  await clearBrowserResourceCaches();
+  window.location.reload();
+  return new Promise<T>(() => {
+    // Keep React suspended while the browser begins navigating to the fresh page.
+  });
+};
+
+const loadLazyModule = async <T,>(loader: () => Promise<T>): Promise<T> => {
+  try {
+    return await loader();
+  } catch (error) {
+    return recoverResourceLoad<T>(error);
+  }
+};
+
 const retryingStylesheets = new WeakSet<HTMLLinkElement>();
 
 const retryFailedStylesheet = (link: HTMLLinkElement) => {
@@ -75,14 +151,18 @@ if (document.readyState === 'complete') {
 window.addEventListener('pageshow', () => window.setTimeout(recoverFailedStylesheets, 250));
 window.addEventListener('online', recoverFailedStylesheets);
 
-const LazyNativeImagePreviewWindow = lazy(async () => ({
-  default: (await import('./app/components/image-viewer/NativeImagePreviewWindow'))
-    .NativeImagePreviewWindow,
-}));
-const LazyNativeBibleWindow = lazy(async () => ({
-  default: (await import('./app/components/bible/NativeBibleWindow')).NativeBibleWindow,
-}));
-const LazyApp = lazy(() => import('./app/pages/App'));
+const LazyNativeImagePreviewWindow = lazy(() =>
+  loadLazyModule(async () => ({
+    default: (await import('./app/components/image-viewer/NativeImagePreviewWindow'))
+      .NativeImagePreviewWindow,
+  }))
+);
+const LazyNativeBibleWindow = lazy(() =>
+  loadLazyModule(async () => ({
+    default: (await import('./app/components/bible/NativeBibleWindow')).NativeBibleWindow,
+  }))
+);
+const LazyApp = lazy(() => loadLazyModule(() => import('./app/pages/App')));
 
 function RootStartupFallback() {
   return (
@@ -102,6 +182,53 @@ function RootStartupFallback() {
   );
 }
 
+type RootErrorBoundaryProps = {
+  children: React.ReactNode;
+};
+
+type RootErrorBoundaryState = {
+  error?: unknown;
+};
+
+class RootErrorBoundary extends React.Component<RootErrorBoundaryProps, RootErrorBoundaryState> {
+  constructor(props: RootErrorBoundaryProps) {
+    super(props);
+    this.state = {};
+  }
+
+  static getDerivedStateFromError(error: unknown): RootErrorBoundaryState {
+    return { error };
+  }
+
+  render() {
+    const { error } = this.state;
+    const { children } = this.props;
+    if (!error) return children;
+
+    return (
+      <div
+        style={{
+          width: '100%',
+          minHeight: 'var(--app-height, 100dvh)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '16px',
+          padding: '24px',
+          textAlign: 'center',
+        }}
+      >
+        <strong>页面资源加载失败</strong>
+        <span>浏览器可能缓存了旧版本文件，请重新加载最新资源。</span>
+        <button type="button" onClick={reloadWithFreshResources}>
+          清理缓存并重新加载
+        </button>
+      </div>
+    );
+  }
+}
+
 const nativeImagePreviewWindow = isDesktopUpdaterSupported() && isNativeImagePreviewWindow();
 const nativeBibleWindow = isDesktopUpdaterSupported() && isNativeBibleWindow();
 const desktopSubWindow = nativeImagePreviewWindow || nativeBibleWindow;
@@ -118,6 +245,7 @@ if (isDesktopUpdaterSupported() && !desktopSubWindow) {
 
 // Register Service Worker
 if (!desktopSubWindow && !isAndroidApp() && 'serviceWorker' in navigator) {
+  const hadServiceWorkerController = navigator.serviceWorker.controller !== null;
   const swUrl =
     import.meta.env.MODE === 'production'
       ? `${trimTrailingSlash(import.meta.env.BASE_URL)}/sw.js`
@@ -130,7 +258,13 @@ if (!desktopSubWindow && !isAndroidApp() && 'serviceWorker' in navigator) {
 
   navigator.serviceWorker.register(swUrl).then(sendSessionToSW);
   navigator.serviceWorker.ready.then(sendSessionToSW);
-  navigator.serviceWorker.addEventListener('controllerchange', sendSessionToSW);
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    sendSessionToSW();
+    if (hadServiceWorkerController && !resourceReloadScheduled) {
+      resourceReloadScheduled = true;
+      window.location.reload();
+    }
+  });
   window.addEventListener('focus', sendSessionToSW);
   window.addEventListener('online', sendSessionToSW);
   document.addEventListener('visibilitychange', () => {
@@ -183,7 +317,7 @@ const mountApp = () => {
   }
 
   const root = createRoot(rootContainer);
-  root.render(renderRootApp());
+  root.render(<RootErrorBoundary>{renderRootApp()}</RootErrorBoundary>);
 };
 
 mountApp();
