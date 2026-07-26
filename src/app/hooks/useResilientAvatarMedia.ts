@@ -19,26 +19,21 @@ export const useResilientAvatarMedia = (src?: string, preferOriginal = false) =>
   );
   const { desktopUrl, objectUrl } = useCachedMediaUrls(mediaSrc);
   const directUrl = shouldUseObjectUrlForMediaDisplay(mediaSrc) ? undefined : mediaSrc;
-  const candidates = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          [
-            desktopUrl,
-            objectUrl,
-            directUrl,
-            // Cross-origin authenticated media is fetched into an object URL when possible.
-            // Keep direct URLs as a final fallback for homeservers whose public media works in
-            // <img> but whose CORS policy blocks JavaScript fetches.
-            mediaSrc,
-            // Animated avatars prefer the original download URL. The original Matrix thumbnail
-            // must remain available so one failed original request cannot hide every avatar.
-            src,
-          ].filter(Boolean) as string[]
-        )
-      ),
-    [desktopUrl, directUrl, mediaSrc, objectUrl, src]
-  );
+  const candidates = useMemo(() => {
+    const orderedCandidates = preferOriginal
+      ? [
+          // Show the Matrix thumbnail immediately. Once the original has been fetched into a
+          // safe object/desktop URL, it moves ahead of this thumbnail and animation starts.
+          desktopUrl,
+          objectUrl,
+          src,
+          directUrl,
+          mediaSrc,
+        ]
+      : [desktopUrl, objectUrl, directUrl, mediaSrc];
+
+    return Array.from(new Set(orderedCandidates.filter(Boolean) as string[]));
+  }, [desktopUrl, directUrl, mediaSrc, objectUrl, preferOriginal, src]);
   const candidateKey = useMemo(() => candidates.join('\n'), [candidates]);
   const [candidateIndex, setCandidateIndex] = useState(0);
   const [retryNonce, setRetryNonce] = useState(0);

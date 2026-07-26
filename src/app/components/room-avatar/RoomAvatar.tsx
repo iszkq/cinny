@@ -19,7 +19,7 @@ export function RoomAvatar({ roomId, src, alt, renderFallback }: RoomAvatarProps
     showFallback,
     handleLoad: handleMediaLoad,
     handleError,
-  } = useResilientAvatarMedia(src);
+  } = useResilientAvatarMedia(src, true);
 
   const handleLoad: ReactEventHandler<HTMLImageElement> = (evt) => {
     evt.currentTarget.setAttribute('data-image-loaded', 'true');

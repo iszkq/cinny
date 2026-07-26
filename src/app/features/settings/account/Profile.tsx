@@ -745,7 +745,7 @@ function ProfileAvatarFrame({ profile, userId }: ProfileProps) {
             自定义头像框要求：静态 PNG 或 WebP，最大 {bytesToSize(AVATAR_FRAME_MAX_FILE_SIZE)}
             ；必须为正方形，边长 {AVATAR_FRAME_MIN_DIMENSION}–{AVATAR_FRAME_MAX_DIMENSION}{' '}
             像素，建议 {AVATAR_FRAME_RECOMMENDED_DIMENSION} × {AVATAR_FRAME_RECOMMENDED_DIMENSION}
-            ；背景和中央区域须透明，装饰只能放在外圈，不能遮挡头像。头像显示在中央约 74% 区域。
+            ；背景和中央区域须透明，装饰只能放在最外圈，不能遮挡头像。头像显示在中央约 94% 区域。
           </Text>
           <Text size="T200" priority="300">
             选择头像框会立即预览；点击“应用头像框”后才会生成并上传。动态头像处理可能需要几秒。
