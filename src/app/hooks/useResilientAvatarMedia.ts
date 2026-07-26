@@ -38,6 +38,7 @@ export const useResilientAvatarMedia = (src?: string, preferOriginal = false) =>
   const [candidateIndex, setCandidateIndex] = useState(0);
   const [retryNonce, setRetryNonce] = useState(0);
   const [showFallback, setShowFallback] = useState(false);
+  const [imageReady, setImageReady] = useState(false);
   const retriedSrcRef = useRef<string>();
   const retryTimerRef = useRef<number>();
 
@@ -48,6 +49,7 @@ export const useResilientAvatarMedia = (src?: string, preferOriginal = false) =>
     setCandidateIndex(0);
     setRetryNonce(0);
     setShowFallback(false);
+    setImageReady(false);
     retriedSrcRef.current = undefined;
   }, [candidateKey]);
 
@@ -61,6 +63,7 @@ export const useResilientAvatarMedia = (src?: string, preferOriginal = false) =>
   const handleLoad = useCallback(() => {
     retryTimerRef.current = clearTimer(retryTimerRef.current);
     setShowFallback(false);
+    setImageReady(true);
     if (displaySrc) {
       retriedSrcRef.current = undefined;
     }
@@ -68,6 +71,7 @@ export const useResilientAvatarMedia = (src?: string, preferOriginal = false) =>
 
   const handleError = useCallback(() => {
     retryTimerRef.current = clearTimer(retryTimerRef.current);
+    setImageReady(false);
 
     if (candidateIndex + 1 < candidates.length) {
       setShowFallback(false);
@@ -94,9 +98,30 @@ export const useResilientAvatarMedia = (src?: string, preferOriginal = false) =>
     setShowFallback(true);
   }, [candidateIndex, candidates.length, displaySrc, mediaSrc]);
 
+  useEffect(() => {
+    setImageReady(false);
+    if (!displaySrc || showFallback) return undefined;
+
+    let disposed = false;
+    const image = new Image();
+    image.onload = () => {
+      if (!disposed) handleLoad();
+    };
+    image.onerror = () => {
+      if (!disposed) handleError();
+    };
+    image.src = displaySrc;
+
+    return () => {
+      disposed = true;
+      image.onload = null;
+      image.onerror = null;
+    };
+  }, [displaySrc, handleError, handleLoad, retryNonce, showFallback]);
+
   return {
     displaySrc,
-    showFallback: !displaySrc || showFallback,
+    showFallback: !displaySrc || showFallback || !imageReady,
     imageKey: `${displaySrc ?? 'empty'}-${retryNonce}`,
     handleLoad,
     handleError,
