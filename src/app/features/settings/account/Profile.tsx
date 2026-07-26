@@ -237,7 +237,14 @@ function ProfileAvatar({ profile, userId }: ProfileProps) {
                 >
                   <Box direction="Column" gap="100" alignItems="Center">
                     <div className={css.AvatarFramePreview}>
-                      <img className={css.AvatarFramePreviewImage} src={imageFileURL} alt="" />
+                      <img
+                        className={classNames(
+                          css.AvatarFramePreviewImage,
+                          css.AvatarFramePreviewImageInset
+                        )}
+                        src={imageFileURL}
+                        alt=""
+                      />
                       <img className={css.AvatarFramePreviewOverlay} src={frame.url} alt="" />
                     </div>
                     <Text size="B300">{frame.name}</Text>

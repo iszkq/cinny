@@ -50,6 +50,12 @@ export const AvatarFramePreviewImage = style({
   borderRadius: '50%',
 });
 
+export const AvatarFramePreviewImageInset = style({
+  inset: '11%',
+  width: '78%',
+  height: '78%',
+});
+
 export const AvatarFramePreviewOverlay = style({
   position: 'absolute',
   inset: 0,

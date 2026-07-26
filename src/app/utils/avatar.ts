@@ -7,6 +7,7 @@ export const AVATAR_FRAME_MAX_FILE_SIZE = 2 * 1024 * 1024;
 
 const STATIC_AVATAR_SIZE = 512;
 const ANIMATED_AVATAR_SIZE = 256;
+const AVATAR_CONTENT_RATIO = 0.78;
 const MAX_GIF_FRAMES = 240;
 const MAX_DECODED_GIF_PIXELS = 80_000_000;
 
@@ -50,7 +51,7 @@ const loadImage = (file: Blob): Promise<HTMLImageElement> =>
     };
     image.onerror = () => {
       URL.revokeObjectURL(url);
-      reject(new Error('图片无法读取，请确认文件没有损坏。'));
+      reject(new Error(`图片（${file.type || '未知格式'}）无法读取，请确认文件没有损坏。`));
     };
     image.src = url;
   });
@@ -68,12 +69,38 @@ const drawCover = (
   source: CanvasImageSource,
   sourceWidth: number,
   sourceHeight: number,
-  size: number
+  targetX: number,
+  targetY: number,
+  targetSize: number
 ) => {
-  const scale = Math.max(size / sourceWidth, size / sourceHeight);
+  const scale = Math.max(targetSize / sourceWidth, targetSize / sourceHeight);
   const width = sourceWidth * scale;
   const height = sourceHeight * scale;
-  context.drawImage(source, (size - width) / 2, (size - height) / 2, width, height);
+  context.drawImage(
+    source,
+    targetX + (targetSize - width) / 2,
+    targetY + (targetSize - height) / 2,
+    width,
+    height
+  );
+};
+
+const drawAvatarInsideFrame = (
+  context: CanvasRenderingContext2D,
+  source: CanvasImageSource,
+  sourceWidth: number,
+  sourceHeight: number,
+  size: number
+) => {
+  const avatarSize = size * AVATAR_CONTENT_RATIO;
+  const avatarOffset = (size - avatarSize) / 2;
+
+  context.save();
+  context.beginPath();
+  context.arc(size / 2, size / 2, avatarSize / 2, 0, Math.PI * 2);
+  context.clip();
+  drawCover(context, source, sourceWidth, sourceHeight, avatarOffset, avatarOffset, avatarSize);
+  context.restore();
 };
 
 const withFrameName = (file: File, extension: string): string => {
@@ -115,18 +142,7 @@ const isAnimatedWebP = (bytes: Uint8Array): boolean => {
   return false;
 };
 
-const assertFrameCompositionSupported = async (avatar: File) => {
-  if (avatar.type === 'image/png' || avatar.type === 'image/webp') {
-    const bytes = new Uint8Array(await avatar.arrayBuffer());
-    const animated = avatar.type === 'image/png' ? isAnimatedPng(bytes) : isAnimatedWebP(bytes);
-    if (animated) {
-      throw new Error('动态 PNG/WebP 可以直接作为头像，但目前只有 GIF 支持逐帧合成头像框。');
-    }
-  }
-};
-
 const composeStaticAvatar = async (avatar: File, frame: File): Promise<File> => {
-  await assertFrameCompositionSupported(avatar);
   const [avatarImage, frameImage] = await Promise.all([loadImage(avatar), loadImage(frame)]);
   const canvas = document.createElement('canvas');
   canvas.width = STATIC_AVATAR_SIZE;
@@ -135,7 +151,7 @@ const composeStaticAvatar = async (avatar: File, frame: File): Promise<File> => 
   if (!context) throw new Error('当前浏览器无法处理头像图片。');
 
   context.clearRect(0, 0, STATIC_AVATAR_SIZE, STATIC_AVATAR_SIZE);
-  drawCover(
+  drawAvatarInsideFrame(
     context,
     avatarImage,
     avatarImage.naturalWidth,
@@ -151,6 +167,25 @@ const composeStaticAvatar = async (avatar: File, frame: File): Promise<File> => 
 
 const getTransparentIndex = (palette: GifPalette): number =>
   palette.findIndex((color) => color.length > 3 && color[3] === 0);
+
+const writeGifFrame = (
+  encoder: ReturnType<typeof GIFEncoder>,
+  context: CanvasRenderingContext2D,
+  delay: number
+) => {
+  const rgba = context.getImageData(0, 0, ANIMATED_AVATAR_SIZE, ANIMATED_AVATAR_SIZE).data;
+  const palette = quantize(rgba, 256, { format: 'rgba4444', oneBitAlpha: true });
+  const index = applyPalette(rgba, palette, 'rgba4444');
+  const transparentIndex = getTransparentIndex(palette);
+  encoder.writeFrame(index, ANIMATED_AVATAR_SIZE, ANIMATED_AVATAR_SIZE, {
+    palette,
+    delay: Math.max(20, delay),
+    repeat: 0,
+    dispose: 1,
+    transparent: transparentIndex >= 0,
+    transparentIndex: transparentIndex >= 0 ? transparentIndex : 0,
+  });
+};
 
 const applyPreviousDisposal = (
   context: CanvasRenderingContext2D,
@@ -212,21 +247,15 @@ const composeGifAvatar = async (avatar: File, frame: File): Promise<File> => {
     sourceContext.drawImage(patchCanvas, left, top);
 
     outputContext.clearRect(0, 0, ANIMATED_AVATAR_SIZE, ANIMATED_AVATAR_SIZE);
-    drawCover(outputContext, sourceCanvas, sourceWidth, sourceHeight, ANIMATED_AVATAR_SIZE);
+    drawAvatarInsideFrame(
+      outputContext,
+      sourceCanvas,
+      sourceWidth,
+      sourceHeight,
+      ANIMATED_AVATAR_SIZE
+    );
     outputContext.drawImage(frameImage, 0, 0, ANIMATED_AVATAR_SIZE, ANIMATED_AVATAR_SIZE);
-
-    const rgba = outputContext.getImageData(0, 0, ANIMATED_AVATAR_SIZE, ANIMATED_AVATAR_SIZE).data;
-    const palette = quantize(rgba, 256, { format: 'rgba4444', oneBitAlpha: true });
-    const index = applyPalette(rgba, palette, 'rgba4444');
-    const transparentIndex = getTransparentIndex(palette);
-    encoder.writeFrame(index, ANIMATED_AVATAR_SIZE, ANIMATED_AVATAR_SIZE, {
-      palette,
-      delay: Math.max(20, gifFrame.delay),
-      repeat: 0,
-      dispose: 1,
-      transparent: transparentIndex >= 0,
-      transparentIndex: transparentIndex >= 0 ? transparentIndex : 0,
-    });
+    writeGifFrame(encoder, outputContext, gifFrame.delay);
 
     previousFrame = gifFrame;
   });
@@ -235,6 +264,109 @@ const composeGifAvatar = async (avatar: File, frame: File): Promise<File> => {
   const blob = new Blob([encoder.bytes()], { type: 'image/gif' });
   ensureOutputSize(blob);
   return new File([blob], withFrameName(avatar, 'gif'), { type: 'image/gif' });
+};
+
+type DecodedAvatarFrame = CanvasImageSource & {
+  displayWidth: number;
+  displayHeight: number;
+  duration: number | null;
+  close: () => void;
+};
+
+type AvatarImageDecoder = {
+  tracks: {
+    ready: Promise<void>;
+    selectedTrack: {
+      frameCount: number;
+    } | null;
+  };
+  decode: (options: { frameIndex: number }) => Promise<{ image: DecodedAvatarFrame }>;
+  close: () => void;
+};
+
+type AvatarImageDecoderConstructor = {
+  new (init: { data: BufferSource; type: string; preferAnimation: boolean }): AvatarImageDecoder;
+  isTypeSupported?: (type: string) => Promise<boolean>;
+};
+
+const composeDecodedAnimatedAvatar = async (avatar: File, frame: File): Promise<File> => {
+  const ImageDecoderConstructor = (
+    window as typeof window & { ImageDecoder?: AvatarImageDecoderConstructor }
+  ).ImageDecoder;
+  if (!ImageDecoderConstructor) {
+    throw new Error(
+      '当前浏览器无法为动态 WebP/APNG 合成头像框，请使用最新版 Chrome、Edge 或桌面客户端。'
+    );
+  }
+  if (
+    ImageDecoderConstructor.isTypeSupported &&
+    !(await ImageDecoderConstructor.isTypeSupported(avatar.type))
+  ) {
+    throw new Error('当前浏览器无法解码这种动态图片，请换用 GIF 或在桌面客户端中重试。');
+  }
+
+  const [avatarBuffer, frameImage] = await Promise.all([avatar.arrayBuffer(), loadImage(frame)]);
+  const decoder = new ImageDecoderConstructor({
+    data: avatarBuffer,
+    type: avatar.type,
+    preferAnimation: true,
+  });
+
+  try {
+    await decoder.tracks.ready;
+    const track = decoder.tracks.selectedTrack;
+    if (!track || track.frameCount < 1) throw new Error('动态图片中没有可用的画面。');
+    if (track.frameCount > MAX_GIF_FRAMES) {
+      throw new Error(
+        `动态图片帧数过多。最多支持 ${MAX_GIF_FRAMES} 帧，当前为 ${track.frameCount} 帧。`
+      );
+    }
+
+    const outputCanvas = document.createElement('canvas');
+    outputCanvas.width = ANIMATED_AVATAR_SIZE;
+    outputCanvas.height = ANIMATED_AVATAR_SIZE;
+    const outputContext = outputCanvas.getContext('2d');
+    if (!outputContext) throw new Error('当前浏览器无法处理动态头像。');
+
+    const encoder = GIFEncoder();
+    let sourceWidth = 0;
+    let sourceHeight = 0;
+
+    for (let frameIndex = 0; frameIndex < track.frameCount; frameIndex += 1) {
+      // ImageDecoder exposes each composed animation frame as a VideoFrame-like canvas source.
+      // eslint-disable-next-line no-await-in-loop
+      const { image } = await decoder.decode({ frameIndex });
+      try {
+        if (frameIndex === 0) {
+          sourceWidth = image.displayWidth;
+          sourceHeight = image.displayHeight;
+          if (sourceWidth * sourceHeight * track.frameCount > MAX_DECODED_GIF_PIXELS) {
+            throw new Error('动态图片解码后过大，请降低分辨率或帧数后重试。');
+          }
+        }
+
+        outputContext.clearRect(0, 0, ANIMATED_AVATAR_SIZE, ANIMATED_AVATAR_SIZE);
+        drawAvatarInsideFrame(
+          outputContext,
+          image,
+          sourceWidth,
+          sourceHeight,
+          ANIMATED_AVATAR_SIZE
+        );
+        outputContext.drawImage(frameImage, 0, 0, ANIMATED_AVATAR_SIZE, ANIMATED_AVATAR_SIZE);
+        writeGifFrame(encoder, outputContext, Math.round((image.duration ?? 100_000) / 1000));
+      } finally {
+        image.close();
+      }
+    }
+
+    encoder.finish();
+    const blob = new Blob([encoder.bytes()], { type: 'image/gif' });
+    ensureOutputSize(blob);
+    return new File([blob], withFrameName(avatar, 'gif'), { type: 'image/gif' });
+  } finally {
+    decoder.close();
+  }
 };
 
 export const composeAvatarWithFrame = async (
@@ -249,7 +381,12 @@ export const composeAvatarWithFrame = async (
     if (frameError) throw new Error(frameError);
   }
 
-  return avatar.type.toLowerCase() === 'image/gif'
-    ? composeGifAvatar(avatar, frame)
-    : composeStaticAvatar(avatar, frame);
+  const avatarType = avatar.type.toLowerCase();
+  if (avatarType === 'image/gif') return composeGifAvatar(avatar, frame);
+  if (avatarType === 'image/png' || avatarType === 'image/webp') {
+    const bytes = new Uint8Array(await avatar.arrayBuffer());
+    const animated = avatarType === 'image/png' ? isAnimatedPng(bytes) : isAnimatedWebP(bytes);
+    if (animated) return composeDecodedAnimatedAvatar(avatar, frame);
+  }
+  return composeStaticAvatar(avatar, frame);
 };
