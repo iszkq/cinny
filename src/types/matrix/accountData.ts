@@ -11,6 +11,7 @@ export enum AccountDataEvent {
   CinnyExploreSources = 'in.cinny.explore_sources',
   CinnyAISettings = 'in.cinny.ai_settings',
   CinnyAppearanceSettings = 'in.cinny.appearance_settings',
+  CinnyAvatarFrame = 'in.cinny.avatar_frame',
   CinnyRoomNavCategories = 'in.cinny.room_nav_categories',
   CinnyUserEmojiPacks = 'in.cinny.user_emoji_packs',
 
@@ -158,6 +159,14 @@ export type CinnyAppearanceSettingsContent = {
   incomingBubbleOpacity?: number;
   chatBackgroundMediaMxc?: string;
   monochromeMode?: boolean;
+};
+
+export type CinnyAvatarFrameContent = {
+  version?: 1;
+  updatedAt?: number;
+  baseAvatarUrl?: string;
+  avatarUrl?: string;
+  frameId?: string;
 };
 
 export type CinnyRoomNavCategoryContent = {

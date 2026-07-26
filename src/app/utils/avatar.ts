@@ -4,6 +4,9 @@ import { bytesToSize } from './common';
 
 export const AVATAR_MAX_FILE_SIZE = 5 * 1024 * 1024;
 export const AVATAR_FRAME_MAX_FILE_SIZE = 2 * 1024 * 1024;
+export const AVATAR_FRAME_MIN_DIMENSION = 128;
+export const AVATAR_FRAME_MAX_DIMENSION = 2048;
+export const AVATAR_FRAME_RECOMMENDED_DIMENSION = 512;
 
 const STATIC_AVATAR_SIZE = 512;
 const ANIMATED_AVATAR_SIZE = 256;
@@ -140,6 +143,57 @@ const isAnimatedWebP = (bytes: Uint8Array): boolean => {
     index += 8 + length + (length % 2);
   }
   return false;
+};
+
+export const validateAvatarFrameImage = async (file: File): Promise<string | undefined> => {
+  const fileError = validateAvatarFrameFile(file);
+  if (fileError) return fileError;
+
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  if (
+    (file.type === 'image/png' && isAnimatedPng(bytes)) ||
+    (file.type === 'image/webp' && isAnimatedWebP(bytes))
+  ) {
+    return '头像框暂不支持动画。请上传静态 PNG 或静态 WebP 图片。';
+  }
+
+  const image = await loadImage(file);
+  const { naturalWidth: width, naturalHeight: height } = image;
+  if (width !== height) {
+    return `头像框必须是正方形。当前尺寸为 ${width} × ${height}。`;
+  }
+  if (width < AVATAR_FRAME_MIN_DIMENSION || width > AVATAR_FRAME_MAX_DIMENSION) {
+    return `头像框边长须为 ${AVATAR_FRAME_MIN_DIMENSION}–${AVATAR_FRAME_MAX_DIMENSION} 像素，建议使用 ${AVATAR_FRAME_RECOMMENDED_DIMENSION} × ${AVATAR_FRAME_RECOMMENDED_DIMENSION}。`;
+  }
+
+  const sampleSize = 32;
+  const canvas = document.createElement('canvas');
+  canvas.width = sampleSize;
+  canvas.height = sampleSize;
+  const context = canvas.getContext('2d', { willReadFrequently: true });
+  if (!context) return '当前浏览器无法检查头像框图片，请换一个浏览器后重试。';
+
+  context.drawImage(image, 0, 0, sampleSize, sampleSize);
+  const pixels = context.getImageData(0, 0, sampleSize, sampleSize).data;
+  let centerPixels = 0;
+  let transparentCenterPixels = 0;
+  const center = sampleSize / 2;
+  const centerRadius = sampleSize * 0.28;
+
+  for (let y = 0; y < sampleSize; y += 1) {
+    for (let x = 0; x < sampleSize; x += 1) {
+      if (Math.hypot(x + 0.5 - center, y + 0.5 - center) <= centerRadius) {
+        centerPixels += 1;
+        if (pixels[(y * sampleSize + x) * 4 + 3] < 32) transparentCenterPixels += 1;
+      }
+    }
+  }
+
+  if (transparentCenterPixels / centerPixels < 0.8) {
+    return '头像框中央必须保持透明，装饰请放在外圈，避免遮住头像。';
+  }
+
+  return undefined;
 };
 
 const composeStaticAvatar = async (avatar: File, frame: File): Promise<File> => {

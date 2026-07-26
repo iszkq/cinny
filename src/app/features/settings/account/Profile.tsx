@@ -31,7 +31,7 @@ import { SequenceCardStyle } from '../styles.css';
 import { SettingTile } from '../../../components/setting-tile';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { UserProfile, useUserProfile } from '../../../hooks/useUserProfile';
-import { getMxIdLocalPart, mxcUrlToHttp } from '../../../utils/matrix';
+import { downloadMedia, getMxIdLocalPart, mxcUrlToHttp } from '../../../utils/matrix';
 import { UserAvatar } from '../../../components/user-avatar';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { bytesToSize, nameInitials } from '../../../utils/common';
@@ -45,18 +45,62 @@ import { useCapabilities } from '../../../hooks/useCapabilities';
 import {
   AVATAR_ACCEPT,
   AVATAR_FRAME_ACCEPT,
+  AVATAR_FRAME_MAX_DIMENSION,
+  AVATAR_FRAME_MAX_FILE_SIZE,
+  AVATAR_FRAME_MIN_DIMENSION,
+  AVATAR_FRAME_RECOMMENDED_DIMENSION,
   AVATAR_MAX_FILE_SIZE,
   composeAvatarWithFrame,
   validateAvatarFile,
-  validateAvatarFrameFile,
+  validateAvatarFrameImage,
 } from '../../../utils/avatar';
 import { DEFAULT_AVATAR_FRAMES, DefaultAvatarFrame, loadDefaultAvatarFrame } from './avatarFrames';
+import { useAccountData } from '../../../hooks/useAccountData';
+import { AccountDataEvent, CinnyAvatarFrameContent } from '../../../../types/matrix/accountData';
+import { setAvatarUrlWithoutRoomEvent } from '../../../utils/profile';
 import * as css from './Profile.css';
 
 type ProfileProps = {
   profile: UserProfile;
   userId: string;
 };
+
+const NO_AVATAR_FRAME = 'none';
+
+const getFileExtension = (mimeType: string): string => {
+  if (mimeType === 'image/jpeg') return 'jpg';
+  if (mimeType === 'image/png') return 'png';
+  if (mimeType === 'image/gif') return 'gif';
+  if (mimeType === 'image/webp') return 'webp';
+  return 'img';
+};
+
+const getAvatarFile = async (
+  mx: ReturnType<typeof useMatrixClient>,
+  mxc: string,
+  useAuthentication: boolean
+): Promise<File> => {
+  const httpUrl = mxcUrlToHttp(mx, mxc, useAuthentication);
+  if (!httpUrl) throw new Error('当前头像地址无效，请重新上传头像后再设置头像框。');
+
+  const blob = await downloadMedia(httpUrl);
+  const mimeType = blob.type.split(';')[0].toLowerCase();
+  const file = new File([blob], `avatar.${getFileExtension(mimeType)}`, { type: mimeType });
+  const error = validateAvatarFile(file);
+  if (error) throw new Error(`当前头像无法用于头像框：${error}`);
+  return file;
+};
+
+const saveAvatarFrameState = (
+  mx: ReturnType<typeof useMatrixClient>,
+  content: CinnyAvatarFrameContent
+) =>
+  mx.setAccountData(AccountDataEvent.CinnyAvatarFrame, {
+    version: 1,
+    updatedAt: Date.now(),
+    ...content,
+  });
+
 function ProfileAvatar({ profile, userId }: ProfileProps) {
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
@@ -70,16 +114,9 @@ function ProfileAvatar({ profile, userId }: ProfileProps) {
     : undefined;
 
   const [imageFile, setImageFile] = useState<File>();
-  const [framedFile, setFramedFile] = useState<File>();
   const [uploadFile, setUploadFile] = useState<File>();
   const [avatarError, setAvatarError] = useState<string>();
-  const [selectedFrameId, setSelectedFrameId] = useState<string>();
-  const [processingFrameId, setProcessingFrameId] = useState<string>();
   const imageFileURL = useObjectURL(imageFile);
-  const framedFileURL = useObjectURL(framedFile);
-  const previewFile = framedFile ?? imageFile;
-  const previewFileURL = framedFileURL ?? imageFileURL;
-  const processingFrame = processingFrameId !== undefined;
   const uploadAtom = useMemo(() => {
     if (uploadFile) return createUploadAtom(uploadFile);
     return undefined;
@@ -89,75 +126,41 @@ function ProfileAvatar({ profile, userId }: ProfileProps) {
     const error = validateAvatarFile(file);
     setAvatarError(error);
     setImageFile(error ? undefined : file);
-    setFramedFile(undefined);
-    setSelectedFrameId(undefined);
     setUploadFile(undefined);
   }, []);
   const pickFile = useFilePicker(handleSelectAvatar, false);
 
-  const applyFrame = useCallback(
-    async (framePromise: Promise<File>, frameId: string, trustedFrame = false) => {
-      if (!imageFile) return;
-
-      setAvatarError(undefined);
-      setProcessingFrameId(frameId);
-      try {
-        const frame = await framePromise;
-        const framedAvatar = await composeAvatarWithFrame(imageFile, frame, trustedFrame);
-        setFramedFile(framedAvatar);
-        setSelectedFrameId(frameId);
-      } catch (errorValue) {
-        setAvatarError(
-          errorValue instanceof Error ? errorValue.message : '头像框合成失败，请重试。'
-        );
-      } finally {
-        setProcessingFrameId(undefined);
-      }
-    },
-    [imageFile]
-  );
-
-  const handleSelectFrame = useCallback(
-    async (frame: File) => {
-      const error = validateAvatarFrameFile(frame);
-      if (error) {
-        setAvatarError(error);
-        return;
-      }
-      await applyFrame(Promise.resolve(frame), 'custom');
-    },
-    [applyFrame]
-  );
-  const pickFrame = useFilePicker(handleSelectFrame, false);
-
-  const handleSelectDefaultFrame = useCallback(
-    (frame: DefaultAvatarFrame) => {
-      applyFrame(loadDefaultAvatarFrame(frame), frame.id, true);
-    },
-    [applyFrame]
-  );
-
   const handleRemoveUpload = useCallback(() => {
     setImageFile(undefined);
-    setFramedFile(undefined);
     setUploadFile(undefined);
     setAvatarError(undefined);
-    setSelectedFrameId(undefined);
-    setProcessingFrameId(undefined);
   }, []);
 
   const handleUploaded = useCallback(
-    (upload: UploadSuccess) => {
+    async (upload: UploadSuccess) => {
       const { mxc } = upload;
-      mx.setAvatarUrl(mxc);
-      handleRemoveUpload();
+      try {
+        await setAvatarUrlWithoutRoomEvent(mx, userId, mxc);
+        await saveAvatarFrameState(mx, {
+          baseAvatarUrl: mxc,
+          avatarUrl: mxc,
+        });
+        handleRemoveUpload();
+      } catch (errorValue) {
+        setAvatarError(errorValue instanceof Error ? errorValue.message : '头像更新失败，请重试。');
+      }
     },
-    [mx, handleRemoveUpload]
+    [mx, userId, handleRemoveUpload]
   );
 
-  const handleRemoveAvatar = () => {
-    mx.setAvatarUrl('');
-    setAlertRemove(false);
+  const handleRemoveAvatar = async () => {
+    try {
+      await setAvatarUrlWithoutRoomEvent(mx, userId, '');
+      await saveAvatarFrameState(mx, {});
+      setAlertRemove(false);
+    } catch (errorValue) {
+      setAvatarError(errorValue instanceof Error ? errorValue.message : '头像移除失败，请重试。');
+    }
   };
 
   return (
@@ -177,7 +180,7 @@ function ProfileAvatar({ profile, userId }: ProfileProps) {
         </Avatar>
       }
     >
-      {uploadAtom ? (
+      {uploadAtom && (
         <Box gap="200" direction="Column">
           <CompactUploadCardRenderer
             uploadAtom={uploadAtom}
@@ -185,107 +188,37 @@ function ProfileAvatar({ profile, userId }: ProfileProps) {
             onComplete={handleUploaded}
           />
         </Box>
-      ) : imageFile && previewFile && previewFileURL && imageFileURL ? (
+      )}
+      {!uploadAtom && imageFile && imageFileURL && (
         <Box gap="300" direction="Column">
           <Box gap="300" alignItems="Center">
             <Avatar size="500" radii="300">
               <UserAvatar
                 userId={userId}
-                src={previewFileURL}
+                src={imageFileURL}
                 alt="新头像预览"
                 renderFallback={() => <Text size="H4">?</Text>}
               />
             </Avatar>
             <Box direction="Column" gap="100">
-              <Text size="B300">{previewFile.name}</Text>
+              <Text size="B300">{imageFile.name}</Text>
               <Text size="T200" priority="300">
-                动态头像会保留原始动画；头像框会直接合成进头像文件。
+                动态头像会保留原始动画。头像框可在下方单独设置。
               </Text>
             </Box>
-          </Box>
-          <Box direction="Column" gap="200">
-            <Text size="L400">选择头像框</Text>
-            <div className={css.AvatarFrameGrid}>
-              <button
-                className={classNames(css.AvatarFrameOption, {
-                  [css.AvatarFrameOptionSelected]: selectedFrameId === undefined,
-                })}
-                type="button"
-                disabled={processingFrame}
-                onClick={() => {
-                  setFramedFile(undefined);
-                  setSelectedFrameId(undefined);
-                  setAvatarError(undefined);
-                }}
-              >
-                <Box direction="Column" gap="100" alignItems="Center">
-                  <div className={css.AvatarFramePreview}>
-                    <img className={css.AvatarFramePreviewImage} src={imageFileURL} alt="" />
-                  </div>
-                  <Text size="B300">无头像框</Text>
-                </Box>
-              </button>
-              {DEFAULT_AVATAR_FRAMES.map((frame) => (
-                <button
-                  className={classNames(css.AvatarFrameOption, {
-                    [css.AvatarFrameOptionSelected]: selectedFrameId === frame.id,
-                  })}
-                  type="button"
-                  disabled={processingFrame}
-                  onClick={() => handleSelectDefaultFrame(frame)}
-                  key={frame.id}
-                >
-                  <Box direction="Column" gap="100" alignItems="Center">
-                    <div className={css.AvatarFramePreview}>
-                      <img
-                        className={classNames(
-                          css.AvatarFramePreviewImage,
-                          css.AvatarFramePreviewImageInset
-                        )}
-                        src={imageFileURL}
-                        alt=""
-                      />
-                      <img className={css.AvatarFramePreviewOverlay} src={frame.url} alt="" />
-                    </div>
-                    <Text size="B300">{frame.name}</Text>
-                  </Box>
-                </button>
-              ))}
-            </div>
-            {processingFrame && (
-              <Box gap="100" alignItems="Center">
-                <Spinner size="100" variant="Secondary" fill="Solid" />
-                <Text size="T200" priority="300">
-                  正在生成头像框预览…
-                </Text>
-              </Box>
-            )}
           </Box>
           <Box gap="200" wrap="Wrap">
             <Button
               onClick={() => {
                 setAvatarError(undefined);
-                setUploadFile(previewFile);
+                setUploadFile(imageFile);
                 setImageFile(undefined);
-                setFramedFile(undefined);
               }}
               size="300"
               variant="Success"
               radii="300"
-              disabled={processingFrame}
             >
               <Text size="B300">上传这个头像</Text>
-            </Button>
-            <Button
-              onClick={() => pickFrame(AVATAR_FRAME_ACCEPT)}
-              size="300"
-              variant="Secondary"
-              fill="Soft"
-              outlined
-              radii="300"
-              disabled={processingFrame}
-            >
-              <Text size="B300">上传自定义头像框</Text>
             </Button>
             <Button
               onClick={handleRemoveUpload}
@@ -293,13 +226,13 @@ function ProfileAvatar({ profile, userId }: ProfileProps) {
               variant="Secondary"
               fill="None"
               radii="300"
-              disabled={processingFrame}
             >
               <Text size="B300">取消</Text>
             </Button>
           </Box>
         </Box>
-      ) : (
+      )}
+      {!uploadAtom && (!imageFile || !imageFileURL) && (
         <Box gap="200">
           <Button
             onClick={() => pickFile(AVATAR_ACCEPT)}
@@ -380,6 +313,297 @@ function ProfileAvatar({ profile, userId }: ProfileProps) {
           </FocusTrap>
         </OverlayCenter>
       </Overlay>
+    </SettingTile>
+  );
+}
+
+function ProfileAvatarFrame({ profile, userId }: ProfileProps) {
+  const mx = useMatrixClient();
+  const useAuthentication = useMediaAuthentication();
+  const capabilities = useCapabilities();
+  const disableSetAvatar = capabilities['m.set_avatar_url']?.enabled === false;
+  const frameEvent = useAccountData(AccountDataEvent.CinnyAvatarFrame);
+  const storedFrame = frameEvent?.getContent<CinnyAvatarFrameContent>();
+  const storedFrameMatchesAvatar =
+    typeof profile.avatarUrl === 'string' &&
+    storedFrame?.avatarUrl === profile.avatarUrl &&
+    typeof storedFrame.baseAvatarUrl === 'string';
+  const baseAvatarMxc = storedFrameMatchesAvatar ? storedFrame.baseAvatarUrl : profile.avatarUrl;
+  const currentFrameId = storedFrameMatchesAvatar ? storedFrame.frameId : undefined;
+  const baseAvatarUrl = baseAvatarMxc
+    ? mxcUrlToHttp(mx, baseAvatarMxc, useAuthentication, 96, 96, 'crop') ?? undefined
+    : undefined;
+  const currentAvatarUrl = profile.avatarUrl
+    ? mxcUrlToHttp(mx, profile.avatarUrl, useAuthentication, 96, 96, 'crop') ?? undefined
+    : undefined;
+
+  const [draftFrameId, setDraftFrameId] = useState<string>();
+  const [draftAvatarFile, setDraftAvatarFile] = useState<File>();
+  const [uploadFile, setUploadFile] = useState<File>();
+  const [frameError, setFrameError] = useState<string>();
+  const [processingFrameId, setProcessingFrameId] = useState<string>();
+  const draftAvatarFileUrl = useObjectURL(draftAvatarFile);
+  const processingFrame = processingFrameId !== undefined;
+  const hasDraft = draftFrameId !== undefined;
+  let selectedFrameId = currentFrameId;
+  let previewAvatarUrl = currentAvatarUrl;
+  if (hasDraft) {
+    selectedFrameId = draftFrameId === NO_AVATAR_FRAME ? undefined : draftFrameId;
+    previewAvatarUrl = draftFrameId === NO_AVATAR_FRAME ? baseAvatarUrl : draftAvatarFileUrl;
+  }
+  const canConfigureFrame = Boolean(profile.avatarUrl && baseAvatarMxc && baseAvatarUrl);
+  const uploadAtom = useMemo(() => {
+    if (uploadFile) return createUploadAtom(uploadFile);
+    return undefined;
+  }, [uploadFile]);
+
+  const clearDraft = useCallback(() => {
+    setDraftFrameId(undefined);
+    setDraftAvatarFile(undefined);
+    setUploadFile(undefined);
+    setProcessingFrameId(undefined);
+  }, []);
+
+  const prepareFrame = useCallback(
+    async (framePromise: Promise<File>, frameId: string, trustedFrame = false) => {
+      if (!baseAvatarMxc) return;
+
+      setFrameError(undefined);
+      setProcessingFrameId(frameId);
+      try {
+        const [avatar, frame] = await Promise.all([
+          getAvatarFile(mx, baseAvatarMxc, useAuthentication),
+          framePromise,
+        ]);
+        const framedAvatar = await composeAvatarWithFrame(avatar, frame, trustedFrame);
+        setDraftAvatarFile(framedAvatar);
+        setDraftFrameId(frameId);
+      } catch (errorValue) {
+        setFrameError(
+          errorValue instanceof Error ? errorValue.message : '头像框合成失败，请重试。'
+        );
+      } finally {
+        setProcessingFrameId(undefined);
+      }
+    },
+    [mx, baseAvatarMxc, useAuthentication]
+  );
+
+  const handleSelectDefaultFrame = useCallback(
+    (frame: DefaultAvatarFrame) => {
+      prepareFrame(loadDefaultAvatarFrame(frame), frame.id, true);
+    },
+    [prepareFrame]
+  );
+
+  const handleSelectCustomFrame = useCallback(
+    async (frame: File) => {
+      setFrameError(undefined);
+      try {
+        const error = await validateAvatarFrameImage(frame);
+        if (error) {
+          setFrameError(error);
+          return;
+        }
+        await prepareFrame(Promise.resolve(frame), 'custom');
+      } catch (errorValue) {
+        setFrameError(
+          errorValue instanceof Error ? errorValue.message : '头像框无法读取，请更换图片后重试。'
+        );
+      }
+    },
+    [prepareFrame]
+  );
+  const pickFrame = useFilePicker(handleSelectCustomFrame, false);
+
+  const applyNoFrame = useCallback(async () => {
+    if (!baseAvatarMxc) return;
+    try {
+      await saveAvatarFrameState(mx, {
+        baseAvatarUrl: baseAvatarMxc,
+        avatarUrl: baseAvatarMxc,
+      });
+      await setAvatarUrlWithoutRoomEvent(mx, userId, baseAvatarMxc);
+      clearDraft();
+    } catch (errorValue) {
+      setFrameError(errorValue instanceof Error ? errorValue.message : '头像框更新失败，请重试。');
+    }
+  }, [mx, userId, baseAvatarMxc, clearDraft]);
+
+  const handleApplyFrame = () => {
+    if (draftFrameId === NO_AVATAR_FRAME) {
+      applyNoFrame();
+      return;
+    }
+    if (draftAvatarFile) setUploadFile(draftAvatarFile);
+  };
+
+  const handleFrameUploaded = useCallback(
+    async (upload: UploadSuccess) => {
+      if (!baseAvatarMxc || !draftFrameId || draftFrameId === NO_AVATAR_FRAME) return;
+      try {
+        await saveAvatarFrameState(mx, {
+          baseAvatarUrl: baseAvatarMxc,
+          avatarUrl: upload.mxc,
+          frameId: draftFrameId,
+        });
+        await setAvatarUrlWithoutRoomEvent(mx, userId, upload.mxc);
+        clearDraft();
+      } catch (errorValue) {
+        setFrameError(
+          errorValue instanceof Error ? errorValue.message : '头像框更新失败，请重试。'
+        );
+      }
+    },
+    [mx, userId, baseAvatarMxc, draftFrameId, clearDraft]
+  );
+
+  return (
+    <SettingTile
+      title={<Text size="L400">头像框</Text>}
+      after={
+        profile.avatarUrl && (
+          <Avatar size="500" radii="300">
+            <UserAvatar
+              userId={userId}
+              src={previewAvatarUrl}
+              renderFallback={() => <Text size="H4">?</Text>}
+            />
+          </Avatar>
+        )
+      }
+    >
+      {!canConfigureFrame && (
+        <Text size="T200" priority="300">
+          请先上传头像，再选择头像框。
+        </Text>
+      )}
+      {canConfigureFrame && uploadAtom && (
+        <CompactUploadCardRenderer
+          uploadAtom={uploadAtom}
+          onRemove={() => setUploadFile(undefined)}
+          onComplete={handleFrameUploaded}
+        />
+      )}
+      {canConfigureFrame && !uploadAtom && baseAvatarUrl && (
+        <Box direction="Column" gap="300">
+          <div className={css.AvatarFrameGrid}>
+            <button
+              className={classNames(css.AvatarFrameOption, {
+                [css.AvatarFrameOptionSelected]: selectedFrameId === undefined,
+              })}
+              type="button"
+              disabled={processingFrame || disableSetAvatar}
+              onClick={() => {
+                setDraftAvatarFile(undefined);
+                setDraftFrameId(NO_AVATAR_FRAME);
+                setFrameError(undefined);
+              }}
+            >
+              <Box direction="Column" gap="100" alignItems="Center">
+                <div className={css.AvatarFramePreview}>
+                  <img className={css.AvatarFramePreviewImage} src={baseAvatarUrl} alt="" />
+                </div>
+                <Text size="B300">无头像框</Text>
+              </Box>
+            </button>
+            {DEFAULT_AVATAR_FRAMES.map((frame) => (
+              <button
+                className={classNames(css.AvatarFrameOption, {
+                  [css.AvatarFrameOptionSelected]: selectedFrameId === frame.id,
+                })}
+                type="button"
+                disabled={processingFrame || disableSetAvatar}
+                onClick={() => handleSelectDefaultFrame(frame)}
+                key={frame.id}
+              >
+                <Box direction="Column" gap="100" alignItems="Center">
+                  <div className={css.AvatarFramePreview}>
+                    <img
+                      className={classNames(
+                        css.AvatarFramePreviewImage,
+                        css.AvatarFramePreviewImageInset
+                      )}
+                      src={baseAvatarUrl}
+                      alt=""
+                    />
+                    <img className={css.AvatarFramePreviewOverlay} src={frame.url} alt="" />
+                  </div>
+                  <Text size="B300">{frame.name}</Text>
+                </Box>
+              </button>
+            ))}
+          </div>
+
+          {selectedFrameId === 'custom' && !hasDraft && (
+            <Text size="T200" priority="300">
+              当前使用自定义头像框。
+            </Text>
+          )}
+          {processingFrame && (
+            <Box gap="100" alignItems="Center">
+              <Spinner size="100" variant="Secondary" fill="Solid" />
+              <Text size="T200" priority="300">
+                正在生成头像框预览…
+              </Text>
+            </Box>
+          )}
+
+          <Box gap="200" wrap="Wrap">
+            {hasDraft && (
+              <Button
+                onClick={handleApplyFrame}
+                size="300"
+                variant="Success"
+                radii="300"
+                disabled={processingFrame || disableSetAvatar}
+              >
+                <Text size="B300">应用头像框</Text>
+              </Button>
+            )}
+            <Button
+              onClick={() => pickFrame(AVATAR_FRAME_ACCEPT)}
+              size="300"
+              variant="Secondary"
+              fill="Soft"
+              outlined
+              radii="300"
+              disabled={processingFrame || disableSetAvatar}
+            >
+              <Text size="B300">上传自定义头像框</Text>
+            </Button>
+            {hasDraft && (
+              <Button
+                onClick={clearDraft}
+                size="300"
+                variant="Secondary"
+                fill="None"
+                radii="300"
+                disabled={processingFrame}
+              >
+                <Text size="B300">取消预览</Text>
+              </Button>
+            )}
+          </Box>
+
+          <Text size="T200" priority="300">
+            自定义头像框要求：静态 PNG 或 WebP，最大 {bytesToSize(AVATAR_FRAME_MAX_FILE_SIZE)}
+            ；必须为正方形，边长 {AVATAR_FRAME_MIN_DIMENSION}–{AVATAR_FRAME_MAX_DIMENSION}{' '}
+            像素，建议 {AVATAR_FRAME_RECOMMENDED_DIMENSION} × {AVATAR_FRAME_RECOMMENDED_DIMENSION}
+            ；背景和中央区域须透明，装饰请放在外圈。头像显示在中央约 78% 区域。
+          </Text>
+          <Text size="T200" priority="300">
+            头像和头像框使用 Matrix
+            静默资料更新（MSC4069），不会主动向房间发送“更换头像”的成员事件；服务器未启用该能力时会取消更新，避免产生通知。
+          </Text>
+        </Box>
+      )}
+
+      {frameError && (
+        <Text size="T200" style={{ color: color.Critical.Main }}>
+          {frameError}
+        </Text>
+      )}
     </SettingTile>
   );
 }
@@ -497,6 +721,7 @@ export function Profile() {
         gap="400"
       >
         <ProfileAvatar userId={userId} profile={profile} />
+        <ProfileAvatarFrame userId={userId} profile={profile} />
         <ProfileDisplayName userId={userId} profile={profile} />
       </SequenceCard>
     </Box>
