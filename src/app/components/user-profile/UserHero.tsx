@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { ReactEventHandler, useEffect, useState } from 'react';
 import { Avatar, Box, Text } from 'folds';
 import { useSetAtom } from 'jotai';
 import classNames from 'classnames';
@@ -43,6 +43,9 @@ export function UserHero({
   const coverMedia = useResilientAvatarMedia(avatarUrl);
   const setImageViewerSession = useSetAtom(imageViewerSessionAtom);
   const fallbackName = displayName ?? getMxIdLocalPart(userId) ?? userId;
+  const coverImageKey = `${userId}-${coverMedia.imageKey}`;
+  const [loadedCoverImageKey, setLoadedCoverImageKey] = useState<string>();
+  const coverImageReady = !coverMedia.showFallback && loadedCoverImageKey === coverImageKey;
 
   useEffect(() => {
     primePersistentMediaUrl(avatarOriginalUrl, 'background');
@@ -50,7 +53,7 @@ export function UserHero({
 
   const loadAvatarPreview = () => {
     const source = avatarOriginalUrl ?? avatarUrl;
-    if (!source) return;
+    if (!source || !coverImageReady) return;
 
     const itemId = `avatar-${userId}`;
     setImageViewerSession({
@@ -77,13 +80,23 @@ export function UserHero({
     });
   };
 
+  const handleCoverLoad: ReactEventHandler<HTMLImageElement> = () => {
+    setLoadedCoverImageKey(coverImageKey);
+    coverMedia.handleLoad();
+  };
+
+  const handleCoverError: ReactEventHandler<HTMLImageElement> = () => {
+    setLoadedCoverImageKey(undefined);
+    coverMedia.handleError();
+  };
+
   return (
     <Box direction="Column" className={css.UserHero}>
       <div
         className={css.UserHeroCoverContainer}
         style={{
           backgroundColor: colorMXID(userId),
-          filter: coverMedia.displaySrc ? undefined : 'brightness(50%)',
+          filter: coverImageReady ? undefined : 'brightness(50%)',
         }}
       >
         {coverMedia.displaySrc && !coverMedia.showFallback && (
@@ -91,9 +104,11 @@ export function UserHero({
             key={coverMedia.imageKey}
             className={css.UserHeroCover}
             src={coverMedia.displaySrc}
-            alt={userId}
-            onLoad={coverMedia.handleLoad}
-            onError={coverMedia.handleError}
+            alt=""
+            aria-hidden={!coverImageReady}
+            style={{ visibility: coverImageReady ? 'visible' : 'hidden' }}
+            onLoad={handleCoverLoad}
+            onError={handleCoverError}
             draggable="false"
           />
         )}
@@ -106,8 +121,8 @@ export function UserHero({
           }
         >
           <Avatar
-            as={avatarUrl ? 'button' : 'div'}
-            onClick={avatarUrl ? loadAvatarPreview : undefined}
+            as={coverImageReady ? 'button' : 'div'}
+            onClick={coverImageReady ? loadAvatarPreview : undefined}
             className={css.UserHeroAvatar}
             size="500"
           >
