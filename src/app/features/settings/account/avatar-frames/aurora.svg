@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="aurora" x1="65" y1="91" x2="447" y2="422" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4dfff3"/>
+      <stop offset=".28" stop-color="#50a8ff"/>
+      <stop offset=".55" stop-color="#ad69ff"/>
+      <stop offset=".78" stop-color="#ff62c7"/>
+      <stop offset="1" stop-color="#5dffcd"/>
+    </linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="9" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <circle cx="256" cy="256" r="218" fill="none" stroke="url(#aurora)" stroke-opacity=".55" stroke-width="30" filter="url(#glow)"/>
+  <circle cx="256" cy="256" r="218" fill="none" stroke="url(#aurora)" stroke-width="11"/>
+  <path d="M82 157c53-90 166-131 267-86" fill="none" stroke="#d9ffff" stroke-linecap="round" stroke-width="5" opacity=".9"/>
+  <path d="M431 348c-49 91-158 137-259 98" fill="none" stroke="#ffd8f5" stroke-linecap="round" stroke-width="5" opacity=".9"/>
+</svg>

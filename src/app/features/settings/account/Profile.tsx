@@ -25,6 +25,7 @@ import {
   color,
 } from 'folds';
 import FocusTrap from 'focus-trap-react';
+import classNames from 'classnames';
 import { SequenceCard } from '../../../components/sequence-card';
 import { SequenceCardStyle } from '../styles.css';
 import { SettingTile } from '../../../components/setting-tile';
@@ -49,6 +50,8 @@ import {
   validateAvatarFile,
   validateAvatarFrameFile,
 } from '../../../utils/avatar';
+import { DEFAULT_AVATAR_FRAMES, DefaultAvatarFrame, loadDefaultAvatarFrame } from './avatarFrames';
+import * as css from './Profile.css';
 
 type ProfileProps = {
   profile: UserProfile;
@@ -67,10 +70,16 @@ function ProfileAvatar({ profile, userId }: ProfileProps) {
     : undefined;
 
   const [imageFile, setImageFile] = useState<File>();
+  const [framedFile, setFramedFile] = useState<File>();
   const [uploadFile, setUploadFile] = useState<File>();
   const [avatarError, setAvatarError] = useState<string>();
-  const [processingFrame, setProcessingFrame] = useState(false);
+  const [selectedFrameId, setSelectedFrameId] = useState<string>();
+  const [processingFrameId, setProcessingFrameId] = useState<string>();
   const imageFileURL = useObjectURL(imageFile);
+  const framedFileURL = useObjectURL(framedFile);
+  const previewFile = framedFile ?? imageFile;
+  const previewFileURL = framedFileURL ?? imageFileURL;
+  const processingFrame = processingFrameId !== undefined;
   const uploadAtom = useMemo(() => {
     if (uploadFile) return createUploadAtom(uploadFile);
     return undefined;
@@ -80,41 +89,61 @@ function ProfileAvatar({ profile, userId }: ProfileProps) {
     const error = validateAvatarFile(file);
     setAvatarError(error);
     setImageFile(error ? undefined : file);
+    setFramedFile(undefined);
+    setSelectedFrameId(undefined);
     setUploadFile(undefined);
   }, []);
   const pickFile = useFilePicker(handleSelectAvatar, false);
 
-  const handleSelectFrame = useCallback(
-    async (frame: File) => {
+  const applyFrame = useCallback(
+    async (framePromise: Promise<File>, frameId: string, trustedFrame = false) => {
       if (!imageFile) return;
-      const error = validateAvatarFrameFile(frame);
-      if (error) {
-        setAvatarError(error);
-        return;
-      }
 
       setAvatarError(undefined);
-      setProcessingFrame(true);
+      setProcessingFrameId(frameId);
       try {
-        const framedAvatar = await composeAvatarWithFrame(imageFile, frame);
-        setUploadFile(framedAvatar);
-        setImageFile(undefined);
+        const frame = await framePromise;
+        const framedAvatar = await composeAvatarWithFrame(imageFile, frame, trustedFrame);
+        setFramedFile(framedAvatar);
+        setSelectedFrameId(frameId);
       } catch (errorValue) {
         setAvatarError(
           errorValue instanceof Error ? errorValue.message : '头像框合成失败，请重试。'
         );
       } finally {
-        setProcessingFrame(false);
+        setProcessingFrameId(undefined);
       }
     },
     [imageFile]
   );
+
+  const handleSelectFrame = useCallback(
+    async (frame: File) => {
+      const error = validateAvatarFrameFile(frame);
+      if (error) {
+        setAvatarError(error);
+        return;
+      }
+      await applyFrame(Promise.resolve(frame), 'custom');
+    },
+    [applyFrame]
+  );
   const pickFrame = useFilePicker(handleSelectFrame, false);
+
+  const handleSelectDefaultFrame = useCallback(
+    (frame: DefaultAvatarFrame) => {
+      applyFrame(loadDefaultAvatarFrame(frame), frame.id, true);
+    },
+    [applyFrame]
+  );
 
   const handleRemoveUpload = useCallback(() => {
     setImageFile(undefined);
+    setFramedFile(undefined);
     setUploadFile(undefined);
     setAvatarError(undefined);
+    setSelectedFrameId(undefined);
+    setProcessingFrameId(undefined);
   }, []);
 
   const handleUploaded = useCallback(
@@ -156,37 +185,89 @@ function ProfileAvatar({ profile, userId }: ProfileProps) {
             onComplete={handleUploaded}
           />
         </Box>
-      ) : imageFile && imageFileURL ? (
+      ) : imageFile && previewFile && previewFileURL && imageFileURL ? (
         <Box gap="300" direction="Column">
           <Box gap="300" alignItems="Center">
             <Avatar size="500" radii="300">
               <UserAvatar
                 userId={userId}
-                src={imageFileURL}
+                src={previewFileURL}
                 alt="新头像预览"
                 renderFallback={() => <Text size="H4">?</Text>}
               />
             </Avatar>
             <Box direction="Column" gap="100">
-              <Text size="B300">{imageFile.name}</Text>
+              <Text size="B300">{previewFile.name}</Text>
               <Text size="T200" priority="300">
                 动态头像会保留原始动画；头像框会直接合成进头像文件。
               </Text>
             </Box>
           </Box>
+          <Box direction="Column" gap="200">
+            <Text size="L400">选择头像框</Text>
+            <div className={css.AvatarFrameGrid}>
+              <button
+                className={classNames(css.AvatarFrameOption, {
+                  [css.AvatarFrameOptionSelected]: selectedFrameId === undefined,
+                })}
+                type="button"
+                disabled={processingFrame}
+                onClick={() => {
+                  setFramedFile(undefined);
+                  setSelectedFrameId(undefined);
+                  setAvatarError(undefined);
+                }}
+              >
+                <Box direction="Column" gap="100" alignItems="Center">
+                  <div className={css.AvatarFramePreview}>
+                    <img className={css.AvatarFramePreviewImage} src={imageFileURL} alt="" />
+                  </div>
+                  <Text size="B300">无头像框</Text>
+                </Box>
+              </button>
+              {DEFAULT_AVATAR_FRAMES.map((frame) => (
+                <button
+                  className={classNames(css.AvatarFrameOption, {
+                    [css.AvatarFrameOptionSelected]: selectedFrameId === frame.id,
+                  })}
+                  type="button"
+                  disabled={processingFrame}
+                  onClick={() => handleSelectDefaultFrame(frame)}
+                  key={frame.id}
+                >
+                  <Box direction="Column" gap="100" alignItems="Center">
+                    <div className={css.AvatarFramePreview}>
+                      <img className={css.AvatarFramePreviewImage} src={imageFileURL} alt="" />
+                      <img className={css.AvatarFramePreviewOverlay} src={frame.url} alt="" />
+                    </div>
+                    <Text size="B300">{frame.name}</Text>
+                  </Box>
+                </button>
+              ))}
+            </div>
+            {processingFrame && (
+              <Box gap="100" alignItems="Center">
+                <Spinner size="100" variant="Secondary" fill="Solid" />
+                <Text size="T200" priority="300">
+                  正在生成头像框预览…
+                </Text>
+              </Box>
+            )}
+          </Box>
           <Box gap="200" wrap="Wrap">
             <Button
               onClick={() => {
                 setAvatarError(undefined);
-                setUploadFile(imageFile);
+                setUploadFile(previewFile);
                 setImageFile(undefined);
+                setFramedFile(undefined);
               }}
               size="300"
               variant="Success"
               radii="300"
               disabled={processingFrame}
             >
-              <Text size="B300">直接使用</Text>
+              <Text size="B300">上传这个头像</Text>
             </Button>
             <Button
               onClick={() => pickFrame(AVATAR_FRAME_ACCEPT)}
@@ -196,13 +277,8 @@ function ProfileAvatar({ profile, userId }: ProfileProps) {
               outlined
               radii="300"
               disabled={processingFrame}
-              before={
-                processingFrame ? (
-                  <Spinner size="100" variant="Secondary" fill="Solid" />
-                ) : undefined
-              }
             >
-              <Text size="B300">{processingFrame ? '正在合成' : '添加头像框'}</Text>
+              <Text size="B300">上传自定义头像框</Text>
             </Button>
             <Button
               onClick={handleRemoveUpload}

@@ -185,7 +185,7 @@ export function Security({ requestClose }: SecurityProps) {
   );
   const accountPinEnabled = policyEnabled || localPinEnabled;
 
-  if (!userId || !baseUrl) {
+  if (!pinSupported || !userId || !baseUrl) {
     return null;
   }
 

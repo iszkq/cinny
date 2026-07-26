@@ -1,5 +1,7 @@
 import { AccountDataEvent, CinnyAccountPinPolicyContent } from '../../types/matrix/accountData';
 import { isDesktopUpdaterSupported } from './desktopUpdater';
+import { isNativeApp } from './nativePlatform';
+import { mobileOrTablet } from './user-agent';
 
 export type AccountPinConfig = {
   version: 1;
@@ -194,7 +196,10 @@ export const getAccountPinConfig = (
 ): AccountPinConfig | undefined => getConfigByAccountKey(getAccountPinKey(baseUrl, userId));
 
 export const supportsPinLock = (): boolean =>
-  typeof crypto !== 'undefined' && typeof crypto.subtle !== 'undefined';
+  typeof window !== 'undefined' &&
+  (isDesktopUpdaterSupported() || isNativeApp() || mobileOrTablet()) &&
+  typeof crypto !== 'undefined' &&
+  typeof crypto.subtle !== 'undefined';
 
 export const isDesktopPinLockSupported = (): boolean =>
   isDesktopUpdaterSupported() && supportsPinLock();

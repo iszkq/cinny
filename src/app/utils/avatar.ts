@@ -237,11 +237,17 @@ const composeGifAvatar = async (avatar: File, frame: File): Promise<File> => {
   return new File([blob], withFrameName(avatar, 'gif'), { type: 'image/gif' });
 };
 
-export const composeAvatarWithFrame = async (avatar: File, frame: File): Promise<File> => {
+export const composeAvatarWithFrame = async (
+  avatar: File,
+  frame: File,
+  trustedFrame = false
+): Promise<File> => {
   const avatarError = validateAvatarFile(avatar);
   if (avatarError) throw new Error(avatarError);
-  const frameError = validateAvatarFrameFile(frame);
-  if (frameError) throw new Error(frameError);
+  if (!trustedFrame) {
+    const frameError = validateAvatarFrameFile(frame);
+    if (frameError) throw new Error(frameError);
+  }
 
   return avatar.type.toLowerCase() === 'image/gif'
     ? composeGifAvatar(avatar, frame)
