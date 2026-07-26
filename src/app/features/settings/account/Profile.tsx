@@ -386,6 +386,7 @@ function ProfileAvatarFrame({ profile, userId }: ProfileProps) {
   }
   const selectedDefaultFrame = DEFAULT_AVATAR_FRAMES.find((frame) => frame.id === draftFrameId);
   const draftFrameUrl = draftFrameId === 'custom' ? draftFrameFileUrl : selectedDefaultFrame?.url;
+  const draftAvatarContentRatio = selectedDefaultFrame?.avatarContentRatio ?? 1;
   const canConfigureFrame = Boolean(profile.avatarUrl && baseAvatarMxc && baseAvatarUrl);
   const needsBaseAvatarSetup = Boolean(profile.avatarUrl && !storedFrameMatchesAvatar);
   const uploadAtom = useMemo(() => {
@@ -501,6 +502,7 @@ function ProfileAvatarFrame({ profile, userId }: ProfileProps) {
       const avatar = await getAvatarFile(mx, baseAvatarMxc, useAuthentication);
       let frame: File;
       let trustedFrame = false;
+      let avatarContentRatio = 1;
       if (draftFrameId === 'custom') {
         if (!draftFrameFile) throw new Error('请选择自定义头像框文件。');
         frame = draftFrameFile;
@@ -509,8 +511,14 @@ function ProfileAvatarFrame({ profile, userId }: ProfileProps) {
         if (!defaultFrame) throw new Error('所选头像框不存在，请重新选择。');
         frame = await loadDefaultAvatarFrame(defaultFrame);
         trustedFrame = true;
+        avatarContentRatio = defaultFrame.avatarContentRatio ?? 1;
       }
-      const framedAvatar = await composeAvatarWithFrame(avatar, frame, trustedFrame);
+      const framedAvatar = await composeAvatarWithFrame(
+        avatar,
+        frame,
+        trustedFrame,
+        avatarContentRatio
+      );
       setUploadFile(framedAvatar);
     } catch (errorValue) {
       setFrameError(errorValue instanceof Error ? errorValue.message : '头像框生成失败，请重试。');
@@ -549,10 +557,18 @@ function ProfileAvatarFrame({ profile, userId }: ProfileProps) {
       after={
         profile.avatarUrl && (
           <div className={css.AvatarFrameCurrentPreview}>
+            {hasDraft && draftFrameUrl && draftAvatarContentRatio < 1 && baseAvatarUrl && (
+              <img className={css.AvatarFramePreviewBackdrop} src={baseAvatarUrl} alt="" />
+            )}
             <img
               className={classNames(css.AvatarFramePreviewImage, {
                 [css.AvatarFramePreviewImageInset]: hasDraft && Boolean(draftFrameUrl),
               })}
+              style={
+                hasDraft && draftFrameUrl
+                  ? { transform: `scale(${draftAvatarContentRatio})` }
+                  : undefined
+              }
               src={hasDraft && draftFrameUrl ? baseAvatarUrl : previewAvatarUrl}
               alt={`${userId} 的头像框预览`}
             />
@@ -647,11 +663,15 @@ function ProfileAvatarFrame({ profile, userId }: ProfileProps) {
               >
                 <Box direction="Column" gap="100" alignItems="Center">
                   <div className={css.AvatarFramePreview}>
+                    {frame.avatarContentRatio && frame.avatarContentRatio < 1 && (
+                      <img className={css.AvatarFramePreviewBackdrop} src={baseAvatarUrl} alt="" />
+                    )}
                     <img
                       className={classNames(
                         css.AvatarFramePreviewImage,
                         css.AvatarFramePreviewImageInset
                       )}
+                      style={{ transform: `scale(${frame.avatarContentRatio ?? 1})` }}
                       src={baseAvatarUrl}
                       alt=""
                     />

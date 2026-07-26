@@ -39,12 +39,26 @@ export const AvatarFramePreview = style({
   width: '52px',
   height: '52px',
   margin: '0 auto',
+  overflow: 'hidden',
+  borderRadius: '50%',
 });
 
 export const AvatarFrameCurrentPreview = style({
   position: 'relative',
   width: '48px',
   height: '48px',
+  overflow: 'hidden',
+  borderRadius: '50%',
+});
+
+export const AvatarFramePreviewBackdrop = style({
+  position: 'absolute',
+  inset: '-12%',
+  width: '124%',
+  height: '124%',
+  objectFit: 'cover',
+  borderRadius: '50%',
+  filter: 'blur(8px) saturate(0.7)',
 });
 
 export const AvatarFramePreviewImage = style({
@@ -54,6 +68,7 @@ export const AvatarFramePreviewImage = style({
   height: '100%',
   objectFit: 'cover',
   borderRadius: '50%',
+  transformOrigin: 'center',
 });
 
 export const AvatarFramePreviewImageInset = style({

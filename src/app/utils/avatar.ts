@@ -15,6 +15,7 @@ const AVATAR_FRAME_CLEAR_CENTER_RATIO = 0.94;
 const LEGACY_AVATAR_RECOVERY_RATIO = 0.75;
 const MAX_GIF_FRAMES = 240;
 const MAX_DECODED_GIF_PIXELS = 80_000_000;
+const MAX_STREAM_DECODED_ANIMATION_PIXELS = 160_000_000;
 
 const AVATAR_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
 const FRAME_MIME_TYPES = new Set(['image/png', 'image/webp']);
@@ -95,15 +96,50 @@ const drawAvatarInsideFrame = (
   source: CanvasImageSource,
   sourceWidth: number,
   sourceHeight: number,
-  size: number
+  size: number,
+  contentRatio = AVATAR_CONTENT_RATIO
 ) => {
-  const avatarSize = size * AVATAR_CONTENT_RATIO;
+  const avatarSize = size * contentRatio;
   const avatarOffset = (size - avatarSize) / 2;
 
   context.save();
   context.beginPath();
-  context.arc(size / 2, size / 2, avatarSize / 2, 0, Math.PI * 2);
+  context.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
   context.clip();
+
+  if (contentRatio < 1) {
+    const sampleCanvas = document.createElement('canvas');
+    sampleCanvas.width = 4;
+    sampleCanvas.height = 1;
+    const sampleContext = sampleCanvas.getContext('2d', { willReadFrequently: true });
+    if (sampleContext) {
+      const insetX = Math.max(0, Math.floor(sourceWidth * 0.02));
+      const insetY = Math.max(0, Math.floor(sourceHeight * 0.02));
+      const samplePoints = [
+        [insetX, insetY],
+        [Math.max(0, sourceWidth - insetX - 1), insetY],
+        [insetX, Math.max(0, sourceHeight - insetY - 1)],
+        [Math.max(0, sourceWidth - insetX - 1), Math.max(0, sourceHeight - insetY - 1)],
+      ];
+      samplePoints.forEach(([sourceX, sourceY], index) => {
+        sampleContext.drawImage(source, sourceX, sourceY, 1, 1, index, 0, 1, 1);
+      });
+      const samples = sampleContext.getImageData(0, 0, 4, 1).data;
+      const opaqueSamples = Array.from({ length: 4 }, (_, index) => index).filter(
+        (index) => samples[index * 4 + 3] >= 32
+      );
+      if (opaqueSamples.length > 0) {
+        const average = (channel: number) =>
+          Math.round(
+            opaqueSamples.reduce((total, index) => total + samples[index * 4 + channel], 0) /
+              opaqueSamples.length
+          );
+        context.fillStyle = `rgb(${average(0)} ${average(1)} ${average(2)})`;
+        context.fillRect(0, 0, size, size);
+      }
+    }
+  }
+
   drawCover(context, source, sourceWidth, sourceHeight, avatarOffset, avatarOffset, avatarSize);
   context.restore();
 };
@@ -216,7 +252,11 @@ export const validateAvatarFrameImage = async (file: File): Promise<string | und
   return undefined;
 };
 
-const composeStaticAvatar = async (avatar: File, frame: File): Promise<File> => {
+const composeStaticAvatar = async (
+  avatar: File,
+  frame: File,
+  avatarContentRatio: number
+): Promise<File> => {
   const [avatarImage, frameImage] = await Promise.all([loadImage(avatar), loadImage(frame)]);
   const canvas = document.createElement('canvas');
   canvas.width = STATIC_AVATAR_SIZE;
@@ -230,7 +270,8 @@ const composeStaticAvatar = async (avatar: File, frame: File): Promise<File> => 
     avatarImage,
     avatarImage.naturalWidth,
     avatarImage.naturalHeight,
-    STATIC_AVATAR_SIZE
+    STATIC_AVATAR_SIZE,
+    avatarContentRatio
   );
   context.drawImage(frameImage, 0, 0, STATIC_AVATAR_SIZE, STATIC_AVATAR_SIZE);
 
@@ -275,7 +316,11 @@ const applyPreviousDisposal = (
   }
 };
 
-const composeGifAvatar = async (avatar: File, frame: File): Promise<File> => {
+const composeGifAvatar = async (
+  avatar: File,
+  frame: File,
+  avatarContentRatio: number
+): Promise<File> => {
   const [avatarBuffer, frameImage] = await Promise.all([avatar.arrayBuffer(), loadImage(frame)]);
   const parsedGif = parseGIF(avatarBuffer);
   const frames = decompressFrames(parsedGif, true);
@@ -326,7 +371,8 @@ const composeGifAvatar = async (avatar: File, frame: File): Promise<File> => {
       sourceCanvas,
       sourceWidth,
       sourceHeight,
-      ANIMATED_AVATAR_SIZE
+      ANIMATED_AVATAR_SIZE,
+      avatarContentRatio
     );
     outputContext.drawImage(frameImage, 0, 0, ANIMATED_AVATAR_SIZE, ANIMATED_AVATAR_SIZE);
     writeGifFrame(encoder, outputContext, gifFrame.delay);
@@ -453,7 +499,11 @@ type AvatarImageDecoderConstructor = {
   isTypeSupported?: (type: string) => Promise<boolean>;
 };
 
-const composeDecodedAnimatedAvatar = async (avatar: File, frame: File): Promise<File> => {
+const composeDecodedAnimatedAvatar = async (
+  avatar: File,
+  frame: File,
+  avatarContentRatio: number
+): Promise<File> => {
   const ImageDecoderConstructor = (
     window as typeof window & { ImageDecoder?: AvatarImageDecoderConstructor }
   ).ImageDecoder;
@@ -504,7 +554,7 @@ const composeDecodedAnimatedAvatar = async (avatar: File, frame: File): Promise<
         if (frameIndex === 0) {
           sourceWidth = image.displayWidth;
           sourceHeight = image.displayHeight;
-          if (sourceWidth * sourceHeight * track.frameCount > MAX_DECODED_GIF_PIXELS) {
+          if (sourceWidth * sourceHeight * track.frameCount > MAX_STREAM_DECODED_ANIMATION_PIXELS) {
             throw new Error('动态图片解码后过大，请降低分辨率或帧数后重试。');
           }
         }
@@ -515,7 +565,8 @@ const composeDecodedAnimatedAvatar = async (avatar: File, frame: File): Promise<
           image,
           sourceWidth,
           sourceHeight,
-          ANIMATED_AVATAR_SIZE
+          ANIMATED_AVATAR_SIZE,
+          avatarContentRatio
         );
         outputContext.drawImage(frameImage, 0, 0, ANIMATED_AVATAR_SIZE, ANIMATED_AVATAR_SIZE);
         writeGifFrame(encoder, outputContext, Math.round((image.duration ?? 100_000) / 1000));
@@ -536,7 +587,8 @@ const composeDecodedAnimatedAvatar = async (avatar: File, frame: File): Promise<
 export const composeAvatarWithFrame = async (
   avatar: File,
   frame: File,
-  trustedFrame = false
+  trustedFrame = false,
+  avatarContentRatio = AVATAR_CONTENT_RATIO
 ): Promise<File> => {
   const avatarError = validateAvatarFile(avatar);
   if (avatarError) throw new Error(avatarError);
@@ -546,11 +598,11 @@ export const composeAvatarWithFrame = async (
   }
 
   const avatarType = avatar.type.toLowerCase();
-  if (avatarType === 'image/gif') return composeGifAvatar(avatar, frame);
+  if (avatarType === 'image/gif') return composeGifAvatar(avatar, frame, avatarContentRatio);
   if (avatarType === 'image/png' || avatarType === 'image/webp') {
     const bytes = new Uint8Array(await avatar.arrayBuffer());
     const animated = avatarType === 'image/png' ? isAnimatedPng(bytes) : isAnimatedWebP(bytes);
-    if (animated) return composeDecodedAnimatedAvatar(avatar, frame);
+    if (animated) return composeDecodedAnimatedAvatar(avatar, frame, avatarContentRatio);
   }
-  return composeStaticAvatar(avatar, frame);
+  return composeStaticAvatar(avatar, frame, avatarContentRatio);
 };
