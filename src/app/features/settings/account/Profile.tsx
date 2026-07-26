@@ -66,6 +66,7 @@ type ProfileProps = {
 };
 
 const NO_AVATAR_FRAME = 'none';
+const AVATAR_DOWNLOAD_TIMEOUT_MS = 10_000;
 
 const getFileExtension = (mimeType: string): string => {
   if (mimeType === 'image/jpeg') return 'jpg';
@@ -80,10 +81,33 @@ const getAvatarFile = async (
   mxc: string,
   useAuthentication: boolean
 ): Promise<File> => {
-  const httpUrl = mxcUrlToHttp(mx, mxc, useAuthentication);
-  if (!httpUrl) throw new Error('当前头像地址无效，请重新上传头像后再设置头像框。');
+  const urls = Array.from(
+    new Set(
+      [
+        mxcUrlToHttp(mx, mxc, false),
+        mxcUrlToHttp(mx, mxc, false, 512, 512, 'scale'),
+        mxcUrlToHttp(mx, mxc, useAuthentication),
+        mxcUrlToHttp(mx, mxc, useAuthentication, 512, 512, 'scale'),
+      ].filter((url): url is string => Boolean(url))
+    )
+  );
+  if (!urls.length) throw new Error('当前头像地址无效，请重新上传头像后再设置头像框。');
 
-  const blob = await downloadMedia(httpUrl);
+  const blob = await Promise.any(
+    urls.map(async (url) => {
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => controller.abort(), AVATAR_DOWNLOAD_TIMEOUT_MS);
+      try {
+        return await downloadMedia(url, { signal: controller.signal });
+      } finally {
+        window.clearTimeout(timeoutId);
+      }
+    })
+  ).catch(() => undefined);
+  if (!blob) {
+    throw new Error('当前头像下载失败。请重新上传一次头像，再设置头像框。');
+  }
+
   const mimeType = blob.type.split(';')[0].toLowerCase();
   const file = new File([blob], `avatar.${getFileExtension(mimeType)}`, { type: mimeType });
   const error = validateAvatarFile(file);

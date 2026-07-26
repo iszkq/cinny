@@ -148,7 +148,7 @@ export const fetchMediaWithAuth = async (src: string, init?: RequestInit): Promi
 
   for (const requestUrl of requestUrls) {
     const requestHeadersList = isSessionMediaUrl(requestUrl, session.baseUrl)
-      ? [authHeaders]
+      ? [authHeaders, baseHeaders]
       : [baseHeaders];
 
     for (const headers of requestHeadersList) {

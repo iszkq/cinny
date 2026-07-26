@@ -19,7 +19,7 @@ export function UserAvatar({ className, userId, src, alt, renderFallback }: User
     showFallback,
     handleLoad: handleMediaLoad,
     handleError,
-  } = useResilientAvatarMedia(src, true);
+  } = useResilientAvatarMedia(src);
 
   const handleLoad: ReactEventHandler<HTMLImageElement> = (evt) => {
     evt.currentTarget.setAttribute('data-image-loaded', 'true');
