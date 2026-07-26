@@ -1,5 +1,5 @@
 import { AvatarFallback, AvatarImage, color } from 'folds';
-import React, { ReactEventHandler, ReactNode, useEffect, useState } from 'react';
+import React, { ReactEventHandler, ReactNode, useState } from 'react';
 import classNames from 'classnames';
 import * as css from './UserAvatar.css';
 import colorMXID from '../../../util/colorMXID';
@@ -18,7 +18,7 @@ export function UserAvatar({
   userId,
   src,
   alt,
-  fallbackWhileLoading = false,
+  fallbackWhileLoading = true,
   renderFallback,
 }: UserAvatarProps) {
   const {
@@ -28,53 +28,69 @@ export function UserAvatar({
     handleLoad: handleMediaLoad,
     handleError,
   } = useResilientAvatarMedia(src, true);
-  const [preloadedSrc, setPreloadedSrc] = useState<string>();
-
-  useEffect(() => {
-    if (!fallbackWhileLoading || !displaySrc || showFallback) return undefined;
-
-    let disposed = false;
-    const image = new Image();
-    image.onload = () => {
-      if (!disposed) setPreloadedSrc(displaySrc);
-    };
-    image.onerror = () => {
-      if (!disposed) handleError();
-    };
-    image.src = displaySrc;
-
-    return () => {
-      disposed = true;
-      image.onload = null;
-      image.onerror = null;
-    };
-  }, [displaySrc, fallbackWhileLoading, handleError, showFallback]);
+  const currentImageKey = `${userId}-${imageKey}`;
+  const [loadedImageKey, setLoadedImageKey] = useState<string>();
+  const imageReady = !showFallback && loadedImageKey === currentImageKey;
 
   const handleLoad: ReactEventHandler<HTMLImageElement> = (evt) => {
     evt.currentTarget.setAttribute('data-image-loaded', 'true');
+    setLoadedImageKey(currentImageKey);
     handleMediaLoad();
   };
 
-  if (showFallback || (fallbackWhileLoading && preloadedSrc !== displaySrc)) {
+  const handleImageError: ReactEventHandler<HTMLImageElement> = () => {
+    setLoadedImageKey(undefined);
+    handleError();
+  };
+
+  if (!fallbackWhileLoading) {
+    if (showFallback) {
+      return (
+        <AvatarFallback
+          style={{ backgroundColor: colorMXID(userId), color: color.Surface.Container }}
+          className={classNames(css.UserAvatar, className)}
+        >
+          {renderFallback()}
+        </AvatarFallback>
+      );
+    }
+
     return (
-      <AvatarFallback
-        style={{ backgroundColor: colorMXID(userId), color: color.Surface.Container }}
+      <AvatarImage
+        key={imageKey}
         className={classNames(css.UserAvatar, className)}
-      >
-        {renderFallback()}
-      </AvatarFallback>
+        src={displaySrc}
+        alt={alt}
+        onError={handleImageError}
+        onLoad={handleLoad}
+        draggable={false}
+      />
     );
   }
 
   return (
-    <AvatarImage
-      key={imageKey}
-      className={classNames(css.UserAvatar, className)}
-      src={displaySrc}
-      alt={alt}
-      onError={handleError}
-      onLoad={handleLoad}
-      draggable={false}
-    />
+    <>
+      {!imageReady && (
+        <AvatarFallback
+          style={{ backgroundColor: colorMXID(userId), color: color.Surface.Container }}
+          className={classNames(css.UserAvatar, className)}
+        >
+          {renderFallback()}
+        </AvatarFallback>
+      )}
+      {!showFallback && displaySrc && (
+        <AvatarImage
+          key={imageKey}
+          className={classNames(css.UserAvatar, className)}
+          src={displaySrc}
+          alt={imageReady ? alt : ''}
+          aria-hidden={!imageReady}
+          style={{ visibility: imageReady ? 'visible' : 'hidden' }}
+          onError={handleImageError}
+          onLoad={handleLoad}
+          draggable={false}
+        />
+      )}
+    </>
   );
 }
