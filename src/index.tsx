@@ -33,16 +33,33 @@ let resourceReloadScheduled = false;
 
 const isResourceLoadError = (error: unknown): boolean => {
   const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
-  return /dynamically imported module|importing a module script failed|loading chunk|chunkloaderror|failed to fetch.*module|module script|module.*(?:load|fetch)|模块.*加载|网络错误/i.test(
+  return /dynamically imported module|importing a module script failed|loading chunk|chunkloaderror|failed to fetch.*module|module script|module.*(?:load|fetch)|unable to preload css|preload.*css|css.*(?:load|fetch)|模块.*加载|网络错误/i.test(
     message
   );
 };
 
 const clearBrowserResourceCaches = async () => {
-  if (!('caches' in window)) return;
+  const clearCacheStorage = async () => {
+    if (!('caches' in window)) return;
 
-  const cacheKeys = await window.caches.keys().catch(() => []);
-  await Promise.all(cacheKeys.map((key) => window.caches.delete(key).catch(() => false)));
+    const cacheKeys = await window.caches.keys().catch(() => []);
+    await Promise.all(cacheKeys.map((key) => window.caches.delete(key).catch(() => false)));
+  };
+
+  const unregisterServiceWorkers = async () => {
+    if (!('serviceWorker' in navigator)) return;
+
+    const registrations = await navigator.serviceWorker.getRegistrations().catch(() => []);
+    await Promise.all(registrations.map((registration) => registration.unregister()));
+  };
+
+  await Promise.all([clearCacheStorage(), unregisterServiceWorkers()]);
+};
+
+const navigateToFreshResources = () => {
+  const recoveryUrl = new URL(window.location.href);
+  recoveryUrl.searchParams.set('cinny-recovery', Date.now().toString());
+  window.location.replace(recoveryUrl);
 };
 
 const recentlyAttemptedResourceRecovery = (): boolean => {
@@ -75,7 +92,7 @@ const resetResourceRecoveryAttempt = () => {
 const reloadWithFreshResources = async () => {
   resetResourceRecoveryAttempt();
   await clearBrowserResourceCaches();
-  window.location.reload();
+  navigateToFreshResources();
 };
 
 const recoverResourceLoad = async <T,>(error: unknown): Promise<T> => {
@@ -89,7 +106,7 @@ const recoverResourceLoad = async <T,>(error: unknown): Promise<T> => {
 
   markResourceRecoveryAttempt();
   await clearBrowserResourceCaches();
-  window.location.reload();
+  navigateToFreshResources();
   return new Promise<T>(() => {
     // Keep React suspended while the browser begins navigating to the fresh page.
   });
