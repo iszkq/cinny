@@ -28,11 +28,12 @@ document.body.classList.add(configClass, varsClass);
 
 const RESOURCE_RECOVERY_KEY = 'cinny-resource-recovery-attempt';
 const RESOURCE_RECOVERY_COOLDOWN = 60_000;
+const STARTUP_RECOVERY_DELAY_MS = 15_000;
 let resourceReloadScheduled = false;
 
 const isResourceLoadError = (error: unknown): boolean => {
   const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
-  return /dynamically imported module|importing a module script failed|loading chunk|chunkloaderror|failed to fetch.*module|module script/i.test(
+  return /dynamically imported module|importing a module script failed|loading chunk|chunkloaderror|failed to fetch.*module|module script|module.*(?:load|fetch)|模块.*加载|网络错误/i.test(
     message
   );
 };
@@ -101,6 +102,31 @@ const loadLazyModule = async <T,>(loader: () => Promise<T>): Promise<T> => {
     return recoverResourceLoad<T>(error);
   }
 };
+
+const recoverUnhandledResourceLoad = (error: unknown) => {
+  if (!isResourceLoadError(error)) return;
+  recoverResourceLoad(error).catch(() => undefined);
+};
+
+window.addEventListener('unhandledrejection', (event) => {
+  if (!isResourceLoadError(event.reason)) return;
+  event.preventDefault();
+  recoverUnhandledResourceLoad(event.reason);
+});
+
+window.addEventListener(
+  'error',
+  (event) => {
+    const { target } = event;
+    let resourceUrl: string | undefined;
+    if (target instanceof HTMLScriptElement) resourceUrl = target.src;
+    if (target instanceof HTMLLinkElement) resourceUrl = target.href;
+    const resourceError =
+      event.error ?? (resourceUrl ? `Module script failed: ${resourceUrl}` : '');
+    recoverUnhandledResourceLoad(resourceError);
+  },
+  true
+);
 
 const retryingStylesheets = new WeakSet<HTMLLinkElement>();
 
@@ -321,3 +347,10 @@ const mountApp = () => {
 };
 
 mountApp();
+
+window.setTimeout(() => {
+  const rootText = document.getElementById('root')?.textContent ?? '';
+  if (!/正在启动|Loading\.\.\./i.test(rootText)) return;
+
+  recoverResourceLoad(new Error('Module startup timed out')).catch(() => undefined);
+}, STARTUP_RECOVERY_DELAY_MS);

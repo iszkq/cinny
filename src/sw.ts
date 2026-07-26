@@ -1,12 +1,19 @@
 /// <reference lib="WebWorker" />
 
-import { cleanupOutdatedCaches, precacheAndRoute } from 'workbox-precaching';
+import { cleanupOutdatedCaches } from 'workbox-precaching';
 
 export type {};
 declare const self: ServiceWorkerGlobalScope;
 
-precacheAndRoute(self.__WB_MANIFEST);
+// Keep the injectManifest marker, but do not route hashed application modules through Workbox.
+// Netlify removes old hashed files on every deploy; an older service worker intercepting those
+// module URLs can otherwise strand the app on the startup screen. The browser HTTP cache already
+// handles immutable assets, while the service worker remains responsible only for Matrix media.
 cleanupOutdatedCaches();
+self.addEventListener('install', (event) => {
+  // Referencing the injected list makes each deployment install a fresh worker without caching it.
+  event.waitUntil(Promise.resolve(self.__WB_MANIFEST).then(() => undefined));
+});
 
 type SessionInfo = {
   accessToken: string;
