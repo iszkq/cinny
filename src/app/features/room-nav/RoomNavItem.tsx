@@ -490,6 +490,7 @@ export function RoomNavItem({
               {showAvatar ? (
                 <RoomAvatar
                   roomId={room.roomId}
+                  fallbackWhileLoading
                   src={
                     direct
                       ? getDirectRoomAvatarUrl(mx, room, 96, useAuthentication)

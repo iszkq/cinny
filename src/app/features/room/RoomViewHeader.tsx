@@ -24,7 +24,7 @@ import {
 } from 'folds';
 import { EventType, MatrixError, Room } from 'matrix-js-sdk';
 import { PageHeader } from '../../components/page';
-import { RoomAvatar, RoomIcon } from '../../components/room-avatar';
+import { RoomAvatar } from '../../components/room-avatar';
 import { UseStateProvider } from '../../components/UseStateProvider';
 import { RoomTopicViewer } from '../../components/room-topic-viewer';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
@@ -75,6 +75,7 @@ import { useAgoraVoice } from '../agora-voice';
 import { getAllVersionsRoomCreator } from '../../utils/room';
 import { mobileOrTablet } from '../../utils/user-agent';
 import { dispatchRoomComposerAction, RoomComposerAction } from '../../utils/roomViewEvents';
+import { nameInitials } from '../../utils/common';
 
 type RoomMenuProps = {
   room: Room;
@@ -472,10 +473,11 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
               <Avatar size="300">
                 <RoomAvatar
                   roomId={room.roomId}
+                  fallbackWhileLoading
                   src={avatarUrl}
                   alt={name}
                   renderFallback={() => (
-                    <RoomIcon size="200" joinRule={room.getJoinRule()} roomType={room.getType()} />
+                    <Text size="B300">{nameInitials(name)}</Text>
                   )}
                 />
               </Avatar>
