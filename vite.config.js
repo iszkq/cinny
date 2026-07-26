@@ -44,6 +44,10 @@ const copyFiles = {
       dest: '',
     },
     {
+      src: 'public/404.html',
+      dest: '',
+    },
+    {
       src: 'public/manifest.json',
       dest: '',
     },
