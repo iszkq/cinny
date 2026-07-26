@@ -1,5 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect } from 'react';
 import { Avatar, Box, Icon, Icons, Text } from 'folds';
+import { useSetAtom } from 'jotai';
 import classNames from 'classnames';
 import * as css from './styles.css';
 import { UserAvatar } from '../user-avatar';
@@ -8,13 +9,14 @@ import { getMxIdLocalPart } from '../../utils/matrix';
 import { BreakWord, LineClamp3 } from '../../styles/Text.css';
 import { UserPresence } from '../../hooks/useUserPresence';
 import { AvatarPresence, PresenceBadge } from '../presence';
-import { ImageViewer, ImageViewerDialog } from '../image-viewer';
+import { ImageViewer } from '../image-viewer';
 import { useResilientAvatarMedia } from '../../hooks/useResilientAvatarMedia';
 import {
   invalidateCachedMediaUrl,
   primeCachedMediaObjectUrl,
   primePersistentMediaUrl,
 } from '../../utils/mediaUrlCache';
+import { imageViewerSessionAtom } from '../../state/imageViewer';
 
 const AVATAR_PREVIEW_RETRY_DELAY_MS = 400;
 
@@ -31,84 +33,39 @@ type UserHeroProps = {
 };
 export function UserHero({ userId, avatarUrl, avatarOriginalUrl, presence }: UserHeroProps) {
   const coverMedia = useResilientAvatarMedia(avatarUrl);
-  const [viewAvatar, setViewAvatar] = useState(false);
-  const [previewSrc, setPreviewSrc] = useState<string>();
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewFailed, setPreviewFailed] = useState(false);
-  const previewRequestRef = useRef(0);
-
-  useEffect(() => {
-    previewRequestRef.current += 1;
-    setViewAvatar(false);
-    setPreviewSrc(undefined);
-    setPreviewLoading(false);
-    setPreviewFailed(false);
-  }, [avatarOriginalUrl, avatarUrl]);
-
-  useEffect(
-    () => () => {
-      previewRequestRef.current += 1;
-    },
-    []
-  );
+  const setImageViewerSession = useSetAtom(imageViewerSessionAtom);
 
   useEffect(() => {
     primePersistentMediaUrl(avatarOriginalUrl, 'background');
   }, [avatarOriginalUrl]);
 
-  useEffect(() => {
-    if (viewAvatar && !previewSrc && coverMedia.displaySrc) {
-      setPreviewSrc(coverMedia.displaySrc);
-    }
-  }, [coverMedia.displaySrc, previewSrc, viewAvatar]);
-
   const loadAvatarPreview = () => {
     const source = avatarOriginalUrl ?? avatarUrl;
     if (!source) return;
 
-    const requestId = previewRequestRef.current + 1;
-    previewRequestRef.current = requestId;
-    setViewAvatar(true);
-    setPreviewSrc(coverMedia.displaySrc);
-    setPreviewLoading(true);
-    setPreviewFailed(false);
+    const itemId = `avatar-${userId}`;
+    setImageViewerSession({
+      activeItemId: itemId,
+      items: [
+        {
+          id: itemId,
+          body: userId,
+          url: source,
+        },
+      ],
+      initialSrc: coverMedia.displaySrc,
+      resolveSource: async (item) => {
+        const firstUrl = await primeCachedMediaObjectUrl(item.url, 'visible', true);
+        if (firstUrl) return firstUrl;
 
-    const previewPromise = (async () => {
-      const firstUrl = await primeCachedMediaObjectUrl(source, 'visible', true);
-      if (firstUrl || previewRequestRef.current !== requestId) {
-        return firstUrl;
-      }
-
-      await wait(AVATAR_PREVIEW_RETRY_DELAY_MS);
-      if (previewRequestRef.current !== requestId) return undefined;
-
-      await invalidateCachedMediaUrl(source);
-      if (previewRequestRef.current !== requestId) return undefined;
-
-      return primeCachedMediaObjectUrl(source, 'visible', true);
-    })();
-
-    previewPromise
-      .then((resolvedUrl) => {
-        if (previewRequestRef.current !== requestId) return;
-        if (resolvedUrl) {
-          setPreviewSrc(resolvedUrl);
-          return;
-        }
-        setPreviewFailed(true);
-      })
-      .catch(() => {
-        if (previewRequestRef.current === requestId) setPreviewFailed(true);
-      })
-      .finally(() => {
-        if (previewRequestRef.current === requestId) setPreviewLoading(false);
-      });
-  };
-
-  const closeAvatarPreview = () => {
-    previewRequestRef.current += 1;
-    setViewAvatar(false);
-    setPreviewLoading(false);
+        await wait(AVATAR_PREVIEW_RETRY_DELAY_MS);
+        await invalidateCachedMediaUrl(item.url);
+        const retryUrl = await primeCachedMediaObjectUrl(item.url, 'visible', true);
+        if (!retryUrl) throw new Error('头像原图加载失败。');
+        return retryUrl;
+      },
+      renderViewer: (viewerProps) => <ImageViewer {...viewerProps} />,
+    });
   };
 
   return (
@@ -154,18 +111,6 @@ export function UserHero({ userId, avatarUrl, avatarOriginalUrl, presence }: Use
             />
           </Avatar>
         </AvatarPresence>
-        {viewAvatar && previewSrc && (
-          <ImageViewerDialog
-            open
-            src={previewSrc}
-            alt={userId}
-            loading={previewLoading}
-            originalLoadFailed={previewFailed}
-            onRetryOriginal={loadAvatarPreview}
-            requestClose={closeAvatarPreview}
-            renderViewer={(viewerProps) => <ImageViewer {...viewerProps} />}
-          />
-        )}
       </div>
     </Box>
   );
