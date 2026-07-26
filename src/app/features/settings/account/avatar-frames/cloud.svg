@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <defs><linearGradient id="sky" x1="80" y1="50" x2="430" y2="460" gradientUnits="userSpaceOnUse"><stop stop-color="#ffffff"/><stop offset=".45" stop-color="#a8deff"/><stop offset="1" stop-color="#a994ff"/></linearGradient></defs>
-  <circle cx="256" cy="256" r="246" fill="none" stroke="#a8dcff" stroke-opacity=".32" stroke-width="12"/>
-  <circle cx="256" cy="256" r="246" fill="none" stroke="url(#sky)" stroke-width="6"/>
+  <circle cx="256" cy="256" r="246" fill="none" stroke="#a8dcff" stroke-opacity=".32" stroke-width="24"/>
+  <circle cx="256" cy="256" r="246" fill="none" stroke="url(#sky)" stroke-width="10"/>
   <g fill="#f8fdff" stroke="#a9d8ff" stroke-width="3">
     <path d="M180 47c7-17 23-25 40-19 9-16 34-15 41 4 21-4 37 9 37 28H180c-11 0-11-12 0-13z"/>
     <path d="M210 470c8-13 26-19 44-14 11-12 39-9 43 6 22-2 37 8 36 22H210c-13 0-13-10 0-14z"/>

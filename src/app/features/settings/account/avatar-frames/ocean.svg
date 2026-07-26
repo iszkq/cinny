@@ -5,8 +5,8 @@
     </linearGradient>
     <filter id="glow" x="-25%" y="-25%" width="150%" height="150%"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
   </defs>
-  <circle cx="256" cy="256" r="246" fill="none" stroke="#36cfff" stroke-opacity=".38" stroke-width="12" filter="url(#glow)"/>
-  <circle cx="256" cy="256" r="246" fill="none" stroke="url(#ocean)" stroke-width="6"/>
+  <circle cx="256" cy="256" r="246" fill="none" stroke="#36cfff" stroke-opacity=".38" stroke-width="24" filter="url(#glow)"/>
+  <circle cx="256" cy="256" r="246" fill="none" stroke="url(#ocean)" stroke-width="10"/>
   <g fill="#d9fbff" stroke="#42c9ff" stroke-width="3">
     <circle cx="83" cy="111" r="12"/><circle cx="62" cy="139" r="7"/><circle cx="432" cy="377" r="13"/><circle cx="452" cy="349" r="7"/>
   </g>

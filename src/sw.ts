@@ -1,7 +1,5 @@
 /// <reference lib="WebWorker" />
 
-import { cleanupOutdatedCaches } from 'workbox-precaching';
-
 export type {};
 declare const self: ServiceWorkerGlobalScope;
 
@@ -9,10 +7,31 @@ declare const self: ServiceWorkerGlobalScope;
 // Netlify removes old hashed files on every deploy; an older service worker intercepting those
 // module URLs can otherwise strand the app on the startup screen. The browser HTTP cache already
 // handles immutable assets, while the service worker remains responsible only for Matrix media.
-cleanupOutdatedCaches();
 self.addEventListener('install', (event) => {
   // Referencing the injected list makes each deployment install a fresh worker without caching it.
-  event.waitUntil(Promise.resolve(self.__WB_MANIFEST).then(() => undefined));
+  event.waitUntil(
+    Promise.all([Promise.resolve(self.__WB_MANIFEST).then(() => undefined), self.skipWaiting()])
+  );
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    (async () => {
+      const cacheNames = await caches.keys();
+      const legacyPrecacheNames = cacheNames.filter((name) => name.startsWith('workbox-precache'));
+      await Promise.all(legacyPrecacheNames.map((name) => caches.delete(name)));
+      await self.clients.claim();
+
+      if (legacyPrecacheNames.length > 0) {
+        const windowClients = await self.clients.matchAll({ type: 'window' });
+        await Promise.all(
+          windowClients.map((client) =>
+            'navigate' in client ? client.navigate(client.url).catch(() => undefined) : undefined
+          )
+        );
+      }
+    })()
+  );
 });
 
 type SessionInfo = {
