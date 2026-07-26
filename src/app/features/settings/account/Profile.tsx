@@ -51,13 +51,13 @@ import {
   AVATAR_FRAME_RECOMMENDED_DIMENSION,
   AVATAR_MAX_FILE_SIZE,
   composeAvatarWithFrame,
+  extractAvatarFromLegacyFrame,
   validateAvatarFile,
   validateAvatarFrameImage,
 } from '../../../utils/avatar';
 import { DEFAULT_AVATAR_FRAMES, DefaultAvatarFrame, loadDefaultAvatarFrame } from './avatarFrames';
 import { useAccountData } from '../../../hooks/useAccountData';
 import { AccountDataEvent, CinnyAvatarFrameContent } from '../../../../types/matrix/accountData';
-import { setAvatarUrlWithoutRoomEvent } from '../../../utils/profile';
 import * as css from './Profile.css';
 
 type ProfileProps = {
@@ -96,7 +96,7 @@ const saveAvatarFrameState = (
   content: CinnyAvatarFrameContent
 ) =>
   mx.setAccountData(AccountDataEvent.CinnyAvatarFrame, {
-    version: 1,
+    version: 2,
     updatedAt: Date.now(),
     ...content,
   });
@@ -140,24 +140,32 @@ function ProfileAvatar({ profile, userId }: ProfileProps) {
     async (upload: UploadSuccess) => {
       const { mxc } = upload;
       try {
-        await setAvatarUrlWithoutRoomEvent(mx, userId, mxc);
-        await saveAvatarFrameState(mx, {
-          baseAvatarUrl: mxc,
-          avatarUrl: mxc,
-        });
+        await mx.setAvatarUrl(mxc);
         handleRemoveUpload();
+        try {
+          await saveAvatarFrameState(mx, {
+            baseAvatarUrl: mxc,
+            avatarUrl: mxc,
+          });
+        } catch {
+          setAvatarError('头像已更新，但头像框基础信息保存失败；下次设置头像框时可重新识别。');
+        }
       } catch (errorValue) {
         setAvatarError(errorValue instanceof Error ? errorValue.message : '头像更新失败，请重试。');
       }
     },
-    [mx, userId, handleRemoveUpload]
+    [mx, handleRemoveUpload]
   );
 
   const handleRemoveAvatar = async () => {
     try {
-      await setAvatarUrlWithoutRoomEvent(mx, userId, '');
-      await saveAvatarFrameState(mx, {});
+      await mx.setAvatarUrl('');
       setAlertRemove(false);
+      try {
+        await saveAvatarFrameState(mx, {});
+      } catch {
+        setAvatarError('头像已移除，但头像框历史记录清理失败。');
+      }
     } catch (errorValue) {
       setAvatarError(errorValue instanceof Error ? errorValue.message : '头像移除失败，请重试。');
     }
@@ -325,10 +333,11 @@ function ProfileAvatarFrame({ profile, userId }: ProfileProps) {
   const frameEvent = useAccountData(AccountDataEvent.CinnyAvatarFrame);
   const storedFrame = frameEvent?.getContent<CinnyAvatarFrameContent>();
   const storedFrameMatchesAvatar =
+    storedFrame?.version === 2 &&
     typeof profile.avatarUrl === 'string' &&
     storedFrame?.avatarUrl === profile.avatarUrl &&
     typeof storedFrame.baseAvatarUrl === 'string';
-  const baseAvatarMxc = storedFrameMatchesAvatar ? storedFrame.baseAvatarUrl : profile.avatarUrl;
+  const baseAvatarMxc = storedFrameMatchesAvatar ? storedFrame.baseAvatarUrl : undefined;
   const currentFrameId = storedFrameMatchesAvatar ? storedFrame.frameId : undefined;
   const baseAvatarUrl = baseAvatarMxc
     ? mxcUrlToHttp(mx, baseAvatarMxc, useAuthentication, 96, 96, 'crop') ?? undefined
@@ -338,20 +347,23 @@ function ProfileAvatarFrame({ profile, userId }: ProfileProps) {
     : undefined;
 
   const [draftFrameId, setDraftFrameId] = useState<string>();
-  const [draftAvatarFile, setDraftAvatarFile] = useState<File>();
+  const [draftFrameFile, setDraftFrameFile] = useState<File>();
   const [uploadFile, setUploadFile] = useState<File>();
   const [frameError, setFrameError] = useState<string>();
   const [processingFrameId, setProcessingFrameId] = useState<string>();
-  const draftAvatarFileUrl = useObjectURL(draftAvatarFile);
+  const draftFrameFileUrl = useObjectURL(draftFrameFile);
   const processingFrame = processingFrameId !== undefined;
   const hasDraft = draftFrameId !== undefined;
   let selectedFrameId = currentFrameId;
   let previewAvatarUrl = currentAvatarUrl;
   if (hasDraft) {
     selectedFrameId = draftFrameId === NO_AVATAR_FRAME ? undefined : draftFrameId;
-    previewAvatarUrl = draftFrameId === NO_AVATAR_FRAME ? baseAvatarUrl : draftAvatarFileUrl;
+    if (draftFrameId === NO_AVATAR_FRAME) previewAvatarUrl = baseAvatarUrl;
   }
+  const selectedDefaultFrame = DEFAULT_AVATAR_FRAMES.find((frame) => frame.id === draftFrameId);
+  const draftFrameUrl = draftFrameId === 'custom' ? draftFrameFileUrl : selectedDefaultFrame?.url;
   const canConfigureFrame = Boolean(profile.avatarUrl && baseAvatarMxc && baseAvatarUrl);
+  const needsBaseAvatarSetup = Boolean(profile.avatarUrl && !storedFrameMatchesAvatar);
   const uploadAtom = useMemo(() => {
     if (uploadFile) return createUploadAtom(uploadFile);
     return undefined;
@@ -359,103 +371,152 @@ function ProfileAvatarFrame({ profile, userId }: ProfileProps) {
 
   const clearDraft = useCallback(() => {
     setDraftFrameId(undefined);
-    setDraftAvatarFile(undefined);
+    setDraftFrameFile(undefined);
     setUploadFile(undefined);
     setProcessingFrameId(undefined);
   }, []);
 
-  const prepareFrame = useCallback(
-    async (framePromise: Promise<File>, frameId: string, trustedFrame = false) => {
-      if (!baseAvatarMxc) return;
+  const handleSelectDefaultFrame = useCallback((frame: DefaultAvatarFrame) => {
+    setFrameError(undefined);
+    setDraftFrameFile(undefined);
+    setDraftFrameId(frame.id);
+  }, []);
 
-      setFrameError(undefined);
-      setProcessingFrameId(frameId);
-      try {
-        const [avatar, frame] = await Promise.all([
-          getAvatarFile(mx, baseAvatarMxc, useAuthentication),
-          framePromise,
-        ]);
-        const framedAvatar = await composeAvatarWithFrame(avatar, frame, trustedFrame);
-        setDraftAvatarFile(framedAvatar);
-        setDraftFrameId(frameId);
-      } catch (errorValue) {
-        setFrameError(
-          errorValue instanceof Error ? errorValue.message : '头像框合成失败，请重试。'
-        );
-      } finally {
-        setProcessingFrameId(undefined);
+  const handleSelectCustomFrame = useCallback(async (frame: File) => {
+    setFrameError(undefined);
+    try {
+      const error = await validateAvatarFrameImage(frame);
+      if (error) {
+        setFrameError(error);
+        return;
       }
-    },
-    [mx, baseAvatarMxc, useAuthentication]
-  );
-
-  const handleSelectDefaultFrame = useCallback(
-    (frame: DefaultAvatarFrame) => {
-      prepareFrame(loadDefaultAvatarFrame(frame), frame.id, true);
-    },
-    [prepareFrame]
-  );
-
-  const handleSelectCustomFrame = useCallback(
-    async (frame: File) => {
-      setFrameError(undefined);
-      try {
-        const error = await validateAvatarFrameImage(frame);
-        if (error) {
-          setFrameError(error);
-          return;
-        }
-        await prepareFrame(Promise.resolve(frame), 'custom');
-      } catch (errorValue) {
-        setFrameError(
-          errorValue instanceof Error ? errorValue.message : '头像框无法读取，请更换图片后重试。'
-        );
-      }
-    },
-    [prepareFrame]
-  );
+      setDraftFrameFile(frame);
+      setDraftFrameId('custom');
+    } catch (errorValue) {
+      setFrameError(
+        errorValue instanceof Error ? errorValue.message : '头像框无法读取，请更换图片后重试。'
+      );
+    }
+  }, []);
   const pickFrame = useFilePicker(handleSelectCustomFrame, false);
+
+  const handleUseCurrentAvatarAsBase = useCallback(async () => {
+    if (!profile.avatarUrl) return;
+    setFrameError(undefined);
+    setProcessingFrameId('current');
+    try {
+      await saveAvatarFrameState(mx, {
+        baseAvatarUrl: profile.avatarUrl,
+        avatarUrl: profile.avatarUrl,
+      });
+    } catch (errorValue) {
+      setFrameError(
+        errorValue instanceof Error ? errorValue.message : '基础头像保存失败，请重试。'
+      );
+    } finally {
+      setProcessingFrameId(undefined);
+    }
+  }, [mx, profile.avatarUrl]);
+
+  const handleSeparateLegacyFrame = useCallback(async () => {
+    if (!profile.avatarUrl) return;
+    setFrameError(undefined);
+    setProcessingFrameId('legacy');
+    try {
+      const currentAvatar = await getAvatarFile(mx, profile.avatarUrl, useAuthentication);
+      const recoveredAvatar = await extractAvatarFromLegacyFrame(currentAvatar);
+      const upload = await mx.uploadContent(recoveredAvatar, { includeFilename: false });
+      if (!upload.content_uri) throw new Error('分离后的基础头像上传失败，请重试。');
+
+      await saveAvatarFrameState(mx, {
+        baseAvatarUrl: upload.content_uri,
+        avatarUrl: profile.avatarUrl,
+        frameId: 'legacy',
+      });
+    } catch (errorValue) {
+      setFrameError(
+        errorValue instanceof Error ? errorValue.message : '旧头像框分离失败，请重试。'
+      );
+    } finally {
+      setProcessingFrameId(undefined);
+    }
+  }, [mx, profile.avatarUrl, useAuthentication]);
 
   const applyNoFrame = useCallback(async () => {
     if (!baseAvatarMxc) return;
+    setFrameError(undefined);
+    setProcessingFrameId(NO_AVATAR_FRAME);
     try {
-      await saveAvatarFrameState(mx, {
-        baseAvatarUrl: baseAvatarMxc,
-        avatarUrl: baseAvatarMxc,
-      });
-      await setAvatarUrlWithoutRoomEvent(mx, userId, baseAvatarMxc);
+      await mx.setAvatarUrl(baseAvatarMxc);
       clearDraft();
+      try {
+        await saveAvatarFrameState(mx, {
+          baseAvatarUrl: baseAvatarMxc,
+          avatarUrl: baseAvatarMxc,
+        });
+      } catch {
+        setFrameError('头像框已移除，但头像框基础信息保存失败；下次可重新识别。');
+      }
     } catch (errorValue) {
       setFrameError(errorValue instanceof Error ? errorValue.message : '头像框更新失败，请重试。');
+    } finally {
+      setProcessingFrameId(undefined);
     }
-  }, [mx, userId, baseAvatarMxc, clearDraft]);
+  }, [mx, baseAvatarMxc, clearDraft]);
 
-  const handleApplyFrame = () => {
+  const handleApplyFrame = async () => {
     if (draftFrameId === NO_AVATAR_FRAME) {
-      applyNoFrame();
+      await applyNoFrame();
       return;
     }
-    if (draftAvatarFile) setUploadFile(draftAvatarFile);
+    if (!baseAvatarMxc || !draftFrameId) return;
+
+    setFrameError(undefined);
+    setProcessingFrameId(draftFrameId);
+    try {
+      const avatar = await getAvatarFile(mx, baseAvatarMxc, useAuthentication);
+      let frame: File;
+      let trustedFrame = false;
+      if (draftFrameId === 'custom') {
+        if (!draftFrameFile) throw new Error('请选择自定义头像框文件。');
+        frame = draftFrameFile;
+      } else {
+        const defaultFrame = DEFAULT_AVATAR_FRAMES.find((item) => item.id === draftFrameId);
+        if (!defaultFrame) throw new Error('所选头像框不存在，请重新选择。');
+        frame = await loadDefaultAvatarFrame(defaultFrame);
+        trustedFrame = true;
+      }
+      const framedAvatar = await composeAvatarWithFrame(avatar, frame, trustedFrame);
+      setUploadFile(framedAvatar);
+    } catch (errorValue) {
+      setFrameError(errorValue instanceof Error ? errorValue.message : '头像框生成失败，请重试。');
+    } finally {
+      setProcessingFrameId(undefined);
+    }
   };
 
   const handleFrameUploaded = useCallback(
     async (upload: UploadSuccess) => {
       if (!baseAvatarMxc || !draftFrameId || draftFrameId === NO_AVATAR_FRAME) return;
       try {
-        await saveAvatarFrameState(mx, {
-          baseAvatarUrl: baseAvatarMxc,
-          avatarUrl: upload.mxc,
-          frameId: draftFrameId,
-        });
-        await setAvatarUrlWithoutRoomEvent(mx, userId, upload.mxc);
+        await mx.setAvatarUrl(upload.mxc);
         clearDraft();
+        try {
+          await saveAvatarFrameState(mx, {
+            baseAvatarUrl: baseAvatarMxc,
+            avatarUrl: upload.mxc,
+            frameId: draftFrameId,
+          });
+        } catch {
+          setFrameError('头像框已更新，但头像框基础信息保存失败；下次可重新识别。');
+        }
       } catch (errorValue) {
         setFrameError(
           errorValue instanceof Error ? errorValue.message : '头像框更新失败，请重试。'
         );
       }
     },
-    [mx, userId, baseAvatarMxc, draftFrameId, clearDraft]
+    [mx, baseAvatarMxc, draftFrameId, clearDraft]
   );
 
   return (
@@ -463,20 +524,63 @@ function ProfileAvatarFrame({ profile, userId }: ProfileProps) {
       title={<Text size="L400">头像框</Text>}
       after={
         profile.avatarUrl && (
-          <Avatar size="500" radii="300">
-            <UserAvatar
-              userId={userId}
-              src={previewAvatarUrl}
-              renderFallback={() => <Text size="H4">?</Text>}
+          <div className={css.AvatarFrameCurrentPreview}>
+            <img
+              className={classNames(css.AvatarFramePreviewImage, {
+                [css.AvatarFramePreviewImageInset]: hasDraft && Boolean(draftFrameUrl),
+              })}
+              src={hasDraft && draftFrameUrl ? baseAvatarUrl : previewAvatarUrl}
+              alt={`${userId} 的头像框预览`}
             />
-          </Avatar>
+            {hasDraft && draftFrameUrl && (
+              <img className={css.AvatarFramePreviewOverlay} src={draftFrameUrl} alt="" />
+            )}
+          </div>
         )
       }
     >
-      {!canConfigureFrame && (
+      {!profile.avatarUrl && (
         <Text size="T200" priority="300">
           请先上传头像，再选择头像框。
         </Text>
+      )}
+      {needsBaseAvatarSetup && (
+        <Box direction="Column" gap="200">
+          <Text size="T200" priority="300">
+            当前头像来自旧版本，无法判断图片里是否已经合成头像框。请先完成一次基础头像识别，之后更换头像框就不会叠加。
+          </Text>
+          <Box gap="200" wrap="Wrap">
+            <Button
+              size="300"
+              variant="Success"
+              radii="300"
+              disabled={processingFrame}
+              onClick={handleSeparateLegacyFrame}
+            >
+              {processingFrameId === 'legacy' && (
+                <Spinner size="100" variant="Success" fill="Solid" />
+              )}
+              <Text size="B300">分离当前旧头像框</Text>
+            </Button>
+            <Button
+              size="300"
+              variant="Secondary"
+              fill="Soft"
+              outlined
+              radii="300"
+              disabled={processingFrame}
+              onClick={handleUseCurrentAvatarAsBase}
+            >
+              {processingFrameId === 'current' && (
+                <Spinner size="100" variant="Secondary" fill="Solid" />
+              )}
+              <Text size="B300">当前头像本来无框</Text>
+            </Button>
+          </Box>
+          <Text size="T200" priority="300">
+            如果当前图片已带框，请选“分离当前旧头像框”；如果它只是普通头像，请选“当前头像本来无框”。这一步只建立基础头像，之后即可自由切换且不会叠加。
+          </Text>
+        </Box>
       )}
       {canConfigureFrame && uploadAtom && (
         <CompactUploadCardRenderer
@@ -495,7 +599,7 @@ function ProfileAvatarFrame({ profile, userId }: ProfileProps) {
               type="button"
               disabled={processingFrame || disableSetAvatar}
               onClick={() => {
-                setDraftAvatarFile(undefined);
+                setDraftFrameFile(undefined);
                 setDraftFrameId(NO_AVATAR_FRAME);
                 setFrameError(undefined);
               }}
@@ -533,6 +637,28 @@ function ProfileAvatarFrame({ profile, userId }: ProfileProps) {
                 </Box>
               </button>
             ))}
+            {draftFrameId === 'custom' && draftFrameFileUrl && (
+              <button
+                className={classNames(css.AvatarFrameOption, css.AvatarFrameOptionSelected)}
+                type="button"
+                disabled={processingFrame || disableSetAvatar}
+              >
+                <Box direction="Column" gap="100" alignItems="Center">
+                  <div className={css.AvatarFramePreview}>
+                    <img
+                      className={classNames(
+                        css.AvatarFramePreviewImage,
+                        css.AvatarFramePreviewImageInset
+                      )}
+                      src={baseAvatarUrl}
+                      alt=""
+                    />
+                    <img className={css.AvatarFramePreviewOverlay} src={draftFrameFileUrl} alt="" />
+                  </div>
+                  <Text size="B300">自定义</Text>
+                </Box>
+              </button>
+            )}
           </div>
 
           {selectedFrameId === 'custom' && !hasDraft && (
@@ -540,11 +666,16 @@ function ProfileAvatarFrame({ profile, userId }: ProfileProps) {
               当前使用自定义头像框。
             </Text>
           )}
+          {selectedFrameId === 'legacy' && !hasDraft && (
+            <Text size="T200" priority="300">
+              当前使用从旧版本识别出的头像框。
+            </Text>
+          )}
           {processingFrame && (
             <Box gap="100" alignItems="Center">
               <Spinner size="100" variant="Secondary" fill="Solid" />
               <Text size="T200" priority="300">
-                正在生成头像框预览…
+                正在生成并准备上传头像框…
               </Text>
             </Box>
           )}
@@ -590,11 +721,10 @@ function ProfileAvatarFrame({ profile, userId }: ProfileProps) {
             自定义头像框要求：静态 PNG 或 WebP，最大 {bytesToSize(AVATAR_FRAME_MAX_FILE_SIZE)}
             ；必须为正方形，边长 {AVATAR_FRAME_MIN_DIMENSION}–{AVATAR_FRAME_MAX_DIMENSION}{' '}
             像素，建议 {AVATAR_FRAME_RECOMMENDED_DIMENSION} × {AVATAR_FRAME_RECOMMENDED_DIMENSION}
-            ；背景和中央区域须透明，装饰请放在外圈。头像显示在中央约 78% 区域。
+            ；背景和中央区域须透明，装饰只能放在外圈，不能遮挡头像。头像显示在中央约 74% 区域。
           </Text>
           <Text size="T200" priority="300">
-            头像和头像框使用 Matrix
-            静默资料更新（MSC4069），不会主动向房间发送“更换头像”的成员事件；服务器未启用该能力时会取消更新，避免产生通知。
+            选择头像框会立即预览；点击“应用头像框”后才会生成并上传。动态头像处理可能需要几秒。
           </Text>
         </Box>
       )}

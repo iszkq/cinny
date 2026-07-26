@@ -41,6 +41,12 @@ export const AvatarFramePreview = style({
   margin: '0 auto',
 });
 
+export const AvatarFrameCurrentPreview = style({
+  position: 'relative',
+  width: '48px',
+  height: '48px',
+});
+
 export const AvatarFramePreviewImage = style({
   position: 'absolute',
   inset: 0,
@@ -51,9 +57,9 @@ export const AvatarFramePreviewImage = style({
 });
 
 export const AvatarFramePreviewImageInset = style({
-  inset: '11%',
-  width: '78%',
-  height: '78%',
+  inset: '13%',
+  width: '74%',
+  height: '74%',
 });
 
 export const AvatarFramePreviewOverlay = style({

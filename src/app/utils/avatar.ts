@@ -10,7 +10,8 @@ export const AVATAR_FRAME_RECOMMENDED_DIMENSION = 512;
 
 const STATIC_AVATAR_SIZE = 512;
 const ANIMATED_AVATAR_SIZE = 256;
-const AVATAR_CONTENT_RATIO = 0.78;
+const AVATAR_CONTENT_RATIO = 0.74;
+const LEGACY_AVATAR_RECOVERY_RATIO = 0.75;
 const MAX_GIF_FRAMES = 240;
 const MAX_DECODED_GIF_PIXELS = 80_000_000;
 
@@ -111,6 +112,24 @@ const withFrameName = (file: File, extension: string): string => {
   return `${baseName}-framed.${extension}`;
 };
 
+const withoutFrameName = (file: File, extension: string): string => {
+  const baseName = file.name.replace(/\.[^.]+$/, '') || 'avatar';
+  return `${baseName}-unframed.${extension}`;
+};
+
+const drawRecoveredLegacyAvatar = (
+  context: CanvasRenderingContext2D,
+  source: CanvasImageSource,
+  sourceWidth: number,
+  sourceHeight: number,
+  outputSize: number
+) => {
+  const cropSize = Math.min(sourceWidth, sourceHeight) * LEGACY_AVATAR_RECOVERY_RATIO;
+  const sourceX = (sourceWidth - cropSize) / 2;
+  const sourceY = (sourceHeight - cropSize) / 2;
+  context.drawImage(source, sourceX, sourceY, cropSize, cropSize, 0, 0, outputSize, outputSize);
+};
+
 const ensureOutputSize = (blob: Blob) => {
   if (blob.size > AVATAR_MAX_FILE_SIZE) {
     throw new Error(
@@ -178,7 +197,7 @@ export const validateAvatarFrameImage = async (file: File): Promise<string | und
   let centerPixels = 0;
   let transparentCenterPixels = 0;
   const center = sampleSize / 2;
-  const centerRadius = sampleSize * 0.28;
+  const centerRadius = (sampleSize * AVATAR_CONTENT_RATIO) / 2;
 
   for (let y = 0; y < sampleSize; y += 1) {
     for (let x = 0; x < sampleSize; x += 1) {
@@ -189,7 +208,7 @@ export const validateAvatarFrameImage = async (file: File): Promise<string | und
     }
   }
 
-  if (transparentCenterPixels / centerPixels < 0.8) {
+  if (transparentCenterPixels / centerPixels < 0.95) {
     return '头像框中央必须保持透明，装饰请放在外圈，避免遮住头像。';
   }
 
@@ -318,6 +337,96 @@ const composeGifAvatar = async (avatar: File, frame: File): Promise<File> => {
   const blob = new Blob([encoder.bytes()], { type: 'image/gif' });
   ensureOutputSize(blob);
   return new File([blob], withFrameName(avatar, 'gif'), { type: 'image/gif' });
+};
+
+const extractGifAvatarFromLegacyFrame = async (avatar: File): Promise<File> => {
+  const avatarBuffer = await avatar.arrayBuffer();
+  const parsedGif = parseGIF(avatarBuffer);
+  const frames = decompressFrames(parsedGif, true);
+  const { width: sourceWidth, height: sourceHeight } = parsedGif.lsd;
+
+  if (!frames.length) throw new Error('GIF 中没有可用的画面。');
+  if (frames.length > MAX_GIF_FRAMES) {
+    throw new Error(`GIF 帧数过多。最多支持 ${MAX_GIF_FRAMES} 帧，当前为 ${frames.length} 帧。`);
+  }
+  if (sourceWidth * sourceHeight * frames.length > MAX_DECODED_GIF_PIXELS) {
+    throw new Error('GIF 解码后过大，无法自动分离旧头像框。');
+  }
+
+  const sourceCanvas = document.createElement('canvas');
+  sourceCanvas.width = sourceWidth;
+  sourceCanvas.height = sourceHeight;
+  const sourceContext = sourceCanvas.getContext('2d');
+  const patchCanvas = document.createElement('canvas');
+  const patchContext = patchCanvas.getContext('2d');
+  const outputCanvas = document.createElement('canvas');
+  outputCanvas.width = ANIMATED_AVATAR_SIZE;
+  outputCanvas.height = ANIMATED_AVATAR_SIZE;
+  const outputContext = outputCanvas.getContext('2d');
+  if (!sourceContext || !patchContext || !outputContext) {
+    throw new Error('当前浏览器无法分离动态头像框。');
+  }
+
+  const encoder = GIFEncoder();
+  let previousFrame: ParsedFrame | undefined;
+  let restoreData: ImageData | undefined;
+
+  frames.forEach((gifFrame) => {
+    applyPreviousDisposal(sourceContext, previousFrame, restoreData);
+    restoreData =
+      gifFrame.disposalType === 3
+        ? sourceContext.getImageData(0, 0, sourceWidth, sourceHeight)
+        : undefined;
+
+    const { left, top, width, height } = gifFrame.dims;
+    patchCanvas.width = width;
+    patchCanvas.height = height;
+    patchContext.putImageData(new ImageData(gifFrame.patch, width, height), 0, 0);
+    sourceContext.drawImage(patchCanvas, left, top);
+
+    outputContext.clearRect(0, 0, ANIMATED_AVATAR_SIZE, ANIMATED_AVATAR_SIZE);
+    drawRecoveredLegacyAvatar(
+      outputContext,
+      sourceCanvas,
+      sourceWidth,
+      sourceHeight,
+      ANIMATED_AVATAR_SIZE
+    );
+    writeGifFrame(encoder, outputContext, gifFrame.delay);
+    previousFrame = gifFrame;
+  });
+
+  encoder.finish();
+  const blob = new Blob([encoder.bytes()], { type: 'image/gif' });
+  ensureOutputSize(blob);
+  return new File([blob], withoutFrameName(avatar, 'gif'), { type: 'image/gif' });
+};
+
+export const extractAvatarFromLegacyFrame = async (avatar: File): Promise<File> => {
+  const avatarError = validateAvatarFile(avatar);
+  if (avatarError) throw new Error(avatarError);
+  if (avatar.type.toLowerCase() === 'image/gif') {
+    return extractGifAvatarFromLegacyFrame(avatar);
+  }
+
+  const image = await loadImage(avatar);
+  const canvas = document.createElement('canvas');
+  canvas.width = STATIC_AVATAR_SIZE;
+  canvas.height = STATIC_AVATAR_SIZE;
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('当前浏览器无法分离旧头像框。');
+
+  context.clearRect(0, 0, STATIC_AVATAR_SIZE, STATIC_AVATAR_SIZE);
+  drawRecoveredLegacyAvatar(
+    context,
+    image,
+    image.naturalWidth,
+    image.naturalHeight,
+    STATIC_AVATAR_SIZE
+  );
+  const blob = await canvasToBlob(canvas, 'image/png');
+  ensureOutputSize(blob);
+  return new File([blob], withoutFrameName(avatar, 'png'), { type: 'image/png' });
 };
 
 type DecodedAvatarFrame = CanvasImageSource & {

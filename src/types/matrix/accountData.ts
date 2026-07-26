@@ -162,7 +162,7 @@ export type CinnyAppearanceSettingsContent = {
 };
 
 export type CinnyAvatarFrameContent = {
-  version?: 1;
+  version?: 1 | 2;
   updatedAt?: number;
   baseAvatarUrl?: string;
   avatarUrl?: string;

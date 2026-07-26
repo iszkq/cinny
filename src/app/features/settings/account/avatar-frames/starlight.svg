@@ -7,15 +7,15 @@
       <stop offset="1" stop-color="#ffe08a"/>
     </linearGradient>
     <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
-      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feGaussianBlur stdDeviation="4" result="blur"/>
       <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
   </defs>
-  <circle cx="256" cy="256" r="217" fill="none" stroke="#ff8a1f" stroke-opacity=".55" stroke-width="30" filter="url(#glow)"/>
-  <circle cx="256" cy="256" r="217" fill="none" stroke="url(#gold)" stroke-width="13"/>
+  <circle cx="256" cy="256" r="226" fill="none" stroke="#ff8a1f" stroke-opacity=".45" stroke-width="20" filter="url(#glow)"/>
+  <circle cx="256" cy="256" r="224" fill="none" stroke="url(#gold)" stroke-width="9"/>
   <g fill="url(#gold)" stroke="#fff4bd" stroke-width="2" filter="url(#glow)">
-    <path d="M256 18l9 24 25 1-20 15 7 24-21-14-21 14 7-24-20-15 25-1z"/>
-    <path d="M58 333l6 16 17 1-13 10 4 16-14-9-14 9 4-16-13-10 17-1z"/>
-    <path d="M454 316l5 13 14 1-11 8 4 14-12-8-12 8 4-14-11-8 14-1z"/>
+    <path d="M256 2l7 18 20 1-16 12 5 19-16-11-16 11 5-19-16-12 20-1z"/>
+    <path d="M42 338l6 16 17 1-13 10 4 16-14-9-14 9 4-16-13-10 17-1z"/>
+    <path d="M470 320l5 13 14 1-11 8 4 14-12-8-12 8 4-14-11-8 14-1z"/>
   </g>
 </svg>
