@@ -65,6 +65,7 @@ export const AvatarFramePreviewImageInset = style({
 export const AvatarFramePreviewOverlay = style({
   position: 'absolute',
   inset: 0,
+  display: 'block',
   width: '100%',
   height: '100%',
   pointerEvents: 'none',
