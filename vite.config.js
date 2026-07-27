@@ -44,7 +44,11 @@ const copyFiles = {
       dest: '',
     },
     {
-      src: 'public/404.html',
+      src: 'public/asset-404.html',
+      dest: '',
+    },
+    {
+      src: 'public/favicon.ico',
       dest: '',
     },
     {
