@@ -12,6 +12,13 @@ import path from 'path';
 import buildConfig from './build.config';
 
 const androidAppBuild = process.env.VITE_ANDROID_APP === 'true';
+const deploymentRevision =
+  process.env.VITE_DEPLOYMENT_ID ??
+  process.env.CF_PAGES_COMMIT_SHA ??
+  process.env.GITHUB_SHA ??
+  process.env.COMMIT_REF ??
+  Date.now().toString(36);
+const deploymentId = deploymentRevision.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 12) || 'local';
 const androidBibleDisabledModule = path
   .resolve('src/app/utils/androidBibleDisabled.ts')
   .replace(/\\/g, '/');
@@ -41,6 +48,10 @@ const copyFiles = {
     },
     {
       src: 'public/_redirects',
+      dest: '',
+    },
+    {
+      src: 'public/_worker.js',
       dest: '',
     },
     {
@@ -176,9 +187,17 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: false,
+    manifest: true,
     copyPublicDir: false,
     rollupOptions: {
       plugins: [inject({ Buffer: ['buffer', 'Buffer'] })],
+      output: {
+        // Content-only hashes can reuse a URL that an edge cache previously poisoned with the
+        // SPA HTML fallback. A deployment suffix guarantees that every release gets a fresh JS
+        // namespace while retaining content hashes inside that release.
+        entryFileNames: `assets/[name]-[hash]-${deploymentId}.js`,
+        chunkFileNames: `assets/[name]-[hash]-${deploymentId}.js`,
+      },
     },
   },
 });

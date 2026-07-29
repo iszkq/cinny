@@ -125,6 +125,23 @@ const recoverUnhandledResourceLoad = (error: unknown) => {
   recoverResourceLoad(error).catch(() => undefined);
 };
 
+window.addEventListener('vite:preloadError', (event) => {
+  const preloadEvent = event as Event & { payload?: unknown };
+  const error = preloadEvent.payload ?? new Error('Unable to preload application module.');
+  if (
+    !isResourceLoadError(error) ||
+    resourceReloadScheduled ||
+    recentlyAttemptedResourceRecovery()
+  ) {
+    return;
+  }
+
+  // Vite emits this before a failed dynamic import rejects. Prevent its default throw while the
+  // recovery path removes stale workers/caches and navigates to the latest deployment.
+  event.preventDefault();
+  recoverUnhandledResourceLoad(error);
+});
+
 window.addEventListener('unhandledrejection', (event) => {
   if (!isResourceLoadError(event.reason)) return;
   event.preventDefault();
