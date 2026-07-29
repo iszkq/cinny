@@ -4,6 +4,10 @@ import path from 'node:path';
 const distDir = path.resolve('dist');
 const manifestPath = path.join(distDir, '.vite', 'manifest.json');
 const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+const basePath = `/${(process.env.APP_BASE_PATH ?? '/').replace(/^\/+|\/+$/g, '')}/`.replace(
+  /^\/\/$/,
+  '/'
+);
 const missing = [];
 let referenceCount = 0;
 
@@ -34,7 +38,12 @@ const indexHtml = await readFile(path.join(distDir, 'index.html'), 'utf8');
 for (const match of indexHtml.matchAll(/(?:src|href)=["']([^"'?#]+)["']/g)) {
   const reference = match[1];
   if (!reference || reference.includes('://') || reference.startsWith('data:')) continue;
-  const file = reference.replace(/^\.\//, '').replace(/^\//, '');
+  const normalizedReference = reference.replace(/^\.\//, '/');
+  const file = (
+    basePath !== '/' && normalizedReference.startsWith(basePath)
+      ? normalizedReference.slice(basePath.length)
+      : normalizedReference.replace(/^\//, '')
+  ).replace(/^\//, '');
   // eslint-disable-next-line no-await-in-loop
   await verifyFile('index.html', file);
 }
