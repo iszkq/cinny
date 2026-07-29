@@ -1,5 +1,6 @@
 import { style } from '@vanilla-extract/css';
 import { DefaultReset, config } from 'folds';
+import { localConfig } from '../../../styles/tokens';
 
 export const FilterCardSection = style([
   DefaultReset,
@@ -284,7 +285,7 @@ export const MediaMetaRow = style([
   {
     display: 'flex',
     flexWrap: 'wrap',
-    gap: config.space.S150,
+    gap: localConfig.space.S150,
     alignItems: 'center',
   },
 ]);
@@ -313,7 +314,7 @@ export const MetaStack = style([
   {
     display: 'flex',
     flexDirection: 'column',
-    gap: config.space.S150,
+    gap: localConfig.space.S150,
     minWidth: 0,
   },
 ]);
@@ -347,7 +348,7 @@ export const DetailInfoCard = style([
     flex: '1 1 220px',
     minWidth: '220px',
     maxWidth: '320px',
-    padding: config.space.S250,
+    padding: localConfig.space.S250,
     borderRadius: config.radii.R300,
     background: 'rgba(15, 23, 42, 0.04)',
     border: '1px solid rgba(15, 23, 42, 0.06)',
@@ -375,7 +376,7 @@ export const MessageContentCard = style([
 export const NoteCard = style([
   DefaultReset,
   {
-    paddingTop: config.space.S150,
+    paddingTop: localConfig.space.S150,
     borderTop: '1px solid rgba(15, 23, 42, 0.08)',
   },
 ]);
@@ -421,7 +422,7 @@ export const ViewerShell = style([
         display: 'grid',
         gridTemplateColumns: 'minmax(0, 1fr) 360px',
         alignItems: 'stretch',
-        gap: config.space.S150,
+        gap: localConfig.space.S150,
       },
     },
   },

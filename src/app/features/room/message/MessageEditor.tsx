@@ -25,6 +25,7 @@ import {
 import { Editor, Transforms } from 'slate';
 import { ReactEditor } from 'slate-react';
 import { IContent, IMentions, MatrixEvent, MsgType, RelationType, Room } from 'matrix-js-sdk';
+import { RoomMessageEventContent } from 'matrix-js-sdk/lib/@types/events';
 import { isKeyHotkey } from 'is-hotkey';
 import {
   AUTOCOMPLETE_PREFIXES,
@@ -335,7 +336,7 @@ const TextMessageEditor = as<'div', MessageEditorProps>(
           },
         };
 
-        return mx.sendMessage(roomId, content);
+        return mx.sendMessage(roomId, content as RoomMessageEventContent);
       }, [mx, editor, roomId, mEvent, isMarkdown, getPrevBodyAndFormattedBody])
     );
 
@@ -420,8 +421,7 @@ const TextMessageEditor = as<'div', MessageEditorProps>(
         const now = Date.now();
         setAnchor((current) => {
           if (current) {
-            emojiBoardSuppressOpenUntilRef.current =
-              now + EMOJI_BOARD_REOPEN_SUPPRESS_MS;
+            emojiBoardSuppressOpenUntilRef.current = now + EMOJI_BOARD_REOPEN_SUPPRESS_MS;
             if (!mobileOrTablet()) ReactEditor.focus(editor);
             return undefined;
           }
@@ -548,7 +548,7 @@ const TextMessageEditor = as<'div', MessageEditorProps>(
                       >
                         <IconButton
                           aria-pressed={anchor !== undefined}
-                          onPointerDown={(evt) => {
+                          onPointerDown={(evt: React.PointerEvent<HTMLButtonElement>) => {
                             emojiBoardTouchTriggerRef.current = Date.now();
                             if (!anchor) {
                               return;

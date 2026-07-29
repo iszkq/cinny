@@ -64,7 +64,9 @@ export const selectFile = <M extends boolean | undefined = undefined>(
 ): Promise<FilesOrFile<M> | undefined> =>
   new Promise((resolve) => {
     const { accept, capture } =
-      typeof selectOptions === 'string' ? { accept: selectOptions } : selectOptions;
+      typeof selectOptions === 'string'
+        ? { accept: selectOptions, capture: undefined }
+        : selectOptions;
     const input = document.createElement('input');
     input.type = 'file';
     if (accept && accept !== '*') input.accept = accept;

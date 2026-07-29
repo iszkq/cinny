@@ -1,5 +1,6 @@
 import { globalStyle, style } from '@vanilla-extract/css';
 import { DefaultReset, config } from 'folds';
+import { localConfig } from '../../styles/tokens';
 
 export const ImageViewer = style([
   DefaultReset,
@@ -144,7 +145,7 @@ export const ImageViewerViewport = style([
     boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.54)',
     '@media': {
       'screen and (max-width: 750px)': {
-        borderRadius: config.radii.R200,
+        borderRadius: localConfig.radii.R200,
       },
     },
   },
@@ -165,7 +166,6 @@ export const ImageViewerImg = style([
     transformOrigin: 'center center',
     transition: 'transform 140ms ease',
     userSelect: 'none',
-    WebkitUserDrag: 'none',
   },
 ]);
 

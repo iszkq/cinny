@@ -164,7 +164,9 @@ export function AddExistingModal({ parentId, space, requestClose }: AddExistingM
   };
 
   const handleApplyChanges = () => {
-    const selectedRooms = selected.map((rId) => getRoom(rId)).filter((room) => room !== undefined);
+    const selectedRooms = selected
+      .map((rId) => getRoom(rId))
+      .filter((room): room is Room => room !== undefined);
     applyChanges(selectedRooms).then(() => {
       if (alive()) {
         setSelected([]);
@@ -239,15 +241,15 @@ export function AddExistingModal({ parentId, space, requestClose }: AddExistingM
                           {searchResult
                             ? '\u672a\u627e\u5230\u5339\u914d\u9879'
                             : space
-                              ? '\u6682\u65e0\u7a7a\u95f4'
-                              : '\u6682\u65e0\u623f\u95f4'}
+                            ? '\u6682\u65e0\u7a7a\u95f4'
+                            : '\u6682\u65e0\u623f\u95f4'}
                         </Text>
                         <Text size="T200" align="Center">
                           {searchResult
                             ? `\u6ca1\u6709\u627e\u5230\u4e0e\u201c${searchResult.query}\u201d\u76f8\u5173\u7684\u7ed3\u679c\u3002`
                             : space
-                              ? '\u4f60\u8fd8\u6ca1\u6709\u53ef\u6dfb\u52a0\u7684\u7a7a\u95f4\u3002'
-                              : '\u4f60\u8fd8\u6ca1\u6709\u53ef\u6dfb\u52a0\u7684\u623f\u95f4\u3002'}
+                            ? '\u4f60\u8fd8\u6ca1\u6709\u53ef\u6dfb\u52a0\u7684\u7a7a\u95f4\u3002'
+                            : '\u4f60\u8fd8\u6ca1\u6709\u53ef\u6dfb\u52a0\u7684\u623f\u95f4\u3002'}
                         </Text>
                       </Box>
                     )}
@@ -336,7 +338,11 @@ export function AddExistingModal({ parentId, space, requestClose }: AddExistingM
                           <Box grow="Yes" direction="Column">
                             {applyState.status === AsyncStatus.Error ? (
                               <Text size="T200">
-                                <b>{'\u5e94\u7528\u53d8\u66f4\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5\u3002'}</b>
+                                <b>
+                                  {
+                                    '\u5e94\u7528\u53d8\u66f4\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5\u3002'
+                                  }
+                                </b>
                               </Text>
                             ) : (
                               <Text size="T200">

@@ -139,7 +139,7 @@ function GlobalPackSelector({
               if (!room) return null;
               const roomPackAddresses = roomPacks
                 .map((pack) => pack.address)
-                .filter((addr) => addr !== undefined);
+                .filter((addr): addr is PackAddress => addr !== undefined);
               const allSelected = roomPackAddresses.every((addr) =>
                 selected.find((address) => packAddressEqual(addr, address))
               );
@@ -508,11 +508,19 @@ export function GlobalPacks({ onViewPack }: GlobalPacksProps) {
             <Box grow="Yes" direction="Column">
               {applyState.status === AsyncStatus.Error ? (
                 <Text size="T200">
-                  <b>{'\u5206\u7c7b\u53d8\u66f4\u4fdd\u5b58\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5\u3002'}</b>
+                  <b>
+                    {
+                      '\u5206\u7c7b\u53d8\u66f4\u4fdd\u5b58\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5\u3002'
+                    }
+                  </b>
                 </Text>
               ) : (
                 <Text size="T200">
-                  <b>{'\u5206\u7c7b\u53d8\u66f4\u5df2\u6682\u5b58\uff0c\u53ef\u4ee5\u7ee7\u7eed\u5e94\u7528\u3002'}</b>
+                  <b>
+                    {
+                      '\u5206\u7c7b\u53d8\u66f4\u5df2\u6682\u5b58\uff0c\u53ef\u4ee5\u7ee7\u7eed\u5e94\u7528\u3002'
+                    }
+                  </b>
                 </Text>
               )}
             </Box>

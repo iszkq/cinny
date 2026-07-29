@@ -86,7 +86,7 @@ export function RoomJoinRules({ permissions }: RoomJoinRulesProps) {
 
           const parents = getStateEvents(room, StateEvent.SpaceParent)
             .map((event) => event.getStateKey())
-            .filter((parentId) => typeof parentId === 'string')
+            .filter((parentId): parentId is string => typeof parentId === 'string')
             .filter((parentId) => roomParents?.has(parentId));
 
           if (parents.length === 0 && space && roomParents) {
@@ -128,11 +128,7 @@ export function RoomJoinRules({ permissions }: RoomJoinRulesProps) {
     >
       <SettingTile
         title={room.isSpaceRoom() ? '空间访问' : '房间访问'}
-        description={
-          room.isSpaceRoom()
-            ? '设置用户加入空间的方式。'
-            : '设置用户加入房间的方式。'
-        }
+        description={room.isSpaceRoom() ? '设置用户加入空间的方式。' : '设置用户加入房间的方式。'}
         after={
           <JoinRulesSwitcher
             icons={icons}

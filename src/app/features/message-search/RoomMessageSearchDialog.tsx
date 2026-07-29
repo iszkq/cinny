@@ -46,6 +46,7 @@ import { isDesktopLikeScreenSize, useScreenSizeContext } from '../../hooks/useSc
 import { useSetting } from '../../state/hooks/settings';
 import { settingsAtom } from '../../state/settings';
 import { ContainerColor } from '../../styles/ContainerColor.css';
+import { localConfig } from '../../styles/tokens';
 import { getMxIdLocalPart, mxcUrlToHttp } from '../../utils/matrix';
 import { getMemberAvatarMxc, getMemberDisplayName } from '../../utils/room';
 import { stopPropagation } from '../../utils/keyboard';
@@ -153,7 +154,7 @@ const DATE_NAV_BUTTON_STYLE = {
   minWidth: toRem(24),
   minHeight: toRem(24),
   border: 'none',
-  borderRadius: config.radii.R200,
+  borderRadius: localConfig.radii.R200,
   background: 'transparent',
   color: 'rgba(100, 116, 139, 0.96)',
   display: 'inline-flex',
@@ -401,7 +402,7 @@ function MemberSelector({ room, selectedUserIds, onChange }: MemberSelectorProps
                         }
                         after={selected ? <Icon size="100" src={Icons.Check} /> : undefined}
                       >
-                        <Box grow="Yes" direction="Column" gap="25">
+                        <Box grow="Yes" direction="Column" gap="100">
                           <Text size="T300" truncate>
                             {displayName}
                           </Text>
@@ -583,7 +584,7 @@ function DateFilterField({
                   gap="100"
                   style={{ minWidth: 0, padding: `${config.space.S100} ${config.space.S100} 0` }}
                 >
-                  <Box gap="50">
+                  <Box gap="100">
                     <button
                       type="button"
                       onClick={() => handleMonthShift(-1, 'year')}
@@ -620,7 +621,7 @@ function DateFilterField({
                     {visibleMonth.format('YYYY\u5e74 M\u6708')}
                   </Text>
 
-                  <Box gap="50">
+                  <Box gap="100">
                     <button
                       type="button"
                       onClick={() => handleMonthShift(1, 'month')}
@@ -652,7 +653,7 @@ function DateFilterField({
 
                 <Line variant="SurfaceVariant" size="300" />
 
-                <Box direction="Column" gap="50" style={{ padding: `0 ${config.space.S100}` }}>
+                <Box direction="Column" gap="100" style={{ padding: `0 ${config.space.S100}` }}>
                   <Box style={DATE_GRID_STYLE}>
                     {WEEKDAY_LABELS.map((weekday) => (
                       <Text
@@ -711,17 +712,21 @@ function DateFilterField({
                           onClick={() => !disabled && handleDateChange(date)}
                           onMouseEnter={() => !disabled && setHoveredDateKey(dateKey)}
                           onMouseLeave={() =>
-                            setHoveredDateKey((current) => (current === dateKey ? undefined : current))
+                            setHoveredDateKey((current) =>
+                              current === dateKey ? undefined : current
+                            )
                           }
                           onFocus={() => !disabled && setHoveredDateKey(dateKey)}
                           onBlur={() =>
-                            setHoveredDateKey((current) => (current === dateKey ? undefined : current))
+                            setHoveredDateKey((current) =>
+                              current === dateKey ? undefined : current
+                            )
                           }
                           disabled={disabled}
                           style={{
                             height: toRem(38),
                             border: dayBorder,
-                            borderRadius: config.radii.R200,
+                            borderRadius: localConfig.radii.R200,
                             background: dayBackground,
                             color: dayColor,
                             font: 'inherit',
@@ -751,7 +756,7 @@ function DateFilterField({
                   gap="100"
                   style={{ padding: `0 ${config.space.S100} ${config.space.S100}` }}
                 >
-                  <Box grow="Yes" direction="Column" gap="25" style={{ minWidth: 0 }}>
+                  <Box grow="Yes" direction="Column" gap="100" style={{ minWidth: 0 }}>
                     <Text size="T200" priority="300">
                       {value ? '\u5df2\u9009\u65e5\u671f' : label}
                     </Text>
@@ -913,7 +918,11 @@ export function RoomMessageSearchDialog({
     [groups]
   );
   const reachedResultEnd =
-    hasSearchCriteria && status === 'success' && resultCount > 0 && !hasNextPage && !isFetchingNextPage;
+    hasSearchCriteria &&
+    status === 'success' &&
+    resultCount > 0 &&
+    !hasNextPage &&
+    !isFetchingNextPage;
 
   useEffect(() => {
     if (!scrollRef.current) return;
@@ -1199,19 +1208,19 @@ export function RoomMessageSearchDialog({
                           groups.length === 0 &&
                           !hasNextPage &&
                           !isFetchingNextPage && (
-                          <Box
-                            className={ContainerColor({ variant: 'Warning' })}
-                            style={{
-                              padding: config.space.S300,
-                              borderRadius: config.radii.R400,
-                            }}
-                            alignItems="Center"
-                            gap="200"
-                          >
-                            <Icon size="200" src={Icons.Info} />
-                            <Text>{emptyStateLabel}</Text>
-                          </Box>
-                        )}
+                            <Box
+                              className={ContainerColor({ variant: 'Warning' })}
+                              style={{
+                                padding: config.space.S300,
+                                borderRadius: config.radii.R400,
+                              }}
+                              alignItems="Center"
+                              gap="200"
+                            >
+                              <Icon size="200" src={Icons.Info} />
+                              <Text>{emptyStateLabel}</Text>
+                            </Box>
+                          )}
 
                         {groups.map((group) => {
                           const groupRoom =
@@ -1295,7 +1304,7 @@ export function RoomMessageSearchDialog({
                           </Text>
                         </Box>
 
-                        <Box direction="Column" gap="150">
+                        <Box direction="Column" gap="100">
                           <Text size="T200" priority="300">
                             {'\u6392\u5e8f'}
                           </Text>
@@ -1331,7 +1340,7 @@ export function RoomMessageSearchDialog({
                           </Box>
                         </Box>
 
-                        <Box direction="Column" gap="150">
+                        <Box direction="Column" gap="100">
                           <Text size="T200" priority="300">
                             {direct ? '\u53d1\u9001\u4eba' : '\u7fa4\u6210\u5458'}
                           </Text>
@@ -1365,7 +1374,7 @@ export function RoomMessageSearchDialog({
                           )}
                         </Box>
 
-                        <Box direction="Column" gap="150">
+                        <Box direction="Column" gap="100">
                           <Text size="T200" priority="300">
                             {'\u65e5\u671f'}
                           </Text>

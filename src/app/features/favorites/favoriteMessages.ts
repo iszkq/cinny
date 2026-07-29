@@ -1,4 +1,14 @@
-import { Direction, EventType, IContent, MatrixClient, MatrixEvent, MsgType, Room } from 'matrix-js-sdk';
+import {
+  Direction,
+  EventType,
+  IContent,
+  MatrixClient,
+  MatrixEvent,
+  MsgType,
+  PollStartEventContent,
+  Room,
+} from 'matrix-js-sdk';
+import { StickerEventContent } from 'matrix-js-sdk/lib/@types/events';
 import {
   AccountDataEvent,
   CinnyFavoriteItemRecord,
@@ -23,11 +33,13 @@ import {
   mxcUrlToHttp,
 } from '../../utils/matrix';
 import { getMemberAvatarMxc, getMemberDisplayName } from '../../utils/room';
+import { OUTGOING_POLL_START_EVENT_TYPE, UNSTABLE_POLL_START_EVENT_TYPE } from '../../utils/polls';
 import {
-  OUTGOING_POLL_START_EVENT_TYPE,
-  UNSTABLE_POLL_START_EVENT_TYPE,
-} from '../../utils/polls';
-import { getAudioMsgContent, getFileMsgContent, getImageMsgContent, getVideoMsgContent } from '../room/msgContent';
+  getAudioMsgContent,
+  getFileMsgContent,
+  getImageMsgContent,
+  getVideoMsgContent,
+} from '../room/msgContent';
 import { isForwardableMessage } from '../room/forwardMessages';
 import {
   CINNY_FAVORITE_CONTENT_KEY,
@@ -188,9 +200,7 @@ export const createFavoriteItemRecordFromEvent = (
 ): CinnyFavoriteItemRecord | undefined =>
   createFavoriteItemRecord(event, roomId, event.getContent());
 
-export const createFavoriteMatrixEventFromRecord = (
-  record: CinnyFavoriteItemRecord
-): MatrixEvent =>
+export const createFavoriteMatrixEventFromRecord = (record: CinnyFavoriteItemRecord): MatrixEvent =>
   new MatrixEvent({
     event_id: record.eventId ?? `$cinny-favorite-${record.id}`,
     type: record.eventType,
@@ -420,9 +430,10 @@ const downloadFavoriteSourceFile = async (
   }
 
   const mimeType = source.mimeType ?? getFallbackMimeType(source.kind);
-  const mediaBlob = source.encInfo
+  const encryptedInfo = source.encInfo;
+  const mediaBlob = encryptedInfo
     ? await downloadEncryptedMedia(mediaUrl, (encBuffer) =>
-        decryptFile(encBuffer, mimeType, source.encInfo)
+        decryptFile(encBuffer, mimeType, encryptedInfo)
       )
     : await downloadMedia(mediaUrl);
 
@@ -470,7 +481,11 @@ const createDurableFavoriteContent = async (
     return getFileMsgContent(uploadItem, uploadMxc) as FavoriteMessageContent;
   }
 
-  const stickerContent = (await getImageMsgContent(mx, uploadItem, uploadMxc)) as FavoriteMessageContent;
+  const stickerContent = (await getImageMsgContent(
+    mx,
+    uploadItem,
+    uploadMxc
+  )) as FavoriteMessageContent;
   delete stickerContent.msgtype;
   delete stickerContent.filename;
 
@@ -540,10 +555,9 @@ export const favoriteMessageToRoom = async (
     sourceEventId
   )[0];
   if (existingFavorite) {
-    const existingRecord =
-      getFavoriteItemRecords(getFavoriteItemsContent(mx))[
-        getFavoriteItemRecordId(sourceRoom.roomId, sourceEventId)
-      ];
+    const existingRecord = getFavoriteItemRecords(getFavoriteItemsContent(mx))[
+      getFavoriteItemRecordId(sourceRoom.roomId, sourceEventId)
+    ];
     const shouldCopyMedia =
       !!getFavoriteMediaSource(existingFavorite) &&
       typeof existingRecord?.mediaCopiedAt !== 'number' &&
@@ -592,7 +606,11 @@ export const favoriteMessageToRoom = async (
   favoriteContent[CINNY_FAVORITE_CONTENT_KEY] = metadata;
 
   if (eventType === MessageEvent.Sticker) {
-    const response = await mx.sendEvent(targetRoomId, EventType.Sticker, favoriteContent);
+    const response = await mx.sendEvent(
+      targetRoomId,
+      EventType.Sticker,
+      favoriteContent as StickerEventContent
+    );
     await upsertFavoriteItemRecord(mx, {
       version: FAVORITE_ITEMS_VERSION,
       id: getFavoriteItemRecordId(metadata.sourceRoomId, metadata.sourceEventId),
@@ -611,7 +629,11 @@ export const favoriteMessageToRoom = async (
   }
 
   if (eventType === MessageEvent.PollStart || eventType === UNSTABLE_POLL_START_EVENT_TYPE) {
-    const response = await mx.sendEvent(targetRoomId, OUTGOING_POLL_START_EVENT_TYPE, favoriteContent);
+    const response = await mx.sendEvent(
+      targetRoomId,
+      OUTGOING_POLL_START_EVENT_TYPE,
+      favoriteContent as PollStartEventContent
+    );
     await upsertFavoriteItemRecord(mx, {
       version: FAVORITE_ITEMS_VERSION,
       id: getFavoriteItemRecordId(metadata.sourceRoomId, metadata.sourceEventId),

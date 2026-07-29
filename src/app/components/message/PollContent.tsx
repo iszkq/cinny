@@ -20,13 +20,13 @@ import {
   config,
   toRem,
 } from 'folds';
-import { SequenceCard } from '../../sequence-card';
-import { UserAvatar } from '../../user-avatar';
-import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
-import { nameInitials } from '../../../utils/common';
-import { getMxIdLocalPart, mxcUrlToHttp } from '../../../utils/matrix';
-import { getMemberAvatarMxc, getMemberDisplayName } from '../../../utils/room';
+import { SequenceCard } from '../sequence-card';
+import { UserAvatar } from '../user-avatar';
+import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
+import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { nameInitials } from '../../utils/common';
+import { getMxIdLocalPart, mxcUrlToHttp } from '../../utils/matrix';
+import { getMemberAvatarMxc, getMemberDisplayName } from '../../utils/room';
 import {
   createPollResponseContent,
   getPollModeLabel,
@@ -34,7 +34,7 @@ import {
   OUTGOING_POLL_RESPONSE_EVENT_TYPE,
   parsePollData,
   summarizePoll,
-} from '../../../utils/polls';
+} from '../../utils/polls';
 
 type PollContentProps = {
   content: IContent;
@@ -65,12 +65,14 @@ const CN = {
   totalSelections: '\u7d2f\u8ba1\u9009\u62e9',
   openInTimeline:
     '\u8bf7\u5728\u623f\u95f4\u6d88\u606f\u5217\u8868\u4e2d\u6253\u5f00\u8be5\u6295\u7968\uff0c\u4ee5\u4fbf\u76f4\u63a5\u53c2\u4e0e\u6295\u7968\u3002',
-  endedSummary: '\u8be5\u6295\u7968\u5df2\u7ecf\u622a\u6b62\uff0c\u53ea\u80fd\u67e5\u770b\u7ed3\u679c\u3002',
+  endedSummary:
+    '\u8be5\u6295\u7968\u5df2\u7ecf\u622a\u6b62\uff0c\u53ea\u80fd\u67e5\u770b\u7ed3\u679c\u3002',
   multipleHint:
     '\u53ef\u4ee5\u5148\u8c03\u6574\u9009\u9879\uff0c\u786e\u8ba4\u540e\u518d\u70b9\u51fb\u201c\u53d1\u9001\u6295\u7968\u201d\u3002',
   singleHint:
     '\u9009\u4e2d\u9009\u9879\u540e\u4e0d\u4f1a\u7acb\u5373\u53d1\u9001\uff0c\u9700\u8981\u4f60\u624b\u52a8\u70b9\u51fb\u201c\u53d1\u9001\u6295\u7968\u201d\u3002',
-  pendingChanges: '\u5f53\u524d\u9009\u62e9\u5c1a\u672a\u53d1\u9001\uff0c\u8bf7\u624b\u52a8\u786e\u8ba4\u3002',
+  pendingChanges:
+    '\u5f53\u524d\u9009\u62e9\u5c1a\u672a\u53d1\u9001\uff0c\u8bf7\u624b\u52a8\u786e\u8ba4\u3002',
   sendVote: '\u53d1\u9001\u6295\u7968',
   sendClearVote: '\u6e05\u9664\u6295\u7968',
   resetDraft: '\u53d6\u6d88\u4fee\u6539',
@@ -105,7 +107,8 @@ const getOrderedAnswers = (
   optionIds: string[],
   selectedAnswers: Set<string>,
   maxSelections: number
-): string[] => optionIds.filter((optionId) => selectedAnswers.has(optionId)).slice(0, maxSelections);
+): string[] =>
+  optionIds.filter((optionId) => selectedAnswers.has(optionId)).slice(0, maxSelections);
 
 type PollVoterDetail = {
   userId: string;
@@ -119,11 +122,7 @@ type PollVoterDirectoryProps = {
   maxHeight?: string;
 };
 
-function PollVoterDirectory({
-  voters,
-  singleColumn = false,
-  maxHeight,
-}: PollVoterDirectoryProps) {
+function PollVoterDirectory({ voters, singleColumn = false, maxHeight }: PollVoterDirectoryProps) {
   return (
     <Box
       gap="100"
@@ -446,10 +445,9 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
                   const displayName =
                     getMemberDisplayName(room, userId) ?? getMxIdLocalPart(userId) ?? userId;
                   const avatarMxc = getMemberAvatarMxc(room, userId);
-                  const avatarUrl =
-                    avatarMxc
-                      ? mxcUrlToHttp(mx, avatarMxc, useAuthentication, 24, 24, 'crop') ?? undefined
-                      : undefined;
+                  const avatarUrl = avatarMxc
+                    ? mxcUrlToHttp(mx, avatarMxc, useAuthentication, 24, 24, 'crop') ?? undefined
+                    : undefined;
 
                   return {
                     userId,
@@ -538,8 +536,13 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
                           }
                         >
                           {(triggerRef) => (
-                            <Box ref={triggerRef} direction="Column" gap="100" style={{ minWidth: 0 }}>
-                              <Box gap="50" alignItems="Center" style={{ flexWrap: 'wrap' }}>
+                            <Box
+                              ref={triggerRef}
+                              direction="Column"
+                              gap="100"
+                              style={{ minWidth: 0 }}
+                            >
+                              <Box gap="100" alignItems="Center" style={{ flexWrap: 'wrap' }}>
                                 {visibleAvatars.map((voter, index) => (
                                   <Box
                                     key={voter.userId}
@@ -565,7 +568,7 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
                                   </Badge>
                                 )}
                               </Box>
-                              <Box direction="Column" gap="50" style={{ minWidth: 0 }}>
+                              <Box direction="Column" gap="100" style={{ minWidth: 0 }}>
                                 <Text
                                   size="T200"
                                   priority="300"
@@ -577,7 +580,7 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
                                 <Text
                                   as="span"
                                   size="T200"
-                                  onClick={(evt) => {
+                                  onClick={(evt: React.MouseEvent<HTMLSpanElement>) => {
                                     evt.preventDefault();
                                     evt.stopPropagation();
                                     setExpandedVoterOptionId((current) =>
@@ -597,7 +600,9 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
                                 <Box
                                   direction="Column"
                                   gap="100"
-                                  onClick={(evt) => evt.stopPropagation()}
+                                  onClick={(evt: React.MouseEvent<HTMLDivElement>) =>
+                                    evt.stopPropagation()
+                                  }
                                   style={{
                                     marginTop: config.space.S100,
                                     paddingTop: config.space.S100,
@@ -612,7 +617,7 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
                         </TooltipProvider>
                       ) : (
                         <Box direction="Column" gap="100">
-                          <Box gap="50" alignItems="Center" style={{ flexWrap: 'wrap' }}>
+                          <Box gap="100" alignItems="Center" style={{ flexWrap: 'wrap' }}>
                             {visibleAvatars.map((voter, index) => (
                               <Box
                                 key={voter.userId}
@@ -679,10 +684,10 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
               {ended
                 ? CN.endedSummary
                 : draftDirty
-                  ? CN.pendingChanges
-                  : poll.mode === 'multiple'
-                    ? CN.multipleHint
-                    : CN.singleHint}
+                ? CN.pendingChanges
+                : poll.mode === 'multiple'
+                ? CN.multipleHint
+                : CN.singleHint}
             </Text>
             {!ended && (
               <Box gap="200" style={{ flexWrap: 'wrap' }}>

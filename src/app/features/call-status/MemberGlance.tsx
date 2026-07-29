@@ -46,7 +46,7 @@ export function MemberGlance({ room, members, speakers, max = 6 }: MemberGlanceP
             variant="Background"
             size="200"
             radii="Pill"
-            onClick={(evt) =>
+            onClick={(evt: React.MouseEvent<HTMLButtonElement>) =>
               openUserProfile(
                 room.roomId,
                 undefined,

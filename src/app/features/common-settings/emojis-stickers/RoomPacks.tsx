@@ -251,7 +251,7 @@ export function RoomPacks({ onViewPack }: RoomPacksProps) {
                     <Icon src={Icons.Cross} size="100" />
                   </IconButton>
                 ))}
-              <PackAvatar src={avatarUrl} />
+              <PackAvatar src={avatarUrl ?? undefined} />
             </Box>
           }
           after={

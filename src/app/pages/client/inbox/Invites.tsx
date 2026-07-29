@@ -550,7 +550,9 @@ function UnknownInvites({
             <PageHero
               icon={<Icon size="600" src={Icons.Info} />}
               title={'\u6682\u65e0\u9080\u8bf7'}
-              subTitle={'\u6765\u81ea\u672a\u540c\u623f\u7528\u6237\u7684\u9080\u8bf7\u4f1a\u663e\u793a\u5728\u8fd9\u91cc\u3002'}
+              subTitle={
+                '\u6765\u81ea\u672a\u540c\u623f\u7528\u6237\u7684\u9080\u8bf7\u4f1a\u663e\u793a\u5728\u8fd9\u91cc\u3002'
+              }
             />
           </PageHeroSection>
         </Box>
@@ -625,7 +627,9 @@ function SpamInvites({
               <PageHero
                 icon={<Icon size="600" src={Icons.Warning} />}
                 title={`${invites.length} \u6761\u5783\u573e\u9080\u8bf7`}
-                subTitle={'\u4e0b\u65b9\u90e8\u5206\u9080\u8bf7\u53ef\u80fd\u5305\u542b\u6076\u610f\u5185\u5bb9\uff0c\u6216\u6765\u81ea\u5df2\u88ab\u5c4f\u853d\u7684\u7528\u6237\u3002'}
+                subTitle={
+                  '\u4e0b\u65b9\u90e8\u5206\u9080\u8bf7\u53ef\u80fd\u5305\u542b\u6076\u610f\u5185\u5bb9\uff0c\u6216\u6765\u81ea\u5df2\u88ab\u5c4f\u853d\u7684\u7528\u6237\u3002'
+                }
               >
                 <Box direction="Row" gap="200" justifyContent="Center" wrap="Wrap">
                   <Button
@@ -717,7 +721,9 @@ function SpamInvites({
             <PageHero
               icon={<Icon size="600" src={Icons.Warning} />}
               title={'\u6682\u65e0\u5783\u573e\u9080\u8bf7'}
-              subTitle={'\u88ab\u8bc6\u522b\u4e3a\u5783\u573e\u7684\u9080\u8bf7\u4f1a\u663e\u793a\u5728\u8fd9\u91cc\u3002'}
+              subTitle={
+                '\u88ab\u8bc6\u522b\u4e3a\u5783\u573e\u7684\u9080\u8bf7\u4f1a\u663e\u793a\u5728\u8fd9\u91cc\u3002'
+              }
             />
           </PageHeroSection>
         </Box>
@@ -737,7 +743,7 @@ export function Invites() {
 
   const invitesData = allInviteIds
     .map((inviteId) => mx.getRoom(inviteId))
-    .filter((inviteRoom) => !!inviteRoom)
+    .filter((inviteRoom): inviteRoom is Room => inviteRoom !== null)
     .map((inviteRoom) => makeInviteData(mx, inviteRoom, useAuthentication));
 
   const [knownInvites, unknownInvites, spamInvites] = useMemo(() => {

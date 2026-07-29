@@ -21,7 +21,7 @@ export function SplashScreen({ children }: SplashScreenProps) {
         alignItems="Center"
         justifyContent="Center"
       >
-        <Box direction="Column" gap="50" alignItems="Center">
+        <Box direction="Column" gap="100" alignItems="Center">
           <Text size="H2" align="Center">
             {APP_DISPLAY_NAME}
           </Text>

@@ -1,5 +1,6 @@
 import { DefaultReset, color, config, toRem } from 'folds';
 import { globalStyle, style } from '@vanilla-extract/css';
+import { localConfig } from '../../styles/tokens';
 
 export const PageViewport = style({
   position: 'fixed',
@@ -225,7 +226,7 @@ export const PrimaryDownloadCard = style([
     position: 'relative',
     display: 'flex',
     flexDirection: 'column',
-    gap: config.space.S250,
+    gap: localConfig.space.S250,
     minWidth: 0,
     padding: toRem(22),
     color: '#fff',
@@ -296,7 +297,7 @@ export const PrimaryDownloadLabel = style({
 
 export const ReleaseLine = style({
   justifyContent: 'center',
-  paddingTop: config.space.S50,
+  paddingTop: localConfig.space.S50,
   color: '#536277',
 });
 

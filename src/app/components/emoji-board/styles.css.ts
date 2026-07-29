@@ -1,5 +1,6 @@
 import { style } from '@vanilla-extract/css';
 import { toRem, color, config, DefaultReset, FocusOutline } from 'folds';
+import { localConfig } from '../../styles/tokens';
 
 /**
  * Layout
@@ -112,7 +113,7 @@ export const SidebarBtnFallback = style([
     justifyContent: 'center',
     width: toRem(24),
     height: toRem(24),
-    borderRadius: config.radii.R200,
+    borderRadius: localConfig.radii.R200,
     backgroundColor: color.SurfaceVariant.Container,
     color: color.SurfaceVariant.OnContainer,
   },

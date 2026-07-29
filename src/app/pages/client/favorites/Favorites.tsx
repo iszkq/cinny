@@ -283,9 +283,7 @@ const getFavoriteEvents = (room?: Room): FavoriteItem[] => {
     .sort((a, b) => b.event.getTs() - a.event.getTs());
 };
 
-const getFavoriteEventsFromRecords = (
-  content?: CinnyFavoriteItemsContent
-): FavoriteItem[] =>
+const getFavoriteEventsFromRecords = (content?: CinnyFavoriteItemsContent): FavoriteItem[] =>
   Object.values(getFavoriteItemRecords(content))
     .reduce<FavoriteItem[]>((items, record) => {
       const event = createFavoriteMatrixEventFromRecord(record);
@@ -305,7 +303,10 @@ const getFavoriteEventsFromRecords = (
     }, [])
     .sort((a, b) => b.metadata.favoritedAt - a.metadata.favoritedAt);
 
-const mergeFavoriteItems = (accountItems: FavoriteItem[], roomItems: FavoriteItem[]): FavoriteItem[] => {
+const mergeFavoriteItems = (
+  accountItems: FavoriteItem[],
+  roomItems: FavoriteItem[]
+): FavoriteItem[] => {
   const itemMap = new Map<string, FavoriteItem>();
 
   roomItems.forEach((item) => {
@@ -315,7 +316,9 @@ const mergeFavoriteItems = (accountItems: FavoriteItem[], roomItems: FavoriteIte
     itemMap.set(item.referenceId, item);
   });
 
-  return Array.from(itemMap.values()).sort((a, b) => b.metadata.favoritedAt - a.metadata.favoritedAt);
+  return Array.from(itemMap.values()).sort(
+    (a, b) => b.metadata.favoritedAt - a.metadata.favoritedAt
+  );
 };
 
 const getFavoriteImageViewerItems = (items: FavoriteItem[]): ViewerImageItem[] =>
@@ -472,7 +475,7 @@ function FavoriteNoteEditor({
   }, [note]);
 
   const [saveState, saveNote] = useAsyncCallback(
-    useCallback(() => onSave(draftNote), [draftNote, onSave])
+    useCallback((nextNote?: string) => onSave(nextNote ?? draftNote), [draftNote, onSave])
   );
 
   const handleSave = () => {
@@ -563,7 +566,7 @@ function FavoriteNoteEditor({
       </Box>
     </Box>
   ) : hasNote ? (
-    <Box className={css.NoteCard} direction="Column" gap="150">
+    <Box className={css.NoteCard} direction="Column" gap="100">
       <Text size="T200" priority="300">
         备注
       </Text>
@@ -607,7 +610,7 @@ function FavoriteMediaDetails({
 
   return (
     <Box direction="Column" gap="300">
-      <Box gap="250" alignItems="Start">
+      <Box gap="200" alignItems="Start">
         <AvatarBase>
           <Avatar size="300">
             <UserAvatar
@@ -885,7 +888,7 @@ function FavoriteImageCard({
   if (!content || !mediaUrl) return null;
 
   return (
-    <Box direction="Column" gap="250" className={css.MediaCard}>
+    <Box direction="Column" gap="200" className={css.MediaCard}>
       <Box
         className={css.MediaPreview}
         style={
@@ -987,7 +990,7 @@ function FavoriteVideoCard({
 
   return (
     <>
-      <Box direction="Column" gap="250" className={css.MediaCard}>
+      <Box direction="Column" gap="200" className={css.MediaCard}>
         <Box
           className={css.MediaPreview}
           style={
@@ -1106,7 +1109,7 @@ function FavoriteCard({
       className={selectionMode && selected ? css.GlassCardSelected : css.GlassCard}
       variant={selectionMode && selected ? 'Secondary' : 'Background'}
       direction="Column"
-      gap="250"
+      gap="200"
       style={{ padding: config.space.S400 }}
     >
       <Box gap="300" alignItems="Start">
@@ -1658,7 +1661,11 @@ export function Favorites() {
             if (eventId && item.storageRoomId && !eventId.startsWith('$cinny-favorite-')) {
               await removeFavoriteMessage(mx, item.storageRoomId, eventId).catch(() => undefined);
             }
-            await removeFavoriteItemRecord(mx, item.metadata.sourceRoomId, item.metadata.sourceEventId);
+            await removeFavoriteItemRecord(
+              mx,
+              item.metadata.sourceRoomId,
+              item.metadata.sourceEventId
+            );
           })
         );
 
@@ -1790,164 +1797,166 @@ export function Favorites() {
                   padding: config.space.S400,
                 }}
               >
-          <Box className={css.FilterCardSection} direction="Column">
-            <Text className={css.FilterCardLabel} size="T200" priority="300">
-              {'\u5185\u5bb9\u5206\u7c7b'}
-            </Text>
-            <Box className={css.FilterCardActions}>
-              {FAVORITE_CATEGORIES.map((category) => {
-                const active = activeCategory === category;
-                return (
-                  <Chip
-                    key={category}
-                    variant={active ? 'Primary' : 'SurfaceVariant'}
-                    fill={active ? 'Solid' : 'Soft'}
-                    radii="Pill"
-                    onClick={() => setActiveCategory(category)}
-                  >
-                    <Text size="B300">
-                      {`${getFavoriteCategoryText(category)} ${categoryCounts[category]}`}
-                    </Text>
-                  </Chip>
-                );
-              })}
-            </Box>
-          </Box>
-
-          <Line size="300" />
-
-          <Box className={css.FilterCardSection} direction="Column" gap="200">
-            <Box justifyContent="SpaceBetween" alignItems="Center" wrap="Wrap" gap="200">
-              <Text size="L400">
-                {visibleItems.length > 0
-                  ? `\u5171 ${visibleItems.length} \u6761\u7ed3\u679c`
-                  : '\u6ca1\u6709\u5339\u914d\u7ed3\u679c'}
-                {filtersOpen && hasSelection
-                  ? ` \xb7 \u5df2\u9009\u62e9 ${selectedFavoriteIds.length} \u6761`
-                  : ''}
-              </Text>
-
-              <Box className={css.FilterCardActions}>
-                {filtersOpen && (
-                  <>
-                    <Button
-                      size="300"
-                      variant="Secondary"
-                      fill="Soft"
-                      radii="300"
-                      onClick={handleToggleSelectVisible}
-                      disabled={visibleItemIds.length === 0}
-                    >
-                      <Text size="B300">
-                        {allVisibleSelected ? '取消选择当前结果' : '全选当前结果'}
-                      </Text>
-                    </Button>
-                    <Button
-                      size="300"
-                      variant="Secondary"
-                      fill="Soft"
-                      radii="300"
-                      onClick={handleClearSelection}
-                      disabled={!hasSelection}
-                    >
-                      <Text size="B300">清空选择</Text>
-                    </Button>
-                    <Button
-                      size="300"
-                      variant="Critical"
-                      radii="300"
-                      onClick={handleBatchRemove}
-                      disabled={!hasSelection || batchRemoveState.status === AsyncStatus.Loading}
-                    >
-                      {batchRemoveState.status === AsyncStatus.Loading && (
-                        <Spinner size="200" variant="Secondary" />
-                      )}
-                      <Text size="B300">
-                        {batchRemoveState.status === AsyncStatus.Loading
-                          ? '取消中...'
-                          : '批量取消收藏'}
-                      </Text>
-                    </Button>
-                  </>
-                )}
-                {hasActiveFilters && (
-                  <Button
-                    size="300"
-                    variant="Secondary"
-                    fill="Soft"
-                    radii="300"
-                    onClick={handleResetFilters}
-                  >
-                    <Text size="B300">重置筛选</Text>
-                  </Button>
-                )}
-                <Button
-                  size="300"
-                  variant="Secondary"
-                  fill="Soft"
-                  radii="300"
-                  onClick={handleToggleAdvanced}
-                >
-                  <Text size="B300">{filtersOpen ? '收起高级' : '高级'}</Text>
-                </Button>
-              </Box>
-            </Box>
-
-            <Text size="T200" priority="300">
-              {filterSummary}
-            </Text>
-          </Box>
-
-          {filtersOpen && (
-            <>
-              <Line size="300" />
-
-              <Box direction="Column" gap="300">
                 <Box className={css.FilterCardSection} direction="Column">
                   <Text className={css.FilterCardLabel} size="T200" priority="300">
-                    搜索
-                  </Text>
-                  <Input
-                    size="300"
-                    variant="Secondary"
-                    radii="300"
-                    value={searchQuery}
-                    placeholder="搜索消息内容、备注、发送者或房间"
-                    autoComplete="off"
-                    onChange={(evt: React.ChangeEvent<HTMLInputElement>) =>
-                      setSearchQuery(evt.target.value)
-                    }
-                  />
-                </Box>
-
-                <Box className={css.FilterCardSection} direction="Column">
-                  <Text className={css.FilterCardLabel} size="T200" priority="300">
-                    按收藏时间筛选
+                    {'\u5185\u5bb9\u5206\u7c7b'}
                   </Text>
                   <Box className={css.FilterCardActions}>
-                    {DATE_FILTER_OPTIONS.map((option) => {
-                      const active = dateFilter === option.id;
+                    {FAVORITE_CATEGORIES.map((category) => {
+                      const active = activeCategory === category;
                       return (
                         <Chip
-                          key={option.id}
+                          key={category}
                           variant={active ? 'Primary' : 'SurfaceVariant'}
-                          fill={active ? 'Solid' : 'Soft'}
+                          fill="Soft"
                           radii="Pill"
-                          onClick={() => setDateFilter(option.id)}
+                          onClick={() => setActiveCategory(category)}
                         >
-                          <Text size="B300">{option.label}</Text>
+                          <Text size="B300">
+                            {`${getFavoriteCategoryText(category)} ${categoryCounts[category]}`}
+                          </Text>
                         </Chip>
                       );
                     })}
                   </Box>
                 </Box>
 
-                <Text size="T200" priority="300">
-                  搜索和时间条件会影响顶部各分类的数量统计。
-                </Text>
-              </Box>
-            </>
-          )}
+                <Line size="300" />
+
+                <Box className={css.FilterCardSection} direction="Column" gap="200">
+                  <Box justifyContent="SpaceBetween" alignItems="Center" wrap="Wrap" gap="200">
+                    <Text size="L400">
+                      {visibleItems.length > 0
+                        ? `\u5171 ${visibleItems.length} \u6761\u7ed3\u679c`
+                        : '\u6ca1\u6709\u5339\u914d\u7ed3\u679c'}
+                      {filtersOpen && hasSelection
+                        ? ` \xb7 \u5df2\u9009\u62e9 ${selectedFavoriteIds.length} \u6761`
+                        : ''}
+                    </Text>
+
+                    <Box className={css.FilterCardActions}>
+                      {filtersOpen && (
+                        <>
+                          <Button
+                            size="300"
+                            variant="Secondary"
+                            fill="Soft"
+                            radii="300"
+                            onClick={handleToggleSelectVisible}
+                            disabled={visibleItemIds.length === 0}
+                          >
+                            <Text size="B300">
+                              {allVisibleSelected ? '取消选择当前结果' : '全选当前结果'}
+                            </Text>
+                          </Button>
+                          <Button
+                            size="300"
+                            variant="Secondary"
+                            fill="Soft"
+                            radii="300"
+                            onClick={handleClearSelection}
+                            disabled={!hasSelection}
+                          >
+                            <Text size="B300">清空选择</Text>
+                          </Button>
+                          <Button
+                            size="300"
+                            variant="Critical"
+                            radii="300"
+                            onClick={handleBatchRemove}
+                            disabled={
+                              !hasSelection || batchRemoveState.status === AsyncStatus.Loading
+                            }
+                          >
+                            {batchRemoveState.status === AsyncStatus.Loading && (
+                              <Spinner size="200" variant="Secondary" />
+                            )}
+                            <Text size="B300">
+                              {batchRemoveState.status === AsyncStatus.Loading
+                                ? '取消中...'
+                                : '批量取消收藏'}
+                            </Text>
+                          </Button>
+                        </>
+                      )}
+                      {hasActiveFilters && (
+                        <Button
+                          size="300"
+                          variant="Secondary"
+                          fill="Soft"
+                          radii="300"
+                          onClick={handleResetFilters}
+                        >
+                          <Text size="B300">重置筛选</Text>
+                        </Button>
+                      )}
+                      <Button
+                        size="300"
+                        variant="Secondary"
+                        fill="Soft"
+                        radii="300"
+                        onClick={handleToggleAdvanced}
+                      >
+                        <Text size="B300">{filtersOpen ? '收起高级' : '高级'}</Text>
+                      </Button>
+                    </Box>
+                  </Box>
+
+                  <Text size="T200" priority="300">
+                    {filterSummary}
+                  </Text>
+                </Box>
+
+                {filtersOpen && (
+                  <>
+                    <Line size="300" />
+
+                    <Box direction="Column" gap="300">
+                      <Box className={css.FilterCardSection} direction="Column">
+                        <Text className={css.FilterCardLabel} size="T200" priority="300">
+                          搜索
+                        </Text>
+                        <Input
+                          size="300"
+                          variant="Secondary"
+                          radii="300"
+                          value={searchQuery}
+                          placeholder="搜索消息内容、备注、发送者或房间"
+                          autoComplete="off"
+                          onChange={(evt: React.ChangeEvent<HTMLInputElement>) =>
+                            setSearchQuery(evt.target.value)
+                          }
+                        />
+                      </Box>
+
+                      <Box className={css.FilterCardSection} direction="Column">
+                        <Text className={css.FilterCardLabel} size="T200" priority="300">
+                          按收藏时间筛选
+                        </Text>
+                        <Box className={css.FilterCardActions}>
+                          {DATE_FILTER_OPTIONS.map((option) => {
+                            const active = dateFilter === option.id;
+                            return (
+                              <Chip
+                                key={option.id}
+                                variant={active ? 'Primary' : 'SurfaceVariant'}
+                                fill="Soft"
+                                radii="Pill"
+                                onClick={() => setDateFilter(option.id)}
+                              >
+                                <Text size="B300">{option.label}</Text>
+                              </Chip>
+                            );
+                          })}
+                        </Box>
+                      </Box>
+
+                      <Text size="T200" priority="300">
+                        搜索和时间条件会影响顶部各分类的数量统计。
+                      </Text>
+                    </Box>
+                  </>
+                )}
               </SequenceCard>
             </Box>
           </div>
@@ -1959,140 +1968,155 @@ export function Favorites() {
               <PageContentCenter>
                 <Box direction="Column" gap="300">
                   {batchRemoveState.status === AsyncStatus.Error && (
-          <SequenceCard
-            variant="Critical"
-            direction="Column"
-            gap="200"
-            style={{ padding: config.space.S300 }}
-          >
-            <Text size="T300">
-              {
-                '\u6279\u91cf\u53d6\u6d88\u6536\u85cf\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5\u3002'
-              }
-            </Text>
-          </SequenceCard>
+                    <SequenceCard
+                      variant="Critical"
+                      direction="Column"
+                      gap="200"
+                      style={{ padding: config.space.S300 }}
+                    >
+                      <Text size="T300">
+                        {
+                          '\u6279\u91cf\u53d6\u6d88\u6536\u85cf\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5\u3002'
+                        }
+                      </Text>
+                    </SequenceCard>
                   )}
 
                   {visibleItems.length === 0 ? (
-          <FavoritesEmptyShell>
-            <PageHeroSection>
-              <PageHero
-                icon={<Icon size="600" src={Icons.Search} />}
-                title={'\u6ca1\u6709\u627e\u5230\u5339\u914d\u7684\u6536\u85cf'}
-                subTitle={
-                  '\u53ef\u4ee5\u8c03\u6574\u5206\u7c7b\u3001\u5173\u952e\u8bcd\u6216\u65f6\u95f4\u8303\u56f4\uff0c\u4e5f\u53ef\u4ee5\u76f4\u63a5\u91cd\u7f6e\u7b5b\u9009\u3002'
-                }
-              >
-                {hasActiveFilters && (
-                  <Box justifyContent="Center">
-                    <Button onClick={handleResetFilters}>
-                      <Text size="B400">{'\u91cd\u7f6e\u7b5b\u9009'}</Text>
-                    </Button>
-                  </Box>
-                )}
-              </PageHero>
-            </PageHeroSection>
-          </FavoritesEmptyShell>
-        ) : (
-          favoriteGroups.map((group) => (
-            <Box key={group.category} direction="Column" gap="200">
-              <Box justifyContent="SpaceBetween" alignItems="Center" wrap="Wrap" gap="200">
-                <Text size="H4">{getFavoriteCategoryText(group.category)}</Text>
-                <Text size="T200" priority="300">
-                  {`${group.items.length} \u6761`}
-                </Text>
-              </Box>
-
-              {isGalleryCategory(group.category) ? (
-                <Box className={css.MediaGrid}>
-                  {group.items.map((item) => {
-                    if (group.category === 'image') {
-                      const imageContent = getFavoriteImageContent(item);
-                      if (!imageContent) {
-                        return (
-                          <Box key={getFavoriteItemId(item)} style={{ gridColumn: '1 / -1' }}>
-                            <FavoriteCard
-                              item={item}
-                              note={favoriteNotes[item.referenceId]}
-                              selected={selectedFavoriteIds.includes(getFavoriteItemId(item))}
-                              selectionMode={filtersOpen}
-                              renderMatrixEvent={renderMatrixEvent}
-                              onToggleSelect={() => handleToggleSelect(item)}
-                              onOpenSource={handleOpenSource}
-                              onRemoveFavorite={handleRemoveFavorite}
-                              onSaveNote={handleSaveNote}
-                            />
-                          </Box>
-                        );
-                      }
-
-                      return (
-                        <FavoriteImageCard
-                          key={getFavoriteItemId(item)}
-                          item={item}
-                          selected={selectedFavoriteIds.includes(getFavoriteItemId(item))}
-                          selectionMode={filtersOpen}
-                          imageViewerItems={imageViewerItems}
-                          onToggleSelect={() => handleToggleSelect(item)}
-                        />
-                      );
-                    }
-
-                    const videoContent = getFavoriteVideoContent(item);
-                    if (!videoContent) {
-                      return (
-                        <Box key={getFavoriteItemId(item)} style={{ gridColumn: '1 / -1' }}>
-                          <FavoriteCard
-                            item={item}
-                            note={favoriteNotes[item.referenceId]}
-                            selected={selectedFavoriteIds.includes(getFavoriteItemId(item))}
-                            selectionMode={filtersOpen}
-                            renderMatrixEvent={renderMatrixEvent}
-                            onToggleSelect={() => handleToggleSelect(item)}
-                            onOpenSource={handleOpenSource}
-                            onRemoveFavorite={handleRemoveFavorite}
-                            onSaveNote={handleSaveNote}
-                          />
+                    <FavoritesEmptyShell>
+                      <PageHeroSection>
+                        <PageHero
+                          icon={<Icon size="600" src={Icons.Search} />}
+                          title={'\u6ca1\u6709\u627e\u5230\u5339\u914d\u7684\u6536\u85cf'}
+                          subTitle={
+                            '\u53ef\u4ee5\u8c03\u6574\u5206\u7c7b\u3001\u5173\u952e\u8bcd\u6216\u65f6\u95f4\u8303\u56f4\uff0c\u4e5f\u53ef\u4ee5\u76f4\u63a5\u91cd\u7f6e\u7b5b\u9009\u3002'
+                          }
+                        >
+                          {hasActiveFilters && (
+                            <Box justifyContent="Center">
+                              <Button onClick={handleResetFilters}>
+                                <Text size="B400">{'\u91cd\u7f6e\u7b5b\u9009'}</Text>
+                              </Button>
+                            </Box>
+                          )}
+                        </PageHero>
+                      </PageHeroSection>
+                    </FavoritesEmptyShell>
+                  ) : (
+                    favoriteGroups.map((group) => (
+                      <Box key={group.category} direction="Column" gap="200">
+                        <Box
+                          justifyContent="SpaceBetween"
+                          alignItems="Center"
+                          wrap="Wrap"
+                          gap="200"
+                        >
+                          <Text size="H4">{getFavoriteCategoryText(group.category)}</Text>
+                          <Text size="T200" priority="300">
+                            {`${group.items.length} \u6761`}
+                          </Text>
                         </Box>
-                      );
-                    }
 
-                    return (
-                      <FavoriteVideoCard
-                        key={getFavoriteItemId(item)}
-                        item={item}
-                        selected={selectedFavoriteIds.includes(getFavoriteItemId(item))}
-                        selectionMode={filtersOpen}
-                        videoItems={visibleVideoItems}
-                        favoriteNotes={favoriteNotes}
-                        onToggleSelect={() => handleToggleSelect(item)}
-                        onOpenSource={handleOpenSource}
-                        onRemoveFavorite={handleRemoveFavorite}
-                        onSaveNote={handleSaveNote}
-                      />
-                    );
-                  })}
-                </Box>
-              ) : (
-                <Box direction="Column" gap="200">
-                  {group.items.map((item) => (
-                    <FavoriteCard
-                      key={getFavoriteItemId(item)}
-                      item={item}
-                      note={favoriteNotes[item.referenceId]}
-                      selected={selectedFavoriteIds.includes(getFavoriteItemId(item))}
-                      selectionMode={filtersOpen}
-                      renderMatrixEvent={renderMatrixEvent}
-                      onToggleSelect={() => handleToggleSelect(item)}
-                      onOpenSource={handleOpenSource}
-                      onRemoveFavorite={handleRemoveFavorite}
-                      onSaveNote={handleSaveNote}
-                    />
-                  ))}
-                </Box>
-              )}
-            </Box>
-          ))
+                        {isGalleryCategory(group.category) ? (
+                          <Box className={css.MediaGrid}>
+                            {group.items.map((item) => {
+                              if (group.category === 'image') {
+                                const imageContent = getFavoriteImageContent(item);
+                                if (!imageContent) {
+                                  return (
+                                    <Box
+                                      key={getFavoriteItemId(item)}
+                                      style={{ gridColumn: '1 / -1' }}
+                                    >
+                                      <FavoriteCard
+                                        item={item}
+                                        note={favoriteNotes[item.referenceId]}
+                                        selected={selectedFavoriteIds.includes(
+                                          getFavoriteItemId(item)
+                                        )}
+                                        selectionMode={filtersOpen}
+                                        renderMatrixEvent={renderMatrixEvent}
+                                        onToggleSelect={() => handleToggleSelect(item)}
+                                        onOpenSource={handleOpenSource}
+                                        onRemoveFavorite={handleRemoveFavorite}
+                                        onSaveNote={handleSaveNote}
+                                      />
+                                    </Box>
+                                  );
+                                }
+
+                                return (
+                                  <FavoriteImageCard
+                                    key={getFavoriteItemId(item)}
+                                    item={item}
+                                    selected={selectedFavoriteIds.includes(getFavoriteItemId(item))}
+                                    selectionMode={filtersOpen}
+                                    imageViewerItems={imageViewerItems}
+                                    onToggleSelect={() => handleToggleSelect(item)}
+                                  />
+                                );
+                              }
+
+                              const videoContent = getFavoriteVideoContent(item);
+                              if (!videoContent) {
+                                return (
+                                  <Box
+                                    key={getFavoriteItemId(item)}
+                                    style={{ gridColumn: '1 / -1' }}
+                                  >
+                                    <FavoriteCard
+                                      item={item}
+                                      note={favoriteNotes[item.referenceId]}
+                                      selected={selectedFavoriteIds.includes(
+                                        getFavoriteItemId(item)
+                                      )}
+                                      selectionMode={filtersOpen}
+                                      renderMatrixEvent={renderMatrixEvent}
+                                      onToggleSelect={() => handleToggleSelect(item)}
+                                      onOpenSource={handleOpenSource}
+                                      onRemoveFavorite={handleRemoveFavorite}
+                                      onSaveNote={handleSaveNote}
+                                    />
+                                  </Box>
+                                );
+                              }
+
+                              return (
+                                <FavoriteVideoCard
+                                  key={getFavoriteItemId(item)}
+                                  item={item}
+                                  selected={selectedFavoriteIds.includes(getFavoriteItemId(item))}
+                                  selectionMode={filtersOpen}
+                                  videoItems={visibleVideoItems}
+                                  favoriteNotes={favoriteNotes}
+                                  onToggleSelect={() => handleToggleSelect(item)}
+                                  onOpenSource={handleOpenSource}
+                                  onRemoveFavorite={handleRemoveFavorite}
+                                  onSaveNote={handleSaveNote}
+                                />
+                              );
+                            })}
+                          </Box>
+                        ) : (
+                          <Box direction="Column" gap="200">
+                            {group.items.map((item) => (
+                              <FavoriteCard
+                                key={getFavoriteItemId(item)}
+                                item={item}
+                                note={favoriteNotes[item.referenceId]}
+                                selected={selectedFavoriteIds.includes(getFavoriteItemId(item))}
+                                selectionMode={filtersOpen}
+                                renderMatrixEvent={renderMatrixEvent}
+                                onToggleSelect={() => handleToggleSelect(item)}
+                                onOpenSource={handleOpenSource}
+                                onRemoveFavorite={handleRemoveFavorite}
+                                onSaveNote={handleSaveNote}
+                              />
+                            ))}
+                          </Box>
+                        )}
+                      </Box>
+                    ))
                   )}
                 </Box>
               </PageContentCenter>

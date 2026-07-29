@@ -1,5 +1,5 @@
 import { MatrixClient } from 'matrix-js-sdk';
-import { IImageInfo } from '../../../../types/matrix/common';
+import { IImageInfo } from '../../../types/matrix/common';
 import { getNormalizedMimeType } from '../../utils/mimeTypes';
 import { isHttpUrl, isMxcUrl, mxcUrlToHttp } from '../../utils/matrix';
 

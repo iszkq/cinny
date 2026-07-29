@@ -34,7 +34,7 @@ export function PinLockCard({
             </IconButton>
           )}
         </Box>
-        <Box direction="Column" gap="150">
+        <Box direction="Column" gap="100">
           <Text size="H4">{title}</Text>
           <Text size="T300" priority="300">
             {description}

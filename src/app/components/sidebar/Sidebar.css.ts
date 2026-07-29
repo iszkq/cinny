@@ -3,6 +3,7 @@ import { recipe, RecipeVariants } from '@vanilla-extract/recipes';
 import { color, config, DefaultReset, Disabled, FocusOutline, toRem } from 'folds';
 import { ContainerColor } from '../../styles/ContainerColor.css';
 import { NAV_RAIL_BG_VAR, NAV_RAIL_BORDER_VAR } from '../../theme/appearance';
+import { localConfig } from '../../styles/tokens';
 
 export const Sidebar = style([
   DefaultReset,
@@ -33,7 +34,7 @@ export const SidebarStack = style([
     flexDirection: 'column',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: config.space.S250,
+    gap: localConfig.space.S250,
     padding: `${config.space.S200} 0`,
   },
 ]);

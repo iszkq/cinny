@@ -78,14 +78,19 @@ const CN = {
   totalSelections: '\u7d2f\u8ba1\u9009\u62e9',
   openInTimeline:
     '\u8bf7\u5728\u623f\u95f4\u6d88\u606f\u5217\u8868\u4e2d\u6253\u5f00\u8be5\u6295\u7968\uff0c\u4ee5\u4fbf\u76f4\u63a5\u53c2\u4e0e\u6295\u7968\u3002',
-  endedSummary: '\u8be5\u6295\u7968\u5df2\u7ecf\u622a\u6b62\uff0c\u53ea\u80fd\u67e5\u770b\u7ed3\u679c\u3002',
-  multipleHint: '\u591a\u9009\u4f1a\u81ea\u52a8\u5408\u5e76\u63d0\u4ea4\u5f53\u524d\u9009\u62e9\u3002',
+  endedSummary:
+    '\u8be5\u6295\u7968\u5df2\u7ecf\u622a\u6b62\uff0c\u53ea\u80fd\u67e5\u770b\u7ed3\u679c\u3002',
+  multipleHint:
+    '\u591a\u9009\u4f1a\u81ea\u52a8\u5408\u5e76\u63d0\u4ea4\u5f53\u524d\u9009\u62e9\u3002',
   singleHint: '\u70b9\u51fb\u9009\u9879\u540e\u4f1a\u76f4\u63a5\u53d1\u9001\u6295\u7968\u3002',
   pendingChanges: '\u6b63\u5728\u51c6\u5907\u63d0\u4ea4\u6295\u7968...',
-  pendingSync: '\u4e0a\u4e00\u6b21\u6295\u7968\u4ecd\u5728\u540c\u6b65\u4e2d\uff0c\u8bf7\u7a0d\u540e\u518d\u63d0\u4ea4\u4fee\u6539\u3002',
+  pendingSync:
+    '\u4e0a\u4e00\u6b21\u6295\u7968\u4ecd\u5728\u540c\u6b65\u4e2d\uff0c\u8bf7\u7a0d\u540e\u518d\u63d0\u4ea4\u4fee\u6539\u3002',
   syncingVote: '\u6295\u7968\u540c\u6b65\u4e2d...',
-  syncDelayed: '\u6295\u7968\u540c\u6b65\u8d85\u65f6\uff0c\u53ef\u4ee5\u91cd\u65b0\u53d1\u9001\u3002',
-  syncFailed: '\u4e0a\u6b21\u6295\u7968\u53d1\u9001\u5931\u8d25\uff0c\u8bf7\u91cd\u65b0\u53d1\u9001\u3002',
+  syncDelayed:
+    '\u6295\u7968\u540c\u6b65\u8d85\u65f6\uff0c\u53ef\u4ee5\u91cd\u65b0\u53d1\u9001\u3002',
+  syncFailed:
+    '\u4e0a\u6b21\u6295\u7968\u53d1\u9001\u5931\u8d25\uff0c\u8bf7\u91cd\u65b0\u53d1\u9001\u3002',
   endingPoll: '\u6b63\u5728\u7ed3\u675f\u6295\u7968...',
   pollEnded: '\u6295\u7968\u5df2\u7ed3\u675f\u3002',
   endPoll: '\u7ed3\u675f\u6295\u7968',
@@ -127,7 +132,8 @@ const getOrderedAnswers = (
   optionIds: string[],
   selectedAnswers: Set<string>,
   maxSelections: number
-): string[] => optionIds.filter((optionId) => selectedAnswers.has(optionId)).slice(0, maxSelections);
+): string[] =>
+  optionIds.filter((optionId) => selectedAnswers.has(optionId)).slice(0, maxSelections);
 
 type PendingPollEventStatus = 'encrypting' | 'queued' | 'sending' | 'not_sent' | 'cancelled';
 
@@ -143,11 +149,7 @@ type PollVoterDirectoryProps = {
   maxHeight?: string;
 };
 
-function PollVoterDirectory({
-  voters,
-  singleColumn = false,
-  maxHeight,
-}: PollVoterDirectoryProps) {
+function PollVoterDirectory({ voters, singleColumn = false, maxHeight }: PollVoterDirectoryProps) {
   return (
     <Box
       gap="100"
@@ -400,7 +402,8 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
     [summaryData.myResponseEvents]
   );
   const confirmedResponseEventIds = useMemo(
-    () => summaryData.myResponseEventIds.filter((responseEventId) => isRemoteEventId(responseEventId)),
+    () =>
+      summaryData.myResponseEventIds.filter((responseEventId) => isRemoteEventId(responseEventId)),
     [summaryData.myResponseEventIds]
   );
   const activePendingOwnResponse = useMemo(
@@ -471,8 +474,7 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
           return currentMinDelay;
         }
 
-        const remainingDelay =
-          responseEvent.getTs() + PENDING_POLL_RESPONSE_STALE_MS - Date.now();
+        const remainingDelay = responseEvent.getTs() + PENDING_POLL_RESPONSE_STALE_MS - Date.now();
         if (remainingDelay <= 0) {
           return 0;
         }
@@ -510,14 +512,7 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
   }, []);
 
   const handleEndPoll = useCallback(async () => {
-    if (
-      !room ||
-      !eventId ||
-      !poll ||
-      pollEndedByEvent ||
-      endingPoll ||
-      endInFlightRef.current
-    ) {
+    if (!room || !eventId || !poll || pollEndedByEvent || endingPoll || endInFlightRef.current) {
       return;
     }
     if (!canManagePoll) {
@@ -676,9 +671,12 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
       return undefined;
     }
 
-    const timerId = window.setTimeout(() => {
-      handleSubmitVote().catch(() => undefined);
-    }, poll.mode === 'multiple' ? MULTIPLE_AUTO_SUBMIT_DELAY_MS : 0);
+    const timerId = window.setTimeout(
+      () => {
+        handleSubmitVote().catch(() => undefined);
+      },
+      poll.mode === 'multiple' ? MULTIPLE_AUTO_SUBMIT_DELAY_MS : 0
+    );
 
     return () => window.clearTimeout(timerId);
   }, [
@@ -765,10 +763,9 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
                   const displayName =
                     getMemberDisplayName(room, userId) ?? getMxIdLocalPart(userId) ?? userId;
                   const avatarMxc = getMemberAvatarMxc(room, userId);
-                  const avatarUrl =
-                    avatarMxc
-                      ? mxcUrlToHttp(mx, avatarMxc, useAuthentication, 24, 24, 'crop') ?? undefined
-                      : undefined;
+                  const avatarUrl = avatarMxc
+                    ? mxcUrlToHttp(mx, avatarMxc, useAuthentication, 24, 24, 'crop') ?? undefined
+                    : undefined;
 
                   return {
                     userId,
@@ -858,8 +855,13 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
                           }
                         >
                           {(triggerRef) => (
-                            <Box ref={triggerRef} direction="Column" gap="100" style={{ minWidth: 0 }}>
-                              <Box gap="50" alignItems="Center" style={{ flexWrap: 'wrap' }}>
+                            <Box
+                              ref={triggerRef}
+                              direction="Column"
+                              gap="100"
+                              style={{ minWidth: 0 }}
+                            >
+                              <Box gap="100" alignItems="Center" style={{ flexWrap: 'wrap' }}>
                                 {visibleAvatars.map((voter, index) => (
                                   <Box
                                     key={voter.userId}
@@ -885,7 +887,7 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
                                   </Badge>
                                 )}
                               </Box>
-                              <Box direction="Column" gap="50" style={{ minWidth: 0 }}>
+                              <Box direction="Column" gap="100" style={{ minWidth: 0 }}>
                                 <Text
                                   size="T200"
                                   priority="300"
@@ -897,7 +899,7 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
                                 <Text
                                   as="span"
                                   size="T200"
-                                  onClick={(evt) => {
+                                  onClick={(evt: React.MouseEvent<HTMLSpanElement>) => {
                                     evt.preventDefault();
                                     evt.stopPropagation();
                                     setExpandedVoterOptionId((current) =>
@@ -917,7 +919,9 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
                                 <Box
                                   direction="Column"
                                   gap="100"
-                                  onClick={(evt) => evt.stopPropagation()}
+                                  onClick={(evt: React.MouseEvent<HTMLDivElement>) =>
+                                    evt.stopPropagation()
+                                  }
                                   style={{
                                     marginTop: config.space.S100,
                                     paddingTop: config.space.S100,
@@ -932,7 +936,7 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
                         </TooltipProvider>
                       ) : (
                         <Box direction="Column" gap="100">
-                          <Box gap="50" alignItems="Center" style={{ flexWrap: 'wrap' }}>
+                          <Box gap="100" alignItems="Center" style={{ flexWrap: 'wrap' }}>
                             {visibleAvatars.map((voter, index) => (
                               <Box
                                 key={voter.userId}
@@ -999,18 +1003,18 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
               {ended
                 ? CN.endedSummary
                 : endingPoll
-                  ? CN.endingPoll
+                ? CN.endingPoll
                 : failedPendingOwnResponse
-                  ? CN.syncFailed
+                ? CN.syncFailed
                 : stalePendingOwnResponse
-                  ? CN.syncDelayed
+                ? CN.syncDelayed
                 : activePendingOwnResponse
-                  ? CN.syncingVote
+                ? CN.syncingVote
                 : draftDirty
-                  ? CN.pendingChanges
+                ? CN.pendingChanges
                 : poll.mode === 'multiple'
-                    ? CN.multipleHint
-                    : CN.singleHint}
+                ? CN.multipleHint
+                : CN.singleHint}
             </Text>
             {canManagePoll && !pollEndedByEvent && (
               <Box>

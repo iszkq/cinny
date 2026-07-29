@@ -274,7 +274,7 @@ export function AudioContent({
           </Box>
 
           {(transcriptionState.status !== AsyncStatus.Idle || shouldShowTranscriptionText) && (
-            <Box direction="Column" gap="50">
+            <Box direction="Column" gap="100">
               {shouldShowTranscriptionText && (
                 <Text size="T300" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                   {transcriptionText}

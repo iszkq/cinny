@@ -1,5 +1,6 @@
 import { globalStyle, style } from '@vanilla-extract/css';
 import { DefaultReset, color, config } from 'folds';
+import { localConfig } from '../../styles/tokens';
 
 export const SpreadsheetViewer = style([
   DefaultReset,
@@ -80,7 +81,7 @@ export const PasswordHint = style([
 export const SheetRail = style([
   DefaultReset,
   {
-    padding: `${config.space.S250} ${config.space.S300}`,
+    padding: `${localConfig.space.S250} ${config.space.S300}`,
     borderTopWidth: config.borderWidth.B300,
     gap: config.space.S200,
     backgroundColor: color.Surface.Container,
@@ -91,7 +92,7 @@ export const SheetList = style([
   DefaultReset,
   {
     display: 'flex',
-    gap: config.space.S150,
+    gap: localConfig.space.S150,
     overflowX: 'auto',
     paddingBottom: config.space.S100,
     scrollbarWidth: 'thin',
@@ -191,7 +192,7 @@ export const Cell = style([
   DefaultReset,
   {
     minWidth: '40px',
-    padding: `${config.space.S150} ${config.space.S200}`,
+    padding: `${localConfig.space.S150} ${config.space.S200}`,
     border: `${config.borderWidth.B300} solid ${color.Surface.ContainerLine}`,
     verticalAlign: 'top',
     whiteSpace: 'pre-wrap',
@@ -229,7 +230,7 @@ globalStyle(`${SheetHtmlFallback} table`, {
 
 globalStyle(`${SheetHtmlFallback} td, ${SheetHtmlFallback} th`, {
   border: `${config.borderWidth.B300} solid ${color.Surface.ContainerLine}`,
-  padding: `${config.space.S150} ${config.space.S200}`,
+  padding: `${localConfig.space.S150} ${config.space.S200}`,
   verticalAlign: 'top',
   whiteSpace: 'pre-wrap',
   wordBreak: 'break-word',

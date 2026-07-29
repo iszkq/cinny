@@ -222,7 +222,7 @@ const getAccountPinPolicyState = (
   }
 
   const updatedAt = isFiniteNumber(content.updatedAt) ? content.updatedAt : 0;
-  const config =
+  const config: AccountPinConfig | undefined =
     isNonEmptyString(content.salt) &&
     isNonEmptyString(content.hash) &&
     isFiniteNumber(content.iterations) &&

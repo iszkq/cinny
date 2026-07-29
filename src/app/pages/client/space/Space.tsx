@@ -414,7 +414,7 @@ export function Space() {
   useNavToActivePathMapper(space.roomId);
   const spaceIdOrAlias = getCanonicalAliasOrRoomId(mx, space.roomId);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const { scrollMargin, virtualListRef } = useVirtualizerScrollMargin(scrollRef);
+  const { scrollMargin, virtualListRef } = useVirtualizerScrollMargin<HTMLDivElement>(scrollRef);
   const mDirects = useAtomValue(mDirectAtom);
   const roomToUnread = useAtomValue(roomToUnreadAtom);
   const categorizedRoomIds = useRoomNavCategorizedRoomIds(space.roomId);

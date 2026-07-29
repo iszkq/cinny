@@ -261,7 +261,7 @@ export function MutualRoomsChip({ userId }: { userId: string }) {
       const mutualRooms = mutualRoomsState.data
         .sort(factoryRoomIdByAtoZ(mx))
         .map(getRoom)
-        .filter((room) => !!room);
+        .filter((room): room is Room => room !== undefined);
       mutualRooms.forEach((room) => {
         if (room.isSpaceRoom()) {
           data.spaces.push(room);

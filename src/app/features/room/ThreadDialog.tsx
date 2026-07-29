@@ -471,7 +471,7 @@ function ThreadMessageView({
           justifyContent="SpaceBetween"
           alignItems="Start"
         >
-          <Box direction="Column" gap="50" grow="Yes">
+          <Box direction="Column" gap="100" grow="Yes">
             <Box alignItems="Center" gap="200">
               <Username style={{ color: usernameColor }}>
                 <Text as="span" size="T400" truncate>
@@ -734,7 +734,7 @@ export function ThreadDialog({
                 <span className={css.IconBadge}>
                   <Icon size="100" src={Icons.Thread} />
                 </span>
-                <Box direction="Column" gap="50" grow="Yes">
+                <Box direction="Column" gap="100" grow="Yes">
                   <Text size="H3" truncate>
                     线程
                   </Text>
@@ -862,7 +862,7 @@ export function ThreadDialog({
             <ThreadReplyComposer
               room={room}
               rootEventId={rootEventId}
-              rootEvent={rootEvent}
+              rootEvent={rootEvent ?? undefined}
               onSent={handleSentReply}
             />
           </Box>

@@ -106,12 +106,12 @@ const getDisplayOrientation = (
 const clampZoom = (value: number): number =>
   Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Number(value.toFixed(2))));
 
-const getTouchPoint = (touch: Touch): TouchPoint => ({
+const getTouchPoint = (touch: React.Touch): TouchPoint => ({
   x: touch.clientX,
   y: touch.clientY,
 });
 
-const getTouchDistance = (touches: TouchList): number => {
+const getTouchDistance = (touches: React.TouchList): number => {
   if (touches.length < 2) return 0;
 
   const first = touches[0];

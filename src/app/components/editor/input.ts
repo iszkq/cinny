@@ -118,7 +118,7 @@ const getInlineMarkElement = (
   children.forEach((child) => {
     if (Text.isText(child)) {
       marks.forEach((mark) => {
-        const textChild = child as Text & Record<string, unknown>;
+        const textChild = child as unknown as Record<string, unknown>;
         textChild[mark.type] = mark.value;
       });
     }

@@ -232,7 +232,7 @@ export function Home() {
   const mx = useMatrixClient();
   useNavToActivePathMapper('home');
   const scrollRef = useRef<HTMLDivElement>(null);
-  const { scrollMargin, virtualListRef } = useVirtualizerScrollMargin(scrollRef);
+  const { scrollMargin, virtualListRef } = useVirtualizerScrollMargin<HTMLDivElement>(scrollRef);
   const rooms = useHomeRooms();
   const clientSyncReady = useClientSyncReady(mx);
   const notificationPreferences = useRoomsNotificationPreferencesContext();

@@ -1,6 +1,7 @@
 import { ComplexStyleRule, createVar, style } from '@vanilla-extract/css';
 import { RecipeVariants, recipe } from '@vanilla-extract/recipes';
 import { ContainerColor, DefaultReset, Disabled, RadiiVariant, color, config, toRem } from 'folds';
+import { localConfig } from '../../styles/tokens';
 
 export const NavCategory = style([
   DefaultReset,
@@ -147,7 +148,7 @@ export const NavItem = recipe({
 export type RoomSelectorVariants = RecipeVariants<typeof NavItem>;
 export const NavItemContent = style({
   paddingLeft: config.space.S300,
-  paddingRight: config.space.S250,
+  paddingRight: localConfig.space.S250,
   height: 'inherit',
   minWidth: 0,
   flexGrow: 1,
@@ -167,5 +168,5 @@ export const NavItemContent = style({
 });
 
 export const NavItemOptions = style({
-  paddingRight: config.space.S150,
+  paddingRight: localConfig.space.S150,
 });

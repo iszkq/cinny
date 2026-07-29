@@ -282,7 +282,7 @@ function DesktopExternalLinkFeature() {
       }
 
       evt.preventDefault();
-      void openExternalUrl(anchor.href || href);
+      void openExternalUrl(anchor.href || href || '');
     };
 
     document.addEventListener('click', handleClick, true);

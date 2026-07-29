@@ -231,7 +231,7 @@ export function DownloadPage() {
                     <span className={css.PrimaryPlatformIcon}>
                       <Icon src={Icons.Monitor} size="300" />
                     </span>
-                    <Box grow="Yes" direction="Column" gap="50">
+                    <Box grow="Yes" direction="Column" gap="100">
                       <Text size="H3">Windows 客户端</Text>
                       <Text size="T200">v{version} · 64 位安装包</Text>
                     </Box>
@@ -250,7 +250,7 @@ export function DownloadPage() {
                     <span className={css.PrimaryPlatformIcon}>
                       <Icon src={Icons.Phone} size="300" />
                     </span>
-                    <Box grow="Yes" direction="Column" gap="50">
+                    <Box grow="Yes" direction="Column" gap="100">
                       <Text size="H3">Android 正式版</Text>
                       <Text size="T200">v{version} · APK 覆盖安装</Text>
                     </Box>
@@ -333,7 +333,7 @@ export function DownloadPage() {
           </section>
 
           <section className={css.GuidesSection} id="guides">
-            <Box className={css.GuidesHeading} direction="Column" gap="150" alignItems="Center">
+            <Box className={css.GuidesHeading} direction="Column" gap="100" alignItems="Center">
               <span className={css.SectionKicker}>图示安装指南</span>
               <Text as="h2" size="H1" align="Center">
                 照着图做，几分钟完成安装
@@ -348,7 +348,7 @@ export function DownloadPage() {
                 <span className={classNames(css.GuidePlatformIcon, css.WindowsGuideIcon)}>
                   <Icon src={Icons.Monitor} size="300" />
                 </span>
-                <Box grow="Yes" direction="Column" gap="50">
+                <Box grow="Yes" direction="Column" gap="100">
                   <Text as="h3" size="H2">
                     Windows 客户端安装
                   </Text>
@@ -377,7 +377,7 @@ export function DownloadPage() {
                 <span className={classNames(css.GuidePlatformIcon, css.IosGuideIcon)}>
                   <Icon src={Icons.Phone} size="300" />
                 </span>
-                <Box grow="Yes" direction="Column" gap="50">
+                <Box grow="Yes" direction="Column" gap="100">
                   <Text as="h3" size="H2">
                     iPhone / iPad 添加到主屏幕
                   </Text>

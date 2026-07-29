@@ -132,7 +132,7 @@ export const ReactionViewer = as<'div', ReactionViewerProps>(
                       key={senderId}
                       style={{ padding: `0 ${config.space.S200}` }}
                       radii="400"
-                      onClick={(event) => {
+                      onClick={(event: React.MouseEvent<HTMLButtonElement>) => {
                         openProfile(
                           room.roomId,
                           space?.roomId,

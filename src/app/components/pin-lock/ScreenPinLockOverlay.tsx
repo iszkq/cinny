@@ -62,14 +62,14 @@ function ScreenPinLockPage({
           <Box direction="Column" gap="300">
             <Box gap="300" alignItems="Center">
               <img className={css.BrandLogo} src={APP_LOGO_URL} alt={`${APP_DISPLAY_NAME} logo`} />
-              <Box direction="Column" gap="50">
+              <Box direction="Column" gap="100">
                 <Text size="L400">{APP_DISPLAY_NAME}</Text>
                 <Text className={css.Eyebrow} as="span">
                   {eyebrow}
                 </Text>
               </Box>
             </Box>
-            <Box direction="Column" gap="150">
+            <Box direction="Column" gap="100">
               <Text size="H3">{title}</Text>
               <Text size="T300" priority="300">
                 {description}

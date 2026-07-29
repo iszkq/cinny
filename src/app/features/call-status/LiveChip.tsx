@@ -87,7 +87,7 @@ export function LiveChip({ count, room, members }: LiveChipProps) {
                         variant="Surface"
                         radii="300"
                         style={{ paddingLeft: config.space.S200 }}
-                        onClick={(evt) =>
+                        onClick={(evt: React.MouseEvent<HTMLButtonElement>) =>
                           openUserProfile(
                             room.roomId,
                             undefined,

@@ -96,10 +96,7 @@ export function ForwardMessagesModal({
   const getRoom = useGetRoom(allRoomsSet);
 
   const items = useMemo(
-    () =>
-      [...directs, ...rooms]
-        .filter((roomId) => getRoom(roomId))
-        .sort(factoryRoomIdByAtoZ(mx)),
+    () => [...directs, ...rooms].filter((roomId) => getRoom(roomId)).sort(factoryRoomIdByAtoZ(mx)),
     [directs, rooms, getRoom, mx]
   );
 
@@ -202,7 +199,7 @@ export function ForwardMessagesModal({
               }
             />
           </Avatar>
-          <Box grow="Yes" direction="Column" gap="50">
+          <Box grow="Yes" direction="Column" gap="100">
             <Text size="B300" truncate>
               {queryHighlightRegex ? highlightText(queryHighlightRegex, [roomName]) : roomName}
             </Text>

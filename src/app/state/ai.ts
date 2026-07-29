@@ -113,9 +113,14 @@ const normalizeAIModel = (model: AIModel): AIModel | undefined => {
   };
 };
 
+type AISettingsSyncShape = Pick<
+  AISettings,
+  'provider' | 'apiKey' | 'baseUrl' | 'modelsApiUrl' | 'skills'
+>;
+
 const getAISettingsSyncShape = (
   settings: Partial<AISettings> | CinnyAISettingsContent
-): Omit<CinnyAISettingsContent, 'version' | 'updatedAt'> => {
+): AISettingsSyncShape => {
   const configuredBaseUrl = getTrimmedString(settings.baseUrl) ?? defaultAISettings.baseUrl;
   const baseUrl = getAihubmixUrlCandidates(configuredBaseUrl)[0] ?? defaultAISettings.baseUrl;
   const modelsApiUrl = getTrimmedString(settings.modelsApiUrl);

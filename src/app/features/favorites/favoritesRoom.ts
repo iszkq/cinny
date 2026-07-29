@@ -34,8 +34,7 @@ const createFavoritesAccountData = (
   roomId,
   createdAt: typeof content?.createdAt === 'number' ? content.createdAt : Date.now(),
   version: Math.max(typeof content?.version === 'number' ? content.version : 0, 2),
-  legacyRoomIds:
-    legacyRoomIds ?? getHiddenFavoritesRoomIdsFromAccountData(content),
+  legacyRoomIds: legacyRoomIds ?? getHiddenFavoritesRoomIdsFromAccountData(content),
 });
 
 const getJoinedFavoritesRoom = (mx: MatrixClient, roomId?: string) => {
@@ -72,7 +71,7 @@ export const ensureFavoritesRoom = async (mx: MatrixClient): Promise<string> => 
   const existingRoomId = getFavoritesRoomIdFromAccountData(content);
   const legacyRoomIds = getHiddenFavoritesRoomIdsFromAccountData(content);
 
-  if (getJoinedFavoritesRoom(mx, existingRoomId)) {
+  if (existingRoomId && getJoinedFavoritesRoom(mx, existingRoomId)) {
     return existingRoomId;
   }
 

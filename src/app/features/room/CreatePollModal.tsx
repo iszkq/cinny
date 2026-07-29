@@ -110,7 +110,8 @@ export function CreatePollModal({ open, requestClose, onCreate }: CreatePollModa
     setOptions((current) => [...current, `${CN.option} ${current.length + 1}`]);
   };
 
-  const preventImplicitSubmit = (callback: () => void): MouseEventHandler =>
+  const preventImplicitSubmit =
+    (callback: () => void): MouseEventHandler =>
     (evt) => {
       evt.preventDefault();
       callback();
@@ -126,7 +127,9 @@ export function CreatePollModal({ open, requestClose, onCreate }: CreatePollModa
     }
 
     const trimmedTitle = title.trim();
-    const trimmedOptions = options.map((option) => option.trim()).filter((option) => option.length > 0);
+    const trimmedOptions = options
+      .map((option) => option.trim())
+      .filter((option) => option.length > 0);
 
     if (!trimmedTitle) {
       setStatusText(CN.needTitle);
@@ -178,7 +181,7 @@ export function CreatePollModal({ open, requestClose, onCreate }: CreatePollModa
         >
           <Box direction="Column" style={{ maxHeight: '85vh' }}>
             <Box alignItems="Center" gap="200" style={{ padding: config.space.S400 }}>
-              <Box grow="Yes" direction="Column" gap="50">
+              <Box grow="Yes" direction="Column" gap="100">
                 <Text size="H4">{CN.createPoll}</Text>
                 <Text size="T300" priority="300">
                   {CN.createHint}

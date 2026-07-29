@@ -638,7 +638,7 @@ function BiblePanelIntro({
   noteTitle = '提示说明',
 }: BiblePanelIntroProps) {
   return (
-    <Box direction="Column" gap="220">
+    <Box direction="Column" gap="200">
       <div
         style={{
           display: 'grid',
@@ -823,7 +823,7 @@ function VerseRow({
       ref={rowRef}
       onClick={() => onToggle(verse)}
       direction="Column"
-      gap="250"
+      gap="200"
       style={{
         width: '100%',
         border: 'none',
@@ -847,7 +847,7 @@ function VerseRow({
       }}
     >
       <Box gap="300" alignItems="Start" wrap="Wrap">
-        <Box grow="Yes" direction="Column" gap="150" style={{ minWidth: 0 }}>
+        <Box grow="Yes" direction="Column" gap="100" style={{ minWidth: 0 }}>
           <Text size="L400" style={{ color: RED_REFERENCE }}>
             <b>{verse.copyReference}</b>
           </Text>
@@ -866,7 +866,7 @@ function VerseRow({
           </Text>
         </Box>
         {onJump && (
-          <Box shrink="No" wrap="Wrap" gap="150" justifyContent="End">
+          <Box shrink="No" wrap="Wrap" gap="100" justifyContent="End">
             <BiblePillButton
               onClick={(evt) => {
                 evt.stopPropagation();
@@ -1735,7 +1735,7 @@ export function BibleExperienceModal({
         </BiblePillButton>
       </Box>
 
-      <Box direction="Column" gap="120">
+      <Box direction="Column" gap="100">
         <Text size="T300" priority="300">
           {CN.bookLabel}
         </Text>
@@ -1761,7 +1761,7 @@ export function BibleExperienceModal({
         </Box>
       </Box>
 
-      <Box direction="Column" gap="120">
+      <Box direction="Column" gap="100">
         <Text size="T300" priority="300">
           {`${selectedBook.name} ${CN.chapterTitle}`}
         </Text>
@@ -1978,7 +1978,7 @@ export function BibleExperienceModal({
 
                   <Box
                     wrap="Wrap"
-                    gap="250"
+                    gap="200"
                     alignItems="Center"
                     justifyContent="End"
                     style={{ padding: `${toRem(16)} ${toRem(28)}`, flexShrink: 0 }}
@@ -2103,7 +2103,7 @@ export function BibleExperienceModal({
           onWindowFocus={focusWindow}
           onWindowDragStart={handleWindowDragStart}
         >
-          <Box direction="Column" gap="250" style={PANEL_STYLE}>
+          <Box direction="Column" gap="200" style={PANEL_STYLE}>
             <Input
               value={searchInput}
               onChange={(evt) => {
@@ -2256,7 +2256,7 @@ export function BibleExperienceModal({
               </BiblePillButton>
             </Box>
 
-            <Box direction="Column" gap="120">
+            <Box direction="Column" gap="100">
               <Text size="T300" priority="300">
                 {CN.bookLabel}
               </Text>
@@ -2282,7 +2282,7 @@ export function BibleExperienceModal({
               </Box>
             </Box>
 
-            <Box direction="Column" gap="120">
+            <Box direction="Column" gap="100">
               <Text size="T300" priority="300">
                 {`${selectedBook.name} · ${CN.chapterTitle}`}
               </Text>

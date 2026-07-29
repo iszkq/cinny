@@ -60,9 +60,11 @@ function UnverifiedIndicator({ requestOpenSettings }: UnverifiedIndicatorProps) 
                 as="button"
                 ref={triggerRef}
                 outlined
-                onPointerDown={(evt) => evt.stopPropagation()}
-                onPointerUp={(evt) => evt.stopPropagation()}
-                onClick={(evt) => {
+                onPointerDown={(evt: React.PointerEvent<HTMLButtonElement>) =>
+                  evt.stopPropagation()
+                }
+                onPointerUp={(evt: React.PointerEvent<HTMLButtonElement>) => evt.stopPropagation()}
+                onClick={(evt: React.MouseEvent<HTMLButtonElement>) => {
                   evt.preventDefault();
                   evt.stopPropagation();
                   if (requestOpenSettings) {

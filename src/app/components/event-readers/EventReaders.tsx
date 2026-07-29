@@ -92,7 +92,7 @@ export const EventReaders = as<'div', EventReadersProps>(
                     className={css.ReaderItem}
                     style={{ padding: `0 ${config.space.S200}` }}
                     radii="400"
-                    onClick={(event) => {
+                    onClick={(event: React.MouseEvent<HTMLButtonElement>) => {
                       openProfile(
                         room.roomId,
                         space?.roomId,
@@ -112,7 +112,7 @@ export const EventReaders = as<'div', EventReadersProps>(
                       </Avatar>
                     }
                   >
-                    <Box className={css.ReaderMeta} direction="Column" gap="50">
+                    <Box className={css.ReaderMeta} direction="Column" gap="100">
                       <Text size="T400" truncate>
                         {name}
                       </Text>

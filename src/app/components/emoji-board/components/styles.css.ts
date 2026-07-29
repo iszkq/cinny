@@ -1,5 +1,6 @@
 import { style } from '@vanilla-extract/css';
 import { toRem, color, config, DefaultReset, FocusOutline } from 'folds';
+import { localConfig } from '../../../styles/tokens';
 
 /**
  * Layout
@@ -8,8 +9,9 @@ import { toRem, color, config, DefaultReset, FocusOutline } from 'folds';
 export const Base = style({
   maxWidth: toRem(432),
   width: `min(${toRem(432)}, calc(var(--app-width, 100vw) - 2 * ${config.space.S400}))`,
-  height:
-    `min(${toRem(450)}, calc(var(--app-height, 100dvh) - ${config.space.S400} - env(safe-area-inset-top) - env(safe-area-inset-bottom)))`,
+  height: `min(${toRem(450)}, calc(var(--app-height, 100dvh) - ${
+    config.space.S400
+  } - env(safe-area-inset-top) - env(safe-area-inset-bottom)))`,
   backgroundColor: color.Surface.Container,
   color: color.Surface.OnContainer,
   border: `${config.borderWidth.B300} solid ${color.Surface.ContainerLine}`,
@@ -19,8 +21,9 @@ export const Base = style({
   '@media': {
     'screen and (max-width: 750px)': {
       width: `calc(var(--app-width, 100vw) - 2 * ${config.space.S200})`,
-      height:
-        `min(${toRem(420)}, calc(var(--app-height, 100dvh) - ${config.space.S300} - env(safe-area-inset-top) - env(safe-area-inset-bottom)))`,
+      height: `min(${toRem(420)}, calc(var(--app-height, 100dvh) - ${
+        config.space.S300
+      } - env(safe-area-inset-top) - env(safe-area-inset-bottom)))`,
     },
   },
 });
@@ -110,7 +113,7 @@ export const SidebarBtnFallback = style([
     justifyContent: 'center',
     width: toRem(24),
     height: toRem(24),
-    borderRadius: config.radii.R200,
+    borderRadius: localConfig.radii.R200,
     backgroundColor: color.SurfaceVariant.Container,
     color: color.SurfaceVariant.OnContainer,
   },

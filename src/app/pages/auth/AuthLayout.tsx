@@ -135,7 +135,7 @@ export function AuthLayout() {
           <Header className={css.AuthHeader} size="600" variant="Surface">
             <Box grow="Yes" direction="Row" gap="300" alignItems="Center">
               <img className={css.AuthLogo} src={APP_LOGO_URL} alt={`${APP_DISPLAY_NAME} Logo`} />
-              <Box direction="Column" gap="50">
+              <Box direction="Column" gap="100">
                 <Text size="H3">{APP_DISPLAY_NAME}</Text>
                 <Text size="T200" priority="300">
                   {APP_TAGLINE}
@@ -186,12 +186,8 @@ export function AuthLayout() {
                     {(specVersions) => (
                       <SpecVersionsProvider value={specVersions}>
                         <AuthFlowsLoader
-                          fallback={() => (
-                            <AuthLayoutLoading message="正在加载认证方式..." />
-                          )}
-                          error={() => (
-                            <AuthLayoutError message="获取认证方式失败。" />
-                          )}
+                          fallback={() => <AuthLayoutLoading message="正在加载认证方式..." />}
+                          error={() => <AuthLayoutError message="获取认证方式失败。" />}
                         >
                           {(authFlows) => (
                             <AuthFlowsProvider value={authFlows}>

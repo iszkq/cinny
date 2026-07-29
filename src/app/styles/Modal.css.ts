@@ -1,5 +1,6 @@
 import { style } from '@vanilla-extract/css';
 import { DefaultReset, config } from 'folds';
+import { localConfig } from './tokens';
 
 export const ModalWide = style({
   minWidth: '85vw',
@@ -130,7 +131,7 @@ export const ImageViewerMinimizedButton = style([
     display: 'flex',
     alignItems: 'center',
     gap: config.space.S100,
-    padding: `${config.space.S100} ${config.space.S250}`,
+    padding: `${config.space.S100} ${localConfig.space.S250}`,
     border: 0,
     borderRadius: config.radii.R300,
     background: 'rgba(255, 255, 255, 0.66)',

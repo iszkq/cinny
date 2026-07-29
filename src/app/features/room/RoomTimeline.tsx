@@ -1874,7 +1874,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
         const senderId = mEvent.getSender() ?? '';
         const senderDisplayName =
           getMemberDisplayName(room, senderId) ?? getMxIdLocalPart(senderId) ?? senderId;
-        const forwardContent = getContent();
+        const forwardContent = getContent<IContent>();
         const forwardSource = isForwardableMessage(MessageEvent.RoomMessage, forwardContent)
           ? {
               eventId: mEventId,

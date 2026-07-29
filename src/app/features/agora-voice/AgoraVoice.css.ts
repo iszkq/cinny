@@ -1,5 +1,6 @@
 import { style } from '@vanilla-extract/css';
 import { color, config, toRem } from 'folds';
+import { localConfig } from '../../styles/tokens';
 
 export const Dialog = style({
   width: 'min(380px, calc(100vw - 32px))',
@@ -9,7 +10,7 @@ export const Dialog = style({
 
 export const DialogBody = style({
   boxSizing: 'border-box',
-  padding: `${config.space.S500} ${config.space.S500} ${config.space.S450}`,
+  padding: `${config.space.S500} ${config.space.S500} ${localConfig.space.S450}`,
   width: '100%',
   minWidth: 0,
 });
@@ -55,12 +56,14 @@ export const FloatingCall = style({
   width: 'min(430px, calc(100vw - 24px))',
   transform: 'translateX(-50%)',
   boxSizing: 'border-box',
-  padding: `${config.space.S250} ${config.space.S300}`,
+  padding: `${localConfig.space.S250} ${config.space.S300}`,
   borderRadius: config.radii.R500,
   backgroundColor: color.Surface.Container,
   color: color.Surface.OnContainer,
   border: `${config.borderWidth.B300} solid ${color.Surface.ContainerLine}`,
-  boxShadow: `0 ${toRem(18)} ${toRem(48)} color-mix(in srgb, ${color.Other.Shadow} 24%, transparent)`,
+  boxShadow: `0 ${toRem(18)} ${toRem(48)} color-mix(in srgb, ${
+    color.Other.Shadow
+  } 24%, transparent)`,
 });
 
 export const FloatingBadge = style({
@@ -97,6 +100,8 @@ export const Toast = style({
   backgroundColor: color.Surface.Container,
   color: color.Surface.OnContainer,
   border: `${config.borderWidth.B300} solid ${color.Surface.ContainerLine}`,
-  boxShadow: `0 ${toRem(14)} ${toRem(40)} color-mix(in srgb, ${color.Other.Shadow} 22%, transparent)`,
+  boxShadow: `0 ${toRem(14)} ${toRem(40)} color-mix(in srgb, ${
+    color.Other.Shadow
+  } 22%, transparent)`,
   pointerEvents: 'none',
 });

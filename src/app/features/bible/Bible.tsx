@@ -21,6 +21,7 @@ import {
 import { isKeyHotkey } from 'is-hotkey';
 import { SequenceCard } from '../../components/sequence-card';
 import { ModalWide } from '../../styles/Modal.css';
+import { localConfig } from '../../styles/tokens';
 import { copyToClipboard } from '../../utils/dom';
 import { stopPropagation } from '../../utils/keyboard';
 import {
@@ -61,8 +62,7 @@ const CARD_STYLE: CSSProperties = {
   borderRadius: toRem(28),
   padding: config.space.S400,
   border: SOFT_LINE,
-  background:
-    'linear-gradient(180deg, rgba(255,255,255,0.97) 0%, rgba(247,250,255,0.95) 100%)',
+  background: 'linear-gradient(180deg, rgba(255,255,255,0.97) 0%, rgba(247,250,255,0.95) 100%)',
   boxShadow: '0 24px 64px rgba(148, 163, 184, 0.14)',
 };
 const PREVIEW_STYLE: CSSProperties = {
@@ -217,14 +217,7 @@ type VerseRowProps = {
   highlightPattern?: RegExp;
 };
 
-function VerseRow({
-  verse,
-  selected,
-  onToggle,
-  onCopy,
-  onJump,
-  highlightPattern,
-}: VerseRowProps) {
+function VerseRow({ verse, selected, onToggle, onCopy, onJump, highlightPattern }: VerseRowProps) {
   return (
     <Box
       as="button"
@@ -238,13 +231,13 @@ function VerseRow({
         borderBottom: SOFT_LINE,
         background: selected ? 'rgba(219, 234, 254, 0.72)' : 'transparent',
         boxShadow: selected ? `inset 3px 0 0 ${BLUE_ACCENT}` : 'none',
-        padding: `${config.space.S350} ${config.space.S400}`,
+        padding: `${localConfig.space.S350} ${config.space.S400}`,
         textAlign: 'left',
         cursor: 'pointer',
       }}
     >
       <Box gap="300" alignItems="Start">
-        <Box grow="Yes" direction="Column" gap="150" style={{ minWidth: 0 }}>
+        <Box grow="Yes" direction="Column" gap="100" style={{ minWidth: 0 }}>
           <Text size="L400" style={{ color: RED_REFERENCE }}>
             <b>{verse.reference}</b>
           </Text>
@@ -258,7 +251,7 @@ function VerseRow({
             variant="Secondary"
             fill="Soft"
             radii="300"
-            onClick={(evt) => {
+            onClick={(evt: React.MouseEvent<HTMLButtonElement>) => {
               evt.stopPropagation();
               onCopy(verse);
             }}
@@ -271,7 +264,7 @@ function VerseRow({
               variant="Primary"
               fill="Soft"
               radii="300"
-              onClick={(evt) => {
+              onClick={(evt: React.MouseEvent<HTMLButtonElement>) => {
                 evt.stopPropagation();
                 onJump(verse);
               }}
@@ -402,12 +395,11 @@ function BibleView({ requestClose, onInsertSelected }: BibleViewProps) {
     () => selectedVerses.map((verse) => formatBibleVerse(verse)).join('\n'),
     [selectedVerses]
   );
-  const pageText = useMemo(() => pageVerses.map((verse) => formatBibleVerse(verse)).join('\n'), [pageVerses]);
-  const selectedPreview = useMemo(
-    () =>
-      selectedText || CN.previewPlaceholder,
-    [selectedText]
+  const pageText = useMemo(
+    () => pageVerses.map((verse) => formatBibleVerse(verse)).join('\n'),
+    [pageVerses]
   );
+  const selectedPreview = useMemo(() => selectedText || CN.previewPlaceholder, [selectedText]);
   const highlightPattern = useMemo(
     () => getHighlightPattern(searchResult.keywords),
     [searchResult.keywords]
@@ -603,7 +595,7 @@ function BibleView({ requestClose, onInsertSelected }: BibleViewProps) {
                 gap="300"
                 style={CARD_STYLE}
               >
-                <Box wrap="Wrap" gap="250" alignItems="Center">
+                <Box wrap="Wrap" gap="200" alignItems="Center">
                   <Box grow="Yes" direction="Column" gap="100">
                     <Text size="H4">{`${CN.selected} ${selectedVerses.length} ${CN.verses}`}</Text>
                     <Text size="T300" priority="300">
@@ -653,10 +645,10 @@ function BibleView({ requestClose, onInsertSelected }: BibleViewProps) {
               <SequenceCard
                 variant="SurfaceVariant"
                 direction="Column"
-                gap="350"
+                gap="300"
                 style={CARD_STYLE}
               >
-                <Box wrap="Wrap" gap="250" alignItems="Center">
+                <Box wrap="Wrap" gap="200" alignItems="Center">
                   <Text size="L400">
                     <b>{CN.browseTitle}</b>
                   </Text>
@@ -683,7 +675,7 @@ function BibleView({ requestClose, onInsertSelected }: BibleViewProps) {
                   </Button>
                 </Box>
 
-                <Box direction="Column" gap="150">
+                <Box direction="Column" gap="100">
                   <Text size="T300" priority="300">
                     {CN.bookLabel}
                   </Text>
@@ -704,7 +696,7 @@ function BibleView({ requestClose, onInsertSelected }: BibleViewProps) {
                   </select>
                 </Box>
 
-                <Box direction="Column" gap="150">
+                <Box direction="Column" gap="100">
                   <Text size="T300" priority="300">
                     {`${CN.chapterLabel} · ${selectedBook.chapterCount} 章`}
                   </Text>
@@ -726,7 +718,7 @@ function BibleView({ requestClose, onInsertSelected }: BibleViewProps) {
 
                 <Line size="300" variant="Surface" />
 
-                <Box direction="Column" gap="150">
+                <Box direction="Column" gap="100">
                   <Text size="L400">
                     <b>{CN.searchTitle}</b>
                   </Text>
@@ -743,7 +735,7 @@ function BibleView({ requestClose, onInsertSelected }: BibleViewProps) {
                   </Text>
                 </Box>
 
-                <Box direction="Column" gap="150">
+                <Box direction="Column" gap="100">
                   <Text size="T300" priority="300">
                     {CN.searchRange}
                   </Text>
@@ -802,7 +794,12 @@ function BibleView({ requestClose, onInsertSelected }: BibleViewProps) {
                 gap="0"
                 style={{ ...CARD_STYLE, padding: 0, overflow: 'hidden' }}
               >
-                <Box wrap="Wrap" gap="250" alignItems="Center" style={{ padding: config.space.S400 }}>
+                <Box
+                  wrap="Wrap"
+                  gap="200"
+                  alignItems="Center"
+                  style={{ padding: config.space.S400 }}
+                >
                   <Box grow="Yes" direction="Column" gap="100">
                     <Text size="H3">{sectionTitle}</Text>
                     <Text size="T300" priority="300">
@@ -840,7 +837,11 @@ function BibleView({ requestClose, onInsertSelected }: BibleViewProps) {
                 </Box>
 
                 {totalPages > 1 && (
-                  <Box wrap="Wrap" gap="200" style={{ padding: `0 ${config.space.S400} ${config.space.S300}` }}>
+                  <Box
+                    wrap="Wrap"
+                    gap="200"
+                    style={{ padding: `0 ${config.space.S400} ${config.space.S300}` }}
+                  >
                     <Button
                       size="300"
                       variant="Secondary"
@@ -889,7 +890,12 @@ function BibleView({ requestClose, onInsertSelected }: BibleViewProps) {
                 </Scroll>
 
                 {!selectedText && (
-                  <Box style={{ padding: `${config.space.S250} ${config.space.S400}`, borderTop: SOFT_LINE }}>
+                  <Box
+                    style={{
+                      padding: `${localConfig.space.S250} ${config.space.S400}`,
+                      borderTop: SOFT_LINE,
+                    }}
+                  >
                     <Text size="T300" priority="300">
                       {CN.noSelection}
                     </Text>

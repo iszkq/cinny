@@ -185,7 +185,6 @@ const createLocalRoomEvent = (
     type: eventType,
     content,
     event_id: `~${room.roomId}:${txnId}`,
-    user_id: userId,
     sender: userId,
     room_id: room.roomId,
     origin_server_ts: Date.now(),
@@ -232,8 +231,7 @@ const sendLocalRoomEvent = (
       room.updatePendingEvent(localEvent, EventStatus.SENT, eventId);
       return response;
     } catch (error) {
-      const failedEvent = localEvent as MatrixEvent & { error?: unknown };
-      failedEvent.error = error;
+      Object.assign(localEvent, { error });
       room.updatePendingEvent(localEvent, EventStatus.NOT_SENT);
       throw error;
     }

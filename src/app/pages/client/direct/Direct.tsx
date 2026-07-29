@@ -211,7 +211,7 @@ export function Direct() {
   const mx = useMatrixClient();
   useNavToActivePathMapper('direct');
   const scrollRef = useRef<HTMLDivElement>(null);
-  const { scrollMargin, virtualListRef } = useVirtualizerScrollMargin(scrollRef);
+  const { scrollMargin, virtualListRef } = useVirtualizerScrollMargin<HTMLDivElement>(scrollRef);
   const directs = useDirectRooms();
   const clientSyncReady = useClientSyncReady(mx);
   const notificationPreferences = useRoomsNotificationPreferencesContext();

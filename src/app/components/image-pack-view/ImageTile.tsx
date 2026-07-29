@@ -128,7 +128,8 @@ export function ImageTile({
                   aria-disabled={!canMove}
                   onClick={
                     canMove
-                      ? (evt) => setMenuCords(evt.currentTarget.getBoundingClientRect())
+                      ? (evt: React.MouseEvent<HTMLElement>) =>
+                          setMenuCords(evt.currentTarget.getBoundingClientRect())
                       : undefined
                   }
                 >

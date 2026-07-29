@@ -8,7 +8,19 @@ import React, {
   useState,
 } from 'react';
 import classNames from 'classnames';
-import { Box, Button, Chip, Header, Icon, IconButton, Icons, Scroll, Spinner, Text, as } from 'folds';
+import {
+  Box,
+  Button,
+  Chip,
+  Header,
+  Icon,
+  IconButton,
+  Icons,
+  Scroll,
+  Spinner,
+  Text,
+  as,
+} from 'folds';
 import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
 import {
   XLSXCell,
@@ -118,7 +130,7 @@ const normalizeExcelColor = (value?: string): string | undefined => {
   return undefined;
 };
 
-const getBorderStyle = (style?: string): string | undefined => {
+const getBorderStyle = (style?: string): CSSProperties['borderTopStyle'] => {
   if (!style) return undefined;
   if (style === 'dotted') return 'dotted';
   if (style === 'dashed') return 'dashed';
@@ -352,9 +364,7 @@ const isSpreadsheetPreviewUnavailable = (message?: string): boolean =>
 
 const getSpreadsheetDisplayError = (message?: string): string | undefined => {
   if (!message) return undefined;
-  if (
-    /bad password|invalid password|incorrect password|wrong password|decrypt/i.test(message)
-  ) {
+  if (/bad password|invalid password|incorrect password|wrong password|decrypt/i.test(message)) {
     return '\u5bc6\u7801\u4e0d\u6b63\u786e\uff0c\u8bf7\u91cd\u65b0\u8f93\u5165\u3002';
   }
   if (/non-whitespace before first tag/i.test(message)) {
@@ -385,7 +395,12 @@ const getSpreadsheetDisplayError = (message?: string): string | undefined => {
 };
 
 const isPasswordProtectedError = (message?: string): boolean =>
-  Boolean(message && /password-protected|unsupported encryption|encrypted|bad password|invalid password|incorrect password|wrong password|decrypt/i.test(message));
+  Boolean(
+    message &&
+      /password-protected|unsupported encryption|encrypted|bad password|invalid password|incorrect password|wrong password|decrypt/i.test(
+        message
+      )
+  );
 
 const isLegacyPasswordSupported = (name: string, mimeType: string): boolean => {
   const ext = getFileNameExt(name);
@@ -409,9 +424,11 @@ const getWorksheetCell = (
   colIndex: number,
   encodeCell: (cell: { c: number; r: number }) => string
 ): XLSXCell | undefined => {
-  const denseData = (worksheet as XLSXWorksheet & {
-    '!data'?: Array<Array<XLSXCell | undefined> | undefined>;
-  })['!data'];
+  const denseData = (
+    worksheet as XLSXWorksheet & {
+      '!data'?: Array<Array<XLSXCell | undefined> | undefined>;
+    }
+  )['!data'];
 
   if (Array.isArray(denseData)) {
     const denseCell = denseData[rowIndex]?.[colIndex];
@@ -514,8 +531,7 @@ const buildRenderedSheet = (
       const merged = mergeStarts.get(key);
       const content = getCellContent(cell);
       const fallbackText = getMatrixCellText(matrix, rowIndex, colIndex, range.s.r, range.s.c);
-      const resolvedText =
-        content.text || content.html ? content.text : fallbackText ?? '';
+      const resolvedText = content.text || content.html ? content.text : fallbackText ?? '';
 
       cells.push({
         key,
@@ -892,11 +908,15 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
               <Icon size="50" src={Icons.Plus} />
             </IconButton>
 
-            {workbookReady && workbookState.status === AsyncStatus.Success && activeSheetIndex >= 0 && (
-              <Chip variant="SurfaceVariant" radii="Pill">
-                <Text size="B300">{`${activeSheetIndex + 1}/${workbookState.data.SheetNames.length}`}</Text>
-              </Chip>
-            )}
+            {workbookReady &&
+              workbookState.status === AsyncStatus.Success &&
+              activeSheetIndex >= 0 && (
+                <Chip variant="SurfaceVariant" radii="Pill">
+                  <Text size="B300">{`${activeSheetIndex + 1}/${
+                    workbookState.data.SheetNames.length
+                  }`}</Text>
+                </Chip>
+              )}
 
             <Chip
               variant="Primary"
@@ -1007,7 +1027,9 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
                   onSubmit={handlePasswordSubmit}
                 >
                   <Text className={css.PasswordHint} size="T200" priority="300">
-                    {'\u68c0\u6d4b\u5230\u65e7\u7248\u52a0\u5bc6\u8868\u683c\uff0c\u53ef\u5c1d\u8bd5\u8f93\u5165\u5bc6\u7801\u5728\u7ebf\u6253\u5f00\u3002'}
+                    {
+                      '\u68c0\u6d4b\u5230\u65e7\u7248\u52a0\u5bc6\u8868\u683c\uff0c\u53ef\u5c1d\u8bd5\u8f93\u5165\u5bc6\u7801\u5728\u7ebf\u6253\u5f00\u3002'
+                    }
                   </Text>
                   <Box className={css.PasswordRow} alignItems="Center" gap="200">
                     <PasswordInput
@@ -1055,104 +1077,107 @@ export const SpreadsheetViewer = as<'div', SpreadsheetViewerProps>(
             workbookReady &&
             workbookState.status === AsyncStatus.Success &&
             renderedSheet && (
-            <>
-              <Box className={css.SpreadsheetStage} grow="Yes" style={{ minHeight: 0 }}>
-                <Scroll
-                  ref={scrollRef}
-                  className={css.SpreadsheetViewport}
-                  size="300"
-                  direction="Both"
-                  variant="Background"
-                  visibility="Hover"
-                >
-                  <div className={css.SheetPreview}>
-                    {renderedSheet.html ? (
-                      <div className={css.SheetCanvasShell} style={{ zoom }}>
-                        <div
-                          className={css.SheetHtmlFallback}
-                          dangerouslySetInnerHTML={{ __html: renderedSheet.html }}
-                        />
-                      </div>
-                    ) : renderedSheet.isEmpty ? (
-                      <div className={css.EmptySheet}>
-                        <Text size="T300" priority="300">
-                          {'\u5f53\u524d\u5de5\u4f5c\u8868\u4e3a\u7a7a\u3002'}
-                        </Text>
-                      </div>
-                    ) : (
-                      <div className={css.SheetCanvasShell} style={{ zoom }}>
-                        <table className={css.Table}>
-                          <colgroup>
-                            {renderedSheet.colWidths.map((width, index) => (
-                              <col
-                                key={`col-${index}`}
-                                style={
-                                  width
-                                    ? {
-                                        width,
-                                        minWidth: width,
-                                      }
-                                    : undefined
-                                }
-                              />
-                            ))}
-                          </colgroup>
-                          <tbody>
-                            {renderedSheet.rows.map((row) => (
-                              <tr key={row.key} style={row.height ? { height: row.height } : undefined}>
-                                {row.cells.map((cell) => (
-                                  <td
-                                    key={cell.key}
-                                    className={css.Cell}
-                                    colSpan={cell.colSpan}
-                                    rowSpan={cell.rowSpan}
-                                    style={cell.style}
-                                    title={cell.title}
-                                  >
-                                    {cell.html ? (
-                                      <span
-                                        className={css.CellText}
-                                        dangerouslySetInnerHTML={{ __html: cell.html }}
-                                      />
-                                    ) : (
-                                      <span className={css.CellText}>{cell.text || ' '}</span>
-                                    )}
-                                  </td>
-                                ))}
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                </Scroll>
-              </Box>
+              <>
+                <Box className={css.SpreadsheetStage} grow="Yes" style={{ minHeight: 0 }}>
+                  <Scroll
+                    ref={scrollRef}
+                    className={css.SpreadsheetViewport}
+                    size="300"
+                    direction="Both"
+                    variant="Background"
+                    visibility="Hover"
+                  >
+                    <div className={css.SheetPreview}>
+                      {renderedSheet.html ? (
+                        <div className={css.SheetCanvasShell} style={{ zoom }}>
+                          <div
+                            className={css.SheetHtmlFallback}
+                            dangerouslySetInnerHTML={{ __html: renderedSheet.html }}
+                          />
+                        </div>
+                      ) : renderedSheet.isEmpty ? (
+                        <div className={css.EmptySheet}>
+                          <Text size="T300" priority="300">
+                            {'\u5f53\u524d\u5de5\u4f5c\u8868\u4e3a\u7a7a\u3002'}
+                          </Text>
+                        </div>
+                      ) : (
+                        <div className={css.SheetCanvasShell} style={{ zoom }}>
+                          <table className={css.Table}>
+                            <colgroup>
+                              {renderedSheet.colWidths.map((width, index) => (
+                                <col
+                                  key={`col-${index}`}
+                                  style={
+                                    width
+                                      ? {
+                                          width,
+                                          minWidth: width,
+                                        }
+                                      : undefined
+                                  }
+                                />
+                              ))}
+                            </colgroup>
+                            <tbody>
+                              {renderedSheet.rows.map((row) => (
+                                <tr
+                                  key={row.key}
+                                  style={row.height ? { height: row.height } : undefined}
+                                >
+                                  {row.cells.map((cell) => (
+                                    <td
+                                      key={cell.key}
+                                      className={css.Cell}
+                                      colSpan={cell.colSpan}
+                                      rowSpan={cell.rowSpan}
+                                      style={cell.style}
+                                      title={cell.title}
+                                    >
+                                      {cell.html ? (
+                                        <span
+                                          className={css.CellText}
+                                          dangerouslySetInnerHTML={{ __html: cell.html }}
+                                        />
+                                      ) : (
+                                        <span className={css.CellText}>{cell.text || ' '}</span>
+                                      )}
+                                    </td>
+                                  ))}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  </Scroll>
+                </Box>
 
-              <Box className={css.SheetRail} direction="Column">
-                {summaryText && (
-                  <Text className={css.SheetSummary} size="T200" priority="300">
-                    {summaryText}
-                  </Text>
-                )}
-                <div className={css.SheetList}>
-                  {workbookState.data.SheetNames.map((sheetName) => (
-                    <Chip
-                      key={sheetName}
-                      variant={sheetName === activeSheetName ? 'Primary' : 'SurfaceVariant'}
-                      fill={sheetName === activeSheetName ? 'Solid' : 'Soft'}
-                      radii="Pill"
-                      onClick={() => setActiveSheetName(sheetName)}
-                    >
-                      <Text size="B300" truncate>
-                        {sheetName}
-                      </Text>
-                    </Chip>
-                  ))}
-                </div>
-              </Box>
-            </>
-          )}
+                <Box className={css.SheetRail} direction="Column">
+                  {summaryText && (
+                    <Text className={css.SheetSummary} size="T200" priority="300">
+                      {summaryText}
+                    </Text>
+                  )}
+                  <div className={css.SheetList}>
+                    {workbookState.data.SheetNames.map((sheetName) => (
+                      <Chip
+                        key={sheetName}
+                        variant={sheetName === activeSheetName ? 'Primary' : 'SurfaceVariant'}
+                        fill="Soft"
+                        radii="Pill"
+                        onClick={() => setActiveSheetName(sheetName)}
+                      >
+                        <Text size="B300" truncate>
+                          {sheetName}
+                        </Text>
+                      </Chip>
+                    ))}
+                  </div>
+                </Box>
+              </>
+            )}
         </Box>
       </Box>
     );

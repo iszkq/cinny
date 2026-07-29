@@ -1,7 +1,7 @@
 /// <reference lib="WebWorker" />
 
 export type {};
-declare const self: ServiceWorkerGlobalScope;
+declare const self: ServiceWorkerGlobalScope & { __WB_MANIFEST: unknown[] };
 
 // Keep the injectManifest marker, but do not route hashed application modules through Workbox.
 // Netlify removes old hashed files on every deploy; an older service worker intercepting those

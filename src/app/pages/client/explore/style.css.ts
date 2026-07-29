@@ -1,6 +1,7 @@
 import { globalStyle, style } from '@vanilla-extract/css';
 import { config } from 'folds';
 import { ContainerColor } from '../../../styles/ContainerColor.css';
+import { localConfig } from '../../../styles/tokens';
 
 export const RoomsInfoCard = style([
   ContainerColor({ variant: 'SurfaceVariant' }),
@@ -43,15 +44,14 @@ export const ExploreNavSection = style({
   padding: config.space.S400,
   boxSizing: 'border-box',
   borderRadius: config.radii.R500,
-  background:
-    'linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 252, 0.84))',
+  background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 252, 0.84))',
   border: '1px solid rgba(226, 232, 240, 0.92)',
   boxShadow: '0 10px 26px rgba(148, 163, 184, 0.1)',
 });
 
 export const ExploreNavCanvas = style({
   padding: config.space.S300,
-  borderRadius: config.radii.R600,
+  borderRadius: localConfig.radii.R600,
   background:
     'radial-gradient(circle at top left, rgba(191, 219, 254, 0.34), transparent 34%), radial-gradient(circle at 82% 18%, rgba(226, 232, 240, 0.6), transparent 26%), linear-gradient(180deg, rgba(248, 250, 252, 0.98), rgba(255, 255, 255, 0.98))',
   border: '1px solid rgba(226, 232, 240, 0.92)',
@@ -112,8 +112,7 @@ export const ExploreNavCard = style([
     minWidth: 0,
     boxSizing: 'border-box',
     overflow: 'hidden',
-    background:
-      'linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.95))',
+    background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.95))',
     border: '1px solid rgba(226, 232, 240, 0.96)',
     boxShadow: '0 14px 30px rgba(148, 163, 184, 0.14)',
     transition:

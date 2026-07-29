@@ -18,7 +18,7 @@ export const getPowers = (tags: PowerLevelTags): number[] => {
       }
       return power;
     })
-    .filter((power) => typeof power === 'number');
+    .filter((power): power is number => typeof power === 'number');
 
   return sortPowers(powers);
 };

@@ -1,5 +1,6 @@
 import { style } from '@vanilla-extract/css';
 import { color, config, toRem } from 'folds';
+import { localConfig } from '../../../styles/tokens';
 
 export const ControlSection = style({
   display: 'flex',
@@ -34,7 +35,7 @@ export const CustomizerLayout = style({
 export const ControlColumn = style({
   display: 'flex',
   flexDirection: 'column',
-  gap: config.space.S250,
+  gap: localConfig.space.S250,
   minWidth: 0,
 });
 
@@ -45,7 +46,7 @@ export const PreviewColumn = style({
 export const StickyPreviewStack = style({
   display: 'flex',
   flexDirection: 'column',
-  gap: config.space.S250,
+  gap: localConfig.space.S250,
   position: 'sticky',
   top: config.space.S100,
   '@media': {
@@ -58,7 +59,7 @@ export const StickyPreviewStack = style({
 export const ToneGrid = style({
   display: 'grid',
   gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-  gap: config.space.S250,
+  gap: localConfig.space.S250,
   '@media': {
     'screen and (max-width: 920px)': {
       gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
@@ -72,7 +73,7 @@ export const ToneGrid = style({
 export const ToneCard = style({
   display: 'flex',
   flexDirection: 'column',
-  gap: config.space.S150,
+  gap: localConfig.space.S150,
   minWidth: 0,
 });
 
@@ -288,7 +289,7 @@ export const ColorPickerHeader = style({
   alignItems: 'center',
   justifyContent: 'space-between',
   gap: config.space.S200,
-  paddingBottom: config.space.S150,
+  paddingBottom: localConfig.space.S150,
 });
 
 export const ColorPickerMeta = style({
@@ -310,7 +311,7 @@ export const ColorPickerDefaultButton = style({
   border: `1px solid ${color.SurfaceVariant.ContainerLine}`,
   background: color.Surface.Container,
   color: color.Surface.OnContainer,
-  padding: `0 ${config.space.S150}`,
+  padding: `0 ${localConfig.space.S150}`,
   display: 'inline-flex',
   alignItems: 'center',
   gap: config.space.S100,
@@ -379,7 +380,7 @@ export const ColorPickerCustomButton = style({
   border: `1px solid ${color.SurfaceVariant.ContainerLine}`,
   background: color.Surface.Container,
   color: color.Surface.OnContainer,
-  padding: `0 ${config.space.S150}`,
+  padding: `0 ${localConfig.space.S150}`,
   display: 'inline-flex',
   alignItems: 'center',
   gap: config.space.S100,
@@ -437,7 +438,7 @@ export const BackgroundPreviewBadge = style({
   alignItems: 'center',
   minHeight: toRem(28),
   maxWidth: '100%',
-  padding: `0 ${config.space.S150}`,
+  padding: `0 ${localConfig.space.S150}`,
   borderRadius: config.radii.R300,
   background: 'rgba(15, 23, 42, 0.56)',
   color: '#FFFFFF',
@@ -449,7 +450,7 @@ export const BackgroundPreviewBadge = style({
 });
 
 export const PreviewRoot = style({
-  padding: config.space.S250,
+  padding: localConfig.space.S250,
   borderRadius: config.radii.R400,
   overflow: 'hidden',
 });
@@ -475,7 +476,7 @@ export const PreviewRail = style({
   borderRightWidth: 1,
   display: 'flex',
   flexDirection: 'column',
-  gap: config.space.S150,
+  gap: localConfig.space.S150,
 });
 
 export const PreviewRailItem = style({
@@ -517,7 +518,7 @@ export const PreviewBody = style({
   display: 'flex',
   flexDirection: 'column',
   gap: config.space.S200,
-  padding: config.space.S250,
+  padding: localConfig.space.S250,
   minWidth: 0,
   flex: 1,
 });
@@ -554,7 +555,7 @@ export const PreviewMessages = style({
 export const PreviewRow = style({
   display: 'flex',
   alignItems: 'flex-start',
-  gap: config.space.S150,
+  gap: localConfig.space.S150,
   minWidth: 0,
 });
 
@@ -578,7 +579,7 @@ export const PreviewBubble = style({
   borderRadius: config.radii.R400,
   borderStyle: 'solid',
   borderWidth: 1,
-  padding: `${config.space.S150} ${config.space.S200}`,
+  padding: `${localConfig.space.S150} ${config.space.S200}`,
   display: 'flex',
   flexDirection: 'column',
   gap: config.space.S100,

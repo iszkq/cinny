@@ -573,26 +573,26 @@ function IncomingCallDialog({ peerName, onAccept, onReject }: IncomingCallDialog
               </Text>
             </Box>
             <Box className={css.IncomingActions} justifyContent="Center" gap="700">
-              <Box className={css.Action} direction="Column" alignItems="Center" gap="150">
+              <Box className={css.Action} direction="Column" alignItems="Center" gap="100">
                 <IconButton
                   className={css.RoundAction}
                   size="500"
                   radii="Pill"
                   variant="Critical"
-                  fill="Solid"
+                  fill="Soft"
                   onClick={onReject}
                 >
                   <Icon size="400" src={Icons.PhoneDown} filled />
                 </IconButton>
                 <Text size="L400">{'拒绝'}</Text>
               </Box>
-              <Box className={css.Action} direction="Column" alignItems="Center" gap="150">
+              <Box className={css.Action} direction="Column" alignItems="Center" gap="100">
                 <IconButton
                   className={css.RoundAction}
                   size="500"
                   radii="Pill"
                   variant="Success"
-                  fill="Solid"
+                  fill="Soft"
                   onClick={onAccept}
                 >
                   <Icon size="400" src={Icons.Phone} filled />

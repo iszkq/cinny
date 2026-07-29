@@ -111,7 +111,9 @@ const normalizeRoomNavCategories = (
 ): RoomNavCategories => ({
   favorites: unique(Array.isArray(value.favorites) ? value.favorites : []),
   categories: (Array.isArray(value.categories) ? value.categories : [])
-    .filter((category) => category && typeof category.id === 'string')
+    .filter((category): category is typeof category & { id: string } =>
+      Boolean(category && typeof category.id === 'string')
+    )
     .map((category) => ({
       id: category.id,
       scope: normalizeScope(category.scope),

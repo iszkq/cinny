@@ -54,7 +54,9 @@ export const UrlPreviewCard = as<'div', { url: string; ts: number }>(
               alt={prev['og:title']}
               title={prev['og:title']}
               tabIndex={0}
-              onKeyDown={(evt) => onEnterOrSpace(() => setViewer(true))(evt)}
+              onKeyDown={(evt: React.KeyboardEvent<HTMLImageElement>) =>
+                onEnterOrSpace(() => setViewer(true))(evt)
+              }
               onClick={() => setViewer(true)}
             />
           )}

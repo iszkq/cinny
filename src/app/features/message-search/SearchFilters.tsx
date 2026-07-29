@@ -493,7 +493,7 @@ export function SearchFilters({
           <OrderButton order={order} onChange={onOrderChange} />
         </Box>
 
-        <Box direction="Column" gap="150">
+        <Box direction="Column" gap="100">
           <Box wrap="Wrap" gap="200" alignItems="End">
             <Box direction="Column" gap="100" style={FILTER_FIELD_STYLE}>
               <Text size="T200" priority="300">

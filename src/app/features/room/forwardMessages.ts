@@ -1,4 +1,5 @@
-import { EventType, IContent, MatrixClient } from 'matrix-js-sdk';
+import { EventType, IContent, MatrixClient, PollStartEventContent } from 'matrix-js-sdk';
+import { StickerEventContent } from 'matrix-js-sdk/lib/@types/events';
 import { MessageEvent } from '../../../types/matrix/room';
 import {
   combinePollSummaries,
@@ -81,13 +82,10 @@ const createForwardedPollContent = (
     snapshotSummary && getPollSummarySnapshot(message.content)
       ? combinePollSummaries(snapshotSummary, liveSummary)
       : snapshotSummary && cachedEvents.length === 0
-        ? combinePollSummaries(snapshotSummary, liveSummary)
-        : liveSummary;
+      ? combinePollSummaries(snapshotSummary, liveSummary)
+      : liveSummary;
 
-  return attachPollSummarySnapshot(
-    forwardedContent,
-    createPollSummarySnapshot(summary, false)
-  );
+  return attachPollSummarySnapshot(forwardedContent, createPollSummarySnapshot(summary, false));
 };
 
 export const isForwardableMessage = (eventType: string, content: IContent): boolean => {
@@ -120,7 +118,7 @@ export const forwardMessagesToRooms = async (
         // Stickers are sent as their own event type rather than m.room.message.
         // Re-sending the same payload lets us forward them across rooms.
         // eslint-disable-next-line no-await-in-loop
-        await mx.sendEvent(roomId, EventType.Sticker, forwardedContent);
+        await mx.sendEvent(roomId, EventType.Sticker, forwardedContent as StickerEventContent);
         continue;
       }
 
@@ -130,7 +128,11 @@ export const forwardMessagesToRooms = async (
       ) {
         const forwardedPollContent = createForwardedPollContent(mx, message, forwardedContent);
         // eslint-disable-next-line no-await-in-loop
-        await mx.sendEvent(roomId, OUTGOING_POLL_START_EVENT_TYPE, forwardedPollContent);
+        await mx.sendEvent(
+          roomId,
+          OUTGOING_POLL_START_EVENT_TYPE,
+          forwardedPollContent as PollStartEventContent
+        );
         continue;
       }
 
