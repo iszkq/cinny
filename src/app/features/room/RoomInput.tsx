@@ -561,7 +561,7 @@ const clearRemoteEmojiUploadCache = (mx: ReturnType<typeof useMatrixClient>, url
   remoteEmojiUploadCache.delete(getRemoteEmojiUploadCacheKey(mx, url));
 };
 
-const getRemoteEmojiMxc = async (
+export const getRemoteEmojiMxc = async (
   mx: ReturnType<typeof useMatrixClient>,
   url: string,
   label: string,

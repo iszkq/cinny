@@ -63,6 +63,8 @@ import {
   downloadEncryptedMedia,
   getCanonicalAliasOrRoomId,
   getMxIdLocalPart,
+  isHttpUrl,
+  isMxcUrl,
   isRoomAlias,
   mxcUrlToHttp,
   uploadContent,
@@ -78,6 +80,7 @@ import { TextViewer } from '../../../components/text-viewer';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { CloudSendMode, EmojiBoard, EmojiBoardTab } from '../../../components/emoji-board';
 import { ReactionViewer } from '../reaction-viewer';
+import { getRemoteEmojiMxc } from '../RoomInput';
 import { MessageEditor } from './MessageEditor';
 import { UserAvatar } from '../../../components/user-avatar';
 import { copyToClipboard } from '../../../utils/dom';
@@ -1493,6 +1496,7 @@ export const Message = as<'div', MessageProps>(
     const [menuAnchor, setMenuAnchor] = useState<RectCords>();
     const [emojiBoardAnchor, setEmojiBoardAnchor] = useState<RectCords>();
     const [emojiBoardTab, setEmojiBoardTab] = useState(EmojiBoardTab.Emoji);
+    const cloudReactionPreparingRef = useRef(false);
     const emojiBoardTriggerAtRef = useRef(0);
     const emojiBoardSuppressOpenUntilRef = useRef(0);
 
@@ -1765,9 +1769,22 @@ export const Message = as<'div', MessageProps>(
                           onReactionToggle(mEvent.getId()!, mxc, shortcode);
                           setEmojiBoardAnchor(undefined);
                         }}
-                        onCloudEmojiSelect={(url, shortcode) => {
-                          onReactionToggle(mEvent.getId()!, url, shortcode);
-                          setEmojiBoardAnchor(undefined);
+                        onCloudEmojiSelect={async (url, shortcode, info) => {
+                          if (cloudReactionPreparingRef.current) return;
+                          if (!isMxcUrl(url) && !isHttpUrl(url)) return;
+
+                          cloudReactionPreparingRef.current = true;
+                          try {
+                            const reactionKey = isMxcUrl(url)
+                              ? url
+                              : await getRemoteEmojiMxc(mx, url, shortcode, info);
+                            onReactionToggle(mEvent.getId()!, reactionKey, shortcode);
+                            setEmojiBoardAnchor(undefined);
+                          } catch (error) {
+                            console.error('Failed to prepare cloud emoji reaction.', error);
+                          } finally {
+                            cloudReactionPreparingRef.current = false;
+                          }
                         }}
                         requestClose={() => {
                           const now = Date.now();
