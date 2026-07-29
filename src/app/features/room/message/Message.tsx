@@ -1489,7 +1489,6 @@ export const Message = as<'div', MessageProps>(
     const favoritesRoomId = useFavoritesRoomId();
     const senderId = mEvent.getSender() ?? '';
     const isOwnMessage = senderId === mx.getUserId();
-    const isVideoMessage = mEvent.getContent().msgtype === MsgType.Video;
 
     const [hover, setHover] = useState(false);
     const { hoverProps } = useHover({ onHoverChange: setHover });
@@ -2065,7 +2064,6 @@ export const Message = as<'div', MessageProps>(
             before={avatarJSX}
             header={headerJSX}
             after={readReceiptsJSX}
-            fitContent={isVideoMessage}
             tone={isOwnMessage ? 'self' : 'other'}
             onContextMenu={handleContextMenu}
             onClick={handleMessageClick}

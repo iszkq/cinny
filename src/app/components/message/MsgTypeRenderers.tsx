@@ -311,7 +311,7 @@ export function MVideo({ content, renderAsFile, renderVideoContent, outlined }: 
   const aspectRatio = videoWidth / videoHeight;
   const maxTimelineWidth =
     aspectRatio < 1 ? VIDEO_TIMELINE_PORTRAIT_MAX_WIDTH : VIDEO_TIMELINE_MAX_WIDTH;
-  const attachmentWidth = `min(100%, ${toRem(maxTimelineWidth)}, ${toRem(
+  const attachmentWidth = `min(${toRem(maxTimelineWidth)}, ${toRem(
     VIDEO_TIMELINE_MAX_HEIGHT * aspectRatio
   )}, ${VIDEO_TIMELINE_VIEWPORT_MAX_HEIGHT * aspectRatio}vh)`;
   const videoAttachmentStyle: CSSProperties = { width: attachmentWidth };
