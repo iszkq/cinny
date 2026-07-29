@@ -198,6 +198,10 @@ export const ImageViewerLoading = style([
   },
 ]);
 
+export const ImageViewerError = style({
+  pointerEvents: 'auto',
+});
+
 export const ImageViewerOcrGlyph = style([
   DefaultReset,
   {

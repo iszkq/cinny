@@ -14,11 +14,13 @@ export type ViewerImageItem = {
   encInfo?: EncryptedAttachmentInfo;
 };
 
+export type ImageViewerSourcePriority = 'visible' | 'background';
+
 export type ImageViewerSession = {
   activeItemId: string;
   items: ViewerImageItem[];
   initialSrc?: string;
-  resolveSource: (item: ViewerImageItem) => Promise<string>;
+  resolveSource: (item: ViewerImageItem, priority?: ImageViewerSourcePriority) => Promise<string>;
   imageOcrConfig?: AihubmixImageOcrConfig;
   renderViewer: (props: ImageViewerProps) => ReactNode;
 };

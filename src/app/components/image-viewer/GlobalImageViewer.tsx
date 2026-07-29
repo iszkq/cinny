@@ -3,33 +3,8 @@ import { useAtom } from 'jotai';
 import { imageViewerSessionAtom } from '../../state/imageViewer';
 import { ImageViewerDialog } from './ImageViewerDialog';
 
-const ORIGINAL_SOURCE_TIMEOUT_MS = 28_000;
-const ORIGINAL_SOURCE_RETRY_DELAY_MS = 500;
-
-const wait = (delayMs: number): Promise<void> =>
-  new Promise((resolve) => {
-    window.setTimeout(resolve, delayMs);
-  });
-
-const resolveSourceWithTimeout = async (resolveSource: () => Promise<string>): Promise<string> => {
-  let timeoutId: number | undefined;
-
-  try {
-    return await Promise.race([
-      resolveSource(),
-      new Promise<never>((_resolve, reject) => {
-        timeoutId = window.setTimeout(
-          () => reject(new Error('Original image request timed out.')),
-          ORIGINAL_SOURCE_TIMEOUT_MS
-        );
-      }),
-    ]);
-  } finally {
-    if (timeoutId !== undefined) {
-      window.clearTimeout(timeoutId);
-    }
-  }
-};
+const ORIGINAL_LOADING_DELAY_MS = 180;
+const ORIGINAL_LOADING_MAX_MS = 8_000;
 
 export function GlobalImageViewer() {
   const [session, setSession] = useAtom(imageViewerSessionAtom);
@@ -68,22 +43,32 @@ export function GlobalImageViewer() {
     if (!session || !activeItem || sourceCache[activeItem.id]) return undefined;
 
     let disposed = false;
-    setLoadingItemId(activeItem.id);
+    let loadingDelayId: number | undefined;
+    let loadingMaxId: number | undefined;
+    const hasActivePreview = activeItem.id === session.activeItemId && Boolean(session.initialSrc);
+
+    setLoadingItemId(undefined);
     setFailedItemId((itemId) => (itemId === activeItem.id ? undefined : itemId));
 
-    const resolveOriginal = async () => {
-      try {
-        return await resolveSourceWithTimeout(() => session.resolveSource(activeItem));
-      } catch {
-        await wait(ORIGINAL_SOURCE_RETRY_DELAY_MS);
-        return resolveSourceWithTimeout(() => session.resolveSource(activeItem));
-      }
-    };
+    if (!hasActivePreview) {
+      loadingDelayId = window.setTimeout(() => {
+        if (!disposed) {
+          setLoadingItemId(activeItem.id);
+        }
+      }, ORIGINAL_LOADING_DELAY_MS);
+      loadingMaxId = window.setTimeout(() => {
+        if (!disposed) {
+          setLoadingItemId((itemId) => (itemId === activeItem.id ? undefined : itemId));
+        }
+      }, ORIGINAL_LOADING_MAX_MS);
+    }
 
-    resolveOriginal()
+    session
+      .resolveSource(activeItem, 'visible')
       .then((src) => {
         if (disposed) return;
         setSourceCache((cache) => ({ ...cache, [activeItem.id]: src }));
+        setFailedItemId((itemId) => (itemId === activeItem.id ? undefined : itemId));
       })
       .catch(() => {
         if (!disposed) {
@@ -91,6 +76,12 @@ export function GlobalImageViewer() {
         }
       })
       .finally(() => {
+        if (loadingDelayId !== undefined) {
+          window.clearTimeout(loadingDelayId);
+        }
+        if (loadingMaxId !== undefined) {
+          window.clearTimeout(loadingMaxId);
+        }
         if (!disposed) {
           setLoadingItemId((itemId) => (itemId === activeItem.id ? undefined : itemId));
         }
@@ -98,8 +89,55 @@ export function GlobalImageViewer() {
 
     return () => {
       disposed = true;
+      if (loadingDelayId !== undefined) {
+        window.clearTimeout(loadingDelayId);
+      }
+      if (loadingMaxId !== undefined) {
+        window.clearTimeout(loadingMaxId);
+      }
     };
   }, [activeItem, retryVersion, session, sourceCache]);
+
+  useEffect(() => {
+    if (!session || !activeItem || !sourceCache[activeItem.id]) return undefined;
+
+    const activeIndex = session.items.findIndex((item) => item.id === activeItem.id);
+    if (activeIndex < 0) return undefined;
+
+    const adjacentItems = [session.items[activeIndex - 1], session.items[activeIndex + 1]].filter(
+      (item): item is NonNullable<typeof item> => Boolean(item && !sourceCache[item.id])
+    );
+    if (adjacentItems.length === 0) return undefined;
+
+    let disposed = false;
+    Promise.all(
+      adjacentItems.map((item) =>
+        session
+          .resolveSource(item, 'background')
+          .then((src) => ({ id: item.id, src }))
+          .catch(() => undefined)
+      )
+    ).then((resolvedItems) => {
+      if (disposed) return;
+
+      const availableItems = resolvedItems.filter((item): item is NonNullable<typeof item> =>
+        Boolean(item)
+      );
+      if (availableItems.length === 0) return;
+
+      setSourceCache((cache) => {
+        const nextCache = { ...cache };
+        availableItems.forEach((item) => {
+          nextCache[item.id] = item.src;
+        });
+        return nextCache;
+      });
+    });
+
+    return () => {
+      disposed = true;
+    };
+  }, [activeItem, session, sourceCache]);
 
   const requestClose = useCallback(() => setSession(undefined), [setSession]);
 

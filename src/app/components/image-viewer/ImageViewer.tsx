@@ -1024,7 +1024,7 @@ export const ImageViewer = as<'div', ImageViewerProps>(
               )}
               {!loading && originalLoadFailed && (
                 <Box
-                  className={css.ImageViewerLoading}
+                  className={classNames(css.ImageViewerLoading, css.ImageViewerError)}
                   alignItems="Center"
                   justifyContent="Center"
                   direction="Column"

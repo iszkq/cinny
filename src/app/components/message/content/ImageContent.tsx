@@ -36,8 +36,10 @@ import { useClientConfig } from '../../../hooks/useClientConfig';
 import type { AihubmixImageOcrConfig } from '../../../utils/ai';
 import {
   imageViewerSessionAtom,
+  type ImageViewerSourcePriority,
   type ViewerImageItem as GlobalViewerImageItem,
 } from '../../../state/imageViewer';
+import { primeDesktopMediaAssetUrl } from '../../../utils/desktopMediaAssetCache';
 
 const IMAGE_PREVIEW_WIDTH = 230;
 const IMAGE_PREVIEW_HEIGHT = 460;
@@ -170,7 +172,8 @@ export const ImageContent = as<'div', ImageContentProps>(
         width?: number,
         height?: number,
         resizeMethod?: string,
-        retryFailed = false
+        retryFailed = false,
+        priority: ImageViewerSourcePriority = 'visible'
       ) => {
         const mediaUrl = isHttpUrl(mediaMxcUrl)
           ? mediaMxcUrl
@@ -185,7 +188,12 @@ export const ImageContent = as<'div', ImageContentProps>(
           return mediaUrl;
         }
 
-        const preparedMediaUrl = await primeCachedMediaObjectUrl(mediaUrl, 'visible', retryFailed);
+        const desktopAssetUrl = await primeDesktopMediaAssetUrl(mediaUrl, priority, mediaMimeType);
+        if (desktopAssetUrl) {
+          return desktopAssetUrl;
+        }
+
+        const preparedMediaUrl = await primeCachedMediaObjectUrl(mediaUrl, priority, retryFailed);
         if (preparedMediaUrl) {
           return preparedMediaUrl;
         }
@@ -310,7 +318,7 @@ export const ImageContent = as<'div', ImageContentProps>(
         activeItemId,
         items,
         initialSrc: previewSrc,
-        resolveSource: (item) =>
+        resolveSource: (item, priority = 'visible') =>
           prepareMediaSrc(
             item.url,
             item.mimeType ?? FALLBACK_MIMETYPE,
@@ -318,7 +326,8 @@ export const ImageContent = as<'div', ImageContentProps>(
             undefined,
             undefined,
             undefined,
-            true
+            true,
+            priority
           ),
         imageOcrConfig,
         renderViewer,
