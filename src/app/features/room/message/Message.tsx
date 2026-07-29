@@ -61,7 +61,6 @@ import {
 import {
   decryptFile,
   downloadEncryptedMedia,
-  downloadMedia,
   getCanonicalAliasOrRoomId,
   getMxIdLocalPart,
   isRoomAlias,
@@ -83,8 +82,6 @@ import { MessageEditor } from './MessageEditor';
 import { UserAvatar } from '../../../components/user-avatar';
 import { copyToClipboard } from '../../../utils/dom';
 import { stopPropagation } from '../../../utils/keyboard';
-import { getMatrixToRoomEvent } from '../../../plugins/matrix-to';
-import { getViaServers } from '../../../plugins/via-servers';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { useRoomPinnedEvents } from '../../../hooks/useRoomPinnedEvents';
 import { useAccountData } from '../../../hooks/useAccountData';
@@ -179,40 +176,6 @@ const getMessageCopyText = (mEvent: MatrixEvent): string | undefined => {
   if (msgType === MsgType.Location) return '[位置]';
 
   return undefined;
-};
-
-type MessageMediaCopySource = {
-  url: string;
-  mimeType?: string;
-  encInfo?: EncryptedAttachmentInfo;
-};
-
-const getMessageMediaCopySource = (mEvent: MatrixEvent): MessageMediaCopySource | undefined => {
-  if (mEvent.isRedacted()) return undefined;
-
-  const content = mEvent.getContent();
-  const sourceUrl = typeof content.file?.url === 'string' ? content.file.url : content.url;
-  const mimeType = typeof content.info?.mimetype === 'string' ? content.info.mimetype : undefined;
-
-  if (typeof sourceUrl !== 'string') return undefined;
-
-  if (mEvent.getType() === EventType.Sticker) {
-    return {
-      url: sourceUrl,
-      mimeType,
-      encInfo: content.file,
-    };
-  }
-
-  if (mEvent.getType() !== EventType.RoomMessage || content.msgtype !== MsgType.Image) {
-    return undefined;
-  }
-
-  return {
-    url: sourceUrl,
-    mimeType,
-    encInfo: content.file,
-  };
 };
 
 const getClipboardImageMimeType = (mimeType?: string, blobType?: string): string | undefined => {
@@ -541,39 +504,6 @@ export const MessageSourceCodeItem = as<
   );
 });
 
-export const MessageCopyLinkItem = as<
-  'button',
-  {
-    room: Room;
-    mEvent: MatrixEvent;
-    onClose?: () => void;
-  }
->(({ room, mEvent, onClose, ...props }, ref) => {
-  const mx = useMatrixClient();
-
-  const handleCopy = () => {
-    const eventId = mEvent.getId();
-    if (!eventId) return;
-    copyToClipboard(getMatrixToRoomEvent(room.roomId, eventId, getViaServers(room)));
-    onClose?.();
-  };
-
-  return (
-    <MenuItem
-      size="300"
-      after={<Icon size="100" src={Icons.Link} />}
-      radii="300"
-      onClick={handleCopy}
-      {...props}
-      ref={ref}
-    >
-      <Text className={css.MessageMenuItemText} as="span" size="T300" truncate>
-        复制链接
-      </Text>
-    </MenuItem>
-  );
-});
-
 export const MessageCopyTextItem = as<
   'button',
   {
@@ -581,51 +511,11 @@ export const MessageCopyTextItem = as<
     onClose?: () => void;
   }
 >(({ mEvent, onClose, ...props }, ref) => {
-  const mx = useMatrixClient();
-  const useAuthentication = useMediaAuthentication();
-
   const handleCopy = async () => {
-    const mediaSource = getMessageMediaCopySource(mEvent);
-
-    if (mediaSource && navigator.clipboard?.write && typeof ClipboardItem !== 'undefined') {
-      try {
-        const mediaUrl = mxcUrlToHttp(mx, mediaSource.url, useAuthentication);
-        if (mediaUrl) {
-          const mediaBlob = mediaSource.encInfo
-            ? await downloadEncryptedMedia(mediaUrl, (encBuf) =>
-                decryptFile(
-                  encBuf,
-                  mediaSource.mimeType ?? FALLBACK_MIMETYPE,
-                  mediaSource.encInfo as EncryptedAttachmentInfo
-                )
-              )
-            : await downloadMedia(mediaUrl);
-
-          const imageMimeType = getClipboardImageMimeType(mediaSource.mimeType, mediaBlob.type);
-          if (imageMimeType) {
-            const clipboardBlob =
-              mediaBlob.type === imageMimeType
-                ? mediaBlob
-                : new Blob([mediaBlob], { type: imageMimeType });
-
-            await navigator.clipboard.write([
-              new ClipboardItem({
-                [imageMimeType]: clipboardBlob,
-              }),
-            ]);
-            onClose?.();
-            return;
-          }
-        }
-      } catch {
-        // fall back to text copy when binary clipboard write is unavailable
-      }
-    }
-
     const text = getMessageCopyText(mEvent);
     if (!text) return;
-    copyToClipboard(text);
-    onClose?.();
+    const copied = await copyToClipboard(text);
+    if (copied) onClose?.();
   };
 
   return (
@@ -1869,6 +1759,10 @@ export const Message = as<'div', MessageProps>(
                           onReactionToggle(mEvent.getId()!, mxc, shortcode);
                           setEmojiBoardAnchor(undefined);
                         }}
+                        onCloudEmojiSelect={(url, shortcode) => {
+                          onReactionToggle(mEvent.getId()!, url, shortcode);
+                          setEmojiBoardAnchor(undefined);
+                        }}
                         requestClose={() => {
                           const now = Date.now();
                           if (
@@ -2089,7 +1983,6 @@ export const Message = as<'div', MessageProps>(
                           )}
                           <MessageSaveEmojiItem mEvent={mEvent} onClose={closeMenu} />
                           <MessageCopyTextItem mEvent={mEvent} onClose={closeMenu} />
-                          <MessageCopyLinkItem room={room} mEvent={mEvent} onClose={closeMenu} />
                           {canPinEvent && (
                             <MessagePinItem room={room} mEvent={mEvent} onClose={closeMenu} />
                           )}
@@ -2274,7 +2167,6 @@ export const Event = as<'div', EventProps>(
                             />
                           )}
                           <MessageCopyTextItem mEvent={mEvent} onClose={closeMenu} />
-                          <MessageCopyLinkItem room={room} mEvent={mEvent} onClose={closeMenu} />
                         </Box>
                         {((!mEvent.isRedacted() && canDelete && !stateEvent) ||
                           (mEvent.getSender() !== mx.getUserId() && !stateEvent)) && (

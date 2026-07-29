@@ -263,22 +263,51 @@ export const scrollToBottom = (scrollEl: HTMLElement, behavior?: 'auto' | 'insta
   });
 };
 
-export const copyToClipboard = (text: string) => {
-  if (navigator.clipboard) {
-    navigator.clipboard.writeText(text);
-  } else {
-    const host = document.body;
-    const copyInput = document.createElement('input');
-    copyInput.style.position = 'fixed';
-    copyInput.style.opacity = '0';
-    copyInput.value = text;
-    host.append(copyInput);
+const copyToClipboardLegacy = (text: string): boolean => {
+  const host = document.body;
+  if (!host) return false;
 
-    copyInput.select();
-    copyInput.setSelectionRange(0, 99999);
-    document.execCommand('Copy');
+  const activeElement =
+    document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
+  const copyInput = document.createElement('textarea');
+  copyInput.readOnly = true;
+  copyInput.style.position = 'fixed';
+  copyInput.style.inset = '0 auto auto 0';
+  copyInput.style.width = '1px';
+  copyInput.style.height = '1px';
+  copyInput.style.opacity = '0';
+  copyInput.style.fontSize = '16px';
+  copyInput.value = text;
+  host.append(copyInput);
+
+  copyInput.focus({ preventScroll: true });
+  copyInput.select();
+  copyInput.setSelectionRange(0, text.length);
+
+  let copied = false;
+  try {
+    copied = document.execCommand('copy');
+  } catch {
+    copied = false;
+  } finally {
     copyInput.remove();
+    activeElement?.focus({ preventScroll: true });
   }
+
+  return copied;
+};
+
+export const copyToClipboard = async (text: string): Promise<boolean> => {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      // WebKit, PWA and embedded WebViews can expose the API while denying a particular write.
+    }
+  }
+
+  return copyToClipboardLegacy(text);
 };
 
 export const setFavicon = (url: string): void => {
