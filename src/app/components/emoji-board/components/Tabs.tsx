@@ -9,48 +9,56 @@ const styles: CSSProperties = {
 export function EmojiBoardTabs({
   tab,
   onTabChange,
+  tabs = [EmojiBoardTab.Sticker, EmojiBoardTab.Emoji, EmojiBoardTab.Cloud],
 }: {
   tab: EmojiBoardTab;
   onTabChange: (tab: EmojiBoardTab) => void;
+  tabs?: readonly EmojiBoardTab[];
 }) {
   return (
     <Box gap="100">
-      <Badge
-        style={styles}
-        as="button"
-        variant="Secondary"
-        fill={tab === EmojiBoardTab.Sticker ? 'Solid' : 'None'}
-        size="500"
-        onClick={() => onTabChange(EmojiBoardTab.Sticker)}
-      >
-        <Text as="span" size="L400">
-          贴纸
-        </Text>
-      </Badge>
-      <Badge
-        style={styles}
-        as="button"
-        variant="Secondary"
-        fill={tab === EmojiBoardTab.Emoji ? 'Solid' : 'None'}
-        size="500"
-        onClick={() => onTabChange(EmojiBoardTab.Emoji)}
-      >
-        <Text as="span" size="L400">
-          表情
-        </Text>
-      </Badge>
-      <Badge
-        style={styles}
-        as="button"
-        variant="Secondary"
-        fill={tab === EmojiBoardTab.Cloud ? 'Solid' : 'None'}
-        size="500"
-        onClick={() => onTabChange(EmojiBoardTab.Cloud)}
-      >
-        <Text as="span" size="L400">
-          {'\u4e91\u7aef'}
-        </Text>
-      </Badge>
+      {tabs.includes(EmojiBoardTab.Sticker) && (
+        <Badge
+          style={styles}
+          as="button"
+          variant="Secondary"
+          fill={tab === EmojiBoardTab.Sticker ? 'Solid' : 'None'}
+          size="500"
+          onClick={() => onTabChange(EmojiBoardTab.Sticker)}
+        >
+          <Text as="span" size="L400">
+            贴纸
+          </Text>
+        </Badge>
+      )}
+      {tabs.includes(EmojiBoardTab.Emoji) && (
+        <Badge
+          style={styles}
+          as="button"
+          variant="Secondary"
+          fill={tab === EmojiBoardTab.Emoji ? 'Solid' : 'None'}
+          size="500"
+          onClick={() => onTabChange(EmojiBoardTab.Emoji)}
+        >
+          <Text as="span" size="L400">
+            表情
+          </Text>
+        </Badge>
+      )}
+      {tabs.includes(EmojiBoardTab.Cloud) && (
+        <Badge
+          style={styles}
+          as="button"
+          variant="Secondary"
+          fill={tab === EmojiBoardTab.Cloud ? 'Solid' : 'None'}
+          size="500"
+          onClick={() => onTabChange(EmojiBoardTab.Cloud)}
+        >
+          <Text as="span" size="L400">
+            {'\u4e91\u7aef'}
+          </Text>
+        </Badge>
+      )}
     </Box>
   );
 }

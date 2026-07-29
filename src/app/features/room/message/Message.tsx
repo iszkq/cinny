@@ -76,7 +76,7 @@ import * as css from './styles.css';
 import { EventReaders } from '../../../components/event-readers';
 import { TextViewer } from '../../../components/text-viewer';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
-import { EmojiBoard } from '../../../components/emoji-board';
+import { CloudSendMode, EmojiBoard, EmojiBoardTab } from '../../../components/emoji-board';
 import { ReactionViewer } from '../reaction-viewer';
 import { MessageEditor } from './MessageEditor';
 import { UserAvatar } from '../../../components/user-avatar';
@@ -128,6 +128,7 @@ const MIN_INLINE_READ_RECEIPTS = 1;
 const MAX_INLINE_READ_RECEIPTS = 50;
 const MESSAGE_EMOJI_REOPEN_SUPPRESS_MS = 400;
 const STICKER_TEXT_FALLBACK = '[\u8d34\u7eb8]';
+const MESSAGE_REACTION_EMOJI_TABS = [EmojiBoardTab.Emoji, EmojiBoardTab.Cloud] as const;
 
 function MessageCopyIcon() {
   return (
@@ -1491,6 +1492,7 @@ export const Message = as<'div', MessageProps>(
     const { focusWithinProps } = useFocusWithin({ onFocusWithinChange: setHover });
     const [menuAnchor, setMenuAnchor] = useState<RectCords>();
     const [emojiBoardAnchor, setEmojiBoardAnchor] = useState<RectCords>();
+    const [emojiBoardTab, setEmojiBoardTab] = useState(EmojiBoardTab.Emoji);
     const emojiBoardTriggerAtRef = useRef(0);
     const emojiBoardSuppressOpenUntilRef = useRef(0);
 
@@ -1747,8 +1749,12 @@ export const Message = as<'div', MessageProps>(
                     anchor={emojiBoardAnchor}
                     content={
                       <EmojiBoard
+                        tab={emojiBoardTab}
+                        tabs={MESSAGE_REACTION_EMOJI_TABS}
+                        onTabChange={setEmojiBoardTab}
                         imagePackRooms={imagePackRooms ?? []}
                         imagePackMode="personal"
+                        cloudAutoSendMode={CloudSendMode.Emoji}
                         returnFocusOnDeactivate={false}
                         allowTextCustomEmoji
                         onEmojiSelect={(key) => {
@@ -1885,7 +1891,7 @@ export const Message = as<'div', MessageProps>(
                                 size="T300"
                                 truncate
                               >
-                                {'添加表情'}
+                                {'添加表情回复'}
                               </Text>
                             </MenuItem>
                           )}

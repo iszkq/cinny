@@ -648,6 +648,7 @@ const VIRTUAL_OVER_SCAN = 2;
 type EmojiBoardProps = {
   tab?: EmojiBoardTab;
   onTabChange?: (tab: EmojiBoardTab) => void;
+  tabs?: readonly EmojiBoardTab[];
   imagePackRooms: Room[];
   imagePackMode?: ImagePackMode;
   requestClose: () => void;
@@ -665,6 +666,7 @@ type EmojiBoardProps = {
 export function EmojiBoard({
   tab = EmojiBoardTab.Emoji,
   onTabChange,
+  tabs,
   imagePackRooms,
   imagePackMode = 'contextual',
   requestClose,
@@ -1066,7 +1068,7 @@ export function EmojiBoard({
       <EmojiBoardLayout
         header={
           <Box direction="Column" gap="200">
-            {onTabChange && <EmojiBoardTabs tab={tab} onTabChange={onTabChange} />}
+            {onTabChange && <EmojiBoardTabs tab={tab} tabs={tabs} onTabChange={onTabChange} />}
             {cloudTab && onCloudEmojiSelect && onStickerSelect && (
               <Box alignItems="Center" justifyContent="SpaceBetween" gap="200">
                 <Text as="span" size="T300">
