@@ -33,6 +33,7 @@ import { FileHeader, FileDownloadButton } from './FileHeader';
 const IMAGE_TIMELINE_WIDTH = 230;
 const IMAGE_TIMELINE_MAX_HEIGHT = 460;
 const VIDEO_TIMELINE_MAX_WIDTH = 400;
+const VIDEO_TIMELINE_PORTRAIT_MAX_WIDTH = IMAGE_TIMELINE_WIDTH;
 const VIDEO_TIMELINE_MAX_HEIGHT = 600;
 const VIDEO_TIMELINE_VIEWPORT_MAX_HEIGHT = 68;
 const VIDEO_FALLBACK_WIDTH = 16;
@@ -308,10 +309,12 @@ export function MVideo({ content, renderAsFile, renderVideoContent, outlined }: 
     getPositiveDimension(videoInfo.thumbnail_info?.h) ??
     VIDEO_FALLBACK_HEIGHT;
   const aspectRatio = videoWidth / videoHeight;
-  const attachmentWidth = `min(100%, ${toRem(VIDEO_TIMELINE_MAX_WIDTH)}, ${toRem(
+  const maxTimelineWidth =
+    aspectRatio < 1 ? VIDEO_TIMELINE_PORTRAIT_MAX_WIDTH : VIDEO_TIMELINE_MAX_WIDTH;
+  const attachmentWidth = `min(100%, ${toRem(maxTimelineWidth)}, ${toRem(
     VIDEO_TIMELINE_MAX_HEIGHT * aspectRatio
   )}, ${VIDEO_TIMELINE_VIEWPORT_MAX_HEIGHT * aspectRatio}vh)`;
-  const videoAttachmentStyle: CSSProperties = { maxWidth: attachmentWidth };
+  const videoAttachmentStyle: CSSProperties = { width: attachmentWidth };
 
   const filename = content.filename ?? content.body ?? 'Video';
 

@@ -207,6 +207,10 @@ export const BubbleContent = style({
   },
 });
 
+export const BubbleContentFit = style({
+  width: 'fit-content',
+});
+
 export const BubbleStack = style({
   display: 'flex',
   flexDirection: 'column',

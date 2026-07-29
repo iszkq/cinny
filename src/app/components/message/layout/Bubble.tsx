@@ -5,6 +5,7 @@ import * as css from './layout.css';
 
 type BubbleLayoutProps = {
   hideBubble?: boolean;
+  fitContent?: boolean;
   before?: ReactNode;
   header?: ReactNode;
   after?: ReactNode;
@@ -13,7 +14,10 @@ type BubbleLayoutProps = {
 };
 
 export const BubbleLayout = as<'div', BubbleLayoutProps>(
-  ({ hideBubble, before, header, after, footer, tone = 'neutral', children, ...props }, ref) => (
+  (
+    { hideBubble, fitContent, before, header, after, footer, tone = 'neutral', children, ...props },
+    ref
+  ) => (
     <Box gap="300" {...props} ref={ref}>
       <Box className={css.BubbleBefore} shrink="No">
         {before}
@@ -34,6 +38,7 @@ export const BubbleLayout = as<'div', BubbleLayoutProps>(
                     <Box
                       className={classNames(
                         css.BubbleContent,
+                        fitContent ? css.BubbleContentFit : undefined,
                         css.BubbleTone[tone],
                         before ? css.BubbleContentArrowLeft : undefined
                       )}
