@@ -220,6 +220,8 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
       ...getPollResponseRelationCollections(room, eventId),
       ...getPollEndRelationCollections(room, eventId),
     ];
+    // Matrix relation collections mutate outside React. revision invalidates this snapshot.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room, eventId, revision]);
 
   useEffect(() => {
@@ -322,6 +324,8 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
   const liveSummary = useMemo(() => {
     if (!poll || !room || !eventId) return undefined;
     return summarizePoll(room, eventId, poll, mx.getUserId() ?? undefined, cachedRelationEvents);
+    // Matrix relation collections mutate outside React. revision invalidates this snapshot.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cachedRelationEvents, poll, room, eventId, mx, revision]);
 
   const snapshotSummary = useMemo(() => {
@@ -384,6 +388,8 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
   const ended = poll ? hasPollEnded(poll, summaryData.endedAt) : false;
   const pollEvent = useMemo(
     () => (room && eventId ? room.findEventById(eventId) : undefined),
+    // Room timelines mutate outside React. revision invalidates the event lookup.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [room, eventId, revision]
   );
   const pollCreatorId = pollEvent?.getSender();
@@ -446,6 +452,9 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
     previousCommittedAnswersKeyRef.current = committedAnswersKey;
     setStatusText(undefined);
     setStatusError(false);
+    // Answer changes are synchronized by the guarded effect below so an incoming vote cannot
+    // overwrite a dirty local draft.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [poll, room?.roomId, eventId]);
 
   useEffect(() => {

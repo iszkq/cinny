@@ -90,6 +90,8 @@ export const useStableMediaUrl = (
         desktopFallbackSrc,
         fallbackSrc
       ),
+    // The media cache mutates outside React. cacheVersion is the explicit invalidation signal.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [cacheVersion, desktopFallbackSrc, desktopSrc, fallbackSrc, objectUrlCacheEnabled, src]
   );
 

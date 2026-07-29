@@ -21,6 +21,7 @@ self.addEventListener('activate', (event) => {
       const legacyPrecacheNames = cacheNames.filter((name) => name.startsWith('workbox-precache'));
       await Promise.all(legacyPrecacheNames.map((name) => caches.delete(name)));
       await self.clients.claim();
+      await cleanupDeadClients();
 
       if (legacyPrecacheNames.length > 0) {
         const windowClients = await self.clients.matchAll({ type: 'window' });
@@ -111,19 +112,6 @@ async function requestSessionWithTimeout(
 
   return Promise.race([sessionPromise, timeout]);
 }
-
-self.addEventListener('install', () => {
-  self.skipWaiting();
-});
-
-self.addEventListener('activate', (event: ExtendableEvent) => {
-  event.waitUntil(
-    (async () => {
-      await self.clients.claim();
-      await cleanupDeadClients();
-    })()
-  );
-});
 
 self.addEventListener('notificationclick', (event: NotificationEvent) => {
   event.notification.close();

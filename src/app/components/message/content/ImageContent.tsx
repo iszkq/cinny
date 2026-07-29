@@ -110,10 +110,11 @@ export const ImageContent = as<'div', ImageContentProps>(
     const mx = useMatrixClient();
     const setImageViewerSession = useSetAtom(imageViewerSessionAtom);
     const clientConfig = useClientConfig();
+    const imageOcr = clientConfig.imageOcr;
     const useAuthentication = useMediaAuthentication();
     const blurHash = validBlurHash(info?.[MATRIX_BLUR_HASH_PROPERTY_NAME]);
     const imageOcrConfig = useMemo<AihubmixImageOcrConfig | undefined>(() => {
-      const config = clientConfig.imageOcr;
+      const config = imageOcr;
       if (!config) return undefined;
 
       return {
@@ -121,11 +122,7 @@ export const ImageContent = as<'div', ImageContentProps>(
         baseUrl: config.baseUrl,
         model: config.model,
       };
-    }, [
-      clientConfig.imageOcr?.baseUrl,
-      clientConfig.imageOcr?.defaultAihubmixApiKey,
-      clientConfig.imageOcr?.model,
-    ]);
+    }, [imageOcr]);
 
     const [load, setLoad] = useState(false);
     const [error, setError] = useState(false);

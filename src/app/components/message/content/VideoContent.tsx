@@ -1,4 +1,11 @@
-import React, { ReactNode, useCallback, useEffect, useState } from 'react';
+import React, {
+  ReactEventHandler,
+  ReactNode,
+  SyntheticEvent,
+  useCallback,
+  useEffect,
+  useState,
+} from 'react';
 import {
   Badge,
   Box,
@@ -36,7 +43,7 @@ import { validBlurHash } from '../../../utils/blurHash';
 type RenderVideoProps = {
   title: string;
   src: string;
-  onLoadedMetadata: () => void;
+  onLoadedMetadata: ReactEventHandler<HTMLVideoElement>;
   onError: () => void;
   autoPlay: boolean;
   controls: boolean;
@@ -50,7 +57,8 @@ type VideoContentProps = {
   autoPlay?: boolean;
   markedAsSpoiler?: boolean;
   spoilerReason?: string;
-  renderThumbnail?: () => ReactNode;
+  onDimensionsChange?: (width: number, height: number) => void;
+  renderThumbnail?: (onLoad: ReactEventHandler<HTMLImageElement>) => ReactNode;
   renderVideo: (props: RenderVideoProps) => ReactNode;
 };
 export const VideoContent = as<'div', VideoContentProps>(
@@ -65,6 +73,7 @@ export const VideoContent = as<'div', VideoContentProps>(
       autoPlay,
       markedAsSpoiler,
       spoilerReason,
+      onDimensionsChange,
       renderThumbnail,
       renderVideo,
       ...props
@@ -93,8 +102,12 @@ export const VideoContent = as<'div', VideoContentProps>(
       }, [mx, url, useAuthentication, mimeType, encInfo])
     );
 
-    const handleLoad = () => {
+    const handleLoad = (evt: SyntheticEvent<HTMLVideoElement>) => {
       setLoad(true);
+      onDimensionsChange?.(evt.currentTarget.videoWidth, evt.currentTarget.videoHeight);
+    };
+    const handleThumbnailLoad = (evt: SyntheticEvent<HTMLImageElement>) => {
+      onDimensionsChange?.(evt.currentTarget.naturalWidth, evt.currentTarget.naturalHeight);
     };
     const handleError = () => {
       setLoad(false);
@@ -127,7 +140,7 @@ export const VideoContent = as<'div', VideoContentProps>(
             alignItems="Center"
             justifyContent="Center"
           >
-            {renderThumbnail()}
+            {renderThumbnail(handleThumbnailLoad)}
           </Box>
         )}
         {!autoPlay && !blurred && srcState.status === AsyncStatus.Idle && (

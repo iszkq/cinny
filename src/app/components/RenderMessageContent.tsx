@@ -263,11 +263,7 @@ export function RenderMessageContent({
               viewerItems={imageViewerItems}
               viewerItemId={eventId}
               renderImage={(p) => (
-                <Image
-                  {...p}
-                  loading={mediaAutoLoad ? 'eager' : 'lazy'}
-                  decoding="async"
-                />
+                <Image {...p} loading={mediaAutoLoad ? 'eager' : 'lazy'} decoding="async" />
               )}
               renderViewer={(p) => <ImageViewer {...p} />}
             />
@@ -292,7 +288,7 @@ export function RenderMessageContent({
               {...props}
               renderThumbnail={
                 mediaAutoLoad
-                  ? () => (
+                  ? (onLoad) => (
                       <ThumbnailContent
                         info={info}
                         renderImage={(src) => (
@@ -302,6 +298,7 @@ export function RenderMessageContent({
                             src={src}
                             loading={mediaAutoLoad ? 'eager' : 'lazy'}
                             decoding="async"
+                            onLoad={onLoad}
                           />
                         )}
                       />

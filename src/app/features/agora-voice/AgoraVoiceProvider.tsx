@@ -1409,7 +1409,7 @@ export function AgoraVoiceProvider({ children }: AgoraVoiceProviderProps) {
       mx.removeListener(RoomEvent.Timeline, handleTimelineEvent);
       mx.off(MatrixEventEvent.Decrypted, handleDecrypted);
     };
-  }, [handleSignal, mx]);
+  }, [handleSignal, mx, myUserId]);
 
   useEffect(
     () => () => {

@@ -1,4 +1,4 @@
-import React, { CSSProperties, ReactNode } from 'react';
+import React, { CSSProperties, ReactNode, useCallback, useState } from 'react';
 import { Box, Chip, Icon, Icons, Text, toRem } from 'folds';
 import { IContent } from 'matrix-js-sdk';
 import { JUMBO_EMOJI_REG, URL_REG } from '../../utils/regex';
@@ -32,6 +32,11 @@ import { FileHeader, FileDownloadButton } from './FileHeader';
 
 const IMAGE_TIMELINE_WIDTH = 230;
 const IMAGE_TIMELINE_MAX_HEIGHT = 460;
+const VIDEO_TIMELINE_MAX_WIDTH = 400;
+const VIDEO_TIMELINE_MAX_HEIGHT = 600;
+const VIDEO_TIMELINE_VIEWPORT_MAX_HEIGHT = 68;
+const VIDEO_FALLBACK_WIDTH = 16;
+const VIDEO_FALLBACK_HEIGHT = 9;
 
 const getPositiveDimension = (value?: number): number | undefined =>
   typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined;
@@ -245,6 +250,7 @@ type RenderVideoContentProps = {
   encInfo?: IEncryptedFile;
   markedAsSpoiler?: boolean;
   spoilerReason?: string;
+  onDimensionsChange: (width: number, height: number) => void;
 };
 type MVideoProps = {
   content: IVideoContent;
@@ -256,6 +262,32 @@ export function MVideo({ content, renderAsFile, renderVideoContent, outlined }: 
   const videoInfo = content?.info;
   const mxcUrl = content.file?.url ?? content.url;
   const safeMimeType = getBlobSafeMimeType(videoInfo?.mimetype ?? '');
+  const [loadedDimensions, setLoadedDimensions] = useState<{
+    url?: string;
+    width: number;
+    height: number;
+  }>();
+
+  const handleDimensionsChange = useCallback(
+    (width: number, height: number) => {
+      const validWidth = getPositiveDimension(width);
+      const validHeight = getPositiveDimension(height);
+      if (!validWidth || !validHeight) return;
+
+      setLoadedDimensions((current) => {
+        if (
+          current &&
+          current.url === mxcUrl &&
+          current.width === validWidth &&
+          current.height === validHeight
+        ) {
+          return current;
+        }
+        return { url: mxcUrl, width: validWidth, height: validHeight };
+      });
+    },
+    [mxcUrl]
+  );
 
   if (!videoInfo || !safeMimeType.startsWith('video') || typeof mxcUrl !== 'string') {
     if (mxcUrl) {
@@ -264,17 +296,32 @@ export function MVideo({ content, renderAsFile, renderVideoContent, outlined }: 
     return <BrokenContent />;
   }
 
-  const videoWidth = typeof videoInfo.w === 'number' && videoInfo.w > 0 ? videoInfo.w : 400;
-  const videoHeight = typeof videoInfo.h === 'number' && videoInfo.h > 0 ? videoInfo.h : 400;
+  const currentLoadedDimensions = loadedDimensions?.url === mxcUrl ? loadedDimensions : undefined;
+  const videoWidth =
+    currentLoadedDimensions?.width ??
+    getPositiveDimension(videoInfo.w) ??
+    getPositiveDimension(videoInfo.thumbnail_info?.w) ??
+    VIDEO_FALLBACK_WIDTH;
+  const videoHeight =
+    currentLoadedDimensions?.height ??
+    getPositiveDimension(videoInfo.h) ??
+    getPositiveDimension(videoInfo.thumbnail_info?.h) ??
+    VIDEO_FALLBACK_HEIGHT;
+  const aspectRatio = videoWidth / videoHeight;
+  const attachmentWidth = `min(100%, ${toRem(VIDEO_TIMELINE_MAX_WIDTH)}, ${toRem(
+    VIDEO_TIMELINE_MAX_HEIGHT * aspectRatio
+  )}, ${VIDEO_TIMELINE_VIEWPORT_MAX_HEIGHT * aspectRatio}vh)`;
+  const videoAttachmentStyle: CSSProperties = { maxWidth: attachmentWidth };
 
   const filename = content.filename ?? content.body ?? 'Video';
 
   return (
-    <Attachment outlined={outlined} mediaContent>
+    <Attachment outlined={outlined} mediaContent style={videoAttachmentStyle}>
       <AttachmentHeader>
         <FileHeader
           body={filename}
           mimeType={safeMimeType}
+          actionPlacement="badge"
           after={
             <FileDownloadButton
               filename={filename}
@@ -288,9 +335,12 @@ export function MVideo({ content, renderAsFile, renderVideoContent, outlined }: 
       <AttachmentBox
         style={{
           aspectRatio: `${videoWidth} / ${videoHeight}`,
+          width: '100%',
           height: 'auto',
           minHeight: toRem(48),
-          maxHeight: `min(${toRem(600)}, 68vh)`,
+          maxHeight: `min(${toRem(
+            VIDEO_TIMELINE_MAX_HEIGHT
+          )}, ${VIDEO_TIMELINE_VIEWPORT_MAX_HEIGHT}vh)`,
         }}
       >
         {renderVideoContent({
@@ -301,6 +351,7 @@ export function MVideo({ content, renderAsFile, renderVideoContent, outlined }: 
           encInfo: content.file,
           markedAsSpoiler: content[MATRIX_SPOILER_PROPERTY_NAME],
           spoilerReason: content[MATRIX_SPOILER_REASON_PROPERTY_NAME],
+          onDimensionsChange: handleDimensionsChange,
         })}
       </AttachmentBox>
     </Attachment>

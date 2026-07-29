@@ -619,8 +619,11 @@ export function Explore() {
   const userId = mx.getUserId();
   const clientConfig = useClientConfig();
   const userServer = userId ? getMxIdServer(userId) : undefined;
-  const servers =
-    clientConfig.featuredCommunities?.servers?.filter((server) => server !== userServer) ?? [];
+  const servers = useMemo(
+    () =>
+      clientConfig.featuredCommunities?.servers?.filter((server) => server !== userServer) ?? [],
+    [clientConfig.featuredCommunities?.servers, userServer]
+  );
 
   useLayoutEffect(() => {
     if (!desktopLayout) return;

@@ -234,6 +234,8 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
   const summary = useMemo(() => {
     if (!poll || !room || !eventId) return undefined;
     return summarizePoll(room, eventId, poll, mx.getUserId() ?? undefined);
+    // Matrix relation collections mutate outside React. revision invalidates this snapshot.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [poll, room, eventId, mx, revision]);
 
   const summaryData = summary ?? DEFAULT_SUMMARY;
@@ -252,6 +254,9 @@ export function PollContent({ content, room, eventId }: PollContentProps) {
     previousCommittedAnswersKeyRef.current = committedAnswersKey;
     setStatusText(undefined);
     setStatusError(false);
+    // Answer changes are synchronized by the guarded effect below so an incoming vote cannot
+    // overwrite a dirty local draft.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [poll, room?.roomId, eventId]);
 
   useEffect(() => {

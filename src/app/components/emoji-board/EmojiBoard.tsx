@@ -717,13 +717,15 @@ export function EmojiBoard({
   const [draggingPackId, setDraggingPackId] = useState<string>();
   const [packDropTarget, setPackDropTarget] = useState<PersonalPackDropTarget>();
   const [searchTerm, setSearchTerm] = useState('');
-  const cloudSearchEnabled = onCloudEmojiSelect !== undefined;
+  const cloudSearchSupported = onCloudEmojiSelect !== undefined;
+  const remoteStickerIndexEnabled =
+    cloudTab || (cloudSearchSupported && searchTerm.trim().length > 0);
   const {
     stickers: remoteStickerImages,
     loading: remoteStickerLoading,
     error: remoteStickerError,
     retry: retryRemoteStickers,
-  } = useRemoteStickerIndex(cloudTab || cloudSearchEnabled);
+  } = useRemoteStickerIndex(remoteStickerIndexEnabled);
   const [emojiGroupItems, stickerGroupItems, cloudGroupItems] = useGroups(
     tab,
     imagePacks,
@@ -741,9 +743,9 @@ export function EmojiBoard({
     }
     list = list.concat(imagePacks.flatMap((pack) => pack.getImages(usage)));
     if (emojiTab) list = list.concat(emojis);
-    if (cloudSearchEnabled) list = list.concat(remoteStickerImages);
+    if (cloudSearchSupported) list = list.concat(remoteStickerImages);
     return list;
-  }, [cloudSearchEnabled, cloudTab, emojiTab, usage, imagePacks, remoteStickerImages]);
+  }, [cloudSearchSupported, cloudTab, emojiTab, usage, imagePacks, remoteStickerImages]);
 
   const [result, search, resetSearch] = useAsyncSearch(
     searchList,

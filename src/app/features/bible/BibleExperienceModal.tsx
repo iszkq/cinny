@@ -1252,26 +1252,32 @@ export function BibleExperienceModal({
     setCurrentPage(1);
   };
 
-  const openChapter = (bookName: string, chapter: number, page = 1, closeBrowseDialog = false) => {
-    const targetBook = data ? resolveBibleBook(data, bookName) : undefined;
-    setSelectedBookName(bookName);
-    setSelectedChapter(chapter);
-    setSearchInput('');
-    setCurrentPage(page);
-    if (targetBook) {
-      setActiveTestament(targetBook.testament === CN.new ? 'new' : 'old');
-    }
-    if (closeBrowseDialog && compactLayout) {
-      setToolPanelOpen(false);
-    }
-  };
+  const openChapter = React.useCallback(
+    (bookName: string, chapter: number, page = 1, closeBrowseDialog = false) => {
+      const targetBook = data ? resolveBibleBook(data, bookName) : undefined;
+      setSelectedBookName(bookName);
+      setSelectedChapter(chapter);
+      setSearchInput('');
+      setCurrentPage(page);
+      if (targetBook) {
+        setActiveTestament(targetBook.testament === CN.new ? 'new' : 'old');
+      }
+      if (closeBrowseDialog && compactLayout) {
+        setToolPanelOpen(false);
+      }
+    },
+    [compactLayout, data]
+  );
 
-  const changeChapter = (direction: -1 | 1) => {
-    if (!selectedBook) return;
-    const nextChapter = selectedChapter + direction;
-    if (nextChapter < 1 || nextChapter > selectedBook.chapterCount) return;
-    openChapter(selectedBook.name, nextChapter, 1, false);
-  };
+  const changeChapter = React.useCallback(
+    (direction: -1 | 1) => {
+      if (!selectedBook) return;
+      const nextChapter = selectedChapter + direction;
+      if (nextChapter < 1 || nextChapter > selectedBook.chapterCount) return;
+      openChapter(selectedBook.name, nextChapter, 1, false);
+    },
+    [openChapter, selectedBook, selectedChapter]
+  );
 
   const toggleCustomBook = (bookName: string) => {
     setCustomScopeBooks((current) =>
@@ -1417,6 +1423,7 @@ export function BibleExperienceModal({
     fontSize,
     handleClearSelected,
     handleCopySelected,
+    changeChapter,
     selectedBook?.chapterCount,
     selectedBook?.name,
     selectedChapter,

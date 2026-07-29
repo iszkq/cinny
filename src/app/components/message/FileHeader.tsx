@@ -68,14 +68,49 @@ export type FileHeaderProps = {
   body: string;
   mimeType: string;
   after?: ReactNode;
+  actionPlacement?: 'end' | 'badge';
 };
 export const FileHeader = as<'div', FileHeaderProps>(
-  ({ body, mimeType, after, ...props }, ref) => {
+  ({ body, mimeType, after, actionPlacement = 'end', ...props }, ref) => {
     const nameExt = getFileNameExt(body);
     const extLabel = nameExt && nameExt !== body ? nameExt : mimeTypeToExt(mimeType);
 
+    if (actionPlacement === 'badge') {
+      return (
+        <Box
+          direction="Column"
+          alignItems="Start"
+          gap="100"
+          grow="Yes"
+          style={{ minWidth: 0 }}
+          {...props}
+          ref={ref}
+        >
+          <Box alignItems="Center" gap="100">
+            <Badge style={badgeStyles} variant="Secondary" radii="Pill">
+              <Text size="O400" truncate>
+                {extLabel}
+              </Text>
+            </Badge>
+            {after}
+          </Box>
+          <Text size="T300" truncate style={{ width: '100%' }}>
+            {body}
+          </Text>
+        </Box>
+      );
+    }
+
     return (
-      <Box alignItems="Center" gap="200" grow="Yes" wrap="Wrap" style={{ minWidth: 0 }} {...props} ref={ref}>
+      <Box
+        alignItems="Center"
+        gap="200"
+        grow="Yes"
+        wrap="Wrap"
+        style={{ minWidth: 0 }}
+        {...props}
+        ref={ref}
+      >
         <Box shrink="No">
           <Badge style={badgeStyles} variant="Secondary" radii="Pill">
             <Text size="O400" truncate>

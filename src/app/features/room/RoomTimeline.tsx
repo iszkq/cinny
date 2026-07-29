@@ -988,6 +988,9 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     }
 
     return receiptMap;
+    // Read receipts mutate inside matrix-js-sdk without changing the Room object. receiptTick is
+    // the explicit React invalidation signal for this memo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ignoredUsersSet, mx, receiptTick, room, timelineIndex, visibleItems]);
 
   const getInlineReadReceiptUserIds = useCallback(
@@ -1408,7 +1411,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
           syncUnreadInfo();
         }
       },
-      [mx, syncUnreadInfo]
+      [syncUnreadInfo]
     )
   );
 

@@ -1,4 +1,12 @@
-import React, { CSSProperties, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  CSSProperties,
+  ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import FocusTrap from 'focus-trap-react';
 import {
   Box,
@@ -417,10 +425,10 @@ function BibleView({ requestClose, onInsertSelected }: BibleViewProps) {
     [chapterReference, data]
   );
 
-  const handleCopySelected = () => {
+  const handleCopySelected = useCallback(() => {
     if (!selectedText) return;
     copyToClipboard(selectedText);
-  };
+  }, [selectedText]);
 
   const handleCopyPage = () => {
     if (!pageText) return;
@@ -433,7 +441,7 @@ function BibleView({ requestClose, onInsertSelected }: BibleViewProps) {
     requestClose();
   };
 
-  const clearSelection = () => setSelectedKeys([]);
+  const clearSelection = useCallback(() => setSelectedKeys([]), []);
 
   const handleVerseToggle = (verse: BibleVerse) => {
     setSelectedKeys((current) =>
@@ -447,22 +455,25 @@ function BibleView({ requestClose, onInsertSelected }: BibleViewProps) {
     copyToClipboard(formatBibleVerse(verse));
   };
 
-  const openChapter = (bookName: string, chapter: number) => {
+  const openChapter = useCallback((bookName: string, chapter: number) => {
     setSelectedBookName(bookName);
     setSelectedChapter(chapter);
     setSearchInput('');
-  };
+  }, []);
 
   const handleJumpToVerse = (verse: BibleVerse) => {
     openChapter(verse.book, verse.chapter);
   };
 
-  const changeChapter = (direction: 1 | -1) => {
-    if (!data || !chapterReference) return;
-    const nextReference = getAdjacentChapter(data, chapterReference, direction);
-    if (!nextReference) return;
-    openChapter(nextReference.book.name, nextReference.chapter);
-  };
+  const changeChapter = useCallback(
+    (direction: 1 | -1) => {
+      if (!data || !chapterReference) return;
+      const nextReference = getAdjacentChapter(data, chapterReference, direction);
+      if (!nextReference) return;
+      openChapter(nextReference.book.name, nextReference.chapter);
+    },
+    [chapterReference, data, openChapter]
+  );
 
   const toggleCustomBook = (bookName: string) => {
     setCustomScopeBooks((current) =>
