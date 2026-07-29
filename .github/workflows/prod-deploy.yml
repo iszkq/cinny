@@ -6,6 +6,8 @@ on:
 jobs:
   deploy-and-tarball:
     name: Netlify deploy and tarball
+    env:
+      GNUPG_SIGNING_AVAILABLE: ${{ secrets.GNUPG_KEY != '' && secrets.GNUPG_PASSPHRASE != '' }}
     outputs:
       version: ${{ steps.vars.outputs.tag }}
     runs-on: ubuntu-latest
@@ -59,6 +61,7 @@ jobs:
       - name: Create tar.gz
         run: tar -czvf cinny-${{ steps.vars.outputs.tag }}.tar.gz dist
       - name: Sign tar.gz
+        if: env.GNUPG_SIGNING_AVAILABLE == 'true'
         run: |
           echo '${{ secrets.GNUPG_KEY }}' | gpg --batch --import
           # Sadly a few lines in the private key match a few lines in the public key,
@@ -75,6 +78,12 @@ jobs:
           files: |
             cinny-${{ steps.vars.outputs.tag }}-static.zip
             cinny-${{ steps.vars.outputs.tag }}.tar.gz
+      - name: Upload tarball signature
+        if: env.GNUPG_SIGNING_AVAILABLE == 'true'
+        uses: softprops/action-gh-release@6cbd405e2c4e67a21c47fa9e383d020e4e28b836 # v2.3.3
+        with:
+          tag_name: ${{ steps.vars.outputs.tag }}
+          files: |
             cinny-${{ steps.vars.outputs.tag }}.tar.gz.asc
 
   publish-image:
