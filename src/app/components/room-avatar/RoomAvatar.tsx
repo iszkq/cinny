@@ -6,6 +6,13 @@ import { getRoomIconSrc } from '../../utils/room';
 import colorMXID from '../../../util/colorMXID';
 import { useResilientAvatarMedia } from '../../hooks/useResilientAvatarMedia';
 
+type LoadedAvatarImage = {
+  key: string;
+  ownerId: string;
+  source?: string;
+  url: string;
+};
+
 type RoomAvatarProps = {
   roomId: string;
   src?: string;
@@ -22,23 +29,41 @@ export function RoomAvatar({
 }: RoomAvatarProps) {
   const {
     displaySrc,
+    displaySrcLoaded,
     imageKey,
     showFallback,
     handleLoad: handleMediaLoad,
     handleError,
   } = useResilientAvatarMedia(src, true);
   const currentImageKey = `${roomId}-${imageKey}`;
-  const [loadedImageKey, setLoadedImageKey] = useState<string>();
-  const imageReady = !showFallback && loadedImageKey === currentImageKey;
+  const [loadedImage, setLoadedImage] = useState<LoadedAvatarImage>();
+  const imageReady =
+    !showFallback &&
+    Boolean(displaySrc && (displaySrcLoaded || loadedImage?.key === currentImageKey));
+  const retainedImage =
+    !imageReady &&
+    src &&
+    loadedImage?.ownerId === roomId &&
+    (!showFallback || loadedImage.source === src)
+      ? loadedImage
+      : undefined;
+  const renderLoadingFallback = !imageReady && !retainedImage;
 
   const handleLoad: ReactEventHandler<HTMLImageElement> = (evt) => {
     evt.currentTarget.setAttribute('data-image-loaded', 'true');
-    setLoadedImageKey(currentImageKey);
+    if (displaySrc) {
+      setLoadedImage({
+        key: currentImageKey,
+        ownerId: roomId,
+        source: src,
+        url: displaySrc,
+      });
+    }
     handleMediaLoad();
   };
 
   const handleImageError: ReactEventHandler<HTMLImageElement> = () => {
-    setLoadedImageKey(undefined);
+    setLoadedImage((current) => (current?.key === currentImageKey ? undefined : current));
     handleError();
   };
 
@@ -69,13 +94,23 @@ export function RoomAvatar({
 
   return (
     <>
-      {!imageReady && (
+      {renderLoadingFallback && (
         <AvatarFallback
           style={{ backgroundColor: colorMXID(roomId ?? ''), color: color.Surface.Container }}
           className={css.RoomAvatar}
         >
           {renderFallback()}
         </AvatarFallback>
+      )}
+      {retainedImage && (
+        <AvatarImage
+          key={retainedImage.key}
+          className={css.RoomAvatar}
+          src={retainedImage.url}
+          alt={alt}
+          data-image-loaded="true"
+          draggable={false}
+        />
       )}
       {!showFallback && displaySrc && (
         <AvatarImage

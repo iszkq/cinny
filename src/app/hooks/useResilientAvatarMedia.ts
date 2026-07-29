@@ -4,6 +4,20 @@ import { getOriginalMediaUrl, shouldUseObjectUrlForMediaDisplay } from '../utils
 import { invalidateCachedMediaUrl, primeCachedMediaObjectUrl } from '../utils/mediaUrlCache';
 
 const AVATAR_RETRY_DELAY_MS = 250;
+const LOADED_AVATAR_MEDIA_LIMIT = 2048;
+const loadedAvatarMedia = new Set<string>();
+
+const markAvatarMediaLoaded = (src: string) => {
+  // Remember successful image URLs across avatar component remounts. Without this, a cached
+  // avatar still renders its text fallback for one frame while waiting for a new load event.
+  loadedAvatarMedia.delete(src);
+  loadedAvatarMedia.add(src);
+
+  if (loadedAvatarMedia.size > LOADED_AVATAR_MEDIA_LIMIT) {
+    const oldestSrc = loadedAvatarMedia.values().next().value;
+    if (typeof oldestSrc === 'string') loadedAvatarMedia.delete(oldestSrc);
+  }
+};
 
 const clearTimer = (timer: number | undefined): undefined => {
   if (typeof timer === 'number') {
@@ -62,12 +76,14 @@ export const useResilientAvatarMedia = (src?: string, preferOriginal = false) =>
     retryTimerRef.current = clearTimer(retryTimerRef.current);
     setShowFallback(false);
     if (displaySrc) {
+      markAvatarMediaLoaded(displaySrc);
       retriedSrcRef.current = undefined;
     }
   }, [displaySrc]);
 
   const handleError = useCallback(() => {
     retryTimerRef.current = clearTimer(retryTimerRef.current);
+    if (displaySrc) loadedAvatarMedia.delete(displaySrc);
 
     if (candidateIndex + 1 < candidates.length) {
       setShowFallback(false);
@@ -96,6 +112,7 @@ export const useResilientAvatarMedia = (src?: string, preferOriginal = false) =>
 
   return {
     displaySrc,
+    displaySrcLoaded: Boolean(displaySrc && loadedAvatarMedia.has(displaySrc)),
     showFallback: !displaySrc || showFallback,
     imageKey: `${displaySrc ?? 'empty'}-${retryNonce}`,
     handleLoad,

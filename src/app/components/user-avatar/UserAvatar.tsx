@@ -5,6 +5,13 @@ import * as css from './UserAvatar.css';
 import colorMXID from '../../../util/colorMXID';
 import { useResilientAvatarMedia } from '../../hooks/useResilientAvatarMedia';
 
+type LoadedAvatarImage = {
+  key: string;
+  ownerId: string;
+  source?: string;
+  url: string;
+};
+
 type UserAvatarProps = {
   className?: string;
   userId: string;
@@ -23,23 +30,41 @@ export function UserAvatar({
 }: UserAvatarProps) {
   const {
     displaySrc,
+    displaySrcLoaded,
     imageKey,
     showFallback,
     handleLoad: handleMediaLoad,
     handleError,
   } = useResilientAvatarMedia(src, true);
   const currentImageKey = `${userId}-${imageKey}`;
-  const [loadedImageKey, setLoadedImageKey] = useState<string>();
-  const imageReady = !showFallback && loadedImageKey === currentImageKey;
+  const [loadedImage, setLoadedImage] = useState<LoadedAvatarImage>();
+  const imageReady =
+    !showFallback &&
+    Boolean(displaySrc && (displaySrcLoaded || loadedImage?.key === currentImageKey));
+  const retainedImage =
+    !imageReady &&
+    src &&
+    loadedImage?.ownerId === userId &&
+    (!showFallback || loadedImage.source === src)
+      ? loadedImage
+      : undefined;
+  const renderLoadingFallback = !imageReady && !retainedImage;
 
   const handleLoad: ReactEventHandler<HTMLImageElement> = (evt) => {
     evt.currentTarget.setAttribute('data-image-loaded', 'true');
-    setLoadedImageKey(currentImageKey);
+    if (displaySrc) {
+      setLoadedImage({
+        key: currentImageKey,
+        ownerId: userId,
+        source: src,
+        url: displaySrc,
+      });
+    }
     handleMediaLoad();
   };
 
   const handleImageError: ReactEventHandler<HTMLImageElement> = () => {
-    setLoadedImageKey(undefined);
+    setLoadedImage((current) => (current?.key === currentImageKey ? undefined : current));
     handleError();
   };
 
@@ -70,13 +95,23 @@ export function UserAvatar({
 
   return (
     <>
-      {!imageReady && (
+      {renderLoadingFallback && (
         <AvatarFallback
           style={{ backgroundColor: colorMXID(userId), color: color.Surface.Container }}
           className={classNames(css.UserAvatar, className)}
         >
           {renderFallback()}
         </AvatarFallback>
+      )}
+      {retainedImage && (
+        <AvatarImage
+          key={retainedImage.key}
+          className={classNames(css.UserAvatar, className)}
+          src={retainedImage.url}
+          alt={alt}
+          data-image-loaded="true"
+          draggable={false}
+        />
       )}
       {!showFallback && displaySrc && (
         <AvatarImage
