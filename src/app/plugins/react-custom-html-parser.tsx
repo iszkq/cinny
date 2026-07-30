@@ -231,21 +231,35 @@ const extractTextFromChildren = (nodes: ChildNode[]): string => {
 function CachedHtmlEmoticonImage(
   props: ComponentPropsWithoutRef<'img'> & { fallbackSrc?: string }
 ) {
+  const androidApp = isAndroidApp();
   const { fallbackSrc, src, ...imgProps } = props;
   const originalSrc = src;
+  const primarySrc = androidApp ? fallbackSrc ?? originalSrc : originalSrc;
+  const secondarySrc = primarySrc === fallbackSrc ? originalSrc : fallbackSrc;
   const { displayUrl, handleLoad, handleError, requestKey } = useStableMediaUrl(
-    originalSrc,
-    fallbackSrc,
+    primarySrc,
+    secondarySrc,
     {
-      disableObjectUrlCache: !isAndroidApp(),
+      disableObjectUrlCache: !androidApp,
     }
   );
+
+  if (androidApp && !displayUrl) {
+    return (
+      <span
+        className={imgProps.className}
+        style={{ display: 'inline-block', width: '1em' }}
+        role="img"
+        aria-label={imgProps.alt ?? imgProps.title ?? ''}
+      />
+    );
+  }
 
   return (
     <img
       {...imgProps}
       key={requestKey}
-      src={displayUrl ?? originalSrc ?? fallbackSrc}
+      src={displayUrl ?? primarySrc ?? secondarySrc}
       decoding="async"
       onLoad={handleLoad}
       onError={handleError}

@@ -24,6 +24,7 @@ export const Reaction = as<
     useAuthentication?: boolean;
   }
 >(({ className, mx, count, reaction, useAuthentication, ...props }, ref) => {
+  const androidApp = isAndroidApp();
   const customEmoji = isMxcUrl(reaction) || isHttpUrl(reaction);
   const originalMediaUrl = isMxcUrl(reaction)
     ? mxcUrlToHttp(mx, reaction, useAuthentication) ?? undefined
@@ -33,14 +34,16 @@ export const Reaction = as<
   const thumbnailMediaUrl = isMxcUrl(reaction)
     ? mxcUrlToHttp(mx, reaction, useAuthentication, 48, 48, 'scale') ?? undefined
     : undefined;
+  const primaryMediaUrl = androidApp ? thumbnailMediaUrl ?? originalMediaUrl : originalMediaUrl;
+  const fallbackMediaUrl =
+    primaryMediaUrl === thumbnailMediaUrl ? originalMediaUrl : thumbnailMediaUrl;
   const { displayUrl, handleLoad, handleError, requestKey } = useStableMediaUrl(
-    originalMediaUrl,
-    thumbnailMediaUrl,
+    primaryMediaUrl,
+    fallbackMediaUrl,
     {
-      // Authenticated Matrix media cannot be loaded by an Android WebView <img> because the
-      // element cannot attach the access token. Keep the existing browser/desktop behavior, but
-      // let Android display the response fetched by the native media bridge as a local blob URL.
-      disableObjectUrlCache: !isAndroidApp(),
+      // An Android WebView <img> cannot attach the Matrix access token. Keep the existing
+      // browser/desktop behavior, but render Android reactions from an authenticated local blob.
+      disableObjectUrlCache: !androidApp,
     }
   );
 
@@ -56,15 +59,21 @@ export const Reaction = as<
     >
       <Text className={css.ReactionText} as="span" size="T400">
         {customEmoji ? (
-          <img
-            key={requestKey}
-            className={css.ReactionImg}
-            src={displayUrl ?? originalMediaUrl ?? thumbnailMediaUrl ?? reaction}
-            alt={reaction}
-            decoding="async"
-            onLoad={handleLoad}
-            onError={handleError}
-          />
+          displayUrl || !androidApp ? (
+            <img
+              key={requestKey}
+              className={css.ReactionImg}
+              src={displayUrl ?? primaryMediaUrl ?? fallbackMediaUrl ?? reaction}
+              alt={reaction}
+              decoding="async"
+              onLoad={handleLoad}
+              onError={handleError}
+            />
+          ) : (
+            <span className={css.ReactionImg} aria-hidden="true">
+              {'...'}
+            </span>
+          )
         ) : (
           <Text as="span" size="Inherit" truncate>
             {reaction}

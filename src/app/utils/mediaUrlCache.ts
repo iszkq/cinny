@@ -4,8 +4,8 @@ import { getFallbackSession } from '../state/sessions';
 import { mobileOrTablet } from './user-agent';
 import { isAndroidApp } from './nativePlatform';
 
-const LEGACY_PERSISTENT_MEDIA_CACHE = 'cinny-auth-media-v2';
-const PERSISTENT_MEDIA_CACHE_PREFIX = 'cinny-auth-media-v3';
+const LEGACY_PERSISTENT_MEDIA_CACHES = ['cinny-auth-media-v2', 'cinny-auth-media-v3'];
+const PERSISTENT_MEDIA_CACHE_PREFIX = 'cinny-auth-media-v4';
 const FAILED_MEDIA_RETRY_DELAY_MS = 30 * 1000;
 const FAILED_MEDIA_NOT_FOUND_RETRY_DELAY_MS = 5 * 60 * 1000;
 
@@ -103,6 +103,13 @@ const getMediaPreloadConcurrency = () => {
       ? undefined
       : (navigator as DeviceMemoryNavigator).deviceMemory;
 
+  if (isAndroidApp()) {
+    return {
+      persistent: 2,
+      objectUrl: typeof deviceMemory === 'number' && deviceMemory <= 4 ? 3 : 4,
+    };
+  }
+
   if (mobileOrTablet()) {
     return {
       persistent: 2,
@@ -175,6 +182,8 @@ let objectUrlMediaBytes = 0;
 let activeObjectUrlMediaTasks = 0;
 let currentCacheNamespace: string | undefined;
 let legacyCacheCleanupPromise: Promise<void> | undefined;
+let legacyCacheCleanupComplete = false;
+let mediaCachePromise: Promise<Cache | undefined> | undefined;
 
 const emitObjectUrlMediaChange = (src: string, objectUrl: string | undefined) => {
   objectUrlMediaListeners.get(src)?.forEach((listener) => {
@@ -409,6 +418,7 @@ const resetInMemoryMediaCaches = () => {
   backgroundObjectUrlMediaQueue.length = 0;
   clearObjectUrlMediaCache();
   clearFailedMediaEntries();
+  mediaCachePromise = undefined;
 };
 
 const syncPersistentMediaNamespace = () => {
@@ -427,6 +437,10 @@ const cleanupLegacyMediaCaches = async () => {
     return;
   }
 
+  if (legacyCacheCleanupComplete) {
+    return;
+  }
+
   if (legacyCacheCleanupPromise) {
     return legacyCacheCleanupPromise;
   }
@@ -437,12 +451,16 @@ const cleanupLegacyMediaCaches = async () => {
       Promise.all(
         cacheKeys
           .filter(
-            (key) => key === LEGACY_PERSISTENT_MEDIA_CACHE || key === PERSISTENT_MEDIA_CACHE_PREFIX
+            (key) =>
+              LEGACY_PERSISTENT_MEDIA_CACHES.includes(key) ||
+              LEGACY_PERSISTENT_MEDIA_CACHES.some((prefix) => key.startsWith(`${prefix}-`))
           )
           .map((key) => caches.delete(key))
       )
     )
-    .then(() => undefined)
+    .then(() => {
+      legacyCacheCleanupComplete = true;
+    })
     .finally(() => {
       legacyCacheCleanupPromise = undefined;
     });
@@ -457,7 +475,10 @@ const getMediaCache = async (): Promise<Cache | undefined> => {
 
   syncPersistentMediaNamespace();
   await cleanupLegacyMediaCaches();
-  return caches.open(getPersistentMediaCacheName());
+  if (!mediaCachePromise) {
+    mediaCachePromise = caches.open(getPersistentMediaCacheName()).catch(() => undefined);
+  }
+  return mediaCachePromise;
 };
 
 const trimPersistentMediaCache = async (
@@ -517,7 +538,21 @@ const matchPersistentMedia = async (src: string): Promise<Response | undefined> 
 
   const cachedResponse = await mediaCache.match(src);
   if (cachedResponse) {
-    await touchPersistentMediaEntry(mediaCache, src, cachedResponse.clone()).catch(() => undefined);
+    const contentType = cachedResponse.headers.get('content-type')?.toLowerCase() ?? '';
+    if (contentType.includes('text/html') || contentType.includes('application/json')) {
+      await mediaCache.delete(src).catch(() => false);
+      persistedMediaUrls.delete(src);
+      return undefined;
+    }
+
+    // Rewriting every cache hit is particularly expensive in Android WebView (Cache Storage is
+    // backed by disk/IndexedDB). It caused dozens of writes while scrolling sticker grids. The
+    // Android cache is already bounded and namespaced, so serve hits without an LRU rewrite.
+    if (!isAndroidApp()) {
+      await touchPersistentMediaEntry(mediaCache, src, cachedResponse.clone()).catch(
+        () => undefined
+      );
+    }
     persistedMediaUrls.add(src);
   }
 

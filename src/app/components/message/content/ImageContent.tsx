@@ -40,6 +40,8 @@ import {
   type ViewerImageItem as GlobalViewerImageItem,
 } from '../../../state/imageViewer';
 import { primeDesktopMediaAssetUrl } from '../../../utils/desktopMediaAssetCache';
+import { isAndroidApp } from '../../../utils/nativePlatform';
+import { isAnimatedEmojiBoardMedia } from '../../emoji-board/media';
 
 const IMAGE_PREVIEW_WIDTH = 230;
 const IMAGE_PREVIEW_HEIGHT = 460;
@@ -110,6 +112,7 @@ export const ImageContent = as<'div', ImageContentProps>(
     ref
   ) => {
     const mx = useMatrixClient();
+    const androidApp = isAndroidApp();
     const setImageViewerSession = useSetAtom(imageViewerSessionAtom);
     const clientConfig = useClientConfig();
     const imageOcr = clientConfig.imageOcr;
@@ -149,6 +152,13 @@ export const ImageContent = as<'div', ImageContentProps>(
           'scale'
         ) ?? undefined
       : undefined;
+    const preferAndroidThumbnail =
+      androidApp && !preferOriginalPreview && !isAnimatedEmojiBoardMedia(info);
+    const stablePrimaryUrl = preferAndroidThumbnail
+      ? stableThumbnailUrl ?? stableOriginalUrl
+      : stableOriginalUrl;
+    const stableFallbackUrl =
+      stablePrimaryUrl === stableThumbnailUrl ? stableOriginalUrl : stableThumbnailUrl;
     const {
       displayUrl: stablePreviewUrl,
       hasFailed: stablePreviewFailed,
@@ -157,8 +167,8 @@ export const ImageContent = as<'div', ImageContentProps>(
       handleError: handleStablePreviewError,
       retry: retryStablePreview,
     } = useStableMediaUrl(
-      stablePreviewEnabled ? stableOriginalUrl : undefined,
-      stablePreviewEnabled ? stableThumbnailUrl : undefined,
+      stablePreviewEnabled ? stablePrimaryUrl : undefined,
+      stablePreviewEnabled ? stableFallbackUrl : undefined,
       {
         mimeType,
         fallbackMimeType: mimeType,

@@ -68,7 +68,7 @@ import { mobileOrTablet } from '../../utils/user-agent';
 import { isAndroidApp } from '../../utils/nativePlatform';
 import { checkForAndroidUpdate, type PendingAndroidUpdate } from '../../utils/androidUpdater';
 import { AndroidUpdatePrompt } from '../../components/AndroidUpdatePrompt';
-import { primeCachedMediaObjectUrl } from '../../utils/mediaUrlCache';
+import { primeCachedMediaObjectUrl, primePersistentMediaUrl } from '../../utils/mediaUrlCache';
 
 const EXTERNAL_LINK_SELECTOR = 'a[href]';
 const DESKTOP_UPDATE_AUTO_CHECK_DELAY_MS = 30000;
@@ -83,6 +83,7 @@ const IMAGE_PACK_MEDIA_WARM_START_DELAY_MS = 15000;
 const ANDROID_UPDATE_AUTO_CHECK_DELAY_MS = 25_000;
 const ANDROID_UPDATE_AUTO_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const ANDROID_AVATAR_WARM_LIMIT = 384;
+const ANDROID_AVATAR_OBJECT_WARM_LIMIT = 64;
 
 const taskbarBadgeIconCache = new Map<string, Uint8Array>();
 let activeTaskbarBadgeColor: string | undefined;
@@ -901,11 +902,13 @@ function AndroidAvatarMediaWarmFeature() {
         if (avatarUrl) avatarUrls.add(avatarUrl);
       });
 
-      Array.from(avatarUrls)
-        .slice(0, ANDROID_AVATAR_WARM_LIMIT)
-        .forEach((avatarUrl) => {
-          primeCachedMediaObjectUrl(avatarUrl, 'background');
-        });
+      const warmUrls = Array.from(avatarUrls).slice(0, ANDROID_AVATAR_WARM_LIMIT);
+      warmUrls.forEach((avatarUrl) => {
+        primePersistentMediaUrl(avatarUrl, 'background');
+      });
+      warmUrls.slice(0, ANDROID_AVATAR_OBJECT_WARM_LIMIT).forEach((avatarUrl) => {
+        primeCachedMediaObjectUrl(avatarUrl, 'background');
+      });
     };
 
     const followUpTimer = window.setTimeout(warmAvatarMedia, 1800);

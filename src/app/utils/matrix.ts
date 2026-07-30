@@ -108,26 +108,21 @@ const fetchMediaWithAndroidFallback = async (
   const method = init?.method?.toUpperCase() ?? 'GET';
   const nativeEligible = isAndroidApp() && method === 'GET' && /^https?:\/\//i.test(url);
 
-  if (nativeEligible) {
-    try {
-      return await fetchMediaWithAndroidNativeHttp(url, init);
-    } catch (nativeError) {
-      try {
-        return await fetchWithTimeout(url, init);
-      } catch {
-        throw nativeError;
-      }
-    }
-  }
-
   try {
     return await fetchWithTimeout(url, init);
   } catch (browserError) {
-    if (!isAndroidApp() || method !== 'GET') {
+    if (!nativeEligible) {
       throw browserError;
     }
     return fetchMediaWithAndroidNativeHttp(url, init);
   }
+};
+
+const isUsableMediaResponse = (response: Response): boolean => {
+  if (!response.ok) return false;
+
+  const contentType = response.headers.get('content-type')?.toLowerCase() ?? '';
+  return !contentType.includes('text/html') && !contentType.includes('application/json');
 };
 
 export const fetchMediaWithAuth = async (src: string, init?: RequestInit): Promise<Response> => {
@@ -166,8 +161,13 @@ export const fetchMediaWithAuth = async (src: string, init?: RequestInit): Promi
         continue;
       }
 
-      if (response.ok) {
+      if (isUsableMediaResponse(response)) {
         return response;
+      }
+
+      if (response.ok) {
+        lastError = new Error(`Media endpoint returned ${response.headers.get('content-type')}`);
+        continue;
       }
 
       lastResponse = response;
@@ -192,11 +192,14 @@ const getAbsoluteUrl = (src: string, baseUrl: string): URL | undefined => {
 
 const isSessionMediaUrl = (src: string, baseUrl: string): boolean => {
   const mediaUrl = getAbsoluteUrl(src, baseUrl);
-  if (!mediaUrl) {
+  const homeserverUrl = getAbsoluteUrl(baseUrl, baseUrl);
+  if (!mediaUrl || !homeserverUrl) {
     return false;
   }
 
-  return AUTH_MEDIA_PATHS.some((path) => mediaUrl.href.startsWith(new URL(path, baseUrl).href));
+  return (
+    mediaUrl.origin === homeserverUrl.origin && MATRIX_MEDIA_PATH_MATCHER.test(mediaUrl.pathname)
+  );
 };
 
 const getPublicMediaFallbackUrls = (src: string, baseUrl: string): string[] => {

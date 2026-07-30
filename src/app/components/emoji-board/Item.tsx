@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Box, Icon, Icons } from 'folds';
 import { MatrixClient } from 'matrix-js-sdk';
 import classNames from 'classnames';
@@ -12,6 +12,78 @@ import { getEmojiBoardMediaUrls } from './media';
 import { getRemoteStickerPreviewUrl } from './useRemoteStickerIndex';
 import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
 import { isHttpUrl } from '../../utils/matrix';
+import { isAndroidApp } from '../../utils/nativePlatform';
+
+type AndroidMediaVisibilityListener = () => void;
+
+const androidMediaVisibilityListeners = new WeakMap<Element, AndroidMediaVisibilityListener>();
+let androidMediaVisibilityObserver: IntersectionObserver | undefined;
+
+const getAndroidMediaVisibilityObserver = (): IntersectionObserver | undefined => {
+  if (androidMediaVisibilityObserver || typeof IntersectionObserver === 'undefined') {
+    return androidMediaVisibilityObserver;
+  }
+
+  androidMediaVisibilityObserver = new IntersectionObserver(
+    (entries, observer) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+
+        androidMediaVisibilityListeners.get(entry.target)?.();
+        androidMediaVisibilityListeners.delete(entry.target);
+        observer.unobserve(entry.target);
+      });
+    },
+    { rootMargin: '160px 0px' }
+  );
+
+  return androidMediaVisibilityObserver;
+};
+
+const useAndroidMediaVisibility = () => {
+  const androidApp = isAndroidApp();
+  const [nearViewport, setNearViewport] = useState(!androidApp);
+  const elementRef = useRef<HTMLElement>();
+
+  const observe = useCallback(
+    (element: HTMLElement | null) => {
+      const previousElement = elementRef.current;
+      if (!androidApp) {
+        elementRef.current = element ?? undefined;
+        setNearViewport(true);
+        return;
+      }
+
+      const observer = getAndroidMediaVisibilityObserver();
+      if (previousElement && observer) {
+        observer.unobserve(previousElement);
+        androidMediaVisibilityListeners.delete(previousElement);
+      }
+
+      elementRef.current = element ?? undefined;
+      if (!element) return;
+
+      androidMediaVisibilityListeners.set(element, () => setNearViewport(true));
+      observer?.observe(element);
+      if (!observer) setNearViewport(true);
+    },
+    [androidApp]
+  );
+
+  useEffect(
+    () => () => {
+      if (!androidApp) return;
+
+      const element = elementRef.current;
+      const observer = getAndroidMediaVisibilityObserver();
+      if (element && observer) observer.unobserve(element);
+      if (element) androidMediaVisibilityListeners.delete(element);
+    },
+    [androidApp]
+  );
+
+  return { androidApp, nearViewport, observe };
+};
 
 export const getEmojiItemInfo = (element: Element): EmojiItemInfo | undefined => {
   const label = element.getAttribute('title');
@@ -74,7 +146,8 @@ type CustomEmojiItemProps = {
 };
 export function CustomEmojiItem({ mx, useAuthentication, image }: CustomEmojiItemProps) {
   const desktopSupported = isDesktopUpdaterSupported();
-  const imageLoading = desktopSupported ? 'eager' : 'lazy';
+  const { androidApp, nearViewport, observe } = useAndroidMediaVisibility();
+  const imageLoading = desktopSupported || androidApp ? 'eager' : 'lazy';
   const previewUrl = getRemoteStickerPreviewUrl(image);
   const noReferrer = isHttpUrl(previewUrl ?? image.url);
   const { primaryUrl, fallbackUrl } = getEmojiBoardMediaUrls({
@@ -86,14 +159,20 @@ export function CustomEmojiItem({ mx, useAuthentication, image }: CustomEmojiIte
     height: 64,
   });
   const { displayUrl, hasFailed, isLoaded, requestKey, handleLoad, handleError } =
-    useStableMediaUrl(primaryUrl, fallbackUrl, {
-      mimeType: image.info?.mimetype,
-      fallbackMimeType: image.info?.mimetype,
-    });
+    useStableMediaUrl(
+      nearViewport ? primaryUrl : undefined,
+      nearViewport ? fallbackUrl : undefined,
+      {
+        mimeType: image.info?.mimetype,
+        fallbackMimeType: image.info?.mimetype,
+      }
+    );
 
   return (
     <Box
       as="button"
+      ref={observe}
+      data-android-media={androidApp || undefined}
       type="button"
       alignItems="Center"
       justifyContent="Center"
@@ -132,7 +211,7 @@ export function CustomEmojiItem({ mx, useAuthentication, image }: CustomEmojiIte
             key={requestKey}
             loading={imageLoading}
             decoding="async"
-            className={css.CustomEmojiImg}
+            className={classNames(css.CustomEmojiImg, androidApp && css.AndroidMediaImg)}
             alt=""
             src={displayUrl}
             referrerPolicy={noReferrer ? 'no-referrer' : undefined}
@@ -157,7 +236,8 @@ type StickerItemProps = {
 
 export function StickerItem({ mx, useAuthentication, image }: StickerItemProps) {
   const desktopSupported = isDesktopUpdaterSupported();
-  const imageLoading = desktopSupported ? 'eager' : 'lazy';
+  const { androidApp, nearViewport, observe } = useAndroidMediaVisibility();
+  const imageLoading = desktopSupported || androidApp ? 'eager' : 'lazy';
   const previewUrl = getRemoteStickerPreviewUrl(image);
   const noReferrer = isHttpUrl(previewUrl ?? image.url);
   const { primaryUrl, fallbackUrl } = getEmojiBoardMediaUrls({
@@ -167,17 +247,25 @@ export function StickerItem({ mx, useAuthentication, image }: StickerItemProps) 
     info: image.info,
     width: 256,
     height: 256,
-    preferOriginal: true,
+    // Animated formats still select the original automatically. Static Android tiles use the
+    // homeserver thumbnail to avoid decoding full-resolution files while scrolling.
+    preferOriginal: !androidApp,
   });
   const { displayUrl, hasFailed, isLoaded, requestKey, handleLoad, handleError } =
-    useStableMediaUrl(primaryUrl, fallbackUrl, {
-      mimeType: image.info?.mimetype,
-      fallbackMimeType: image.info?.mimetype,
-    });
+    useStableMediaUrl(
+      nearViewport ? primaryUrl : undefined,
+      nearViewport ? fallbackUrl : undefined,
+      {
+        mimeType: image.info?.mimetype,
+        fallbackMimeType: image.info?.mimetype,
+      }
+    );
 
   return (
     <Box
       as="button"
+      ref={observe}
+      data-android-media={androidApp || undefined}
       type="button"
       alignItems="Center"
       justifyContent="Center"
@@ -214,7 +302,7 @@ export function StickerItem({ mx, useAuthentication, image }: StickerItemProps) 
             key={requestKey}
             loading={imageLoading}
             decoding="async"
-            className={css.StickerImg}
+            className={classNames(css.StickerImg, androidApp && css.AndroidMediaImg)}
             alt=""
             src={displayUrl}
             referrerPolicy={noReferrer ? 'no-referrer' : undefined}

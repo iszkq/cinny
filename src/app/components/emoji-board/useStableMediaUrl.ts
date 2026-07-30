@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   getCachedMediaObjectUrl,
   invalidateCachedMediaUrl,
@@ -10,6 +10,7 @@ import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
 import { releaseObjectUrl, retainObjectUrl } from '../../utils/objectUrlRetainer';
 import { shouldUseObjectUrlForMediaDisplay } from '../../utils/matrix';
 import { mobileOrTablet } from '../../utils/user-agent';
+import { isAndroidApp } from '../../utils/nativePlatform';
 
 type MediaCandidate = {
   source: string;
@@ -21,13 +22,16 @@ type UseStableMediaUrlOptions = {
   mimeType?: string;
   fallbackMimeType?: string;
   preferObjectUrl?: boolean;
+  requireObjectUrl?: boolean;
 };
 
 const PREFERRED_OBJECT_URL_WAIT_MS = 700;
+const ANDROID_REQUIRED_OBJECT_URL_WAIT_MS = 15_000;
 
 const buildMediaCandidates = (
   options: {
     allowBrowserObjectUrlCache: boolean;
+    allowDirectSource: boolean;
   },
   ...sources: Array<string | undefined>
 ): MediaCandidate[] => {
@@ -50,7 +54,7 @@ const buildMediaCandidates = (
       }
     }
 
-    if (!seenDisplayUrls.has(source)) {
+    if (options.allowDirectSource && !seenDisplayUrls.has(source)) {
       candidates.push({ source, displayUrl: source });
       seenDisplayUrls.add(source);
     }
@@ -71,6 +75,11 @@ export const useStableMediaUrl = (
     (mobileDevice ||
       shouldUseObjectUrlForMediaDisplay(src) ||
       shouldUseObjectUrlForMediaDisplay(fallbackSrc));
+  const requireObjectUrl =
+    options.requireObjectUrl ??
+    (isAndroidApp() &&
+      (shouldUseObjectUrlForMediaDisplay(src) || shouldUseObjectUrlForMediaDisplay(fallbackSrc)));
+  const deferFallbackPreparation = requireObjectUrl && isAndroidApp();
   const desktopSupported = isDesktopUpdaterSupported();
   const objectUrlCacheEnabled = preferObjectUrl && !disableObjectUrlCache;
   const shouldWaitForPreparedMedia =
@@ -81,11 +90,15 @@ export const useStableMediaUrl = (
   const [desktopFallbackSrc, setDesktopFallbackSrc] = useState<string | undefined>();
   const [loadedDisplayUrl, setLoadedDisplayUrl] = useState<string | undefined>();
   const [preparedMediaReady, setPreparedMediaReady] = useState(!shouldWaitForPreparedMedia);
+  const fallbackAttemptedRef = useRef(false);
 
   const candidates = useMemo(
     () =>
       buildMediaCandidates(
-        { allowBrowserObjectUrlCache: objectUrlCacheEnabled },
+        {
+          allowBrowserObjectUrlCache: objectUrlCacheEnabled,
+          allowDirectSource: !requireObjectUrl,
+        },
         desktopSrc,
         src,
         desktopFallbackSrc,
@@ -93,7 +106,15 @@ export const useStableMediaUrl = (
       ),
     // The media cache mutates outside React. cacheVersion is the explicit invalidation signal.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [cacheVersion, desktopFallbackSrc, desktopSrc, fallbackSrc, objectUrlCacheEnabled, src]
+    [
+      cacheVersion,
+      desktopFallbackSrc,
+      desktopSrc,
+      fallbackSrc,
+      objectUrlCacheEnabled,
+      requireObjectUrl,
+      src,
+    ]
   );
 
   const hasPreparedCandidate =
@@ -109,6 +130,7 @@ export const useStableMediaUrl = (
     setDesktopFallbackSrc(undefined);
     setLoadedDisplayUrl(undefined);
     setPreparedMediaReady(!shouldWaitForPreparedMedia);
+    fallbackAttemptedRef.current = false;
   }, [fallbackSrc, shouldWaitForPreparedMedia, src]);
 
   useEffect(() => {
@@ -181,14 +203,14 @@ export const useStableMediaUrl = (
     if (src) {
       void primeCachedMediaObjectUrl(src, 'visible');
     }
-    if (fallbackSrc && fallbackSrc !== src) {
+    if (!deferFallbackPreparation && fallbackSrc && fallbackSrc !== src) {
       void primeCachedMediaObjectUrl(fallbackSrc, 'background');
     }
 
     return () => {
       unsubscribeList.forEach((unsubscribe) => unsubscribe());
     };
-  }, [desktopSupported, fallbackSrc, objectUrlCacheEnabled, src]);
+  }, [deferFallbackPreparation, desktopSupported, fallbackSrc, objectUrlCacheEnabled, src]);
 
   useEffect(() => {
     if (!shouldWaitForPreparedMedia) {
@@ -196,32 +218,37 @@ export const useStableMediaUrl = (
     }
 
     let disposed = false;
-    const timeoutId = setTimeout(() => {
-      if (!disposed) {
-        setPreparedMediaReady(true);
-      }
-    }, PREFERRED_OBJECT_URL_WAIT_MS);
+    const timeoutId = setTimeout(
+      () => {
+        if (!disposed) {
+          setPreparedMediaReady(true);
+        }
+      },
+      requireObjectUrl ? ANDROID_REQUIRED_OBJECT_URL_WAIT_MS : PREFERRED_OBJECT_URL_WAIT_MS
+    );
 
     const preparePreferredUrl = async () => {
-      await Promise.all(
-        desktopSupported
-          ? [
-              src ? primeDesktopMediaAssetUrl(src, 'visible', options.mimeType) : undefined,
-              fallbackSrc && fallbackSrc !== src
-                ? primeDesktopMediaAssetUrl(
-                    fallbackSrc,
-                    'background',
-                    options.fallbackMimeType ?? options.mimeType
-                  )
-                : undefined,
-            ]
-          : [
-              src ? primeCachedMediaObjectUrl(src, 'visible') : undefined,
-              fallbackSrc && fallbackSrc !== src
-                ? primeCachedMediaObjectUrl(fallbackSrc, 'background')
-                : undefined,
-            ]
-      ).catch(() => undefined);
+      if (desktopSupported) {
+        await Promise.all([
+          src ? primeDesktopMediaAssetUrl(src, 'visible', options.mimeType) : undefined,
+          fallbackSrc && fallbackSrc !== src
+            ? primeDesktopMediaAssetUrl(
+                fallbackSrc,
+                'background',
+                options.fallbackMimeType ?? options.mimeType
+              )
+            : undefined,
+        ]).catch(() => undefined);
+      } else {
+        const primaryObjectUrl = src
+          ? await primeCachedMediaObjectUrl(src, 'visible')?.catch(() => undefined)
+          : undefined;
+        if ((!src || !primaryObjectUrl) && fallbackSrc && fallbackSrc !== src) {
+          await primeCachedMediaObjectUrl(fallbackSrc, 'visible')?.catch(() => undefined);
+        } else if (!deferFallbackPreparation && fallbackSrc && fallbackSrc !== src) {
+          await primeCachedMediaObjectUrl(fallbackSrc, 'background')?.catch(() => undefined);
+        }
+      }
 
       if (disposed) {
         return;
@@ -240,9 +267,11 @@ export const useStableMediaUrl = (
     };
   }, [
     desktopSupported,
+    deferFallbackPreparation,
     fallbackSrc,
     options.fallbackMimeType,
     options.mimeType,
+    requireObjectUrl,
     shouldWaitForPreparedMedia,
     src,
   ]);
@@ -273,13 +302,41 @@ export const useStableMediaUrl = (
       return;
     }
 
+    if (
+      requireObjectUrl &&
+      activeCandidate?.source === src &&
+      fallbackSrc &&
+      fallbackSrc !== src &&
+      !fallbackAttemptedRef.current
+    ) {
+      fallbackAttemptedRef.current = true;
+      setPreparedMediaReady(false);
+      invalidateCachedMediaUrl(src)
+        .then(() => primeCachedMediaObjectUrl(fallbackSrc, 'visible', true))
+        .catch(() => undefined)
+        .finally(() => {
+          setPreparedMediaReady(true);
+          setCandidateIndex(0);
+          setCacheVersion((prev) => prev + 1);
+        });
+      return;
+    }
+
     setCandidateIndex((currentIndex) => Math.min(currentIndex + 1, activeCandidates.length));
-  }, [activeCandidates.length, loadedDisplayUrl]);
+  }, [
+    activeCandidate,
+    activeCandidates.length,
+    fallbackSrc,
+    loadedDisplayUrl,
+    requireObjectUrl,
+    src,
+  ]);
 
   const retry = useCallback(() => {
     setLoadedDisplayUrl(undefined);
     setCandidateIndex(0);
     setPreparedMediaReady(!shouldWaitForPreparedMedia);
+    fallbackAttemptedRef.current = false;
 
     if (!objectUrlCacheEnabled) {
       setCacheVersion((prev) => prev + 1);

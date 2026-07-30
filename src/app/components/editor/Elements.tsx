@@ -80,6 +80,7 @@ function RenderEmoticonElement({
   children,
 }: { element: EmoticonElement } & RenderElementProps) {
   const mx = useMatrixClient();
+  const androidApp = isAndroidApp();
   const useAuthentication = useMediaAuthentication();
   const selected = useSelected();
   const focused = useFocused();
@@ -92,11 +93,14 @@ function RenderEmoticonElement({
   const thumbnailMediaUrl = isMxcUrl(element.key)
     ? mxcUrlToHttp(mx, element.key, useAuthentication, 48, 48, 'scale') ?? undefined
     : undefined;
+  const primaryMediaUrl = androidApp ? thumbnailMediaUrl ?? originalMediaUrl : originalMediaUrl;
+  const fallbackMediaUrl =
+    primaryMediaUrl === thumbnailMediaUrl ? originalMediaUrl : thumbnailMediaUrl;
   const { displayUrl, handleLoad, handleError, requestKey } = useStableMediaUrl(
-    originalMediaUrl,
-    thumbnailMediaUrl,
+    primaryMediaUrl,
+    fallbackMediaUrl,
     {
-      disableObjectUrlCache: !isAndroidApp(),
+      disableObjectUrlCache: !androidApp,
     }
   );
 
@@ -108,16 +112,20 @@ function RenderEmoticonElement({
         })}
         contentEditable={false}
       >
-        {customEmoji ? (
+        {customEmoji && (displayUrl || !androidApp) ? (
           <img
             key={requestKey}
             className={css.EmoticonImg}
-            src={displayUrl ?? originalMediaUrl ?? thumbnailMediaUrl ?? element.key}
+            src={displayUrl ?? primaryMediaUrl ?? fallbackMediaUrl ?? element.key}
             alt={element.shortcode}
             decoding="async"
             onLoad={handleLoad}
             onError={handleError}
           />
+        ) : customEmoji ? (
+          <span className={css.EmoticonImg} aria-label={element.shortcode}>
+            {'...'}
+          </span>
         ) : (
           element.key
         )}

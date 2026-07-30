@@ -46,10 +46,10 @@ const WEB_IMAGE_PACK_WARM_BATCH_SIZE = 12;
 const WEB_IMAGE_PACK_WARM_BATCH_DELAY_MS = 650;
 const WEB_IMAGE_PACK_PRIORITY_OBJECT_WARM_LIMIT = 96;
 const WEB_IMAGE_PACK_SECONDARY_OBJECT_WARM_LIMIT = 192;
-const ANDROID_IMAGE_PACK_PRIORITY_OBJECT_WARM_LIMIT = 512;
-const ANDROID_IMAGE_PACK_SECONDARY_OBJECT_WARM_LIMIT = 256;
-const ANDROID_IMAGE_PACK_PRIORITY_BATCH_SIZE = 24;
-const ANDROID_IMAGE_PACK_SECONDARY_BATCH_SIZE = 12;
+const ANDROID_IMAGE_PACK_PRIORITY_OBJECT_WARM_LIMIT = 36;
+const ANDROID_IMAGE_PACK_SECONDARY_OBJECT_WARM_LIMIT = 24;
+const ANDROID_IMAGE_PACK_PRIORITY_BATCH_SIZE = 12;
+const ANDROID_IMAGE_PACK_SECONDARY_BATCH_SIZE = 8;
 const ANDROID_IMAGE_PACK_PRIORITY_BATCH_DELAY_MS = 80;
 const ANDROID_IMAGE_PACK_SECONDARY_BATCH_DELAY_MS = 160;
 const IMAGE_PACK_AVATAR_SIZE = 64;
@@ -234,6 +234,7 @@ const getImagePackMediaUrls = (
   usages: ImageUsage[]
 ) => {
   const mediaUrls = new Set<string>();
+  const androidApp = isAndroidApp();
 
   packs.forEach((pack) => {
     usages.forEach((usage) => {
@@ -263,7 +264,7 @@ const getImagePackMediaUrls = (
           info: image.info,
           width: size,
           height: size,
-          preferOriginal: usage === ImageUsage.Sticker,
+          preferOriginal: usage === ImageUsage.Sticker && !androidApp,
         }).forEach((mediaUrl) => {
           mediaUrls.add(mediaUrl);
         });
@@ -281,6 +282,7 @@ const getImagePackPrimaryMediaUrls = (
   usages: ImageUsage[]
 ) => {
   const mediaUrls = new Set<string>();
+  const androidApp = isAndroidApp();
 
   packs.forEach((pack) => {
     usages.forEach((usage) => {
@@ -310,7 +312,7 @@ const getImagePackPrimaryMediaUrls = (
           info: image.info,
           width: size,
           height: size,
-          preferOriginal: usage === ImageUsage.Sticker,
+          preferOriginal: usage === ImageUsage.Sticker && !androidApp,
         });
 
         if (primaryUrl) {

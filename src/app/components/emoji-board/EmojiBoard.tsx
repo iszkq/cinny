@@ -76,6 +76,7 @@ import {
   useRemoteStickerIndex,
 } from './useRemoteStickerIndex';
 import { isHttpUrl } from '../../utils/matrix';
+import { isAndroidApp } from '../../utils/nativePlatform';
 
 const RECENT_GROUP_ID = 'recent_group';
 const SEARCH_GROUP_ID = 'search_group';
@@ -430,6 +431,7 @@ function StickerSidebar({
 }: StickerSidebarProps) {
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
+  const androidApp = isAndroidApp();
 
   const [activeGroupId, setActiveGroupId] = useAtom(activeGroupAtom);
   const usage = ImageUsage.Sticker;
@@ -465,7 +467,7 @@ function StickerSidebar({
               info: firstImage?.info,
               width: 64,
               height: 64,
-              preferOriginal: true,
+              preferOriginal: !androidApp,
             });
 
           return (
@@ -683,6 +685,7 @@ export function EmojiBoard({
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
   const desktopSupported = isDesktopUpdaterSupported();
+  const androidApp = isAndroidApp();
 
   const emojiTab = tab === EmojiBoardTab.Emoji;
   const cloudTab = tab === EmojiBoardTab.Cloud;
@@ -783,7 +786,7 @@ export function EmojiBoard({
           info: image.info,
           width: size,
           height: size,
-          preferOriginal: usage === ImageUsage.Sticker,
+          preferOriginal: usage === ImageUsage.Sticker && !androidApp,
         }).forEach((url) => {
           mediaUrls.add(url);
         });
@@ -791,7 +794,7 @@ export function EmojiBoard({
 
       return Array.from(mediaUrls);
     },
-    [mx, usage, useAuthentication]
+    [androidApp, mx, usage, useAuthentication]
   );
 
   const priorityPacks = useMemo(() => {

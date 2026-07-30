@@ -1,4 +1,4 @@
-import { style } from '@vanilla-extract/css';
+import { globalStyle, style } from '@vanilla-extract/css';
 import { toRem, color, config, DefaultReset, FocusOutline } from 'folds';
 import { localConfig } from '../../styles/tokens';
 
@@ -228,6 +228,14 @@ export const EmojiItem = style([
     ':hover': {
       backgroundColor: color.Surface.ContainerHover,
     },
+
+    selectors: {
+      '&[data-android-media="true"]': {
+        contain: 'layout paint style',
+        contentVisibility: 'auto',
+        containIntrinsicSize: `${toRem(48)} ${toRem(48)}`,
+      },
+    },
   },
 ]);
 
@@ -238,6 +246,10 @@ export const StickerItem = style([
     height: toRem(112),
   },
 ]);
+
+globalStyle(`${StickerItem}[data-android-media="true"]`, {
+  containIntrinsicSize: `${toRem(112)} ${toRem(112)}`,
+});
 
 export const CustomEmojiImg = style([
   DefaultReset,
@@ -290,3 +302,7 @@ export const StickerFallback = style([
     color: color.SurfaceVariant.OnContainer,
   },
 ]);
+
+export const AndroidMediaImg = style({
+  transition: 'none',
+});
