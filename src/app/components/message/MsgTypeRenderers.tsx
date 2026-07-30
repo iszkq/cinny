@@ -2,6 +2,7 @@ import React, { CSSProperties, ReactNode, useCallback, useState } from 'react';
 import { Box, Chip, Icon, Icons, Text, toRem } from 'folds';
 import { IContent } from 'matrix-js-sdk';
 import { JUMBO_EMOJI_REG, URL_REG } from '../../utils/regex';
+import { isAndroidApp } from '../../utils/nativePlatform';
 import { trimReplyFromBody } from '../../utils/room';
 import { MessageTextBody } from './layout';
 import {
@@ -29,8 +30,6 @@ import { FALLBACK_MIMETYPE, getBlobSafeMimeType } from '../../utils/mimeTypes';
 import { parseGeoUri, scaleYDimension } from '../../utils/common';
 import { Attachment, AttachmentBox, AttachmentContent, AttachmentHeader } from './attachment';
 import { FileHeader, FileDownloadButton } from './FileHeader';
-import { isAndroidApp } from '../../utils/nativePlatform';
-
 const IMAGE_TIMELINE_WIDTH = 230;
 const ANDROID_PORTRAIT_IMAGE_TIMELINE_WIDTH = 144;
 const IMAGE_TIMELINE_MAX_HEIGHT = 460;
@@ -90,6 +89,15 @@ type MTextProps = {
   renderUrlsPreview?: (urls: string[]) => ReactNode;
   style?: CSSProperties;
 };
+
+const shouldUseJumboEmoji = (body: string, customBody: unknown): boolean =>
+  JUMBO_EMOJI_REG.test(body) &&
+  !(
+    isAndroidApp() &&
+    typeof customBody === 'string' &&
+    customBody.includes('data-mx-emoticon')
+  );
+
 export function MText({ edited, content, renderBody, renderUrlsPreview, style }: MTextProps) {
   const { body, formatted_body: customBody } = content;
 
@@ -102,7 +110,7 @@ export function MText({ edited, content, renderBody, renderUrlsPreview, style }:
     <>
       <MessageTextBody
         preWrap={typeof customBody !== 'string'}
-        jumboEmoji={JUMBO_EMOJI_REG.test(trimmedBody)}
+        jumboEmoji={shouldUseJumboEmoji(trimmedBody, customBody)}
         style={style}
       >
         {renderBody({
@@ -142,7 +150,7 @@ export function MEmote({
       <MessageTextBody
         emote
         preWrap={typeof customBody !== 'string'}
-        jumboEmoji={JUMBO_EMOJI_REG.test(trimmedBody)}
+        jumboEmoji={shouldUseJumboEmoji(trimmedBody, customBody)}
       >
         <b>{`${displayName} `}</b>
         {renderBody({
@@ -175,7 +183,7 @@ export function MNotice({ edited, content, renderBody, renderUrlsPreview }: MNot
       <MessageTextBody
         notice
         preWrap={typeof customBody !== 'string'}
-        jumboEmoji={JUMBO_EMOJI_REG.test(trimmedBody)}
+        jumboEmoji={shouldUseJumboEmoji(trimmedBody, customBody)}
       >
         {renderBody({
           body: trimmedBody,

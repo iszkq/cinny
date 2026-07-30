@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useCachedMediaUrls } from './useCachedMediaUrl';
 import { getOriginalMediaUrl, shouldUseObjectUrlForMediaDisplay } from '../utils/matrix';
-import { invalidateCachedMediaUrl, primeCachedMediaObjectUrl } from '../utils/mediaUrlCache';
+import {
+  invalidateCachedMediaUrl,
+  isCachedMediaObjectUrl,
+  primeCachedMediaObjectUrl,
+} from '../utils/mediaUrlCache';
 import { isAndroidApp } from '../utils/nativePlatform';
 
 const AVATAR_RETRY_DELAY_MS = 250;
@@ -31,29 +35,37 @@ const clearTimer = (timer: number | undefined): undefined => {
 export const useResilientAvatarMedia = (src?: string, preferOriginal = false) => {
   const androidApp = isAndroidApp();
   const mediaSrc = useMemo(
-    () => (preferOriginal ? getOriginalMediaUrl(src) : src),
-    [preferOriginal, src]
+    // Android prioritizes the already-sized homeserver thumbnail. Downloading an avatar's full
+    // original on every first encounter made contacts and rooms appear to lose their avatar while
+    // a much larger file was fetched. Desktop/web keep the animated-original preference.
+    () => (preferOriginal && !androidApp ? getOriginalMediaUrl(src) : src),
+    [androidApp, preferOriginal, src]
   );
   const { desktopUrl, objectUrl } = useCachedMediaUrls(mediaSrc);
   const directUrl = shouldUseObjectUrlForMediaDisplay(mediaSrc) ? undefined : mediaSrc;
-  const rememberedAndroidUrl =
+  const rememberedAvatarUrl =
     androidApp && mediaSrc ? androidLoadedAvatarBySource.get(mediaSrc) : undefined;
+  const rememberedAndroidUrl =
+    rememberedAvatarUrl && isCachedMediaObjectUrl(rememberedAvatarUrl)
+      ? rememberedAvatarUrl
+      : undefined;
+  if (rememberedAvatarUrl && !rememberedAndroidUrl && mediaSrc) {
+    androidLoadedAvatarBySource.delete(mediaSrc);
+  }
   const candidates = useMemo(() => {
     const orderedCandidates = preferOriginal
       ? [
           // Show the Matrix thumbnail immediately. Once the original has been fetched into a
           // safe object/desktop URL, it moves ahead of this thumbnail and animation starts.
-          rememberedAndroidUrl,
           desktopUrl,
           objectUrl,
-          src,
+          rememberedAndroidUrl,
           directUrl,
-          mediaSrc,
         ]
-      : [rememberedAndroidUrl, desktopUrl, objectUrl, directUrl, mediaSrc];
+      : [desktopUrl, objectUrl, rememberedAndroidUrl, directUrl];
 
     return Array.from(new Set(orderedCandidates.filter(Boolean) as string[]));
-  }, [desktopUrl, directUrl, mediaSrc, objectUrl, preferOriginal, rememberedAndroidUrl, src]);
+  }, [desktopUrl, directUrl, objectUrl, preferOriginal, rememberedAndroidUrl]);
   const candidateKey = useMemo(() => candidates.join('\n'), [candidates]);
   const [candidateIndex, setCandidateIndex] = useState(0);
   const [retryNonce, setRetryNonce] = useState(0);

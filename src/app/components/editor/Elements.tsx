@@ -132,7 +132,13 @@ function RenderEmoticonElement({
             onError={handleError}
           />
         ) : customEmoji ? (
-          <span aria-label={element.shortcode}>:{element.shortcode}:</span>
+          <span
+            className={css.EmoticonImg}
+            style={{ display: 'inline-block', width: '1em', textAlign: 'center' }}
+            aria-label={element.shortcode}
+          >
+            {'\u25cc'}
+          </span>
         ) : (
           element.key
         )}

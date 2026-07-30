@@ -26,7 +26,7 @@ test('Android media uses browser authentication before the native fallback', asy
   assert.match(source, /contentType\.includes\('application\/json'\)/);
 });
 
-test('Android persistent media cache rejects stale bad responses without rewriting cache hits', async () => {
+test('Android persistent media validates native files and preserves older cache generations', async () => {
   const source = await readSource('src/app/utils/mediaUrlCache.ts');
   const nativeSource = await readSource('src/app/utils/androidMediaAssetCache.ts');
   const javaSource = await readSource(
@@ -36,12 +36,24 @@ test('Android persistent media cache rejects stale bad responses without rewriti
   assert.match(source, /PERSISTENT_MEDIA_CACHE_PREFIX = 'cinny-auth-media-v4'/);
   assert.match(source, /contentType\.includes\('text\/html'\)/);
   assert.match(source, /if \(!isAndroidApp\(\)\) \{\s+await touchPersistentMediaEntry/);
-  assert.match(source, /legacyCacheCleanupComplete/);
+  assert.match(source, /getLegacyMediaCaches/);
+  assert.match(source, /matchedCache !== mediaCache/);
+  assert.doesNotMatch(source, /LEGACY_PERSISTENT_MEDIA_CACHES[\s\S]{0,500}caches\.delete/);
   assert.match(source, /PERSISTENT_MEDIA_TRIM_INTERVAL = 64/);
-  assert.match(source, /prepareAndroidMediaAssetUrl\(src\)/);
+  assert.match(source, /loadAndroidMediaBlob\(src\)/);
+  assert.match(source, /fetch\(assetUrl, \{ cache: 'no-store' \}\)/);
+  assert.match(source, /responseToMediaBlob/);
+  assert.match(source, /fetchAndPersistMedia\(src\)/);
+  assert.match(source, /ANDROID_MEDIA_RESOLVE_DEADLINE_MS = 20_000/);
+  assert.match(source, /maxEntries: 10_000/);
+  assert.match(source, /typeof window === 'undefined' \|\| isAndroidApp\(\)/);
   assert.match(source, /legacyUrl\.searchParams\.delete\('animated'\)/);
-  assert.match(nativeSource, /Capacitor\.convertFileSrc\(asset\.filePath\)/);
+  assert.match(nativeSource, /toAndroidWebViewAssetUrl\(asset\.filePath\)/);
   assert.match(javaSource, /getContext\(\)\.getFilesDir\(\)/);
+  assert.match(javaSource, /Uri\.fromFile\(file\)\.toString\(\)/);
+  assert.match(javaSource, /if \(isInvalidMediaType\(mimeType\)\) return true/);
+  assert.match(javaSource, /MAX_CACHE_FILES = 10_000/);
+  assert.match(javaSource, /!looksLikeHtmlOrJson\(cachedFile, cachedMimeType\)/);
   assert.match(javaSource, /REQUEST_DEADLINE_MS = 15_000L/);
   assert.match(javaSource, /Executors\.newFixedThreadPool\(4\)/);
   assert.doesNotMatch(
@@ -61,6 +73,7 @@ test('Android sticker grid limits memory blobs and defers offscreen media', asyn
   assert.match(itemSource, /preferOriginal: !androidApp/);
   assert.match(itemSource, /forceThumbnail: androidApp/);
   assert.match(itemSource, /entry\.isIntersecting/);
+  assert.match(itemSource, /if \(visible\) setNearViewport\(true\)/);
   assert.doesNotMatch(itemSource, /observer\.unobserve\(entry\.target\)/);
   assert.match(packSource, /deferFallbackPersistent: true/);
   const mediaSource = await readSource('src/app/components/emoji-board/media.ts');
@@ -77,7 +90,8 @@ test('Android timeline and custom emoji never fall back to raw authenticated ima
   assert.match(imageSource, /const preferAndroidThumbnail =/);
   assert.match(reactionSource, /displayUrl \|\| !androidApp/);
   assert.match(htmlSource, /if \(androidApp && !displayUrl\)/);
-  assert.match(htmlSource, /fallbackLabel \? `:\$\{fallbackLabel\}:`/);
+  assert.match(htmlSource, /\{'\\u25cc'\}/);
+  assert.doesNotMatch(htmlSource, /fallbackLabel \? `:\$\{fallbackLabel\}:`/);
   assert.match(stableSource, /const timeoutId = requireObjectUrl\s+\? undefined/);
   assert.match(stableSource, /invalidateCachedMediaUrl\(src\)/);
   assert.match(stableSource, /primeCachedMediaObjectUrl\(fallbackSrc, 'visible', true\)/);
@@ -91,6 +105,7 @@ test('Android cloud emoji uses its visible source preview without serializing it
   assert.match(roomInputSource, /handleEmoticonSelect\(key, shortcode, sourceUrl\)/);
   assert.match(editorSource, /const androidPreviewUrl =/);
   assert.doesNotMatch(editorSource, /\{'\.\.\.'\}/);
+  assert.doesNotMatch(editorSource, /<span aria-label=\{element\.shortcode\}>:\{element\.shortcode\}:<\/span>/);
   assert.doesNotMatch(outputSource, /previewUrl/);
 });
 
@@ -107,7 +122,9 @@ test('Android emoji board and software keyboard are mutually exclusive', async (
     /onPointerDown=\{\(evt\) => \{\s+if \(mobileEmojiBoard && emojiBoardOpenRef\.current\) \{\s+evt\.preventDefault\(\)/
   );
   assert.match(editorSource, /onPointerDown=\{onPointerDown\}/);
-  assert.match(roomInputSource, /closeEmojiBoard\(\);\s+ReactEditor\.focus\(editor\);/);
+  assert.match(roomInputSource, /flushSync\(\(\) => closeEmojiBoard\(\)\)/);
+  assert.match(roomInputSource, /Transforms\.select\(editor, Editor\.end\(editor, \[\]\)\)/);
+  assert.match(roomInputSource, /ReactEditor\.focus\(editor\)/);
 });
 
 test('Only Android portrait timeline images use the compact width', async () => {
@@ -146,7 +163,8 @@ test('Android images, avatars, emoji and encrypted media share the native file c
     'android/app/src/main/java/com/iszkq/starfire/MainActivity.java'
   );
 
-  assert.match(cacheSource, /setObjectUrlMediaEntry\(src, assetUrl, 0\)/);
+  assert.match(cacheSource, /loadAndroidNativeMediaBlob/);
+  assert.match(cacheSource, /URL\.createObjectURL\(mediaBlob\)/);
   assert.match(encryptedSource, /prepareAndroidMediaAssetUrl\(sourceUrl, mimeType\)/);
   assert.match(encryptedSource, /getPersistedMediaBlob\(sourceUrl\)/);
   assert.match(uploadSource, /await cacheUploadedMxcMedia\(mx, mxc, file\)/);
@@ -170,6 +188,9 @@ test('Android avatar cache survives component remounts without a fallback flash'
 
   assert.match(avatarSource, /const androidLoadedAvatarBySource = new Map/);
   assert.match(avatarSource, /rememberedAndroidUrl/);
+  assert.match(avatarSource, /isCachedMediaObjectUrl\(rememberedAvatarUrl\)/);
+  assert.match(avatarSource, /preferOriginal && !androidApp \? getOriginalMediaUrl\(src\) : src/);
+  assert.doesNotMatch(avatarSource, /\[rememberedAndroidUrl, desktopUrl, objectUrl/);
   assert.match(
     avatarSource,
     /displaySrcLoaded: Boolean\(displaySrc && loadedAvatarMedia\.has\(displaySrc\)\)/

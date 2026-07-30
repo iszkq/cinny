@@ -25,6 +25,27 @@ const getObjectUrlMediaLimits = () => {
       ? undefined
       : (navigator as DeviceMemoryNavigator).deviceMemory;
 
+  if (isAndroidApp()) {
+    if (typeof deviceMemory === 'number' && deviceMemory <= 4) {
+      return {
+        maxItems: 768,
+        maxBytes: 128 * 1024 * 1024,
+      };
+    }
+
+    if (typeof deviceMemory === 'number' && deviceMemory >= 8) {
+      return {
+        maxItems: 2400,
+        maxBytes: 384 * 1024 * 1024,
+      };
+    }
+
+    return {
+      maxItems: 1536,
+      maxBytes: 256 * 1024 * 1024,
+    };
+  }
+
   if (mobileOrTablet()) {
     if (typeof deviceMemory === 'number' && deviceMemory <= 4) {
       return {
@@ -73,7 +94,7 @@ const getPersistentMediaLimits = () => {
   // sets available between launches. Browser limits stay unchanged.
   if (isAndroidApp()) {
     return {
-      maxEntries: 2400,
+      maxEntries: 10_000,
     };
   }
 
@@ -185,13 +206,14 @@ let objectUrlMediaCleanupBound = false;
 let objectUrlMediaBytes = 0;
 let activeObjectUrlMediaTasks = 0;
 let currentCacheNamespace: string | undefined;
-let legacyCacheCleanupPromise: Promise<void> | undefined;
-let legacyCacheCleanupComplete = false;
+let legacyMediaCachesPromise: Promise<Cache[]> | undefined;
 let mediaCachePromise: Promise<Cache | undefined> | undefined;
 let persistentWritesSinceTrim = 0;
 let persistentTrimPromise: Promise<void> | undefined;
 
 const PERSISTENT_MEDIA_TRIM_INTERVAL = 64;
+const ANDROID_MEDIA_FALLBACK_DELAY_MS = 800;
+const ANDROID_MEDIA_RESOLVE_DEADLINE_MS = 20_000;
 
 const emitObjectUrlMediaChange = (src: string, objectUrl: string | undefined) => {
   objectUrlMediaListeners.get(src)?.forEach((listener) => {
@@ -290,6 +312,83 @@ const setObjectUrlMediaEntry = (src: string, objectUrl: string, size: number) =>
   emitObjectUrlMediaChange(src, objectUrlMediaCache.get(src)?.objectUrl);
 };
 
+const isInvalidMediaResponse = (response: Response): boolean => {
+  const contentType = response.headers.get('content-type')?.toLowerCase() ?? '';
+  return (
+    !response.ok || contentType.includes('text/html') || contentType.includes('application/json')
+  );
+};
+
+const responseToMediaBlob = async (response?: Response): Promise<Blob | undefined> => {
+  if (!response || isInvalidMediaResponse(response)) return undefined;
+  const blob = await response.blob().catch(() => undefined);
+  return blob && blob.size > 0 ? blob : undefined;
+};
+
+const loadAndroidNativeMediaBlob = async (src: string): Promise<Blob | undefined> => {
+  const assetUrl = await prepareAndroidMediaAssetUrl(src);
+  if (!assetUrl) return undefined;
+
+  const response = await fetch(assetUrl, { cache: 'no-store' }).catch(() => undefined);
+  const blob = await responseToMediaBlob(response);
+  if (!blob) invalidateAndroidMediaAssetUrl(src);
+  return blob;
+};
+
+const loadAndroidMediaBlob = (src: string): Promise<Blob | undefined> =>
+  new Promise((resolve) => {
+    let settled = false;
+    let browserDone = false;
+    let nativeDone = false;
+    let nativeStarted = false;
+    let nativeFallbackTimer: number | undefined;
+    let deadlineTimer: number | undefined;
+
+    const finish = (blob?: Blob) => {
+      if (settled) return;
+      if (blob) {
+        settled = true;
+        if (nativeFallbackTimer !== undefined) window.clearTimeout(nativeFallbackTimer);
+        if (deadlineTimer !== undefined) window.clearTimeout(deadlineTimer);
+        persistedMediaUrls.add(src);
+        resolve(blob);
+        return;
+      }
+      if (browserDone && nativeDone) {
+        settled = true;
+        if (deadlineTimer !== undefined) window.clearTimeout(deadlineTimer);
+        resolve(undefined);
+      }
+    };
+
+    const startNative = () => {
+      if (nativeStarted || settled) return;
+      nativeStarted = true;
+      loadAndroidNativeMediaBlob(src)
+        .catch(() => undefined)
+        .then((blob) => {
+          nativeDone = true;
+          finish(blob);
+        });
+    };
+
+    nativeFallbackTimer = window.setTimeout(startNative, ANDROID_MEDIA_FALLBACK_DELAY_MS);
+    deadlineTimer = window.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      resolve(undefined);
+    }, ANDROID_MEDIA_RESOLVE_DEADLINE_MS);
+
+    fetchAndPersistMedia(src)
+      .then(responseToMediaBlob)
+      .catch(() => undefined)
+      .then((blob) => {
+        browserDone = true;
+        if (!blob) startNative();
+        finish(blob);
+      });
+  });
+
 const createObjectUrlFromMedia = async (src: string): Promise<string | undefined> => {
   const cachedObjectUrl = touchObjectUrlMediaEntry(src)?.objectUrl;
   if (cachedObjectUrl) {
@@ -312,12 +411,16 @@ const createObjectUrlFromMedia = async (src: string): Promise<string | undefined
   }
 
   if (isAndroidApp()) {
-    const assetUrl = await prepareAndroidMediaAssetUrl(src);
-    if (!assetUrl) return undefined;
+    const mediaBlob = await loadAndroidMediaBlob(src);
+    if (!mediaBlob) {
+      markFailedMediaEntry(src, FAILED_MEDIA_RETRY_DELAY_MS);
+      return undefined;
+    }
 
-    persistedMediaUrls.add(src);
-    setObjectUrlMediaEntry(src, assetUrl, 0);
-    return assetUrl;
+    bindObjectUrlMediaCleanup();
+    const objectUrl = URL.createObjectURL(mediaBlob);
+    setObjectUrlMediaEntry(src, objectUrl, mediaBlob.size);
+    return objectUrl;
   }
 
   const response = await fetchAndPersistMedia(src);
@@ -392,7 +495,7 @@ const flushObjectUrlMediaQueue = () => {
 };
 
 const bindObjectUrlMediaCleanup = () => {
-  if (objectUrlMediaCleanupBound || typeof window === 'undefined') {
+  if (objectUrlMediaCleanupBound || typeof window === 'undefined' || isAndroidApp()) {
     return;
   }
 
@@ -445,6 +548,7 @@ const resetInMemoryMediaCaches = () => {
   mediaCachePromise = undefined;
   persistentWritesSinceTrim = 0;
   persistentTrimPromise = undefined;
+  legacyMediaCachesPromise = undefined;
 };
 
 const syncPersistentMediaNamespace = () => {
@@ -458,40 +562,22 @@ const syncPersistentMediaNamespace = () => {
   return nextNamespace;
 };
 
-const cleanupLegacyMediaCaches = async () => {
+const getLegacyMediaCaches = async (): Promise<Cache[]> => {
   if (typeof caches === 'undefined') {
-    return;
+    return [];
   }
 
-  if (legacyCacheCleanupComplete) {
-    return;
+  if (!legacyMediaCachesPromise) {
+    const namespaceHash = hashNamespace(getCacheNamespace());
+    const allowedNames = new Set(
+      LEGACY_PERSISTENT_MEDIA_CACHES.flatMap((name) => [name, `${name}-${namespaceHash}`])
+    );
+    legacyMediaCachesPromise = caches.keys().then((cacheKeys) =>
+      Promise.all(cacheKeys.filter((key) => allowedNames.has(key)).map((key) => caches.open(key)))
+    );
   }
 
-  if (legacyCacheCleanupPromise) {
-    return legacyCacheCleanupPromise;
-  }
-
-  legacyCacheCleanupPromise = caches
-    .keys()
-    .then((cacheKeys) =>
-      Promise.all(
-        cacheKeys
-          .filter(
-            (key) =>
-              LEGACY_PERSISTENT_MEDIA_CACHES.includes(key) ||
-              LEGACY_PERSISTENT_MEDIA_CACHES.some((prefix) => key.startsWith(`${prefix}-`))
-          )
-          .map((key) => caches.delete(key))
-      )
-    )
-    .then(() => {
-      legacyCacheCleanupComplete = true;
-    })
-    .finally(() => {
-      legacyCacheCleanupPromise = undefined;
-    });
-
-  return legacyCacheCleanupPromise;
+  return legacyMediaCachesPromise;
 };
 
 const getMediaCache = async (): Promise<Cache | undefined> => {
@@ -500,7 +586,6 @@ const getMediaCache = async (): Promise<Cache | undefined> => {
   }
 
   syncPersistentMediaNamespace();
-  await cleanupLegacyMediaCaches();
   if (!mediaCachePromise) {
     mediaCachePromise = caches.open(getPersistentMediaCacheName()).catch(() => undefined);
   }
@@ -592,6 +677,7 @@ const matchPersistentMedia = async (src: string): Promise<Response | undefined> 
   }
 
   let matchedUrl = src;
+  let matchedCache = mediaCache;
   let cachedResponse: Response | undefined;
   for (const lookupUrl of getPersistentMediaLookupUrls(src)) {
     // eslint-disable-next-line no-await-in-loop
@@ -602,12 +688,32 @@ const matchPersistentMedia = async (src: string): Promise<Response | undefined> 
       break;
     }
   }
+  if (!cachedResponse) {
+    const legacyCaches = await getLegacyMediaCaches().catch(() => []);
+    for (const legacyCache of legacyCaches) {
+      for (const lookupUrl of getPersistentMediaLookupUrls(src)) {
+        // eslint-disable-next-line no-await-in-loop
+        const response = await legacyCache.match(lookupUrl);
+        if (response) {
+          matchedUrl = lookupUrl;
+          matchedCache = legacyCache;
+          cachedResponse = response;
+          break;
+        }
+      }
+      if (cachedResponse) break;
+    }
+  }
   if (cachedResponse) {
     const contentType = cachedResponse.headers.get('content-type')?.toLowerCase() ?? '';
     if (contentType.includes('text/html') || contentType.includes('application/json')) {
-      await mediaCache.delete(matchedUrl).catch(() => false);
+      await matchedCache.delete(matchedUrl).catch(() => false);
       persistedMediaUrls.delete(src);
       return undefined;
+    }
+
+    if (matchedCache !== mediaCache) {
+      await persistMediaResponse(mediaCache, src, cachedResponse.clone()).catch(() => false);
     }
 
     // Rewriting every cache hit is particularly expensive in Android WebView (Cache Storage is
@@ -633,7 +739,7 @@ const fetchAndPersistMedia = async (src: string): Promise<Response | undefined> 
     markFailedMediaEntry(src, FAILED_MEDIA_RETRY_DELAY_MS);
     throw error;
   });
-  if (!response.ok) {
+  if (isInvalidMediaResponse(response)) {
     markFailedMediaEntry(
       src,
       response.status === 404 ? FAILED_MEDIA_NOT_FOUND_RETRY_DELAY_MS : FAILED_MEDIA_RETRY_DELAY_MS

@@ -43,6 +43,7 @@ import {
   toRem,
 } from 'folds';
 import FocusTrap from 'focus-trap-react';
+import { flushSync } from 'react-dom';
 
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import {
@@ -2282,7 +2283,13 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
             if (mobileEmojiBoard && emojiBoardOpenRef.current) {
               evt.preventDefault();
               evt.stopPropagation();
-              closeEmojiBoard();
+              // Unmount FocusTrap before moving focus. Otherwise its focus guard can steal focus
+              // back during the same pointer event (most often on Sticker/Cloud tabs), leaving the
+              // panel closed but the Android software keyboard hidden.
+              flushSync(() => closeEmojiBoard());
+              if (!editor.selection) {
+                Transforms.select(editor, Editor.end(editor, []));
+              }
               ReactEditor.focus(editor);
             }
           }}

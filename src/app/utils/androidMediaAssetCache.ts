@@ -24,6 +24,14 @@ const cachedAssetUrls = new Map<string, string>();
 const pendingAssets = new Map<string, Promise<string | undefined>>();
 const forcedRefreshAssets = new Set<string>();
 
+export const toAndroidWebViewAssetUrl = (filePath: string): string => {
+  const normalizedPath =
+    filePath.startsWith('/') || /^(?:file|content):\/\//i.test(filePath)
+      ? filePath
+      : `file://${filePath}`;
+  return Capacitor.convertFileSrc(normalizedPath);
+};
+
 const normalizeBaseUrl = (baseUrl: string): string => {
   try {
     return new URL(baseUrl).origin.toLowerCase();
@@ -91,7 +99,7 @@ export const prepareAndroidMediaAssetUrl = (
   })
     .then((asset) => {
       if (!asset.filePath) return undefined;
-      const assetUrl = Capacitor.convertFileSrc(asset.filePath);
+      const assetUrl = toAndroidWebViewAssetUrl(asset.filePath);
       cachedAssetUrls.set(identity.cacheKey, assetUrl);
       return assetUrl;
     })

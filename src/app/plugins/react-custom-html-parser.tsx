@@ -249,11 +249,19 @@ function CachedHtmlEmoticonImage(
     return (
       <span
         className={imgProps.className}
-        style={{ display: 'inline-block' }}
+        style={{
+          display: 'inline-block',
+          width: '1em',
+          height: '1em',
+          overflow: 'hidden',
+          fontSize: '1rem',
+          lineHeight: '1em',
+          textAlign: 'center',
+        }}
         role="img"
         aria-label={fallbackLabel}
       >
-        {fallbackLabel ? `:${fallbackLabel}:` : '\u00a0'}
+        {'\u25cc'}
       </span>
     );
   }

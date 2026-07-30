@@ -35,8 +35,8 @@ public class AndroidMediaCachePlugin extends Plugin {
     private static final int CONNECT_TIMEOUT_MS = 5_000;
     private static final int READ_TIMEOUT_MS = 10_000;
     private static final int MAX_REDIRECTS = 5;
-    private static final int MAX_CACHE_FILES = 3_000;
-    private static final long MAX_CACHE_BYTES = 768L * 1024L * 1024L;
+    private static final int MAX_CACHE_FILES = 10_000;
+    private static final long MAX_CACHE_BYTES = 2L * 1024L * 1024L * 1024L;
     private static final AtomicInteger WRITE_COUNT = new AtomicInteger();
     private static final ExecutorService MEDIA_EXECUTOR = Executors.newFixedThreadPool(4);
 
@@ -84,12 +84,20 @@ public class AndroidMediaCachePlugin extends Plugin {
 
             if (forceRefresh) deleteRecursively(assetDir);
             File cachedFile = findCachedFile(assetDir);
-            if (cachedFile != null && cachedFile.length() > 0) {
+            String cachedMimeType = cachedFile != null
+                ? mimeTypeFromExtension(cachedFile.getName())
+                : null;
+            if (
+                cachedFile != null &&
+                cachedFile.length() > 0 &&
+                !looksLikeHtmlOrJson(cachedFile, cachedMimeType)
+            ) {
                 cachedFile.setLastModified(System.currentTimeMillis());
                 assetDir.setLastModified(System.currentTimeMillis());
-                resolveFile(call, cachedFile, mimeTypeFromExtension(cachedFile.getName()));
+                resolveFile(call, cachedFile, cachedMimeType);
                 return;
             }
+            if (cachedFile != null) deleteCachedFiles(assetDir);
 
             if (!assetDir.exists() && !assetDir.mkdirs()) {
                 throw new IllegalStateException("Unable to create Android media cache directory.");
@@ -113,7 +121,10 @@ public class AndroidMediaCachePlugin extends Plugin {
 
     private void resolveFile(PluginCall call, File file, String mimeType) {
         JSObject result = new JSObject();
-        result.put("filePath", file.getAbsolutePath());
+        // Capacitor's convertFileSrc accepts file:// URIs on every supported Android WebView.
+        // Returning a URI also avoids a raw /data/... path being interpreted as an app-relative
+        // URL when the native bridge is not ready at the exact moment the promise resolves.
+        result.put("filePath", Uri.fromFile(file).toString());
         result.put("mimeType", mimeType);
         result.put("size", file.length());
         call.resolve(result);
@@ -336,7 +347,7 @@ public class AndroidMediaCachePlugin extends Plugin {
     }
 
     private static boolean looksLikeHtmlOrJson(File file, String mimeType) {
-        if (mimeType != null) return isInvalidMediaType(mimeType);
+        if (isInvalidMediaType(mimeType)) return true;
         byte[] prefix = new byte[64];
         try (FileInputStream input = new FileInputStream(file)) {
             int read = input.read(prefix);

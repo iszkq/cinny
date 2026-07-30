@@ -59,7 +59,12 @@ const useAndroidMediaVisibility = () => {
       elementRef.current = element ?? undefined;
       if (!element) return;
 
-      androidMediaVisibilityListeners.set(element, setNearViewport);
+      // Once a tile has been prepared, keep using the resolved local URL while this group remains
+      // mounted. Toggling src back to undefined on every scroll-out made Android decode/load the
+      // same sticker again when the user immediately scrolled back.
+      androidMediaVisibilityListeners.set(element, (visible) => {
+        if (visible) setNearViewport(true);
+      });
       observer?.observe(element);
       if (!observer) setNearViewport(true);
     },
