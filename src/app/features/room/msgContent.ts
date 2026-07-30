@@ -13,13 +13,29 @@ import {
   loadImageElement,
   loadVideoElement,
 } from '../../utils/dom';
-import { encryptFile, getImageInfo, getThumbnailContent, getVideoInfo } from '../../utils/matrix';
+import {
+  encryptFile,
+  getImageInfo,
+  getThumbnailContent,
+  getVideoInfo,
+  mxcUrlToHttp,
+} from '../../utils/matrix';
 import { TUploadItem } from '../../state/room/roomInputDrafts';
 import { encodeBlurHash } from '../../utils/blurHash';
 import { scaleYDimension } from '../../utils/common';
+import { cacheUploadedMediaBlob } from '../../utils/mediaUrlCache';
 
 const IMAGE_PREVIEW_WIDTH = 230;
 const IMAGE_PREVIEW_HEIGHT = 460;
+
+const cacheUploadedMxcMedia = async (mx: MatrixClient, mxc: string, media: Blob): Promise<void> => {
+  const authenticatedUrl = mxcUrlToHttp(mx, mxc, true) ?? undefined;
+  const legacyUrl = mxcUrlToHttp(mx, mxc, false) ?? undefined;
+  await cacheUploadedMediaBlob(authenticatedUrl ?? legacyUrl, media);
+  if (legacyUrl && legacyUrl !== authenticatedUrl) {
+    await cacheUploadedMediaBlob(legacyUrl, media, false);
+  }
+};
 
 const generateThumbnailContent = async (
   mx: MatrixClient,
@@ -36,6 +52,7 @@ const generateThumbnailContent = async (
   const data = await mx.uploadContent(thumbnailFile);
   const thumbMxc = data?.content_uri;
   if (!thumbMxc) throw new Error('Failed when uploading thumbnail!');
+  await cacheUploadedMxcMedia(mx, thumbMxc, thumbnailFile);
   const thumbnailContent = getThumbnailContent({
     thumbnail: thumbnailFile,
     encInfo: encThumbData?.encInfo,
@@ -90,6 +107,7 @@ export const getImageMsgContent = async (
   } else {
     content.url = mxc;
   }
+  await cacheUploadedMxcMedia(mx, mxc, file);
   return content;
 };
 
@@ -139,6 +157,7 @@ export const getVideoMsgContent = async (
   } else {
     content.url = mxc;
   }
+  await cacheUploadedMxcMedia(mx, mxc, file);
   return content;
 };
 

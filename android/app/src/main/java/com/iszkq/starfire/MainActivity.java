@@ -10,6 +10,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(NativeFileSaverPlugin.class);
         registerPlugin(AndroidUpdaterPlugin.class);
         registerPlugin(NativeNotificationsPlugin.class);
+        registerPlugin(AndroidMediaCachePlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

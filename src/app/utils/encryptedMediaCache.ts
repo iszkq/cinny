@@ -1,10 +1,10 @@
 import { EncryptedAttachmentInfo } from 'browser-encrypt-attachment';
 import { decryptFile, downloadEncryptedMedia } from './matrix';
-import {
-  getCachedDesktopMediaAssetUrl,
-  primeDesktopMediaAssetUrl,
-} from './desktopMediaAssetCache';
+import { getCachedDesktopMediaAssetUrl, primeDesktopMediaAssetUrl } from './desktopMediaAssetCache';
 import { getSessionMediaCacheKey, loadSessionMediaUrl } from './sessionMediaCache';
+import { prepareAndroidMediaAssetUrl } from './androidMediaAssetCache';
+import { isAndroidApp } from './nativePlatform';
+import { getPersistedMediaBlob } from './mediaUrlCache';
 
 const DESKTOP_ENCRYPTED_MEDIA_WAIT_MS = 120;
 
@@ -23,6 +23,11 @@ const resolveEncryptedMediaSourceUrl = async (
   sourceUrl: string,
   mimeType: string
 ): Promise<string> => {
+  if (isAndroidApp()) {
+    const androidAssetUrl = await prepareAndroidMediaAssetUrl(sourceUrl, mimeType);
+    if (androidAssetUrl) return androidAssetUrl;
+  }
+
   const cachedDesktopUrl = getCachedDesktopMediaAssetUrl(sourceUrl);
   if (cachedDesktopUrl) {
     return cachedDesktopUrl;
@@ -59,6 +64,11 @@ export const prepareEncryptedMediaObjectUrl = async (
   const cacheKey = getEncryptedMediaCacheKey(sourceUrl, mimeType, encInfo);
 
   return loadSessionMediaUrl(cacheKey, async () => {
+    const locallyUploadedMedia = await getPersistedMediaBlob(sourceUrl);
+    if (locallyUploadedMedia) {
+      return decryptFile(await locallyUploadedMedia.arrayBuffer(), mimeType, encInfo);
+    }
+
     const resolvedSourceUrl = await resolveEncryptedMediaSourceUrl(sourceUrl, mimeType);
 
     try {
@@ -70,9 +80,7 @@ export const prepareEncryptedMediaObjectUrl = async (
         throw error;
       }
 
-      return downloadEncryptedMedia(sourceUrl, (encBuf) =>
-        decryptFile(encBuf, mimeType, encInfo)
-      );
+      return downloadEncryptedMedia(sourceUrl, (encBuf) => decryptFile(encBuf, mimeType, encInfo));
     }
   });
 };

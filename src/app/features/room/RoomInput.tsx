@@ -1654,6 +1654,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           emojiBoardSuppressOpenUntilRef.current = suppressUntil;
           emojiBoardSkipClickUntilRef.current = suppressUntil;
         }
+        emojiBoardOpenRef.current = false;
         setEmojiBoardOpen(false);
         if (!mobileOrTablet()) {
           if (emojiBoardFocusTimerRef.current) {
@@ -2277,8 +2278,13 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
             }
             if (mobileEmojiBoard && emojiBoardOpenRef.current) closeEmojiBoard();
           }}
-          onPointerDown={() => {
-            if (mobileEmojiBoard && emojiBoardOpenRef.current) closeEmojiBoard();
+          onPointerDown={(evt) => {
+            if (mobileEmojiBoard && emojiBoardOpenRef.current) {
+              evt.preventDefault();
+              evt.stopPropagation();
+              closeEmojiBoard();
+              ReactEditor.focus(editor);
+            }
           }}
           onKeyDown={handleKeyDown}
           onChange={handleEditorChange}

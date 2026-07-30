@@ -28,12 +28,22 @@ test('Android media uses browser authentication before the native fallback', asy
 
 test('Android persistent media cache rejects stale bad responses without rewriting cache hits', async () => {
   const source = await readSource('src/app/utils/mediaUrlCache.ts');
+  const nativeSource = await readSource('src/app/utils/androidMediaAssetCache.ts');
+  const javaSource = await readSource(
+    'android/app/src/main/java/com/iszkq/starfire/AndroidMediaCachePlugin.java'
+  );
 
   assert.match(source, /PERSISTENT_MEDIA_CACHE_PREFIX = 'cinny-auth-media-v4'/);
   assert.match(source, /contentType\.includes\('text\/html'\)/);
   assert.match(source, /if \(!isAndroidApp\(\)\) \{\s+await touchPersistentMediaEntry/);
   assert.match(source, /legacyCacheCleanupComplete/);
   assert.match(source, /PERSISTENT_MEDIA_TRIM_INTERVAL = 64/);
+  assert.match(source, /prepareAndroidMediaAssetUrl\(src\)/);
+  assert.match(source, /legacyUrl\.searchParams\.delete\('animated'\)/);
+  assert.match(nativeSource, /Capacitor\.convertFileSrc\(asset\.filePath\)/);
+  assert.match(javaSource, /getContext\(\)\.getFilesDir\(\)/);
+  assert.match(javaSource, /REQUEST_DEADLINE_MS = 15_000L/);
+  assert.match(javaSource, /Executors\.newFixedThreadPool\(4\)/);
   assert.doesNotMatch(
     source,
     /await trimPersistentMediaCache\(mediaCache, Math\.max\(0, MAX_PERSISTENT_MEDIA_ENTRIES - 1\)\)/
@@ -94,9 +104,10 @@ test('Android emoji board and software keyboard are mutually exclusive', async (
   );
   assert.match(
     roomInputSource,
-    /onPointerDown=\{\(\) => \{\s+if \(mobileEmojiBoard && emojiBoardOpenRef\.current\) closeEmojiBoard\(\)/
+    /onPointerDown=\{\(evt\) => \{\s+if \(mobileEmojiBoard && emojiBoardOpenRef\.current\) \{\s+evt\.preventDefault\(\)/
   );
   assert.match(editorSource, /onPointerDown=\{onPointerDown\}/);
+  assert.match(roomInputSource, /closeEmojiBoard\(\);\s+ReactEditor\.focus\(editor\);/);
 });
 
 test('Only Android portrait timeline images use the compact width', async () => {
@@ -120,6 +131,27 @@ test('media cache survives ordinary app upgrades and resource recovery', async (
     /cacheKeys\.filter\(\(key\) => key\.startsWith\('workbox-precache'\)\)/
   );
   assert.doesNotMatch(startupSource, /cacheKeys\.map\(\(key\) => window\.caches\.delete/);
+  const javaSource = await readSource(
+    'android/app/src/main/java/com/iszkq/starfire/AndroidMediaCachePlugin.java'
+  );
+  assert.match(javaSource, /android-media-cache-v1/);
+  assert.doesNotMatch(javaSource, /getCacheDir\(\)/);
+});
+
+test('Android images, avatars, emoji and encrypted media share the native file cache', async () => {
+  const cacheSource = await readSource('src/app/utils/mediaUrlCache.ts');
+  const encryptedSource = await readSource('src/app/utils/encryptedMediaCache.ts');
+  const uploadSource = await readSource('src/app/features/room/msgContent.ts');
+  const activitySource = await readSource(
+    'android/app/src/main/java/com/iszkq/starfire/MainActivity.java'
+  );
+
+  assert.match(cacheSource, /setObjectUrlMediaEntry\(src, assetUrl, 0\)/);
+  assert.match(encryptedSource, /prepareAndroidMediaAssetUrl\(sourceUrl, mimeType\)/);
+  assert.match(encryptedSource, /getPersistedMediaBlob\(sourceUrl\)/);
+  assert.match(uploadSource, /await cacheUploadedMxcMedia\(mx, mxc, file\)/);
+  assert.match(uploadSource, /await cacheUploadedMxcMedia\(mx, thumbMxc, thumbnailFile\)/);
+  assert.match(activitySource, /registerPlugin\(AndroidMediaCachePlugin\.class\)/);
 });
 
 test('web service worker and stylesheet recovery never refresh a healthy active page', async () => {

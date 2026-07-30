@@ -3,6 +3,10 @@ import { fetchMediaWithAuth } from './matrix';
 import { getFallbackSession } from '../state/sessions';
 import { mobileOrTablet } from './user-agent';
 import { isAndroidApp } from './nativePlatform';
+import {
+  invalidateAndroidMediaAssetUrl,
+  prepareAndroidMediaAssetUrl,
+} from './androidMediaAssetCache';
 
 const LEGACY_PERSISTENT_MEDIA_CACHES = ['cinny-auth-media-v2', 'cinny-auth-media-v3'];
 const PERSISTENT_MEDIA_CACHE_PREFIX = 'cinny-auth-media-v4';
@@ -105,7 +109,7 @@ const getMediaPreloadConcurrency = () => {
 
   if (isAndroidApp()) {
     return {
-      persistent: 2,
+      persistent: 1,
       objectUrl: typeof deviceMemory === 'number' && deviceMemory <= 4 ? 3 : 4,
     };
   }
@@ -298,10 +302,26 @@ const createObjectUrlFromMedia = async (src: string): Promise<string | undefined
     await pendingPersistent.catch(() => undefined);
   }
 
-  const response = await ensurePersistentMedia(src);
-  if (!response) {
-    return undefined;
+  const cachedResponse = await matchPersistentMedia(src);
+  if (cachedResponse) {
+    bindObjectUrlMediaCleanup();
+    const mediaBlob = await cachedResponse.blob();
+    const objectUrl = URL.createObjectURL(mediaBlob);
+    setObjectUrlMediaEntry(src, objectUrl, mediaBlob.size);
+    return objectUrl;
   }
+
+  if (isAndroidApp()) {
+    const assetUrl = await prepareAndroidMediaAssetUrl(src);
+    if (!assetUrl) return undefined;
+
+    persistedMediaUrls.add(src);
+    setObjectUrlMediaEntry(src, assetUrl, 0);
+    return assetUrl;
+  }
+
+  const response = await fetchAndPersistMedia(src);
+  if (!response) return undefined;
 
   bindObjectUrlMediaCleanup();
 
@@ -551,17 +571,41 @@ const touchPersistentMediaEntry = async (mediaCache: Cache, src: string, respons
   await mediaCache.put(src, response);
 };
 
+const getPersistentMediaLookupUrls = (src: string): string[] => {
+  const lookupUrls = [src];
+  try {
+    const legacyUrl = new URL(src);
+    if (legacyUrl.searchParams.get('animated') === 'false') {
+      legacyUrl.searchParams.delete('animated');
+      lookupUrls.push(legacyUrl.toString());
+    }
+  } catch {
+    // Keep the exact lookup for non-URL cache keys.
+  }
+  return lookupUrls;
+};
+
 const matchPersistentMedia = async (src: string): Promise<Response | undefined> => {
   const mediaCache = await getMediaCache().catch(() => undefined);
   if (!mediaCache) {
     return undefined;
   }
 
-  const cachedResponse = await mediaCache.match(src);
+  let matchedUrl = src;
+  let cachedResponse: Response | undefined;
+  for (const lookupUrl of getPersistentMediaLookupUrls(src)) {
+    // eslint-disable-next-line no-await-in-loop
+    const response = await mediaCache.match(lookupUrl);
+    if (response) {
+      matchedUrl = lookupUrl;
+      cachedResponse = response;
+      break;
+    }
+  }
   if (cachedResponse) {
     const contentType = cachedResponse.headers.get('content-type')?.toLowerCase() ?? '';
     if (contentType.includes('text/html') || contentType.includes('application/json')) {
-      await mediaCache.delete(src).catch(() => false);
+      await mediaCache.delete(matchedUrl).catch(() => false);
       persistedMediaUrls.delete(src);
       return undefined;
     }
@@ -610,13 +654,20 @@ const fetchAndPersistMedia = async (src: string): Promise<Response | undefined> 
   return response;
 };
 
-const ensurePersistentMedia = async (src: string): Promise<Response | undefined> => {
+const ensurePersistentMediaAvailable = async (src: string): Promise<void> => {
   const cachedResponse = await matchPersistentMedia(src);
   if (cachedResponse) {
-    return cachedResponse;
+    persistedMediaUrls.add(src);
+    return;
   }
 
-  return fetchAndPersistMedia(src);
+  if (isAndroidApp()) {
+    const assetUrl = await prepareAndroidMediaAssetUrl(src);
+    if (assetUrl) persistedMediaUrls.add(src);
+    return;
+  }
+
+  await fetchAndPersistMedia(src);
 };
 
 const flushPersistentMediaQueue = () => {
@@ -630,7 +681,7 @@ const flushPersistentMediaQueue = () => {
     queuedPersistentMediaTasks.delete(task.src);
     activePersistentMediaTasks += 1;
 
-    ensurePersistentMedia(task.src)
+    ensurePersistentMediaAvailable(task.src)
       .catch(() => undefined)
       .finally(() => {
         pendingPersistentMedia.delete(task.src);
@@ -682,6 +733,35 @@ export const getCachedMediaObjectUrl = (src?: string): string | undefined => {
   return (src && touchObjectUrlMediaEntry(src)?.objectUrl) || undefined;
 };
 
+export const getPersistedMediaBlob = async (src?: string): Promise<Blob | undefined> => {
+  if (!src) return undefined;
+  const response = await matchPersistentMedia(src);
+  return response?.blob().catch(() => undefined);
+};
+
+export const cacheUploadedMediaBlob = async (
+  src: string | undefined,
+  blob: Blob,
+  prepareRuntimeUrl = true
+): Promise<void> => {
+  if (!src || blob.size <= 0) return;
+
+  const mediaCache = await getMediaCache().catch(() => undefined);
+  if (mediaCache) {
+    const response = new Response(blob, {
+      status: 200,
+      headers: blob.type ? { 'content-type': blob.type } : undefined,
+    });
+    const persisted = await persistMediaResponse(mediaCache, src, response);
+    if (persisted) persistedMediaUrls.add(src);
+  }
+
+  if (prepareRuntimeUrl) {
+    const objectUrl = URL.createObjectURL(blob);
+    setObjectUrlMediaEntry(src, objectUrl, blob.size);
+  }
+};
+
 export const invalidateCachedMediaUrl = async (src?: string): Promise<void> => {
   syncPersistentMediaNamespace();
   if (!src) return;
@@ -689,9 +769,14 @@ export const invalidateCachedMediaUrl = async (src?: string): Promise<void> => {
   removeObjectUrlMediaEntry(src);
   clearFailedMediaEntry(src);
   persistedMediaUrls.delete(src);
+  invalidateAndroidMediaAssetUrl(src);
 
   const mediaCache = await getMediaCache().catch(() => undefined);
-  await mediaCache?.delete(src).catch(() => false);
+  await Promise.all(
+    getPersistentMediaLookupUrls(src).map((lookupUrl) =>
+      mediaCache?.delete(lookupUrl).catch(() => false)
+    )
+  );
 };
 
 export const getPreparedMediaUrl = async (
