@@ -22,15 +22,6 @@ self.addEventListener('activate', (event) => {
       await Promise.all(legacyPrecacheNames.map((name) => caches.delete(name)));
       await self.clients.claim();
       await cleanupDeadClients();
-
-      if (legacyPrecacheNames.length > 0) {
-        const windowClients = await self.clients.matchAll({ type: 'window' });
-        await Promise.all(
-          windowClients.map((client) =>
-            'navigate' in client ? client.navigate(client.url).catch(() => undefined) : undefined
-          )
-        );
-      }
     })()
   );
 });

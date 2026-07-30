@@ -1532,8 +1532,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       ReactEditor.focus(editor);
     }, [editor]);
 
-    const handleEmoticonSelect = (key: string, shortcode: string) => {
-      editor.insertNode(createEmoticonElement(key, shortcode));
+    const handleEmoticonSelect = (key: string, shortcode: string, previewUrl?: string) => {
+      editor.insertNode(createEmoticonElement(key, shortcode, previewUrl));
       moveCursor(editor, true);
     };
 
@@ -1627,7 +1627,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         }
 
         Transforms.select(editor, insertionRange);
-        handleEmoticonSelect(key, shortcode);
+        handleEmoticonSelect(key, shortcode, sourceUrl);
       } catch {
         releaseInsertionRange();
         // resolveCloudEmojiKey reports the user-facing failure next to the composer.
@@ -2275,7 +2275,10 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
             if (mobileEmojiBoard) {
               dispatchRoomComposerViewportChange(roomId);
             }
-            if (mobileEmojiBoard && emojiBoardOpen) closeEmojiBoard();
+            if (mobileEmojiBoard && emojiBoardOpenRef.current) closeEmojiBoard();
+          }}
+          onPointerDown={() => {
+            if (mobileEmojiBoard && emojiBoardOpenRef.current) closeEmojiBoard();
           }}
           onKeyDown={handleKeyDown}
           onChange={handleEditorChange}

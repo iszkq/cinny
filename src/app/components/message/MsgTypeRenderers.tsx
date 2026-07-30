@@ -29,8 +29,10 @@ import { FALLBACK_MIMETYPE, getBlobSafeMimeType } from '../../utils/mimeTypes';
 import { parseGeoUri, scaleYDimension } from '../../utils/common';
 import { Attachment, AttachmentBox, AttachmentContent, AttachmentHeader } from './attachment';
 import { FileHeader, FileDownloadButton } from './FileHeader';
+import { isAndroidApp } from '../../utils/nativePlatform';
 
 const IMAGE_TIMELINE_WIDTH = 230;
+const ANDROID_PORTRAIT_IMAGE_TIMELINE_WIDTH = 144;
 const IMAGE_TIMELINE_MAX_HEIGHT = 460;
 const VIDEO_TIMELINE_MAX_WIDTH = 400;
 const VIDEO_TIMELINE_PORTRAIT_MAX_WIDTH = IMAGE_TIMELINE_WIDTH;
@@ -213,8 +215,9 @@ export function MImage({ content, renderImageContent, outlined }: MImageProps) {
   const imageHeight =
     getPositiveDimension(imgInfo?.thumbnail_info?.h) ?? getPositiveDimension(imgInfo?.h);
   const hasAspectRatio = typeof imageWidth === 'number' && typeof imageHeight === 'number';
+  const androidPortrait = isAndroidApp() && hasAspectRatio && imageHeight > imageWidth * 1.08;
   const imageAttachmentStyle: CSSProperties = {
-    width: toRem(IMAGE_TIMELINE_WIDTH),
+    width: toRem(androidPortrait ? ANDROID_PORTRAIT_IMAGE_TIMELINE_WIDTH : IMAGE_TIMELINE_WIDTH),
     maxWidth: '100%',
   };
   const imageBoxStyle: CSSProperties = {

@@ -71,7 +71,7 @@ export const Reaction = as<
             />
           ) : (
             <span className={css.ReactionImg} aria-hidden="true">
-              {'...'}
+              {'\u25cc'}
             </span>
           )
         ) : (

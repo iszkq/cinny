@@ -218,49 +218,73 @@ export const ImageContent = as<'div', ImageContentProps>(
       [mx, useAuthentication]
     );
 
-    const [srcState, loadSrc] = useAsyncCallback(
-      useCallback(async (): Promise<TimelineImageSource> => {
-        const thumbMxcUrl = info?.thumbnail_file?.url ?? info?.thumbnail_url;
-        const thumbMimeType = info?.thumbnail_info?.mimetype ?? mimeType ?? FALLBACK_MIMETYPE;
-        const thumbEncInfo = info?.thumbnail_file;
+    const [srcState, loadSrc] = useAsyncCallback<
+      TimelineImageSource,
+      unknown,
+      [retryFailed?: boolean]
+    >(
+      useCallback(
+        async (retryFailed = false): Promise<TimelineImageSource> => {
+          const thumbMxcUrl = info?.thumbnail_file?.url ?? info?.thumbnail_url;
+          const thumbMimeType = info?.thumbnail_info?.mimetype ?? mimeType ?? FALLBACK_MIMETYPE;
+          const thumbEncInfo = info?.thumbnail_file;
 
-        if (!preferOriginalPreview && typeof thumbMxcUrl === 'string') {
-          try {
-            const thumbSrc = await prepareMediaSrc(thumbMxcUrl, thumbMimeType, thumbEncInfo);
-            return {
-              src: thumbSrc,
-              kind: 'thumbnail',
-            };
-          } catch {
-            // Fall back to the original image to preserve current behavior.
+          if (!preferOriginalPreview && typeof thumbMxcUrl === 'string') {
+            try {
+              const thumbSrc = await prepareMediaSrc(
+                thumbMxcUrl,
+                thumbMimeType,
+                thumbEncInfo,
+                undefined,
+                undefined,
+                undefined,
+                retryFailed
+              );
+              return {
+                src: thumbSrc,
+                kind: 'thumbnail',
+              };
+            } catch {
+              // Fall back to the original image to preserve current behavior.
+            }
           }
-        }
 
-        if (!preferOriginalPreview && !encInfo) {
-          try {
-            const thumbnailSrc = await prepareMediaSrc(
-              url,
-              mimeType ?? FALLBACK_MIMETYPE,
-              undefined,
-              IMAGE_PREVIEW_WIDTH,
-              IMAGE_PREVIEW_HEIGHT,
-              'scale'
-            );
-            return {
-              src: thumbnailSrc,
-              kind: 'thumbnail',
-            };
-          } catch {
-            // Fall back to the original image when homeserver thumbnails are unavailable.
+          if (!preferOriginalPreview && !encInfo) {
+            try {
+              const thumbnailSrc = await prepareMediaSrc(
+                url,
+                mimeType ?? FALLBACK_MIMETYPE,
+                undefined,
+                IMAGE_PREVIEW_WIDTH,
+                IMAGE_PREVIEW_HEIGHT,
+                'scale',
+                retryFailed
+              );
+              return {
+                src: thumbnailSrc,
+                kind: 'thumbnail',
+              };
+            } catch {
+              // Fall back to the original image when homeserver thumbnails are unavailable.
+            }
           }
-        }
 
-        const originalSrc = await prepareMediaSrc(url, mimeType ?? FALLBACK_MIMETYPE, encInfo);
-        return {
-          src: originalSrc,
-          kind: 'original',
-        };
-      }, [encInfo, info, mimeType, preferOriginalPreview, prepareMediaSrc, url])
+          const originalSrc = await prepareMediaSrc(
+            url,
+            mimeType ?? FALLBACK_MIMETYPE,
+            encInfo,
+            undefined,
+            undefined,
+            undefined,
+            retryFailed
+          );
+          return {
+            src: originalSrc,
+            kind: 'original',
+          };
+        },
+        [encInfo, info, mimeType, preferOriginalPreview, prepareMediaSrc, url]
+      )
     );
 
     const handleLoad = () => {
@@ -287,12 +311,12 @@ export const ImageContent = as<'div', ImageContentProps>(
         setStableRetryNonce((current) => current + 1);
         return;
       }
-      loadSrc().catch(() => undefined);
+      loadSrc(true).catch(() => undefined);
     };
 
     useEffect(() => {
       if (autoPlay && !stablePreviewEnabled) {
-        loadSrc().catch(() => undefined);
+        loadSrc(false).catch(() => undefined);
       }
     }, [autoPlay, loadSrc, stablePreviewEnabled]);
 

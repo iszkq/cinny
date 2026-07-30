@@ -151,6 +151,7 @@ const scheduleWebImagePackMediaWarm = (
     objectWarmLimit: number;
     batchSize?: number;
     batchDelayMs?: number;
+    deferFallbackPersistent?: boolean;
   }
 ) => {
   let disposed = false;
@@ -159,17 +160,24 @@ const scheduleWebImagePackMediaWarm = (
     getImagePackPrimaryMediaUrls(mx, useAuthentication, packs, usages)
   ).slice(0, options.objectWarmLimit);
   const persistentUrls = Array.from(getImagePackMediaUrls(mx, useAuthentication, packs, usages));
+  const primaryPersistentUrls = Array.from(
+    getImagePackPrimaryMediaUrls(mx, useAuthentication, packs, usages)
+  );
+  const primaryPersistentSet = new Set(primaryPersistentUrls);
+  const fallbackPersistentUrls = persistentUrls.filter((url) => !primaryPersistentSet.has(url));
   const batchSize = options.batchSize ?? WEB_IMAGE_PACK_WARM_BATCH_SIZE;
   const batchDelayMs = options.batchDelayMs ?? WEB_IMAGE_PACK_WARM_BATCH_DELAY_MS;
 
   const scheduleBatch = (
     urls: string[],
     initialDelay: number,
-    action: (mediaUrl: string) => void
+    action: (mediaUrl: string) => void,
+    scheduledBatchSize = batchSize,
+    scheduledBatchDelayMs = batchDelayMs
   ) => {
-    for (let batchStart = 0; batchStart < urls.length; batchStart += batchSize) {
-      const batch = urls.slice(batchStart, batchStart + batchSize);
-      const batchIndex = batchStart / batchSize;
+    for (let batchStart = 0; batchStart < urls.length; batchStart += scheduledBatchSize) {
+      const batch = urls.slice(batchStart, batchStart + scheduledBatchSize);
+      const batchIndex = batchStart / scheduledBatchSize;
 
       timers.push(
         window.setTimeout(() => {
@@ -178,7 +186,7 @@ const scheduleWebImagePackMediaWarm = (
           }
 
           batch.forEach(action);
-        }, initialDelay + batchIndex * batchDelayMs)
+        }, initialDelay + batchIndex * scheduledBatchDelayMs)
       );
     }
   };
@@ -189,9 +197,23 @@ const scheduleWebImagePackMediaWarm = (
   // Runtime blob URLs disappear when the WebView is restarted. Persist every personal/default
   // pack item as well, including the priority items above, so Android and iOS can paint them from
   // local storage on the next launch.
-  scheduleBatch(persistentUrls, options.persistentWarmDelayMs, (mediaUrl) => {
+  const persistMediaUrl = (mediaUrl: string) => {
     void primePersistentMediaUrl(mediaUrl, 'background');
-  });
+  };
+  if (options.deferFallbackPersistent) {
+    // Cache the static grid thumbnails first. Full animated originals are still downloaded
+    // automatically, but later and in smaller batches so GIF/WebP warm-up cannot stall scrolling.
+    scheduleBatch(primaryPersistentUrls, options.persistentWarmDelayMs, persistMediaUrl);
+    scheduleBatch(
+      fallbackPersistentUrls,
+      options.persistentWarmDelayMs + 12_000,
+      persistMediaUrl,
+      Math.max(4, Math.floor(batchSize / 2)),
+      Math.max(400, batchDelayMs * 3)
+    );
+  } else {
+    scheduleBatch(persistentUrls, options.persistentWarmDelayMs, persistMediaUrl);
+  }
 
   return () => {
     disposed = true;
@@ -265,6 +287,7 @@ const getImagePackMediaUrls = (
           width: size,
           height: size,
           preferOriginal: usage === ImageUsage.Sticker && !androidApp,
+          forceThumbnail: androidApp,
         }).forEach((mediaUrl) => {
           mediaUrls.add(mediaUrl);
         });
@@ -313,6 +336,7 @@ const getImagePackPrimaryMediaUrls = (
           width: size,
           height: size,
           preferOriginal: usage === ImageUsage.Sticker && !androidApp,
+          forceThumbnail: androidApp,
         });
 
         if (primaryUrl) {
@@ -761,6 +785,7 @@ export const useWarmWebImagePackMedia = () => {
                 objectWarmLimit: ANDROID_IMAGE_PACK_PRIORITY_OBJECT_WARM_LIMIT,
                 batchSize: ANDROID_IMAGE_PACK_PRIORITY_BATCH_SIZE,
                 batchDelayMs: ANDROID_IMAGE_PACK_PRIORITY_BATCH_DELAY_MS,
+                deferFallbackPersistent: true,
               }
             : {
                 objectWarmDelayMs: WEB_IMAGE_PACK_PRIORITY_OBJECT_WARM_DELAY_MS,
@@ -785,6 +810,7 @@ export const useWarmWebImagePackMedia = () => {
                 objectWarmLimit: ANDROID_IMAGE_PACK_SECONDARY_OBJECT_WARM_LIMIT,
                 batchSize: ANDROID_IMAGE_PACK_SECONDARY_BATCH_SIZE,
                 batchDelayMs: ANDROID_IMAGE_PACK_SECONDARY_BATCH_DELAY_MS,
+                deferFallbackPersistent: true,
               }
             : {
                 objectWarmDelayMs: WEB_IMAGE_PACK_SECONDARY_OBJECT_WARM_DELAY_MS,

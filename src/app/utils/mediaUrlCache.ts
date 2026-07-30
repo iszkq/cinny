@@ -184,6 +184,10 @@ let currentCacheNamespace: string | undefined;
 let legacyCacheCleanupPromise: Promise<void> | undefined;
 let legacyCacheCleanupComplete = false;
 let mediaCachePromise: Promise<Cache | undefined> | undefined;
+let persistentWritesSinceTrim = 0;
+let persistentTrimPromise: Promise<void> | undefined;
+
+const PERSISTENT_MEDIA_TRIM_INTERVAL = 64;
 
 const emitObjectUrlMediaChange = (src: string, objectUrl: string | undefined) => {
   objectUrlMediaListeners.get(src)?.forEach((listener) => {
@@ -419,6 +423,8 @@ const resetInMemoryMediaCaches = () => {
   clearObjectUrlMediaCache();
   clearFailedMediaEntries();
   mediaCachePromise = undefined;
+  persistentWritesSinceTrim = 0;
+  persistentTrimPromise = undefined;
 };
 
 const syncPersistentMediaNamespace = () => {
@@ -497,16 +503,31 @@ const trimPersistentMediaCache = async (
   );
 };
 
+const schedulePersistentMediaTrim = (mediaCache: Cache) => {
+  persistentWritesSinceTrim += 1;
+  if (persistentWritesSinceTrim < PERSISTENT_MEDIA_TRIM_INTERVAL || persistentTrimPromise) {
+    return;
+  }
+
+  persistentWritesSinceTrim = 0;
+  persistentTrimPromise = trimPersistentMediaCache(mediaCache)
+    .catch(() => undefined)
+    .finally(() => {
+      persistentTrimPromise = undefined;
+    });
+};
+
 const persistMediaResponse = async (
   mediaCache: Cache,
   src: string,
   response: Response
 ): Promise<boolean> => {
   try {
-    // Make room before writing. WebView Cache Storage may reject the new response before a
-    // post-write trim gets a chance to run.
-    await trimPersistentMediaCache(mediaCache, Math.max(0, MAX_PERSISTENT_MEDIA_ENTRIES - 1));
+    // Cache.keys() is an expensive disk scan in Android WebView. Scanning before every sticker
+    // write made a full pack warm-up quadratic and competed with scrolling. Put immediately and
+    // trim in coarse background batches; quota failures still reclaim space synchronously below.
     await mediaCache.put(src, response.clone());
+    schedulePersistentMediaTrim(mediaCache);
     return true;
   } catch {
     try {

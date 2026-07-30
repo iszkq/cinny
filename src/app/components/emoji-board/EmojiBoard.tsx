@@ -468,6 +468,7 @@ function StickerSidebar({
               width: 64,
               height: 64,
               preferOriginal: !androidApp,
+              forceThumbnail: androidApp,
             });
 
           return (
@@ -787,6 +788,7 @@ export function EmojiBoard({
           width: size,
           height: size,
           preferOriginal: usage === ImageUsage.Sticker && !androidApp,
+          forceThumbnail: androidApp,
         }).forEach((url) => {
           mediaUrls.add(url);
         });

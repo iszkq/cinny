@@ -3,6 +3,7 @@ import React, {
   ClipboardEventHandler,
   FocusEventHandler,
   KeyboardEventHandler,
+  PointerEventHandler,
   ReactNode,
   forwardRef,
   useCallback,
@@ -73,6 +74,7 @@ type CustomEditorProps = {
   onChange?: EditorChangeHandler;
   onPaste?: ClipboardEventHandler;
   onFocus?: FocusEventHandler;
+  onPointerDown?: PointerEventHandler;
 };
 export const CustomEditor = forwardRef<HTMLDivElement, CustomEditorProps>(
   (
@@ -90,6 +92,7 @@ export const CustomEditor = forwardRef<HTMLDivElement, CustomEditorProps>(
       onChange,
       onPaste,
       onFocus,
+      onPointerDown,
     },
     ref
   ) => {
@@ -155,6 +158,7 @@ export const CustomEditor = forwardRef<HTMLDivElement, CustomEditorProps>(
                 onKeyUp={onKeyUp}
                 onPaste={onPaste}
                 onFocus={onFocus}
+                onPointerDown={onPointerDown}
               />
             </Scroll>
             {after && (

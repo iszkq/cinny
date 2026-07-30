@@ -43,7 +43,10 @@ const clearBrowserResourceCaches = async () => {
     if (!('caches' in window)) return;
 
     const cacheKeys = await window.caches.keys().catch(() => []);
-    await Promise.all(cacheKeys.map((key) => window.caches.delete(key).catch(() => false)));
+    const applicationShellCaches = cacheKeys.filter((key) => key.startsWith('workbox-precache'));
+    await Promise.all(
+      applicationShellCaches.map((key) => window.caches.delete(key).catch(() => false))
+    );
   };
 
   const unregisterServiceWorkers = async () => {
@@ -152,11 +155,16 @@ window.addEventListener(
   'error',
   (event) => {
     const { target } = event;
-    let resourceUrl: string | undefined;
-    if (target instanceof HTMLScriptElement) resourceUrl = target.src;
-    if (target instanceof HTMLLinkElement) resourceUrl = target.href;
+    if (target instanceof HTMLLinkElement) {
+      if (target.dataset.cinnyStylesheetRetry === 'true') return;
+      target.dataset.cinnyStylesheetFailed = 'true';
+      retryFailedStylesheet(target);
+      return;
+    }
+
     const resourceError =
-      event.error ?? (resourceUrl ? `Module script failed: ${resourceUrl}` : '');
+      event.error ??
+      (target instanceof HTMLScriptElement ? `Module script failed: ${target.src}` : '');
     recoverUnhandledResourceLoad(resourceError);
   },
   true
@@ -164,11 +172,12 @@ window.addEventListener(
 
 const retryingStylesheets = new WeakSet<HTMLLinkElement>();
 
-const retryFailedStylesheet = (link: HTMLLinkElement) => {
+function retryFailedStylesheet(link: HTMLLinkElement) {
   if (retryingStylesheets.has(link)) return;
 
   retryingStylesheets.add(link);
   const retryLink = link.cloneNode(false) as HTMLLinkElement;
+  retryLink.dataset.cinnyStylesheetRetry = 'true';
   const retryUrl = new URL(link.href, window.location.href);
   retryUrl.searchParams.set('cinny-style-retry', Date.now().toString());
   retryLink.href = retryUrl.href;
@@ -176,6 +185,8 @@ const retryFailedStylesheet = (link: HTMLLinkElement) => {
   retryLink.addEventListener(
     'load',
     () => {
+      delete retryLink.dataset.cinnyStylesheetFailed;
+      delete retryLink.dataset.cinnyStylesheetRetry;
       link.remove();
       document.documentElement.dataset.cinnyStylesRecovered = 'true';
     },
@@ -191,16 +202,25 @@ const retryFailedStylesheet = (link: HTMLLinkElement) => {
   );
 
   link.after(retryLink);
-};
+}
 
 const recoverFailedStylesheets = () => {
-  document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"][href]').forEach((link) => {
-    if (link.sheet === null) retryFailedStylesheet(link);
-  });
+  document
+    .querySelectorAll<HTMLLinkElement>(
+      'link[rel="stylesheet"][href][data-cinny-stylesheet-failed="true"]'
+    )
+    .forEach(retryFailedStylesheet);
 };
 
 document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"][href]').forEach((link) => {
-  link.addEventListener('error', () => retryFailedStylesheet(link), { once: true });
+  link.addEventListener(
+    'error',
+    () => {
+      link.dataset.cinnyStylesheetFailed = 'true';
+      retryFailedStylesheet(link);
+    },
+    { once: true }
+  );
 });
 
 if (document.readyState === 'complete') {
@@ -305,7 +325,6 @@ if (isDesktopUpdaterSupported() && !desktopSubWindow) {
 
 // Register Service Worker
 if (!desktopSubWindow && !isAndroidApp() && 'serviceWorker' in navigator) {
-  const hadServiceWorkerController = navigator.serviceWorker.controller !== null;
   const swUrl =
     import.meta.env.MODE === 'production'
       ? `${trimTrailingSlash(import.meta.env.BASE_URL)}/sw.js`
@@ -320,10 +339,6 @@ if (!desktopSubWindow && !isAndroidApp() && 'serviceWorker' in navigator) {
   navigator.serviceWorker.ready.then(sendSessionToSW);
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     sendSessionToSW();
-    if (hadServiceWorkerController && !resourceReloadScheduled) {
-      resourceReloadScheduled = true;
-      window.location.reload();
-    }
   });
   window.addEventListener('focus', sendSessionToSW);
   window.addEventListener('online', sendSessionToSW);

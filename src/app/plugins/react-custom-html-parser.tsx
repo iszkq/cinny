@@ -233,6 +233,7 @@ function CachedHtmlEmoticonImage(
 ) {
   const androidApp = isAndroidApp();
   const { fallbackSrc, src, ...imgProps } = props;
+  const fallbackLabel = String(imgProps.alt ?? imgProps.title ?? '').replace(/^:+|:+$/g, '');
   const originalSrc = src;
   const primarySrc = androidApp ? fallbackSrc ?? originalSrc : originalSrc;
   const secondarySrc = primarySrc === fallbackSrc ? originalSrc : fallbackSrc;
@@ -248,10 +249,12 @@ function CachedHtmlEmoticonImage(
     return (
       <span
         className={imgProps.className}
-        style={{ display: 'inline-block', width: '1em' }}
+        style={{ display: 'inline-block' }}
         role="img"
-        aria-label={imgProps.alt ?? imgProps.title ?? ''}
-      />
+        aria-label={fallbackLabel}
+      >
+        {fallbackLabel ? `:${fallbackLabel}:` : '\u00a0'}
+      </span>
     );
   }
 

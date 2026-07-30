@@ -14,7 +14,7 @@ import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
 import { isHttpUrl } from '../../utils/matrix';
 import { isAndroidApp } from '../../utils/nativePlatform';
 
-type AndroidMediaVisibilityListener = () => void;
+type AndroidMediaVisibilityListener = (nearViewport: boolean) => void;
 
 const androidMediaVisibilityListeners = new WeakMap<Element, AndroidMediaVisibilityListener>();
 let androidMediaVisibilityObserver: IntersectionObserver | undefined;
@@ -25,13 +25,9 @@ const getAndroidMediaVisibilityObserver = (): IntersectionObserver | undefined =
   }
 
   androidMediaVisibilityObserver = new IntersectionObserver(
-    (entries, observer) => {
+    (entries) => {
       entries.forEach((entry) => {
-        if (!entry.isIntersecting) return;
-
-        androidMediaVisibilityListeners.get(entry.target)?.();
-        androidMediaVisibilityListeners.delete(entry.target);
-        observer.unobserve(entry.target);
+        androidMediaVisibilityListeners.get(entry.target)?.(entry.isIntersecting);
       });
     },
     { rootMargin: '160px 0px' }
@@ -63,7 +59,7 @@ const useAndroidMediaVisibility = () => {
       elementRef.current = element ?? undefined;
       if (!element) return;
 
-      androidMediaVisibilityListeners.set(element, () => setNearViewport(true));
+      androidMediaVisibilityListeners.set(element, setNearViewport);
       observer?.observe(element);
       if (!observer) setNearViewport(true);
     },
@@ -157,6 +153,7 @@ export function CustomEmojiItem({ mx, useAuthentication, image }: CustomEmojiIte
     info: image.info,
     width: 64,
     height: 64,
+    forceThumbnail: androidApp,
   });
   const { displayUrl, hasFailed, isLoaded, requestKey, handleLoad, handleError } =
     useStableMediaUrl(
@@ -247,9 +244,10 @@ export function StickerItem({ mx, useAuthentication, image }: StickerItemProps) 
     info: image.info,
     width: 256,
     height: 256,
-    // Animated formats still select the original automatically. Static Android tiles use the
-    // homeserver thumbnail to avoid decoding full-resolution files while scrolling.
+    // Android tiles request a non-animated homeserver thumbnail. The original animation remains
+    // available for the preview/send path without keeping dozens of decoders active in the grid.
     preferOriginal: !androidApp,
+    forceThumbnail: androidApp,
   });
   const { displayUrl, hasFailed, isLoaded, requestKey, handleLoad, handleError } =
     useStableMediaUrl(

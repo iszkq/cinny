@@ -85,6 +85,8 @@ function RenderEmoticonElement({
   const selected = useSelected();
   const focused = useFocused();
   const customEmoji = isMxcUrl(element.key) || isHttpUrl(element.key);
+  const androidPreviewUrl =
+    androidApp && isHttpUrl(element.previewUrl) ? element.previewUrl : undefined;
   const originalMediaUrl = isMxcUrl(element.key)
     ? mxcUrlToHttp(mx, element.key, useAuthentication) ?? undefined
     : isHttpUrl(element.key)
@@ -93,14 +95,21 @@ function RenderEmoticonElement({
   const thumbnailMediaUrl = isMxcUrl(element.key)
     ? mxcUrlToHttp(mx, element.key, useAuthentication, 48, 48, 'scale') ?? undefined
     : undefined;
-  const primaryMediaUrl = androidApp ? thumbnailMediaUrl ?? originalMediaUrl : originalMediaUrl;
+  const primaryMediaUrl =
+    androidPreviewUrl ?? (androidApp ? thumbnailMediaUrl ?? originalMediaUrl : originalMediaUrl);
   const fallbackMediaUrl =
-    primaryMediaUrl === thumbnailMediaUrl ? originalMediaUrl : thumbnailMediaUrl;
+    primaryMediaUrl === androidPreviewUrl
+      ? thumbnailMediaUrl ?? originalMediaUrl
+      : primaryMediaUrl === thumbnailMediaUrl
+      ? originalMediaUrl
+      : thumbnailMediaUrl;
   const { displayUrl, handleLoad, handleError, requestKey } = useStableMediaUrl(
     primaryMediaUrl,
     fallbackMediaUrl,
     {
       disableObjectUrlCache: !androidApp,
+      preferObjectUrl: androidPreviewUrl ? false : undefined,
+      requireObjectUrl: androidPreviewUrl ? false : undefined,
     }
   );
 
@@ -123,9 +132,7 @@ function RenderEmoticonElement({
             onError={handleError}
           />
         ) : customEmoji ? (
-          <span className={css.EmoticonImg} aria-label={element.shortcode}>
-            {'...'}
-          </span>
+          <span aria-label={element.shortcode}>:{element.shortcode}:</span>
         ) : (
           element.key
         )}

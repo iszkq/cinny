@@ -188,10 +188,15 @@ export const createMentionElement = (
   children: [{ text: '' }],
 });
 
-export const createEmoticonElement = (key: string, shortcode: string): EmoticonElement => ({
+export const createEmoticonElement = (
+  key: string,
+  shortcode: string,
+  previewUrl?: string
+): EmoticonElement => ({
   type: BlockType.Emoticon,
   key,
   shortcode,
+  ...(previewUrl ? { previewUrl } : {}),
   children: [{ text: '' }],
 });
 

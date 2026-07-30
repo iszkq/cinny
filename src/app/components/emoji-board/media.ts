@@ -13,6 +13,18 @@ const ANIMATED_EMOJI_MEDIA_MIME_TYPES = new Set([
 export const isAnimatedEmojiBoardMedia = (info?: IImageInfo): boolean =>
   ANIMATED_EMOJI_MEDIA_MIME_TYPES.has(getNormalizedMimeType(info?.mimetype ?? ''));
 
+const requestStaticThumbnail = (src: string | undefined): string | undefined => {
+  if (!src) return undefined;
+
+  try {
+    const url = new URL(src);
+    url.searchParams.set('animated', 'false');
+    return url.toString();
+  } catch {
+    return src;
+  }
+};
+
 type EmojiBoardMediaUrlsOptions = {
   mx: MatrixClient;
   mxc?: string;
@@ -22,6 +34,7 @@ type EmojiBoardMediaUrlsOptions = {
   height: number;
   resizeMethod?: string;
   preferOriginal?: boolean;
+  forceThumbnail?: boolean;
 };
 
 export const getEmojiBoardMediaUrls = ({
@@ -33,6 +46,7 @@ export const getEmojiBoardMediaUrls = ({
   height,
   resizeMethod = 'scale',
   preferOriginal = false,
+  forceThumbnail = false,
 }: EmojiBoardMediaUrlsOptions): {
   primaryUrl?: string;
   fallbackUrl?: string;
@@ -54,16 +68,22 @@ export const getEmojiBoardMediaUrls = ({
   const thumbnailUrl =
     mxcUrlToHttp(mx, mxc, useAuthentication, width, height, resizeMethod) ?? undefined;
   const originalUrl = mxcUrlToHttp(mx, mxc, useAuthentication) ?? undefined;
+  const preferredThumbnailUrl = forceThumbnail
+    ? requestStaticThumbnail(thumbnailUrl)
+    : thumbnailUrl;
   const animated = isAnimatedEmojiBoardMedia(info);
 
-  const primaryUrl =
-    animated || preferOriginal ? originalUrl ?? thumbnailUrl : thumbnailUrl ?? originalUrl;
+  const primaryUrl = forceThumbnail
+    ? preferredThumbnailUrl ?? originalUrl
+    : animated || preferOriginal
+    ? originalUrl ?? thumbnailUrl
+    : thumbnailUrl ?? originalUrl;
   const fallbackUrl =
     primaryUrl === originalUrl
-      ? thumbnailUrl !== originalUrl
-        ? thumbnailUrl
+      ? preferredThumbnailUrl !== originalUrl
+        ? preferredThumbnailUrl
         : undefined
-      : originalUrl !== thumbnailUrl
+      : originalUrl !== preferredThumbnailUrl
       ? originalUrl
       : undefined;
 

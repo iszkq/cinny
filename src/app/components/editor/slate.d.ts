@@ -40,6 +40,7 @@ export type EmoticonElement = {
   type: BlockType.Emoticon;
   key: string;
   shortcode: string;
+  previewUrl?: string;
   children: Text[];
 };
 export type CommandElement = {

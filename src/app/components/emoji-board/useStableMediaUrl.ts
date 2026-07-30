@@ -26,7 +26,6 @@ type UseStableMediaUrlOptions = {
 };
 
 const PREFERRED_OBJECT_URL_WAIT_MS = 700;
-const ANDROID_REQUIRED_OBJECT_URL_WAIT_MS = 15_000;
 
 const buildMediaCandidates = (
   options: {
@@ -218,14 +217,15 @@ export const useStableMediaUrl = (
     }
 
     let disposed = false;
-    const timeoutId = setTimeout(
-      () => {
-        if (!disposed) {
-          setPreparedMediaReady(true);
-        }
-      },
-      requireObjectUrl ? ANDROID_REQUIRED_OBJECT_URL_WAIT_MS : PREFERRED_OBJECT_URL_WAIT_MS
-    );
+    // Authenticated Android media has no safe direct <img> fallback. Do not manufacture a Retry
+    // state while the bounded browser/native request is still running; wait for the real result.
+    const timeoutId = requireObjectUrl
+      ? undefined
+      : setTimeout(() => {
+          if (!disposed) {
+            setPreparedMediaReady(true);
+          }
+        }, PREFERRED_OBJECT_URL_WAIT_MS);
 
     const preparePreferredUrl = async () => {
       if (desktopSupported) {
@@ -254,7 +254,7 @@ export const useStableMediaUrl = (
         return;
       }
 
-      clearTimeout(timeoutId);
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
       setPreparedMediaReady(true);
       setCacheVersion((prev) => prev + 1);
     };
@@ -263,7 +263,7 @@ export const useStableMediaUrl = (
 
     return () => {
       disposed = true;
-      clearTimeout(timeoutId);
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
     };
   }, [
     desktopSupported,

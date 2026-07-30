@@ -101,6 +101,13 @@ const fetchMediaWithAndroidNativeHttp = async (
   return response;
 };
 
+const isUsableMediaResponse = (response: Response): boolean => {
+  if (!response.ok) return false;
+
+  const contentType = response.headers.get('content-type')?.toLowerCase() ?? '';
+  return !contentType.includes('text/html') && !contentType.includes('application/json');
+};
+
 const fetchMediaWithAndroidFallback = async (
   url: string,
   init?: RequestInit
@@ -109,7 +116,17 @@ const fetchMediaWithAndroidFallback = async (
   const nativeEligible = isAndroidApp() && method === 'GET' && /^https?:\/\//i.test(url);
 
   try {
-    return await fetchWithTimeout(url, init);
+    const browserResponse = await fetchWithTimeout(url, init);
+    if (!nativeEligible || isUsableMediaResponse(browserResponse)) {
+      return browserResponse;
+    }
+
+    // Cloudflare/VPN paths can return an HTML challenge or a transient HTTP error without making
+    // fetch reject. Give the native stack a chance in those cases too, not only on exceptions.
+    const nativeResponse = await fetchMediaWithAndroidNativeHttp(url, init).catch(() => undefined);
+    return nativeResponse && isUsableMediaResponse(nativeResponse)
+      ? nativeResponse
+      : browserResponse;
   } catch (browserError) {
     if (!nativeEligible) {
       throw browserError;
@@ -118,11 +135,14 @@ const fetchMediaWithAndroidFallback = async (
   }
 };
 
-const isUsableMediaResponse = (response: Response): boolean => {
-  if (!response.ok) return false;
-
-  const contentType = response.headers.get('content-type')?.toLowerCase() ?? '';
-  return !contentType.includes('text/html') && !contentType.includes('application/json');
+const withMediaAccessToken = (src: string, accessToken: string): string => {
+  try {
+    const url = new URL(src);
+    url.searchParams.set('access_token', accessToken);
+    return url.toString();
+  } catch {
+    return src;
+  }
 };
 
 export const fetchMediaWithAuth = async (src: string, init?: RequestInit): Promise<Response> => {
@@ -142,16 +162,23 @@ export const fetchMediaWithAuth = async (src: string, init?: RequestInit): Promi
   let lastError: unknown;
 
   for (const requestUrl of requestUrls) {
-    const requestHeadersList = isSessionMediaUrl(requestUrl, session.baseUrl)
-      ? [authHeaders, baseHeaders]
-      : [baseHeaders];
+    const sessionMediaRequest = isSessionMediaUrl(requestUrl, session.baseUrl);
+    const requestAttempts: Array<{ url: string; headers: Headers }> = sessionMediaRequest
+      ? [
+          { url: requestUrl, headers: authHeaders },
+          ...(isAndroidApp()
+            ? [{ url: withMediaAccessToken(requestUrl, session.accessToken), headers: baseHeaders }]
+            : []),
+          { url: requestUrl, headers: baseHeaders },
+        ]
+      : [{ url: requestUrl, headers: baseHeaders }];
 
-    for (const headers of requestHeadersList) {
+    for (const attempt of requestAttempts) {
       // eslint-disable-next-line no-await-in-loop
-      const response = await fetchMediaWithAndroidFallback(requestUrl, {
+      const response = await fetchMediaWithAndroidFallback(attempt.url, {
         ...init,
         method: init?.method ?? 'GET',
-        headers,
+        headers: attempt.headers,
       }).catch((error) => {
         lastError = error;
         return undefined;
