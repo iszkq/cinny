@@ -31,6 +31,7 @@ import {
   getEmojiBoardMediaUrls,
 } from '../components/emoji-board/components/media';
 import { useSyncState } from './useSyncState';
+import { isAndroidApp } from '../utils/nativePlatform';
 
 const GLOBAL_IMAGE_PACK_WARM_DELAY_MS = 1500;
 const GLOBAL_IMAGE_PACK_OBJECT_WARM_DELAY_MS = 2400;
@@ -45,6 +46,12 @@ const WEB_IMAGE_PACK_WARM_BATCH_SIZE = 12;
 const WEB_IMAGE_PACK_WARM_BATCH_DELAY_MS = 650;
 const WEB_IMAGE_PACK_PRIORITY_OBJECT_WARM_LIMIT = 96;
 const WEB_IMAGE_PACK_SECONDARY_OBJECT_WARM_LIMIT = 192;
+const ANDROID_IMAGE_PACK_PRIORITY_OBJECT_WARM_LIMIT = 512;
+const ANDROID_IMAGE_PACK_SECONDARY_OBJECT_WARM_LIMIT = 256;
+const ANDROID_IMAGE_PACK_PRIORITY_BATCH_SIZE = 24;
+const ANDROID_IMAGE_PACK_SECONDARY_BATCH_SIZE = 12;
+const ANDROID_IMAGE_PACK_PRIORITY_BATCH_DELAY_MS = 80;
+const ANDROID_IMAGE_PACK_SECONDARY_BATCH_DELAY_MS = 160;
 const IMAGE_PACK_AVATAR_SIZE = 64;
 const IMAGE_PACK_EMOTICON_SIZE = 64;
 const IMAGE_PACK_STICKER_SIZE = 256;
@@ -142,6 +149,8 @@ const scheduleWebImagePackMediaWarm = (
     objectWarmDelayMs: number;
     persistentWarmDelayMs: number;
     objectWarmLimit: number;
+    batchSize?: number;
+    batchDelayMs?: number;
   }
 ) => {
   let disposed = false;
@@ -150,19 +159,17 @@ const scheduleWebImagePackMediaWarm = (
     getImagePackPrimaryMediaUrls(mx, useAuthentication, packs, usages)
   ).slice(0, options.objectWarmLimit);
   const persistentUrls = Array.from(getImagePackMediaUrls(mx, useAuthentication, packs, usages));
+  const batchSize = options.batchSize ?? WEB_IMAGE_PACK_WARM_BATCH_SIZE;
+  const batchDelayMs = options.batchDelayMs ?? WEB_IMAGE_PACK_WARM_BATCH_DELAY_MS;
 
   const scheduleBatch = (
     urls: string[],
     initialDelay: number,
     action: (mediaUrl: string) => void
   ) => {
-    for (
-      let batchStart = 0;
-      batchStart < urls.length;
-      batchStart += WEB_IMAGE_PACK_WARM_BATCH_SIZE
-    ) {
-      const batch = urls.slice(batchStart, batchStart + WEB_IMAGE_PACK_WARM_BATCH_SIZE);
-      const batchIndex = batchStart / WEB_IMAGE_PACK_WARM_BATCH_SIZE;
+    for (let batchStart = 0; batchStart < urls.length; batchStart += batchSize) {
+      const batch = urls.slice(batchStart, batchStart + batchSize);
+      const batchIndex = batchStart / batchSize;
 
       timers.push(
         window.setTimeout(() => {
@@ -171,7 +178,7 @@ const scheduleWebImagePackMediaWarm = (
           }
 
           batch.forEach(action);
-        }, initialDelay + batchIndex * WEB_IMAGE_PACK_WARM_BATCH_DELAY_MS)
+        }, initialDelay + batchIndex * batchDelayMs)
       );
     }
   };
@@ -728,6 +735,7 @@ export const useWarmWebImagePackMedia = () => {
   }, [priorityPacks, relevantPacks]);
 
   const hasWarmTargets = priorityPacks.length > 0 || secondaryPacks.length > 0;
+  const androidApp = isAndroidApp();
 
   useEffect(() => {
     if (!warmReady || !hasWarmTargets) {
@@ -744,11 +752,19 @@ export const useWarmWebImagePackMedia = () => {
           useAuthentication,
           priorityPacks,
           [ImageUsage.Emoticon, ImageUsage.Sticker],
-          {
-            objectWarmDelayMs: WEB_IMAGE_PACK_PRIORITY_OBJECT_WARM_DELAY_MS,
-            persistentWarmDelayMs: WEB_IMAGE_PACK_PRIORITY_PERSISTENT_WARM_DELAY_MS,
-            objectWarmLimit: WEB_IMAGE_PACK_PRIORITY_OBJECT_WARM_LIMIT,
-          }
+          androidApp
+            ? {
+                objectWarmDelayMs: 0,
+                persistentWarmDelayMs: 0,
+                objectWarmLimit: ANDROID_IMAGE_PACK_PRIORITY_OBJECT_WARM_LIMIT,
+                batchSize: ANDROID_IMAGE_PACK_PRIORITY_BATCH_SIZE,
+                batchDelayMs: ANDROID_IMAGE_PACK_PRIORITY_BATCH_DELAY_MS,
+              }
+            : {
+                objectWarmDelayMs: WEB_IMAGE_PACK_PRIORITY_OBJECT_WARM_DELAY_MS,
+                persistentWarmDelayMs: WEB_IMAGE_PACK_PRIORITY_PERSISTENT_WARM_DELAY_MS,
+                objectWarmLimit: WEB_IMAGE_PACK_PRIORITY_OBJECT_WARM_LIMIT,
+              }
         )
       );
     }
@@ -760,11 +776,19 @@ export const useWarmWebImagePackMedia = () => {
           useAuthentication,
           secondaryPacks,
           [ImageUsage.Emoticon, ImageUsage.Sticker],
-          {
-            objectWarmDelayMs: WEB_IMAGE_PACK_SECONDARY_OBJECT_WARM_DELAY_MS,
-            persistentWarmDelayMs: WEB_IMAGE_PACK_SECONDARY_PERSISTENT_WARM_DELAY_MS,
-            objectWarmLimit: WEB_IMAGE_PACK_SECONDARY_OBJECT_WARM_LIMIT,
-          }
+          androidApp
+            ? {
+                objectWarmDelayMs: 800,
+                persistentWarmDelayMs: 1200,
+                objectWarmLimit: ANDROID_IMAGE_PACK_SECONDARY_OBJECT_WARM_LIMIT,
+                batchSize: ANDROID_IMAGE_PACK_SECONDARY_BATCH_SIZE,
+                batchDelayMs: ANDROID_IMAGE_PACK_SECONDARY_BATCH_DELAY_MS,
+              }
+            : {
+                objectWarmDelayMs: WEB_IMAGE_PACK_SECONDARY_OBJECT_WARM_DELAY_MS,
+                persistentWarmDelayMs: WEB_IMAGE_PACK_SECONDARY_PERSISTENT_WARM_DELAY_MS,
+                objectWarmLimit: WEB_IMAGE_PACK_SECONDARY_OBJECT_WARM_LIMIT,
+              }
         )
       );
     }
@@ -772,7 +796,7 @@ export const useWarmWebImagePackMedia = () => {
     return () => {
       cleanups.forEach((cleanup) => cleanup());
     };
-  }, [mx, hasWarmTargets, priorityPacks, secondaryPacks, useAuthentication, warmReady]);
+  }, [androidApp, mx, hasWarmTargets, priorityPacks, secondaryPacks, useAuthentication, warmReady]);
 };
 
 export const useWarmUniversalImagePackMedia = () => {

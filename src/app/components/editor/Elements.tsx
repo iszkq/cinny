@@ -16,6 +16,7 @@ import { BlockType } from './types';
 import { isHttpUrl, isMxcUrl, mxcUrlToHttp } from '../../utils/matrix';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 import { useStableMediaUrl } from '../emoji-board/components/useStableMediaUrl';
+import { isAndroidApp } from '../../utils/nativePlatform';
 
 // Put this at the start and end of an inline component to work around this Chromium bug:
 // https://bugs.chromium.org/p/chromium/issues/detail?id=1249405
@@ -84,18 +85,18 @@ function RenderEmoticonElement({
   const focused = useFocused();
   const customEmoji = isMxcUrl(element.key) || isHttpUrl(element.key);
   const originalMediaUrl = isMxcUrl(element.key)
-    ? (mxcUrlToHttp(mx, element.key, useAuthentication) ?? undefined)
+    ? mxcUrlToHttp(mx, element.key, useAuthentication) ?? undefined
     : isHttpUrl(element.key)
-      ? element.key
-      : undefined;
+    ? element.key
+    : undefined;
   const thumbnailMediaUrl = isMxcUrl(element.key)
-    ? (mxcUrlToHttp(mx, element.key, useAuthentication, 48, 48, 'scale') ?? undefined)
+    ? mxcUrlToHttp(mx, element.key, useAuthentication, 48, 48, 'scale') ?? undefined
     : undefined;
   const { displayUrl, handleLoad, handleError, requestKey } = useStableMediaUrl(
     originalMediaUrl,
     thumbnailMediaUrl,
     {
-      disableObjectUrlCache: true,
+      disableObjectUrlCache: !isAndroidApp(),
     }
   );
 

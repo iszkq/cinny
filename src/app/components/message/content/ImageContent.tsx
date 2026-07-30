@@ -155,6 +155,7 @@ export const ImageContent = as<'div', ImageContentProps>(
       requestKey: stablePreviewRequestKey,
       handleLoad: handleStablePreviewLoad,
       handleError: handleStablePreviewError,
+      retry: retryStablePreview,
     } = useStableMediaUrl(
       stablePreviewEnabled ? stableOriginalUrl : undefined,
       stablePreviewEnabled ? stableThumbnailUrl : undefined,
@@ -272,6 +273,7 @@ export const ImageContent = as<'div', ImageContentProps>(
       setError(false);
       setLoad(false);
       if (stablePreviewEnabled) {
+        retryStablePreview();
         setStableRetryNonce((current) => current + 1);
         return;
       }

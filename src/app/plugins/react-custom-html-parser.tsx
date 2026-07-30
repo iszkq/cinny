@@ -44,6 +44,7 @@ import { onEnterOrSpace } from '../utils/keyboard';
 import { copyToClipboard, tryDecodeURIComponent } from '../utils/dom';
 import { useTimeoutToggle } from '../hooks/useTimeoutToggle';
 import { useStableMediaUrl } from '../components/emoji-board/components/useStableMediaUrl';
+import { isAndroidApp } from '../utils/nativePlatform';
 
 const ReactPrism = lazy(() => import('./react-prism/ReactPrism'));
 
@@ -236,7 +237,7 @@ function CachedHtmlEmoticonImage(
     originalSrc,
     fallbackSrc,
     {
-      disableObjectUrlCache: true,
+      disableObjectUrlCache: !isAndroidApp(),
     }
   );
 
@@ -504,12 +505,12 @@ export const getReactCustomHtmlParser = (
         if (name === 'img') {
           const isEmoticon = 'data-mx-emoticon' in props;
           const emoticonOriginalSrc = isMxcUrl(props.src)
-            ? (mxcUrlToHttp(mx, props.src, params.useAuthentication) ?? props.src)
+            ? mxcUrlToHttp(mx, props.src, params.useAuthentication) ?? props.src
             : isHttpUrl(props.src)
-              ? props.src
-              : undefined;
+            ? props.src
+            : undefined;
           const emoticonFallbackSrc = isMxcUrl(props.src)
-            ? (mxcUrlToHttp(mx, props.src, params.useAuthentication, 64, 64, 'scale') ?? undefined)
+            ? mxcUrlToHttp(mx, props.src, params.useAuthentication, 64, 64, 'scale') ?? undefined
             : undefined;
           const htmlSrc = emoticonOriginalSrc;
           if (isEmoticon && emoticonOriginalSrc) {

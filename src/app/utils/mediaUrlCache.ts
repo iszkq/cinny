@@ -2,6 +2,7 @@ import { revokeObjectUrlWhenPossible } from './objectUrlRetainer';
 import { fetchMediaWithAuth } from './matrix';
 import { getFallbackSession } from '../state/sessions';
 import { mobileOrTablet } from './user-agent';
+import { isAndroidApp } from './nativePlatform';
 
 const LEGACY_PERSISTENT_MEDIA_CACHE = 'cinny-auth-media-v2';
 const PERSISTENT_MEDIA_CACHE_PREFIX = 'cinny-auth-media-v3';
@@ -64,6 +65,14 @@ const getObjectUrlMediaLimits = () => {
 };
 
 const getPersistentMediaLimits = () => {
+  // The installed Android app owns its storage and benefits from keeping complete sticker/avatar
+  // sets available between launches. Browser limits stay unchanged.
+  if (isAndroidApp()) {
+    return {
+      maxEntries: 2400,
+    };
+  }
+
   const deviceMemory =
     typeof navigator === 'undefined'
       ? undefined

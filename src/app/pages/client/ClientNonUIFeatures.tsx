@@ -68,6 +68,7 @@ import { mobileOrTablet } from '../../utils/user-agent';
 import { isAndroidApp } from '../../utils/nativePlatform';
 import { checkForAndroidUpdate, type PendingAndroidUpdate } from '../../utils/androidUpdater';
 import { AndroidUpdatePrompt } from '../../components/AndroidUpdatePrompt';
+import { primeCachedMediaObjectUrl } from '../../utils/mediaUrlCache';
 
 const EXTERNAL_LINK_SELECTOR = 'a[href]';
 const DESKTOP_UPDATE_AUTO_CHECK_DELAY_MS = 30000;
@@ -81,6 +82,7 @@ const TASKBAR_BADGE_ICON_SIZE = 64;
 const IMAGE_PACK_MEDIA_WARM_START_DELAY_MS = 15000;
 const ANDROID_UPDATE_AUTO_CHECK_DELAY_MS = 25_000;
 const ANDROID_UPDATE_AUTO_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const ANDROID_AVATAR_WARM_LIMIT = 384;
 
 const taskbarBadgeIconCache = new Map<string, Uint8Array>();
 let activeTaskbarBadgeColor: string | undefined;
@@ -854,7 +856,9 @@ function DelayedImagePackMediaWarmFeature() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    const startDelay = mobileOrTablet() ? 2500 : IMAGE_PACK_MEDIA_WARM_START_DELAY_MS;
+    let startDelay = IMAGE_PACK_MEDIA_WARM_START_DELAY_MS;
+    if (mobileOrTablet()) startDelay = 2500;
+    if (isAndroidApp()) startDelay = 0;
     const timerId = window.setTimeout(() => setReady(true), startDelay);
 
     return () => {
@@ -863,6 +867,69 @@ function DelayedImagePackMediaWarmFeature() {
   }, []);
 
   return ready ? <ImagePackMediaWarmFeature /> : null;
+}
+
+function AndroidAvatarMediaWarmFeature() {
+  const mx = useMatrixClient();
+  const useAuthentication = useMediaAuthentication();
+
+  useEffect(() => {
+    if (!isAndroidApp()) return undefined;
+
+    let disposed = false;
+    let scheduledTimer: number | undefined;
+
+    const warmAvatarMedia = () => {
+      if (disposed) return;
+
+      const avatarUrls = new Set<string>();
+      const ownUserId = mx.getUserId();
+      const ownAvatarMxc = ownUserId ? mx.getUser(ownUserId)?.avatarUrl : undefined;
+      if (ownAvatarMxc) {
+        const ownAvatarUrl = mxcUrlToHttp(mx, ownAvatarMxc, useAuthentication);
+        if (ownAvatarUrl) avatarUrls.add(ownAvatarUrl);
+      }
+
+      mx.getRooms().forEach((room) => {
+        if (room.getMyMembership() !== 'join') return;
+
+        const avatarMxc =
+          room.getAvatarFallbackMember()?.getMxcAvatarUrl() ?? room.getMxcAvatarUrl();
+        if (!avatarMxc) return;
+
+        const avatarUrl = mxcUrlToHttp(mx, avatarMxc, useAuthentication);
+        if (avatarUrl) avatarUrls.add(avatarUrl);
+      });
+
+      Array.from(avatarUrls)
+        .slice(0, ANDROID_AVATAR_WARM_LIMIT)
+        .forEach((avatarUrl) => {
+          primeCachedMediaObjectUrl(avatarUrl, 'background');
+        });
+    };
+
+    const followUpTimer = window.setTimeout(warmAvatarMedia, 1800);
+
+    const scheduleWarm = () => {
+      if (disposed || typeof scheduledTimer === 'number') return;
+      scheduledTimer = window.setTimeout(() => {
+        scheduledTimer = undefined;
+        warmAvatarMedia();
+      }, 80);
+    };
+
+    scheduleWarm();
+    mx.on(ClientEvent.Room, scheduleWarm);
+
+    return () => {
+      disposed = true;
+      if (typeof scheduledTimer === 'number') window.clearTimeout(scheduledTimer);
+      window.clearTimeout(followUpTimer);
+      mx.removeListener(ClientEvent.Room, scheduleWarm);
+    };
+  }, [mx, useAuthentication]);
+
+  return null;
 }
 
 function FaviconUpdater() {
@@ -1123,6 +1190,7 @@ export function ClientNonUIFeatures({ children }: ClientNonUIFeaturesProps) {
       <PersonalPackSyncFeature />
       <AppearanceSettingsAccountDataFeature />
       <AISettingsAccountDataFeature />
+      <AndroidAvatarMediaWarmFeature />
       <DelayedImagePackMediaWarmFeature />
       <FaviconUpdater />
       <DesktopTaskbarUnreadBadgeFeature />

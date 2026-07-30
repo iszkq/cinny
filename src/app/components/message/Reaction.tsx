@@ -13,6 +13,7 @@ import {
   mxcUrlToHttp,
 } from '../../utils/matrix';
 import { useStableMediaUrl } from '../emoji-board/components/useStableMediaUrl';
+import { isAndroidApp } from '../../utils/nativePlatform';
 
 export const Reaction = as<
   'button',
@@ -25,18 +26,21 @@ export const Reaction = as<
 >(({ className, mx, count, reaction, useAuthentication, ...props }, ref) => {
   const customEmoji = isMxcUrl(reaction) || isHttpUrl(reaction);
   const originalMediaUrl = isMxcUrl(reaction)
-    ? (mxcUrlToHttp(mx, reaction, useAuthentication) ?? undefined)
+    ? mxcUrlToHttp(mx, reaction, useAuthentication) ?? undefined
     : isHttpUrl(reaction)
-      ? reaction
-      : undefined;
+    ? reaction
+    : undefined;
   const thumbnailMediaUrl = isMxcUrl(reaction)
-    ? (mxcUrlToHttp(mx, reaction, useAuthentication, 48, 48, 'scale') ?? undefined)
+    ? mxcUrlToHttp(mx, reaction, useAuthentication, 48, 48, 'scale') ?? undefined
     : undefined;
   const { displayUrl, handleLoad, handleError, requestKey } = useStableMediaUrl(
     originalMediaUrl,
     thumbnailMediaUrl,
     {
-      disableObjectUrlCache: true,
+      // Authenticated Matrix media cannot be loaded by an Android WebView <img> because the
+      // element cannot attach the access token. Keep the existing browser/desktop behavior, but
+      // let Android display the response fetched by the native media bridge as a local blob URL.
+      disableObjectUrlCache: !isAndroidApp(),
     }
   );
 

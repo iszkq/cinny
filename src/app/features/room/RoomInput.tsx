@@ -83,6 +83,7 @@ import {
   getAudioInfo,
   TUploadContent,
   encryptFile,
+  fetchMediaWithAuth,
   getMxIdLocalPart,
   isHttpUrl,
   isMxcUrl,
@@ -133,6 +134,7 @@ import { getMemberDisplayName, getMentionContent, getReplyPreviewBody } from '..
 import { CommandAutocomplete } from './CommandAutocomplete';
 import { Command, SHRUG, TABLEFLIP, UNFLIP, useCommands } from '../../hooks/useCommands';
 import { mobileOrTablet } from '../../utils/user-agent';
+import { isAndroidApp } from '../../utils/nativePlatform';
 import { ReplyLayout, ThreadIndicator } from '../../components/message';
 import { roomToParentsAtom } from '../../state/room/roomToParents';
 import { useImagePackRooms } from '../../hooks/useImagePackRooms';
@@ -490,6 +492,23 @@ const fetchRemoteStickerMediaWithBrowser = async (
   }
 };
 
+const fetchRemoteStickerMediaWithAndroid = async (
+  url: string,
+  info?: IImageInfo
+): Promise<RemoteStickerMedia> => {
+  const response = await fetchMediaWithAuth(url, { method: 'GET', cache: 'no-store' });
+  if (!response.ok) {
+    throw new Error(`Failed to download remote sticker: ${response.status}`);
+  }
+
+  const blob = await response.blob();
+  const mimeType = getRemoteStickerMimeType(blob.type, info);
+  return {
+    blob: blob.type ? blob : new Blob([blob], { type: mimeType }),
+    mimeType,
+  };
+};
+
 const fetchRemoteStickerMediaWithDesktop = async (
   url: string,
   info?: IImageInfo
@@ -509,6 +528,12 @@ const fetchRemoteStickerMedia = async (
   info?: IImageInfo
 ): Promise<RemoteStickerMedia> => {
   try {
+    // Remote sticker hosts commonly omit CORS headers. Android can fetch them through the native
+    // HTTP bridge, while the existing Web and desktop paths remain unchanged.
+    if (isAndroidApp()) {
+      return await fetchRemoteStickerMediaWithAndroid(url, info);
+    }
+
     if (isDesktopUpdaterSupported()) {
       try {
         return await fetchRemoteStickerMediaWithDesktop(url, info);

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   getCachedMediaObjectUrl,
+  invalidateCachedMediaUrl,
   primeCachedMediaObjectUrl,
   subscribeCachedMediaObjectUrl,
 } from '../../utils/mediaUrlCache';
@@ -275,6 +276,32 @@ export const useStableMediaUrl = (
     setCandidateIndex((currentIndex) => Math.min(currentIndex + 1, activeCandidates.length));
   }, [activeCandidates.length, loadedDisplayUrl]);
 
+  const retry = useCallback(() => {
+    setLoadedDisplayUrl(undefined);
+    setCandidateIndex(0);
+    setPreparedMediaReady(!shouldWaitForPreparedMedia);
+
+    if (!objectUrlCacheEnabled) {
+      setCacheVersion((prev) => prev + 1);
+      return;
+    }
+
+    const sources = Array.from(new Set([src, fallbackSrc].filter(Boolean) as string[]));
+    Promise.all(sources.map((source) => invalidateCachedMediaUrl(source)))
+      .then(() =>
+        Promise.all(
+          sources.map((source, index) =>
+            primeCachedMediaObjectUrl(source, index === 0 ? 'visible' : 'background', true)
+          )
+        )
+      )
+      .catch(() => undefined)
+      .finally(() => {
+        setPreparedMediaReady(true);
+        setCacheVersion((prev) => prev + 1);
+      });
+  }, [fallbackSrc, objectUrlCacheEnabled, shouldWaitForPreparedMedia, src]);
+
   return {
     displayUrl,
     hasFailed,
@@ -282,5 +309,6 @@ export const useStableMediaUrl = (
     requestKey,
     handleLoad,
     handleError,
+    retry,
   };
 };

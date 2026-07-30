@@ -72,6 +72,20 @@ export const ImageViewerMobileToolbar = style([
   },
 ]);
 
+export const ImageViewerAndroidToolbar = style({
+  display: 'grid',
+  gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
+  overflow: 'visible',
+});
+
+globalStyle(`${ImageViewerAndroidToolbar} > *`, {
+  width: '100%',
+  minWidth: 0,
+  paddingLeft: 0,
+  paddingRight: 0,
+  justifyContent: 'center',
+});
+
 globalStyle(`${ImageViewerMobileToolbar} > *`, {
   flexShrink: 0,
 });

@@ -11,6 +11,7 @@ import { saveDownloadedFile } from '../../utils/saveDownloadedFile';
 import { recognizeImageTextWithAihubmix, type AihubmixImageOcrConfig } from '../../utils/ai';
 import { copyToClipboard } from '../../utils/dom';
 import { mobileOrTablet } from '../../utils/user-agent';
+import { isAndroidApp } from '../../utils/nativePlatform';
 
 export type ImageViewerProps = {
   alt: string;
@@ -151,6 +152,7 @@ export const ImageViewer = as<'div', ImageViewerProps>(
   ) => {
     const screenSize = useScreenSizeContext();
     const mobile = mobileOrTablet() || screenSize === ScreenSize.Mobile;
+    const androidApp = isAndroidApp();
     const [rotation, setRotation] = useState(0);
     const [viewMode, setViewMode] = useState<ViewMode>('fit');
     const { zoom, zoomIn, zoomOut, setZoom } = useZoom(ZOOM_STEP, MIN_ZOOM, MAX_ZOOM);
@@ -682,85 +684,173 @@ export const ImageViewer = as<'div', ImageViewerProps>(
               </Box>
 
               <Box
-                className={css.ImageViewerMobileToolbar}
+                className={classNames(
+                  css.ImageViewerMobileToolbar,
+                  androidApp && css.ImageViewerAndroidToolbar
+                )}
                 alignItems="Center"
                 gap="100"
                 style={{ width: '100%', minWidth: 0 }}
               >
-                <IconButton
-                  variant={zoom < 1 ? 'Success' : 'SurfaceVariant'}
-                  outlined={zoom < 1}
-                  size="300"
-                  radii="Pill"
-                  onClick={zoomOut}
-                  aria-label={'\u7f29\u5c0f'}
-                >
-                  <Icon size="50" src={Icons.Minus} />
-                </IconButton>
+                {androidApp ? (
+                  <>
+                    <IconButton
+                      variant={zoom < 1 ? 'Success' : 'SurfaceVariant'}
+                      outlined={zoom < 1}
+                      size="300"
+                      radii="Pill"
+                      onClick={zoomOut}
+                      aria-label={'\u7f29\u5c0f'}
+                    >
+                      <Icon size="50" src={Icons.Minus} />
+                    </IconButton>
 
-                <Chip variant="SurfaceVariant" radii="Pill" onClick={() => setZoom(1)}>
-                  <Text size="B300">{Math.round(zoom * 100)}%</Text>
-                </Chip>
+                    <Chip variant="SurfaceVariant" radii="Pill" onClick={() => setZoom(1)}>
+                      <Text size="B300">{Math.round(zoom * 100)}%</Text>
+                    </Chip>
 
-                <IconButton
-                  variant={zoom > 1 ? 'Success' : 'SurfaceVariant'}
-                  outlined={zoom > 1}
-                  size="300"
-                  radii="Pill"
-                  onClick={zoomIn}
-                  aria-label={'\u653e\u5927'}
-                >
-                  <Icon size="50" src={Icons.Plus} />
-                </IconButton>
+                    <IconButton
+                      variant={zoom > 1 ? 'Success' : 'SurfaceVariant'}
+                      outlined={zoom > 1}
+                      size="300"
+                      radii="Pill"
+                      onClick={zoomIn}
+                      aria-label={'\u653e\u5927'}
+                    >
+                      <Icon size="50" src={Icons.Plus} />
+                    </IconButton>
 
-                <Chip
-                  variant={viewMode === 'actual' ? 'Success' : 'SurfaceVariant'}
-                  radii="Pill"
-                  onClick={toggleViewMode}
-                >
-                  <Text size="B300">{viewMode === 'fit' ? '\u9002\u5e94' : '\u539f\u56fe'}</Text>
-                </Chip>
+                    <Chip
+                      variant={viewMode === 'actual' ? 'Success' : 'SurfaceVariant'}
+                      radii="Pill"
+                      onClick={toggleViewMode}
+                    >
+                      <Text size="B300">
+                        {viewMode === 'fit' ? '\u9002\u5e94' : '\u539f\u56fe'}
+                      </Text>
+                    </Chip>
 
-                <Chip variant="SurfaceVariant" radii="Pill" onClick={rotateLeft}>
-                  <Text size="B300">{'\u5de6\u8f6c'}</Text>
-                </Chip>
+                    <IconButton
+                      variant={displayRotation !== 0 ? 'Success' : 'SurfaceVariant'}
+                      size="300"
+                      radii="Pill"
+                      onClick={rotateRight}
+                      aria-label={`${'\u5411\u53f3\u65cb\u8f6c'} 90\u00b0`}
+                      title={`${'\u5f53\u524d\u65cb\u8f6c'} ${displayRotation}\u00b0`}
+                    >
+                      <Text size="B400" aria-hidden="true">
+                        {'\u21bb'}
+                      </Text>
+                    </IconButton>
 
-                <Chip
-                  variant={displayRotation !== 0 ? 'Success' : 'SurfaceVariant'}
-                  radii="Pill"
-                  onClick={() => setRotation(0)}
-                >
-                  <Text size="B300">{`${displayRotation}\u00b0`}</Text>
-                </Chip>
-
-                <Chip variant="SurfaceVariant" radii="Pill" onClick={rotateRight}>
-                  <Text size="B300">{'\u53f3\u8f6c'}</Text>
-                </Chip>
-
-                {imageOcrConfig && (
-                  <Chip
-                    className={classNames(
-                      css.ImageViewerOcrButton,
-                      ocrState.status === 'success' && css.ImageViewerOcrButtonSuccess
+                    {imageOcrConfig && (
+                      <IconButton
+                        className={classNames(
+                          css.ImageViewerOcrButton,
+                          ocrState.status === 'success' && css.ImageViewerOcrButtonSuccess
+                        )}
+                        variant={ocrState.status === 'success' ? 'Success' : 'SurfaceVariant'}
+                        size="300"
+                        radii="Pill"
+                        onClick={handleRecognizeText}
+                        aria-label={'\u8bc6\u522b\u6587\u5b57'}
+                      >
+                        <span className={css.ImageViewerOcrGlyph} aria-hidden="true" />
+                      </IconButton>
                     )}
-                    variant={ocrState.status === 'success' ? 'Success' : 'SurfaceVariant'}
-                    radii="Pill"
-                    onClick={handleRecognizeText}
-                    before={<span className={css.ImageViewerOcrGlyph} aria-hidden="true" />}
-                  >
-                    <Text size="B300">{'\u8bc6\u522b\u6587\u5b57'}</Text>
-                  </Chip>
-                )}
 
-                {!loading && (
-                  <Chip
-                    variant="Primary"
-                    onClick={handleDownload}
-                    radii="Pill"
-                    before={<Icon size="50" src={Icons.Download} />}
-                  >
-                    <Text size="B300">{'\u4e0b\u8f7d'}</Text>
-                  </Chip>
+                    {!loading && (
+                      <IconButton
+                        variant="Primary"
+                        onClick={handleDownload}
+                        size="300"
+                        radii="Pill"
+                        aria-label={'\u4e0b\u8f7d'}
+                      >
+                        <Icon size="50" src={Icons.Download} />
+                      </IconButton>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <IconButton
+                      variant={zoom < 1 ? 'Success' : 'SurfaceVariant'}
+                      outlined={zoom < 1}
+                      size="300"
+                      radii="Pill"
+                      onClick={zoomOut}
+                      aria-label={'\u7f29\u5c0f'}
+                    >
+                      <Icon size="50" src={Icons.Minus} />
+                    </IconButton>
+
+                    <Chip variant="SurfaceVariant" radii="Pill" onClick={() => setZoom(1)}>
+                      <Text size="B300">{Math.round(zoom * 100)}%</Text>
+                    </Chip>
+
+                    <IconButton
+                      variant={zoom > 1 ? 'Success' : 'SurfaceVariant'}
+                      outlined={zoom > 1}
+                      size="300"
+                      radii="Pill"
+                      onClick={zoomIn}
+                      aria-label={'\u653e\u5927'}
+                    >
+                      <Icon size="50" src={Icons.Plus} />
+                    </IconButton>
+
+                    <Chip
+                      variant={viewMode === 'actual' ? 'Success' : 'SurfaceVariant'}
+                      radii="Pill"
+                      onClick={toggleViewMode}
+                    >
+                      <Text size="B300">
+                        {viewMode === 'fit' ? '\u9002\u5e94' : '\u539f\u56fe'}
+                      </Text>
+                    </Chip>
+
+                    <Chip variant="SurfaceVariant" radii="Pill" onClick={rotateLeft}>
+                      <Text size="B300">{'\u5de6\u8f6c'}</Text>
+                    </Chip>
+
+                    <Chip
+                      variant={displayRotation !== 0 ? 'Success' : 'SurfaceVariant'}
+                      radii="Pill"
+                      onClick={() => setRotation(0)}
+                    >
+                      <Text size="B300">{`${displayRotation}\u00b0`}</Text>
+                    </Chip>
+
+                    <Chip variant="SurfaceVariant" radii="Pill" onClick={rotateRight}>
+                      <Text size="B300">{'\u53f3\u8f6c'}</Text>
+                    </Chip>
+
+                    {imageOcrConfig && (
+                      <Chip
+                        className={classNames(
+                          css.ImageViewerOcrButton,
+                          ocrState.status === 'success' && css.ImageViewerOcrButtonSuccess
+                        )}
+                        variant={ocrState.status === 'success' ? 'Success' : 'SurfaceVariant'}
+                        radii="Pill"
+                        onClick={handleRecognizeText}
+                        before={<span className={css.ImageViewerOcrGlyph} aria-hidden="true" />}
+                      >
+                        <Text size="B300">{'\u8bc6\u522b\u6587\u5b57'}</Text>
+                      </Chip>
+                    )}
+
+                    {!loading && (
+                      <Chip
+                        variant="Primary"
+                        onClick={handleDownload}
+                        radii="Pill"
+                        before={<Icon size="50" src={Icons.Download} />}
+                      >
+                        <Text size="B300">{'\u4e0b\u8f7d'}</Text>
+                      </Chip>
+                    )}
+                  </>
                 )}
               </Box>
             </Box>
