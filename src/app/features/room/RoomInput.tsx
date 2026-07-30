@@ -366,6 +366,7 @@ const REMOTE_STICKER_MIME_EXTENSION: Record<string, string> = {
   'image/svg+xml': 'svg',
   'image/webp': 'webp',
 };
+const REMOTE_IMAGE_MIME_TYPES = new Set(Object.keys(REMOTE_STICKER_MIME_EXTENSION));
 
 const remoteStickerUploadCache = new Map<string, Promise<IContent>>();
 const remoteEmojiUploadCache = new Map<string, Promise<string>>();
@@ -380,8 +381,57 @@ const base64ToBlob = (dataBase64: string, mimeType: string): Blob => {
   return new Blob([bytes], { type: mimeType });
 };
 
-const getRemoteStickerMimeType = (mimeType?: string, info?: IImageInfo): string =>
-  mimeType || info?.mimetype || 'image/gif';
+const normalizeRemoteImageMimeType = (mimeType?: string): string | undefined => {
+  const normalized = mimeType?.split(';', 1)[0].trim().toLowerCase();
+  return normalized && REMOTE_IMAGE_MIME_TYPES.has(normalized) ? normalized : undefined;
+};
+
+const getRemoteImageMimeTypeFromUrl = (url: string): string | undefined => {
+  try {
+    const extension = new URL(url).pathname.split('.').pop()?.toLowerCase();
+    return Object.entries(REMOTE_STICKER_MIME_EXTENSION).find(([, ext]) => ext === extension)?.[0];
+  } catch {
+    return undefined;
+  }
+};
+
+const detectRemoteImageMimeType = async (
+  blob: Blob,
+  reportedMimeType: string | undefined,
+  info: IImageInfo | undefined,
+  sourceUrl: string
+): Promise<string> => {
+  const bytes = new Uint8Array(await blob.slice(0, 256).arrayBuffer());
+  const ascii = String.fromCharCode(...bytes);
+
+  if (ascii.startsWith('GIF87a') || ascii.startsWith('GIF89a')) return 'image/gif';
+  if (
+    bytes.length >= 8 &&
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47 &&
+    bytes[4] === 0x0d &&
+    bytes[5] === 0x0a &&
+    bytes[6] === 0x1a &&
+    bytes[7] === 0x0a
+  ) {
+    return 'image/png';
+  }
+  if (ascii.startsWith('RIFF') && ascii.slice(8, 12) === 'WEBP') return 'image/webp';
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg';
+  if (ascii.slice(4, 8) === 'ftyp' && /^(?:avif|avis)$/.test(ascii.slice(8, 12))) {
+    return 'image/avif';
+  }
+  if (new TextDecoder().decode(bytes).trimStart().startsWith('<svg')) return 'image/svg+xml';
+
+  return (
+    normalizeRemoteImageMimeType(reportedMimeType) ??
+    normalizeRemoteImageMimeType(info?.mimetype) ??
+    getRemoteImageMimeTypeFromUrl(sourceUrl) ??
+    'application/octet-stream'
+  );
+};
 
 const sanitizeRemoteStickerFileName = (label: string): string => {
   const safeName = label
@@ -450,9 +500,9 @@ const loadRemoteStickerMediaWithBrowser = async (
   }
 
   const blob = await response.blob();
-  const mimeType = getRemoteStickerMimeType(blob.type, info);
+  const mimeType = await detectRemoteImageMimeType(blob, blob.type, info, url);
   return {
-    blob: blob.type ? blob : new Blob([blob], { type: mimeType }),
+    blob: blob.type === mimeType ? blob : new Blob([blob], { type: mimeType }),
     mimeType,
   };
 };
@@ -503,9 +553,9 @@ const fetchRemoteStickerMediaWithAndroid = async (
   }
 
   const blob = await response.blob();
-  const mimeType = getRemoteStickerMimeType(blob.type, info);
+  const mimeType = await detectRemoteImageMimeType(blob, blob.type, info, url);
   return {
-    blob: blob.type ? blob : new Blob([blob], { type: mimeType }),
+    blob: blob.type === mimeType ? blob : new Blob([blob], { type: mimeType }),
     mimeType,
   };
 };
@@ -516,10 +566,14 @@ const fetchRemoteStickerMediaWithDesktop = async (
 ): Promise<RemoteStickerMedia> => {
   const { invoke } = await import('@tauri-apps/api/core');
   const result = await invoke<RemoteStickerMediaResponse>('fetch_remote_sticker_media', { url });
-  const mimeType = getRemoteStickerMimeType(result.mimeType, info);
+  const downloadedBlob = base64ToBlob(result.dataBase64, result.mimeType || '');
+  const mimeType = await detectRemoteImageMimeType(downloadedBlob, result.mimeType, info, url);
 
   return {
-    blob: base64ToBlob(result.dataBase64, mimeType),
+    blob:
+      downloadedBlob.type === mimeType
+        ? downloadedBlob
+        : new Blob([downloadedBlob], { type: mimeType }),
     mimeType,
   };
 };

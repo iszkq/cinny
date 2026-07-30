@@ -234,7 +234,9 @@ const toRemoteSticker = (
     isHttpUrl
   );
   const uploadableHttpUrl = getFirstValidUrl(
-    [item.previewUrl, item.httpUrl, item.sourceUrl, item.url, item.thumbUrl, item.thumbnailUrl],
+    // Sending must prefer the original source. previewUrl/thumbUrl are often deliberately static
+    // thumbnails; choosing them first made only some cloud GIF/WebP emoji lose animation.
+    [item.httpUrl, item.sourceUrl, item.url, item.previewUrl, item.thumbUrl, item.thumbnailUrl],
     isCorsSafeHttpStickerMediaUrl
   );
   // Keep Matrix-native entries regardless of their preview host. For HTTP-only entries, exclude

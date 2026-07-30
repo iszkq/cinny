@@ -359,6 +359,14 @@ export const useStableMediaUrl = (
       });
   }, [fallbackSrc, objectUrlCacheEnabled, shouldWaitForPreparedMedia, src]);
 
+  useEffect(() => {
+    if (!isAndroidApp() || !hasFailed) return undefined;
+
+    const handleOnline = () => retry();
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, [hasFailed, retry]);
+
   return {
     displayUrl,
     hasFailed,

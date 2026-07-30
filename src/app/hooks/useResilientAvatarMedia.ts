@@ -90,6 +90,18 @@ export const useResilientAvatarMedia = (src?: string, preferOriginal = false) =>
     []
   );
 
+  useEffect(() => {
+    if (!androidApp || !mediaSrc || objectUrl) return undefined;
+
+    const handleOnline = () => {
+      invalidateCachedMediaUrl(mediaSrc).then(() => {
+        primeCachedMediaObjectUrl(mediaSrc, 'visible', true);
+      });
+    };
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, [androidApp, mediaSrc, objectUrl]);
+
   const handleLoad = useCallback(() => {
     retryTimerRef.current = clearTimer(retryTimerRef.current);
     setShowFallback(false);

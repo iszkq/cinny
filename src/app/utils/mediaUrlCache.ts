@@ -335,9 +335,21 @@ const loadAndroidNativeMediaBlob = async (src: string): Promise<Blob | undefined
   return blob;
 };
 
-const loadAndroidMediaBlob = (src: string): Promise<Blob | undefined> =>
+const cacheRuntimeMediaBlob = (src: string, mediaBlob: Blob): string => {
+  bindObjectUrlMediaCleanup();
+  persistedMediaUrls.add(src);
+  const objectUrl = URL.createObjectURL(mediaBlob);
+  setObjectUrlMediaEntry(src, objectUrl, mediaBlob.size);
+  return objectUrl;
+};
+
+const loadAndroidMediaBlob = (
+  src: string,
+  onLateMedia: (mediaBlob: Blob) => void
+): Promise<Blob | undefined> =>
   new Promise((resolve) => {
     let settled = false;
+    let mediaAccepted = false;
     let browserDone = false;
     let nativeDone = false;
     let nativeStarted = false;
@@ -345,15 +357,20 @@ const loadAndroidMediaBlob = (src: string): Promise<Blob | undefined> =>
     let deadlineTimer: number | undefined;
 
     const finish = (blob?: Blob) => {
-      if (settled) return;
       if (blob) {
+        if (mediaAccepted) return;
+        mediaAccepted = true;
+        if (settled) {
+          onLateMedia(blob);
+          return;
+        }
         settled = true;
         if (nativeFallbackTimer !== undefined) window.clearTimeout(nativeFallbackTimer);
         if (deadlineTimer !== undefined) window.clearTimeout(deadlineTimer);
-        persistedMediaUrls.add(src);
         resolve(blob);
         return;
       }
+      if (settled) return;
       if (browserDone && nativeDone) {
         settled = true;
         if (deadlineTimer !== undefined) window.clearTimeout(deadlineTimer);
@@ -411,16 +428,15 @@ const createObjectUrlFromMedia = async (src: string): Promise<string | undefined
   }
 
   if (isAndroidApp()) {
-    const mediaBlob = await loadAndroidMediaBlob(src);
+    const mediaBlob = await loadAndroidMediaBlob(src, (lateMediaBlob) => {
+      cacheRuntimeMediaBlob(src, lateMediaBlob);
+    });
     if (!mediaBlob) {
       markFailedMediaEntry(src, FAILED_MEDIA_RETRY_DELAY_MS);
       return undefined;
     }
 
-    bindObjectUrlMediaCleanup();
-    const objectUrl = URL.createObjectURL(mediaBlob);
-    setObjectUrlMediaEntry(src, objectUrl, mediaBlob.size);
-    return objectUrl;
+    return cacheRuntimeMediaBlob(src, mediaBlob);
   }
 
   const response = await fetchAndPersistMedia(src);

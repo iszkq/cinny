@@ -235,7 +235,9 @@ function CachedHtmlEmoticonImage(
   const { fallbackSrc, src, ...imgProps } = props;
   const fallbackLabel = String(imgProps.alt ?? imgProps.title ?? '').replace(/^:+|:+$/g, '');
   const originalSrc = src;
-  const primarySrc = androidApp ? fallbackSrc ?? originalSrc : originalSrc;
+  // Inline custom emoji must keep its original animation. Static thumbnails are only a grid
+  // optimization; using one as Android's primary message source turned sent GIF/WebP emoji static.
+  const primarySrc = originalSrc;
   const secondarySrc = primarySrc === fallbackSrc ? originalSrc : fallbackSrc;
   const { displayUrl, handleLoad, handleError, requestKey } = useStableMediaUrl(
     primarySrc,

@@ -40,11 +40,13 @@ test('Android persistent media validates native files and preserves older cache 
   assert.match(source, /matchedCache !== mediaCache/);
   assert.doesNotMatch(source, /LEGACY_PERSISTENT_MEDIA_CACHES[\s\S]{0,500}caches\.delete/);
   assert.match(source, /PERSISTENT_MEDIA_TRIM_INTERVAL = 64/);
-  assert.match(source, /loadAndroidMediaBlob\(src\)/);
+  assert.match(source, /loadAndroidMediaBlob\(src, \(lateMediaBlob\)/);
   assert.match(source, /fetch\(assetUrl, \{ cache: 'no-store' \}\)/);
   assert.match(source, /responseToMediaBlob/);
   assert.match(source, /fetchAndPersistMedia\(src\)/);
   assert.match(source, /ANDROID_MEDIA_RESOLVE_DEADLINE_MS = 20_000/);
+  assert.match(source, /onLateMedia\(blob\)/);
+  assert.match(source, /cacheRuntimeMediaBlob\(src, lateMediaBlob\)/);
   assert.match(source, /maxEntries: 10_000/);
   assert.match(source, /typeof window === 'undefined' \|\| isAndroidApp\(\)/);
   assert.match(source, /legacyUrl\.searchParams\.delete\('animated'\)/);
@@ -89,20 +91,34 @@ test('Android timeline and custom emoji never fall back to raw authenticated ima
   assert.match(stableSource, /allowDirectSource: !requireObjectUrl/);
   assert.match(imageSource, /const preferAndroidThumbnail =/);
   assert.match(reactionSource, /displayUrl \|\| !androidApp/);
+  assert.match(reactionSource, /const primaryMediaUrl = originalMediaUrl \?\? thumbnailMediaUrl/);
   assert.match(htmlSource, /if \(androidApp && !displayUrl\)/);
+  assert.match(htmlSource, /const primarySrc = originalSrc/);
   assert.match(htmlSource, /\{'\\u25cc'\}/);
   assert.doesNotMatch(htmlSource, /fallbackLabel \? `:\$\{fallbackLabel\}:`/);
   assert.match(stableSource, /const timeoutId = requireObjectUrl\s+\? undefined/);
   assert.match(stableSource, /invalidateCachedMediaUrl\(src\)/);
   assert.match(stableSource, /primeCachedMediaObjectUrl\(fallbackSrc, 'visible', true\)/);
+  assert.match(stableSource, /window\.addEventListener\('online', handleOnline\)/);
 });
 
 test('Android cloud emoji uses its visible source preview without serializing it into messages', async () => {
   const roomInputSource = await readSource('src/app/features/room/RoomInput.tsx');
   const editorSource = await readSource('src/app/components/editor/Elements.tsx');
   const outputSource = await readSource('src/app/components/editor/output.ts');
+  const remoteIndexSource = await readSource(
+    'src/app/components/emoji-board/useRemoteStickerIndex.ts'
+  );
 
   assert.match(roomInputSource, /handleEmoticonSelect\(key, shortcode, sourceUrl\)/);
+  assert.match(roomInputSource, /detectRemoteImageMimeType/);
+  assert.match(roomInputSource, /ascii\.startsWith\('GIF87a'\)/);
+  assert.match(roomInputSource, /ascii\.slice\(8, 12\) === 'WEBP'/);
+  assert.match(roomInputSource, /new Blob\(\[blob\], \{ type: mimeType \}\)/);
+  assert.match(
+    remoteIndexSource,
+    /\[item\.httpUrl, item\.sourceUrl, item\.url, item\.previewUrl, item\.thumbUrl, item\.thumbnailUrl\]/
+  );
   assert.match(editorSource, /const androidPreviewUrl =/);
   assert.doesNotMatch(editorSource, /\{'\.\.\.'\}/);
   assert.doesNotMatch(editorSource, /<span aria-label=\{element\.shortcode\}>:\{element\.shortcode\}:<\/span>/);
@@ -189,6 +205,7 @@ test('Android avatar cache survives component remounts without a fallback flash'
   assert.match(avatarSource, /const androidLoadedAvatarBySource = new Map/);
   assert.match(avatarSource, /rememberedAndroidUrl/);
   assert.match(avatarSource, /isCachedMediaObjectUrl\(rememberedAvatarUrl\)/);
+  assert.match(avatarSource, /window\.addEventListener\('online', handleOnline\)/);
   assert.match(avatarSource, /preferOriginal && !androidApp \? getOriginalMediaUrl\(src\) : src/);
   assert.doesNotMatch(avatarSource, /\[rememberedAndroidUrl, desktopUrl, objectUrl/);
   assert.match(
@@ -220,6 +237,6 @@ test('Android-only optimizations stay behind platform guards', async () => {
   assert.match(imageSource, /androidApp && !preferOriginalPreview/);
   assert.match(
     reactionSource,
-    /androidApp \? thumbnailMediaUrl \?\? originalMediaUrl : originalMediaUrl/
+    /originalMediaUrl \?\? thumbnailMediaUrl/
   );
 });

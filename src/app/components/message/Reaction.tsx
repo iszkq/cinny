@@ -34,7 +34,9 @@ export const Reaction = as<
   const thumbnailMediaUrl = isMxcUrl(reaction)
     ? mxcUrlToHttp(mx, reaction, useAuthentication, 48, 48, 'scale') ?? undefined
     : undefined;
-  const primaryMediaUrl = androidApp ? thumbnailMediaUrl ?? originalMediaUrl : originalMediaUrl;
+  // Reactions are individual inline emoji, not a scrolling sticker grid. Prefer the original so
+  // animated custom emoji stay animated on Android; the thumbnail remains a failure fallback.
+  const primaryMediaUrl = originalMediaUrl ?? thumbnailMediaUrl;
   const fallbackMediaUrl =
     primaryMediaUrl === thumbnailMediaUrl ? originalMediaUrl : thumbnailMediaUrl;
   const { displayUrl, handleLoad, handleError, requestKey } = useStableMediaUrl(
