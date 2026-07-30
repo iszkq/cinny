@@ -218,6 +218,9 @@ test('Android avatar cache survives component remounts without a fallback flash'
 
 test('Android image preview exposes every action without horizontal scrolling', async () => {
   const viewerSource = await readSource('src/app/components/image-viewer/ImageViewer.tsx');
+  const globalViewerSource = await readSource(
+    'src/app/components/image-viewer/GlobalImageViewer.tsx'
+  );
   const viewerStyles = await readSource('src/app/components/image-viewer/ImageViewer.css.ts');
 
   assert.match(viewerSource, /androidApp && css\.ImageViewerAndroidToolbar/);
@@ -226,6 +229,11 @@ test('Android image preview exposes every action without horizontal scrolling', 
   assert.match(viewerSource, /onClick=\{handleDownload\}/);
   assert.match(viewerStyles, /gridTemplateColumns: 'repeat\(7, minmax\(0, 1fr\)\)'/);
   assert.match(viewerStyles, /overflow: 'visible'/);
+  assert.match(globalViewerSource, /ANDROID_ORIGINAL_RESOLVE_MAX_MS = 20_000/);
+  assert.match(globalViewerSource, /Promise\.race/);
+  assert.match(globalViewerSource, /setSourceCache\(\{\}\)/);
+  assert.match(globalViewerSource, /ANDROID_ORIGINAL_LATE_RETRY_MS = 1_500/);
+  assert.match(globalViewerSource, /window\.addEventListener\('online', handleOnline\)/);
 });
 
 test('Android-only optimizations stay behind platform guards', async () => {

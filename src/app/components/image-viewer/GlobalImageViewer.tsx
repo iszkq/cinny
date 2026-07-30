@@ -1,10 +1,13 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAtom } from 'jotai';
 import { imageViewerSessionAtom } from '../../state/imageViewer';
 import { ImageViewerDialog } from './ImageViewerDialog';
+import { isAndroidApp } from '../../utils/nativePlatform';
 
 const ORIGINAL_LOADING_DELAY_MS = 180;
 const ORIGINAL_LOADING_MAX_MS = 8_000;
+const ANDROID_ORIGINAL_RESOLVE_MAX_MS = 20_000;
+const ANDROID_ORIGINAL_LATE_RETRY_MS = 1_500;
 
 export function GlobalImageViewer() {
   const [session, setSession] = useAtom(imageViewerSessionAtom);
@@ -14,6 +17,8 @@ export function GlobalImageViewer() {
   const [failedItemId, setFailedItemId] = useState<string>();
   const [retryVersion, setRetryVersion] = useState(0);
   const [focusRequestKey, setFocusRequestKey] = useState(0);
+  const autoRetriedItemIdsRef = useRef(new Set<string>());
+  const androidApp = isAndroidApp();
 
   useEffect(
     () => () => {
@@ -26,10 +31,16 @@ export function GlobalImageViewer() {
     setActiveItemId(session?.activeItemId);
     setLoadingItemId(undefined);
     setFailedItemId(undefined);
+    autoRetriedItemIdsRef.current.clear();
+    if (androidApp) {
+      // Object URLs may be reclaimed after a previous viewer session closes. Re-resolve them from
+      // the persistent cache instead of carrying a stale URL into the next Android preview.
+      setSourceCache({});
+    }
     if (session) {
       setFocusRequestKey((key) => key + 1);
     }
-  }, [session]);
+  }, [androidApp, session]);
 
   const activeItem = useMemo(() => {
     if (!session) return undefined;
@@ -45,6 +56,8 @@ export function GlobalImageViewer() {
     let disposed = false;
     let loadingDelayId: number | undefined;
     let loadingMaxId: number | undefined;
+    let sourceMaxId: number | undefined;
+    let lateRetryId: number | undefined;
     const hasActivePreview = activeItem.id === session.activeItemId && Boolean(session.initialSrc);
 
     setLoadingItemId(undefined);
@@ -63,16 +76,37 @@ export function GlobalImageViewer() {
       }, ORIGINAL_LOADING_MAX_MS);
     }
 
-    session
-      .resolveSource(activeItem, 'visible')
+    const sourcePromise = session.resolveSource(activeItem, 'visible');
+    const boundedSourcePromise = androidApp
+      ? Promise.race([
+          sourcePromise,
+          new Promise<never>((_, reject) => {
+            sourceMaxId = window.setTimeout(
+              () => reject(new Error('Android original image preparation timed out.')),
+              ANDROID_ORIGINAL_RESOLVE_MAX_MS
+            );
+          }),
+        ])
+      : sourcePromise;
+
+    boundedSourcePromise
       .then((src) => {
         if (disposed) return;
+        autoRetriedItemIdsRef.current.delete(activeItem.id);
         setSourceCache((cache) => ({ ...cache, [activeItem.id]: src }));
         setFailedItemId((itemId) => (itemId === activeItem.id ? undefined : itemId));
       })
       .catch(() => {
         if (!disposed) {
           setFailedItemId(activeItem.id);
+          if (androidApp && !autoRetriedItemIdsRef.current.has(activeItem.id)) {
+            autoRetriedItemIdsRef.current.add(activeItem.id);
+            lateRetryId = window.setTimeout(() => {
+              if (disposed) return;
+              setFailedItemId(undefined);
+              setRetryVersion((version) => version + 1);
+            }, ANDROID_ORIGINAL_LATE_RETRY_MS);
+          }
         }
       })
       .finally(() => {
@@ -81,6 +115,9 @@ export function GlobalImageViewer() {
         }
         if (loadingMaxId !== undefined) {
           window.clearTimeout(loadingMaxId);
+        }
+        if (sourceMaxId !== undefined) {
+          window.clearTimeout(sourceMaxId);
         }
         if (!disposed) {
           setLoadingItemId((itemId) => (itemId === activeItem.id ? undefined : itemId));
@@ -95,8 +132,31 @@ export function GlobalImageViewer() {
       if (loadingMaxId !== undefined) {
         window.clearTimeout(loadingMaxId);
       }
+      if (sourceMaxId !== undefined) {
+        window.clearTimeout(sourceMaxId);
+      }
+      if (lateRetryId !== undefined) {
+        window.clearTimeout(lateRetryId);
+      }
     };
-  }, [activeItem, retryVersion, session, sourceCache]);
+  }, [activeItem, androidApp, retryVersion, session, sourceCache]);
+
+  useEffect(() => {
+    if (!androidApp || !activeItem || failedItemId !== activeItem.id) return undefined;
+
+    const handleOnline = () => {
+      autoRetriedItemIdsRef.current.delete(activeItem.id);
+      setFailedItemId(undefined);
+      setSourceCache((cache) => {
+        const nextCache = { ...cache };
+        delete nextCache[activeItem.id];
+        return nextCache;
+      });
+      setRetryVersion((version) => version + 1);
+    };
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, [activeItem, androidApp, failedItemId]);
 
   useEffect(() => {
     if (!session || !activeItem || !sourceCache[activeItem.id]) return undefined;
@@ -156,6 +216,7 @@ export function GlobalImageViewer() {
       loading={loadingItemId === activeItem.id}
       originalLoadFailed={failedItemId === activeItem.id}
       onRetryOriginal={() => {
+        autoRetriedItemIdsRef.current.delete(activeItem.id);
         setSourceCache((cache) => {
           const nextCache = { ...cache };
           delete nextCache[activeItem.id];
