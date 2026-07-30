@@ -2,6 +2,7 @@ import React, {
   ChangeEventHandler,
   FormEventHandler,
   MouseEventHandler,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -9,7 +10,7 @@ import React, {
 } from 'react';
 import dayjs from 'dayjs';
 import FocusTrap from 'focus-trap-react';
-import { useInfiniteQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { Room, RoomMember, SearchOrderBy } from 'matrix-js-sdk';
 import {
   Avatar,
@@ -50,6 +51,7 @@ import { localConfig } from '../../styles/tokens';
 import { getMxIdLocalPart, mxcUrlToHttp } from '../../utils/matrix';
 import { getMemberAvatarMxc, getMemberDisplayName } from '../../utils/room';
 import { stopPropagation } from '../../utils/keyboard';
+import { isAndroidApp } from '../../utils/nativePlatform';
 import { MessageSearchParams, ResultGroup, ResultItem, useMessageSearch } from './useMessageSearch';
 import { SearchResultGroup } from './SearchResultGroup';
 
@@ -820,10 +822,12 @@ export function RoomMessageSearchDialog({
   requestClose,
 }: RoomMessageSearchDialogProps) {
   const mx = useMatrixClient();
+  const queryClient = useQueryClient();
   const { navigateRoom } = useRoomNavigate();
   const screenSize = useScreenSizeContext();
   const desktopLike = isDesktopLikeScreenSize(screenSize);
   const compact = !desktopLike;
+  const androidApp = isAndroidApp();
 
   const [mediaAutoLoad] = useSetting(settingsAtom, 'mediaAutoLoad');
   const [urlPreview] = useSetting(settingsAtom, 'urlPreview');
@@ -886,7 +890,7 @@ export function RoomMessageSearchDialog({
       dateTo,
       category,
     ],
-    queryFn: ({ pageParam }) => searchMessages(pageParam),
+    queryFn: ({ pageParam, signal }) => searchMessages(pageParam, signal),
     initialPageParam: '',
     getNextPageParam: (lastPage) => lastPage.nextToken,
   });
@@ -975,8 +979,17 @@ export function RoomMessageSearchDialog({
     setOrder(SearchOrderBy.Recent);
   };
 
-  const handleOpenResult = (roomId: string, eventId: string) => {
+  const handleRequestClose = useCallback(() => {
+    queryClient
+      .cancelQueries({
+        queryKey: ['room-message-search-dialog', room.roomId],
+      })
+      .catch(() => undefined);
     requestClose();
+  }, [queryClient, requestClose, room.roomId]);
+
+  const handleOpenResult = (roomId: string, eventId: string) => {
+    handleRequestClose();
     navigateRoom(roomId, eventId);
   };
 
@@ -1015,11 +1028,22 @@ export function RoomMessageSearchDialog({
           focusTrapOptions={{
             initialFocus: false,
             clickOutsideDeactivates: true,
-            onDeactivate: requestClose,
+            onDeactivate: handleRequestClose,
             escapeDeactivates: stopPropagation,
           }}
         >
-          <Dialog variant="Surface" style={DIALOG_STYLE}>
+          <Dialog
+            variant="Surface"
+            style={
+              androidApp
+                ? {
+                    ...DIALOG_STYLE,
+                    height: 'min(92dvh, 56rem)',
+                    maxHeight: 'calc(100dvh - 24px)',
+                  }
+                : DIALOG_STYLE
+            }
+          >
             <Box direction="Column" style={{ height: '100%', minWidth: 0, minHeight: 0 }}>
               <Box shrink="No" alignItems="Center" gap="300" style={HEADER_STYLE}>
                 <Box grow="Yes" direction="Column" gap="100" style={{ minWidth: 0 }}>
@@ -1032,7 +1056,7 @@ export function RoomMessageSearchDialog({
                 </Box>
                 <Box shrink="No">
                   <IconButton
-                    onClick={requestClose}
+                    onClick={handleRequestClose}
                     variant="SurfaceVariant"
                     size="300"
                     radii="300"
@@ -1289,12 +1313,24 @@ export function RoomMessageSearchDialog({
                       width: compact ? '100%' : toRem(288),
                       minWidth: compact ? 0 : toRem(288),
                       maxWidth: compact ? '100%' : toRem(288),
+                      height: androidApp && compact ? 'min(42dvh, 28rem)' : undefined,
+                      maxHeight: androidApp && compact ? 'min(42dvh, 28rem)' : undefined,
                       minHeight: 0,
                       ...FILTER_PANEL_STYLE,
                     }}
                   >
                     <Scroll size="300" hideTrack visibility="Hover">
-                      <Box direction="Column" gap="400" style={{ padding: config.space.S300 }}>
+                      <Box
+                        direction="Column"
+                        gap="400"
+                        style={{
+                          padding: config.space.S300,
+                          paddingBottom:
+                            androidApp && compact
+                              ? `calc(${config.space.S500} + env(safe-area-inset-bottom, 0px))`
+                              : config.space.S300,
+                        }}
+                      >
                         <Box direction="Column" gap="100">
                           <Text size="L400">{'\u7b5b\u9009\u6761\u4ef6'}</Text>
                           <Text size="T200" priority="300">

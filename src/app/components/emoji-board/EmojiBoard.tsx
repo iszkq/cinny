@@ -46,6 +46,7 @@ import {
   warmDesktopMediaAssetCache,
 } from '../../utils/desktopMediaAssetCache';
 import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
+import { primePersistentMediaUrl } from '../../utils/mediaUrlCache';
 import {
   SearchInput,
   EmojiBoardTabs,
@@ -762,36 +763,39 @@ export function EmojiBoard({
   if (searchedItems?.length) searchResultLabel = '搜索结果';
 
   const getPackMediaUrls = useCallback(
-    (pack: ImagePack) => {
+    (pack: ImagePack, primaryOnly = false) => {
       const size = usage === ImageUsage.Sticker ? 256 : 64;
       const mediaUrls = new Set<string>();
+      const addMediaCandidates = (candidates: string[]) => {
+        (primaryOnly ? candidates.slice(0, 1) : candidates).forEach((url) => mediaUrls.add(url));
+      };
       const avatarMxc = pack.getAvatarUrl(usage);
 
       if (avatarMxc) {
-        getEmojiBoardMediaCandidates({
-          mx,
-          mxc: avatarMxc,
-          useAuthentication,
-          width: 64,
-          height: 64,
-        }).forEach((url) => {
-          mediaUrls.add(url);
-        });
+        addMediaCandidates(
+          getEmojiBoardMediaCandidates({
+            mx,
+            mxc: avatarMxc,
+            useAuthentication,
+            width: 64,
+            height: 64,
+          })
+        );
       }
 
       pack.getImages(usage).forEach((image) => {
-        getEmojiBoardMediaCandidates({
-          mx,
-          mxc: image.url,
-          useAuthentication,
-          info: image.info,
-          width: size,
-          height: size,
-          preferOriginal: usage === ImageUsage.Sticker && !androidApp,
-          forceThumbnail: androidApp,
-        }).forEach((url) => {
-          mediaUrls.add(url);
-        });
+        addMediaCandidates(
+          getEmojiBoardMediaCandidates({
+            mx,
+            mxc: image.url,
+            useAuthentication,
+            info: image.info,
+            width: size,
+            height: size,
+            preferOriginal: usage === ImageUsage.Sticker && !androidApp,
+            forceThumbnail: androidApp,
+          })
+        );
       });
 
       return Array.from(mediaUrls);
@@ -987,6 +991,24 @@ export function EmojiBoard({
       window.clearTimeout(preloadTimer);
     };
   }, [desktopSupported, getPackMediaUrls, priorityPackVisibleUrlLimit, priorityPacks]);
+
+  useEffect(() => {
+    if (!androidApp || cloudTab || imagePacks.length === 0) {
+      return undefined;
+    }
+
+    // Cache every local pack thumbnail without decoding it. A single low-priority worker keeps
+    // scrolling responsive while making unopened rows available after the background warm-up.
+    const preloadTimer = window.setTimeout(() => {
+      imagePacks.forEach((pack) => {
+        getPackMediaUrls(pack, true).forEach((mediaUrl) => {
+          primePersistentMediaUrl(mediaUrl, 'background')?.catch(() => undefined);
+        });
+      });
+    }, 1_000);
+
+    return () => window.clearTimeout(preloadTimer);
+  }, [androidApp, cloudTab, getPackMediaUrls, imagePacks]);
 
   // sync active sidebar tab with scroll
   useEffect(() => {

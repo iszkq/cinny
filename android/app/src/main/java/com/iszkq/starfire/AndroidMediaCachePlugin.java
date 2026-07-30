@@ -65,6 +65,7 @@ public class AndroidMediaCachePlugin extends Plugin {
         String accessToken = call.getString("accessToken");
         String requestedMimeType = call.getString("mimeType");
         boolean forceRefresh = Boolean.TRUE.equals(call.getBoolean("forceRefresh", false));
+        boolean cacheOnly = Boolean.TRUE.equals(call.getBoolean("cacheOnly", false));
 
         if (sourceUrl == null || sourceUrl.trim().isEmpty()) {
             call.reject("sourceUrl is required");
@@ -98,6 +99,11 @@ public class AndroidMediaCachePlugin extends Plugin {
                 return;
             }
             if (cachedFile != null) deleteCachedFiles(assetDir);
+
+            if (cacheOnly) {
+                call.resolve(new JSObject());
+                return;
+            }
 
             if (!assetDir.exists() && !assetDir.mkdirs()) {
                 throw new IllegalStateException("Unable to create Android media cache directory.");

@@ -170,6 +170,7 @@ export const ImageContent = as<'div', ImageContentProps>(
       stablePreviewEnabled ? stablePrimaryUrl : undefined,
       stablePreviewEnabled ? stableFallbackUrl : undefined,
       {
+        autoRetry: androidApp,
         mimeType,
         fallbackMimeType: mimeType,
       }

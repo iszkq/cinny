@@ -325,8 +325,11 @@ const responseToMediaBlob = async (response?: Response): Promise<Blob | undefine
   return blob && blob.size > 0 ? blob : undefined;
 };
 
-const loadAndroidNativeMediaBlob = async (src: string): Promise<Blob | undefined> => {
-  const assetUrl = await prepareAndroidMediaAssetUrl(src);
+const loadAndroidNativeMediaBlob = async (
+  src: string,
+  cacheOnly = false
+): Promise<Blob | undefined> => {
+  const assetUrl = await prepareAndroidMediaAssetUrl(src, undefined, false, cacheOnly);
   if (!assetUrl) return undefined;
 
   const response = await fetch(assetUrl, { cache: 'no-store' }).catch(() => undefined);
@@ -347,63 +350,67 @@ const loadAndroidMediaBlob = (
   src: string,
   onLateMedia: (mediaBlob: Blob) => void
 ): Promise<Blob | undefined> =>
-  new Promise((resolve) => {
-    let settled = false;
-    let mediaAccepted = false;
-    let browserDone = false;
-    let nativeDone = false;
-    let nativeStarted = false;
-    let nativeFallbackTimer: number | undefined;
-    let deadlineTimer: number | undefined;
+  loadAndroidNativeMediaBlob(src, true).then((cachedNativeBlob) => {
+    if (cachedNativeBlob) return cachedNativeBlob;
 
-    const finish = (blob?: Blob) => {
-      if (blob) {
-        if (mediaAccepted) return;
-        mediaAccepted = true;
-        if (settled) {
-          onLateMedia(blob);
+    return new Promise((resolve) => {
+      let settled = false;
+      let mediaAccepted = false;
+      let browserDone = false;
+      let nativeDone = false;
+      let nativeStarted = false;
+      let nativeFallbackTimer: number | undefined;
+      let deadlineTimer: number | undefined;
+
+      const finish = (blob?: Blob) => {
+        if (blob) {
+          if (mediaAccepted) return;
+          mediaAccepted = true;
+          if (settled) {
+            onLateMedia(blob);
+            return;
+          }
+          settled = true;
+          if (nativeFallbackTimer !== undefined) window.clearTimeout(nativeFallbackTimer);
+          if (deadlineTimer !== undefined) window.clearTimeout(deadlineTimer);
+          resolve(blob);
           return;
         }
-        settled = true;
-        if (nativeFallbackTimer !== undefined) window.clearTimeout(nativeFallbackTimer);
-        if (deadlineTimer !== undefined) window.clearTimeout(deadlineTimer);
-        resolve(blob);
-        return;
-      }
-      if (settled) return;
-      if (browserDone && nativeDone) {
-        settled = true;
-        if (deadlineTimer !== undefined) window.clearTimeout(deadlineTimer);
-        resolve(undefined);
-      }
-    };
+        if (settled) return;
+        if (browserDone && nativeDone) {
+          settled = true;
+          if (deadlineTimer !== undefined) window.clearTimeout(deadlineTimer);
+          resolve(undefined);
+        }
+      };
 
-    const startNative = () => {
-      if (nativeStarted || settled) return;
-      nativeStarted = true;
-      loadAndroidNativeMediaBlob(src)
+      const startNative = () => {
+        if (nativeStarted || settled) return;
+        nativeStarted = true;
+        loadAndroidNativeMediaBlob(src)
+          .catch(() => undefined)
+          .then((blob) => {
+            nativeDone = true;
+            finish(blob);
+          });
+      };
+
+      nativeFallbackTimer = window.setTimeout(startNative, ANDROID_MEDIA_FALLBACK_DELAY_MS);
+      deadlineTimer = window.setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        resolve(undefined);
+      }, ANDROID_MEDIA_RESOLVE_DEADLINE_MS);
+
+      fetchAndPersistMedia(src)
+        .then(responseToMediaBlob)
         .catch(() => undefined)
         .then((blob) => {
-          nativeDone = true;
+          browserDone = true;
+          if (!blob) startNative();
           finish(blob);
         });
-    };
-
-    nativeFallbackTimer = window.setTimeout(startNative, ANDROID_MEDIA_FALLBACK_DELAY_MS);
-    deadlineTimer = window.setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      resolve(undefined);
-    }, ANDROID_MEDIA_RESOLVE_DEADLINE_MS);
-
-    fetchAndPersistMedia(src)
-      .then(responseToMediaBlob)
-      .catch(() => undefined)
-      .then((blob) => {
-        browserDone = true;
-        if (!blob) startNative();
-        finish(blob);
-      });
+    });
   });
 
 const createObjectUrlFromMedia = async (src: string): Promise<string | undefined> => {
@@ -588,9 +595,11 @@ const getLegacyMediaCaches = async (): Promise<Cache[]> => {
     const allowedNames = new Set(
       LEGACY_PERSISTENT_MEDIA_CACHES.flatMap((name) => [name, `${name}-${namespaceHash}`])
     );
-    legacyMediaCachesPromise = caches.keys().then((cacheKeys) =>
-      Promise.all(cacheKeys.filter((key) => allowedNames.has(key)).map((key) => caches.open(key)))
-    );
+    legacyMediaCachesPromise = caches
+      .keys()
+      .then((cacheKeys) =>
+        Promise.all(cacheKeys.filter((key) => allowedNames.has(key)).map((key) => caches.open(key)))
+      );
   }
 
   return legacyMediaCachesPromise;

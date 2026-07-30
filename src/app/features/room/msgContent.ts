@@ -28,7 +28,11 @@ import { cacheUploadedMediaBlob } from '../../utils/mediaUrlCache';
 const IMAGE_PREVIEW_WIDTH = 230;
 const IMAGE_PREVIEW_HEIGHT = 460;
 
-const cacheUploadedMxcMedia = async (mx: MatrixClient, mxc: string, media: Blob): Promise<void> => {
+export const cacheUploadedMxcMedia = async (
+  mx: MatrixClient,
+  mxc: string,
+  media: Blob
+): Promise<void> => {
   const authenticatedUrl = mxcUrlToHttp(mx, mxc, true) ?? undefined;
   const legacyUrl = mxcUrlToHttp(mx, mxc, false) ?? undefined;
   await cacheUploadedMediaBlob(authenticatedUrl ?? legacyUrl, media);

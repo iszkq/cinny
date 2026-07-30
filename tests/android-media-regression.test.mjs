@@ -44,6 +44,10 @@ test('Android persistent media validates native files and preserves older cache 
   assert.match(source, /fetch\(assetUrl, \{ cache: 'no-store' \}\)/);
   assert.match(source, /responseToMediaBlob/);
   assert.match(source, /fetchAndPersistMedia\(src\)/);
+  assert.match(source, /loadAndroidNativeMediaBlob\(src, true\)/);
+  assert.match(nativeSource, /cacheOnly\?: boolean/);
+  assert.match(javaSource, /boolean cacheOnly =/);
+  assert.match(javaSource, /if \(cacheOnly\) \{/);
   assert.match(source, /ANDROID_MEDIA_RESOLVE_DEADLINE_MS = 20_000/);
   assert.match(source, /onLateMedia\(blob\)/);
   assert.match(source, /cacheRuntimeMediaBlob\(src, lateMediaBlob\)/);
@@ -67,6 +71,7 @@ test('Android persistent media validates native files and preserves older cache 
 test('Android sticker grid limits memory blobs and defers offscreen media', async () => {
   const packSource = await readSource('src/app/hooks/useImagePacks.ts');
   const itemSource = await readSource('src/app/components/emoji-board/Item.tsx');
+  const boardSource = await readSource('src/app/components/emoji-board/EmojiBoard.tsx');
 
   assert.match(packSource, /ANDROID_IMAGE_PACK_PRIORITY_OBJECT_WARM_LIMIT = 36/);
   assert.match(packSource, /ANDROID_IMAGE_PACK_SECONDARY_OBJECT_WARM_LIMIT = 24/);
@@ -78,6 +83,8 @@ test('Android sticker grid limits memory blobs and defers offscreen media', asyn
   assert.match(itemSource, /if \(visible\) setNearViewport\(true\)/);
   assert.doesNotMatch(itemSource, /observer\.unobserve\(entry\.target\)/);
   assert.match(packSource, /deferFallbackPersistent: true/);
+  assert.match(boardSource, /primePersistentMediaUrl\(mediaUrl, 'background'\)/);
+  assert.match(boardSource, /getPackMediaUrls\(pack, true\)/);
   const mediaSource = await readSource('src/app/components/emoji-board/media.ts');
   assert.match(mediaSource, /url\.searchParams\.set\('animated', 'false'\)/);
 });
@@ -90,6 +97,7 @@ test('Android timeline and custom emoji never fall back to raw authenticated ima
 
   assert.match(stableSource, /allowDirectSource: !requireObjectUrl/);
   assert.match(imageSource, /const preferAndroidThumbnail =/);
+  assert.match(imageSource, /autoRetry: androidApp/);
   assert.match(reactionSource, /displayUrl \|\| !androidApp/);
   assert.match(reactionSource, /const primaryMediaUrl = originalMediaUrl \?\? thumbnailMediaUrl/);
   assert.match(htmlSource, /if \(androidApp && !displayUrl\)/);
@@ -100,6 +108,9 @@ test('Android timeline and custom emoji never fall back to raw authenticated ima
   assert.match(stableSource, /invalidateCachedMediaUrl\(src\)/);
   assert.match(stableSource, /primeCachedMediaObjectUrl\(fallbackSrc, 'visible', true\)/);
   assert.match(stableSource, /window\.addEventListener\('online', handleOnline\)/);
+  assert.match(stableSource, /const retryDelays = \[1_500, 5_000, 15_000\]/);
+  assert.match(reactionSource, /autoRetry: androidApp/);
+  assert.match(htmlSource, /autoRetry: androidApp/);
 });
 
 test('Android cloud emoji uses its visible source preview without serializing it into messages', async () => {
@@ -115,13 +126,17 @@ test('Android cloud emoji uses its visible source preview without serializing it
   assert.match(roomInputSource, /ascii\.startsWith\('GIF87a'\)/);
   assert.match(roomInputSource, /ascii\.slice\(8, 12\) === 'WEBP'/);
   assert.match(roomInputSource, /new Blob\(\[blob\], \{ type: mimeType \}\)/);
+  assert.match(roomInputSource, /await cacheUploadedMxcMedia\(mx, mxc, sourceFile\)/);
   assert.match(
     remoteIndexSource,
     /\[item\.httpUrl, item\.sourceUrl, item\.url, item\.previewUrl, item\.thumbUrl, item\.thumbnailUrl\]/
   );
   assert.match(editorSource, /const androidPreviewUrl =/);
   assert.doesNotMatch(editorSource, /\{'\.\.\.'\}/);
-  assert.doesNotMatch(editorSource, /<span aria-label=\{element\.shortcode\}>:\{element\.shortcode\}:<\/span>/);
+  assert.doesNotMatch(
+    editorSource,
+    /<span aria-label=\{element\.shortcode\}>:\{element\.shortcode\}:<\/span>/
+  );
   assert.doesNotMatch(outputSource, /previewUrl/);
 });
 
@@ -185,6 +200,7 @@ test('Android images, avatars, emoji and encrypted media share the native file c
   assert.match(encryptedSource, /getPersistedMediaBlob\(sourceUrl\)/);
   assert.match(uploadSource, /await cacheUploadedMxcMedia\(mx, mxc, file\)/);
   assert.match(uploadSource, /await cacheUploadedMxcMedia\(mx, thumbMxc, thumbnailFile\)/);
+  assert.match(uploadSource, /export const cacheUploadedMxcMedia/);
   assert.match(activitySource, /registerPlugin\(AndroidMediaCachePlugin\.class\)/);
 });
 
@@ -243,8 +259,18 @@ test('Android-only optimizations stay behind platform guards', async () => {
 
   assert.match(itemSource, /preferOriginal: !androidApp/);
   assert.match(imageSource, /androidApp && !preferOriginalPreview/);
-  assert.match(
-    reactionSource,
-    /originalMediaUrl \?\? thumbnailMediaUrl/
+  assert.match(reactionSource, /originalMediaUrl \?\? thumbnailMediaUrl/);
+});
+
+test('Android room search is scrollable and cancels local history pagination on close', async () => {
+  const dialogSource = await readSource(
+    'src/app/features/message-search/RoomMessageSearchDialog.tsx'
   );
+  const searchSource = await readSource('src/app/features/message-search/useMessageSearch.ts');
+
+  assert.match(dialogSource, /queryFn: \(\{ pageParam, signal \}\)/);
+  assert.match(dialogSource, /queryClient\s*\.cancelQueries/);
+  assert.match(dialogSource, /height: androidApp && compact \? 'min\(42dvh, 28rem\)'/);
+  assert.match(searchSource, /throwIfSearchAborted\(signal\)/);
+  assert.match(searchSource, /paginateLocalRoomHistoryStep\(mx, room, roomState, signal\)/);
 });

@@ -16,6 +16,7 @@ type AndroidMediaCachePlugin = {
     accessToken?: string;
     mimeType?: string;
     forceRefresh?: boolean;
+    cacheOnly?: boolean;
   }): Promise<AndroidMediaAsset>;
 };
 
@@ -75,7 +76,8 @@ const getAndroidMediaIdentity = (sourceUrl: string) => {
 export const prepareAndroidMediaAssetUrl = (
   sourceUrl?: string,
   mimeType?: string,
-  forceRefresh = false
+  forceRefresh = false,
+  cacheOnly = false
 ): Promise<string | undefined> | undefined => {
   if (!sourceUrl || !isAndroidApp()) return undefined;
 
@@ -86,7 +88,8 @@ export const prepareAndroidMediaAssetUrl = (
   const cachedUrl = cachedAssetUrls.get(identity.cacheKey);
   if (cachedUrl) return Promise.resolve(cachedUrl);
 
-  const pending = pendingAssets.get(identity.cacheKey);
+  const pendingKey = cacheOnly ? `${identity.cacheKey}::cache-only` : identity.cacheKey;
+  const pending = pendingAssets.get(pendingKey);
   if (pending) return pending;
 
   const promise = AndroidMediaCache.prepare({
@@ -96,6 +99,7 @@ export const prepareAndroidMediaAssetUrl = (
     accessToken: identity.accessToken,
     mimeType,
     forceRefresh: shouldForceRefresh,
+    cacheOnly,
   })
     .then((asset) => {
       if (!asset.filePath) return undefined;
@@ -105,10 +109,10 @@ export const prepareAndroidMediaAssetUrl = (
     })
     .catch(() => undefined)
     .finally(() => {
-      pendingAssets.delete(identity.cacheKey);
+      pendingAssets.delete(pendingKey);
     });
 
-  pendingAssets.set(identity.cacheKey, promise);
+  pendingAssets.set(pendingKey, promise);
   return promise;
 };
 

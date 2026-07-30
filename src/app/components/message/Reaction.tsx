@@ -43,6 +43,7 @@ export const Reaction = as<
     primaryMediaUrl,
     fallbackMediaUrl,
     {
+      autoRetry: androidApp,
       // An Android WebView <img> cannot attach the Matrix access token. Keep the existing
       // browser/desktop behavior, but render Android reactions from an authenticated local blob.
       disableObjectUrlCache: !androidApp,

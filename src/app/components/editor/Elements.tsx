@@ -107,6 +107,7 @@ function RenderEmoticonElement({
     primaryMediaUrl,
     fallbackMediaUrl,
     {
+      autoRetry: androidApp,
       disableObjectUrlCache: !androidApp,
       preferObjectUrl: androidPreviewUrl ? false : undefined,
       requireObjectUrl: androidPreviewUrl ? false : undefined,

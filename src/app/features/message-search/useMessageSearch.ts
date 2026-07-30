@@ -16,7 +16,11 @@ import {
 import { useCallback, useRef } from 'react';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { getFirstLinkedTimeline, getLinkedTimelines, getLiveTimeline } from '../room/RoomTimeline';
-import { decryptAllTimelineEvent, trimReplyFromBody, trimReplyFromFormattedBody } from '../../utils/room';
+import {
+  decryptAllTimelineEvent,
+  trimReplyFromBody,
+  trimReplyFromFormattedBody,
+} from '../../utils/room';
 import {
   parsePollData,
   POLL_START_EVENT_TYPE,
@@ -103,6 +107,12 @@ const emptyResult = (): SearchResult => ({
   highlights: [],
   groups: [],
 });
+
+const throwIfSearchAborted = (signal?: AbortSignal): void => {
+  if (signal?.aborted) {
+    throw new DOMException('Message search was cancelled.', 'AbortError');
+  }
+};
 
 const unique = <T>(items: T[]): T[] => Array.from(new Set(items));
 
@@ -336,7 +346,10 @@ const sortLocalResults = (results: LocalResultItem[], order?: string) => {
   });
 };
 
-const createLocalSearchState = (mx: MatrixClient, params: MessageSearchParams): LocalSearchState => {
+const createLocalSearchState = (
+  mx: MatrixClient,
+  params: MessageSearchParams
+): LocalSearchState => {
   const {
     term,
     order,
@@ -427,8 +440,10 @@ const collectLoadedRoomResults = async (
   mx: MatrixClient,
   room: Room,
   state: LocalSearchState,
-  roomState: LocalRoomSearchState
+  roomState: LocalRoomSearchState,
+  signal?: AbortSignal
 ) => {
+  throwIfSearchAborted(signal);
   const timelines = getLinkedTimelines(getLiveTimeline(room));
 
   if (room.hasEncryptionStateEvent()) {
@@ -439,6 +454,7 @@ const collectLoadedRoomResults = async (
       }
 
       await decryptAllTimelineEvent(mx, timeline);
+      throwIfSearchAborted(signal);
       roomState.decryptedEventCounts.set(timeline, timeline.getEvents().length);
     }
   }
@@ -488,8 +504,10 @@ const collectLoadedRoomResults = async (
 const paginateLocalRoomHistoryStep = async (
   mx: MatrixClient,
   room: Room,
-  roomState: LocalRoomSearchState
+  roomState: LocalRoomSearchState,
+  signal?: AbortSignal
 ): Promise<boolean> => {
+  throwIfSearchAborted(signal);
   const oldestTimeline = getFirstLinkedTimeline(getLiveTimeline(room), Direction.Backward);
 
   if (
@@ -504,6 +522,7 @@ const paginateLocalRoomHistoryStep = async (
     backwards: true,
     limit: LOCAL_HISTORY_PAGINATION_LIMIT,
   });
+  throwIfSearchAborted(signal);
   roomState.loadedPageCount += 1;
 
   const nextOldestTimeline = getFirstLinkedTimeline(getLiveTimeline(room), Direction.Backward);
@@ -518,15 +537,18 @@ const paginateLocalRoomHistoryStep = async (
 const ensureLocalResultsLoaded = async (
   mx: MatrixClient,
   state: LocalSearchState,
-  requiredCount: number
+  requiredCount: number,
+  signal?: AbortSignal
 ) => {
   for (const room of state.targetRooms) {
+    throwIfSearchAborted(signal);
     const roomState = state.roomStates.get(room.roomId);
     if (!roomState) continue;
-    await collectLoadedRoomResults(mx, room, state, roomState);
+    await collectLoadedRoomResults(mx, room, state, roomState, signal);
   }
 
   while (!state.fullyLoaded && state.items.length < requiredCount) {
+    throwIfSearchAborted(signal);
     const pendingRooms = state.targetRooms.filter((room) => {
       const roomState = state.roomStates.get(room.roomId);
       return !!roomState && !roomState.exhausted;
@@ -540,11 +562,12 @@ const ensureLocalResultsLoaded = async (
     let paginatedAny = false;
 
     for (const room of pendingRooms) {
+      throwIfSearchAborted(signal);
       const roomState = state.roomStates.get(room.roomId);
       if (!roomState || roomState.exhausted) continue;
 
-      const paginated = await paginateLocalRoomHistoryStep(mx, room, roomState);
-      await collectLoadedRoomResults(mx, room, state, roomState);
+      const paginated = await paginateLocalRoomHistoryStep(mx, room, roomState, signal);
+      await collectLoadedRoomResults(mx, room, state, roomState, signal);
 
       paginatedAny = paginatedAny || paginated;
       if (state.items.length >= requiredCount) {
@@ -624,14 +647,21 @@ export const useMessageSearch = (params: MessageSearchParams) => {
     !!(msgTypes && msgTypes.length > 0);
 
   const searchLocalFallback = useCallback(
-    async (nextBatch?: string): Promise<SearchResult> => {
+    async (nextBatch?: string, signal?: AbortSignal): Promise<SearchResult> => {
+      throwIfSearchAborted(signal);
       const cacheKey = createCacheKey(params);
       if (localCacheRef.current?.key !== cacheKey) {
         localCacheRef.current = createLocalSearchState(mx, params);
       }
 
       const offset = nextBatch ? Number(nextBatch) || 0 : 0;
-      await ensureLocalResultsLoaded(mx, localCacheRef.current, offset + LOCAL_SEARCH_PAGE_LIMIT);
+      await ensureLocalResultsLoaded(
+        mx,
+        localCacheRef.current,
+        offset + LOCAL_SEARCH_PAGE_LIMIT,
+        signal
+      );
+      throwIfSearchAborted(signal);
       const items = localCacheRef.current.items.slice(offset, offset + LOCAL_SEARCH_PAGE_LIMIT);
       const hasMoreLocalResults =
         offset + LOCAL_SEARCH_PAGE_LIMIT < localCacheRef.current.items.length ||
@@ -647,10 +677,11 @@ export const useMessageSearch = (params: MessageSearchParams) => {
   );
 
   const searchMessages = useCallback(
-    async (nextBatch?: string) => {
+    async (nextBatch?: string, signal?: AbortSignal) => {
+      throwIfSearchAborted(signal);
       if (!term) {
         if (hasLocalFilters || includeAllMessages) {
-          return searchLocalFallback(nextBatch);
+          return searchLocalFallback(nextBatch, signal);
         }
         return emptyResult();
       }
@@ -664,7 +695,7 @@ export const useMessageSearch = (params: MessageSearchParams) => {
           rooms.some((roomId) => mx.getRoom(roomId)?.hasEncryptionStateEvent()));
 
       if (shouldUseLocalHistory) {
-        return searchLocalFallback(nextBatch);
+        return searchLocalFallback(nextBatch, signal);
       }
 
       const requestBody: ISearchRequestBody = {
@@ -692,16 +723,18 @@ export const useMessageSearch = (params: MessageSearchParams) => {
           body: requestBody,
           next_batch: nextBatch === '' ? undefined : nextBatch,
         });
+        throwIfSearchAborted(signal);
         const parsed = parseSearchResult(r);
 
         if (!nextBatch && parsed.groups.length === 0) {
-          return searchLocalFallback();
+          return searchLocalFallback(undefined, signal);
         }
 
         return parsed;
       } catch (error) {
+        throwIfSearchAborted(signal);
         if (!nextBatch) {
-          return searchLocalFallback();
+          return searchLocalFallback(undefined, signal);
         }
         throw error;
       }

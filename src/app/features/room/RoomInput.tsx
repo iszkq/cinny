@@ -120,6 +120,7 @@ import { fulfilledPromiseSettledResult, millisecondsToMinutesAndSeconds } from '
 import { useSetting } from '../../state/hooks/settings';
 import { settingsAtom } from '../../state/settings';
 import {
+  cacheUploadedMxcMedia,
   getAudioMsgContent,
   getFileMsgContent,
   getImageMsgContent,
@@ -628,6 +629,11 @@ const uploadRemoteEmojiMxc = async (
   if (!mxc) {
     throw toRemoteMediaOperationError('upload', new Error('Matrix did not return a media URL.'));
   }
+
+  // The original animated emoji is already available locally. Associate it with the newly
+  // uploaded MXC immediately so Android can render the composer, message and reaction without
+  // downloading the same authenticated media again.
+  await cacheUploadedMxcMedia(mx, mxc, sourceFile);
 
   return mxc;
 };

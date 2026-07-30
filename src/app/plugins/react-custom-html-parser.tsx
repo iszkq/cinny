@@ -243,6 +243,7 @@ function CachedHtmlEmoticonImage(
     primarySrc,
     secondarySrc,
     {
+      autoRetry: androidApp,
       disableObjectUrlCache: !androidApp,
     }
   );

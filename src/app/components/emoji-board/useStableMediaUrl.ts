@@ -18,6 +18,7 @@ type MediaCandidate = {
 };
 
 type UseStableMediaUrlOptions = {
+  autoRetry?: boolean;
   disableObjectUrlCache?: boolean;
   mimeType?: string;
   fallbackMimeType?: string;
@@ -26,6 +27,7 @@ type UseStableMediaUrlOptions = {
 };
 
 const PREFERRED_OBJECT_URL_WAIT_MS = 700;
+const retryDelays = [1_500, 5_000, 15_000];
 
 const buildMediaCandidates = (
   options: {
@@ -67,6 +69,7 @@ export const useStableMediaUrl = (
   fallbackSrc?: string,
   options: UseStableMediaUrlOptions = {}
 ) => {
+  const autoRetry = options.autoRetry ?? false;
   const disableObjectUrlCache = options.disableObjectUrlCache ?? false;
   const mobileDevice = mobileOrTablet();
   const preferObjectUrl =
@@ -90,6 +93,11 @@ export const useStableMediaUrl = (
   const [loadedDisplayUrl, setLoadedDisplayUrl] = useState<string | undefined>();
   const [preparedMediaReady, setPreparedMediaReady] = useState(!shouldWaitForPreparedMedia);
   const fallbackAttemptedRef = useRef(false);
+  const autoRetryAttemptRef = useRef(0);
+
+  useEffect(() => {
+    autoRetryAttemptRef.current = 0;
+  }, [fallbackSrc, src]);
 
   const candidates = useMemo(
     () =>
@@ -294,6 +302,7 @@ export const useStableMediaUrl = (
   }, [displayUrl]);
 
   const handleLoad = useCallback(() => {
+    autoRetryAttemptRef.current = 0;
     setLoadedDisplayUrl((prev) => prev ?? activeCandidate?.displayUrl);
   }, [activeCandidate]);
 
@@ -366,6 +375,17 @@ export const useStableMediaUrl = (
     window.addEventListener('online', handleOnline);
     return () => window.removeEventListener('online', handleOnline);
   }, [hasFailed, retry]);
+
+  useEffect(() => {
+    if (!autoRetry || !isAndroidApp() || !hasFailed) return undefined;
+
+    const retryDelay = retryDelays[autoRetryAttemptRef.current];
+    if (retryDelay === undefined) return undefined;
+
+    autoRetryAttemptRef.current += 1;
+    const timeoutId = window.setTimeout(retry, retryDelay);
+    return () => window.clearTimeout(timeoutId);
+  }, [autoRetry, hasFailed, retry]);
 
   return {
     displayUrl,
