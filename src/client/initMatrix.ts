@@ -8,6 +8,7 @@ import { restorePinLockStorage, snapshotPinLockStorage } from '../app/utils/pinL
 import { clearDesktopMediaCache } from '../app/utils/desktopMediaAssetCache';
 import { isDesktopUpdaterSupported } from '../app/utils/desktopUpdater';
 import { pushSessionToSW } from '../sw-session';
+import { removeFallbackSession } from '../app/state/sessions';
 
 type Session = {
   baseUrl: string;
@@ -188,6 +189,27 @@ export const clearLocalSessionAfterLogout = async (mx?: MatrixClient) => {
   window.localStorage.clear();
   restoreLocalStorageEntries(preservedSettingsEntries);
   restorePinLockStorage(preservedPinLockEntries);
+};
+
+/**
+ * The homeserver can invalidate an access token without the user choosing to
+ * sign out. Keep the crypto store in that case: it contains the device's local
+ * encryption keys and is required to decrypt messages after signing in again.
+ * The regular sync store is still cleared so a later sign-in cannot show data
+ * from the expired account.
+ * Explicit sign-out and "clear local data" still use the destructive cleanup
+ * above.
+ */
+export const clearExpiredSessionAfterLogout = async (mx?: MatrixClient) => {
+  pushSessionToSW();
+  mx?.stopClient();
+  try {
+    await mx?.store.deleteAllData();
+  } catch {
+    // A failed sync-store cleanup must not prevent returning to sign-in.
+  }
+  removeFallbackSession();
+  await clearDesktopMediaCache();
 };
 
 export const logoutClient = async (mx: MatrixClient) => {

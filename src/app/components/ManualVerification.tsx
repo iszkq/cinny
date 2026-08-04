@@ -236,53 +236,62 @@ export function ManualVerificationTile({
 
       storePrivateKey(secretStorageKeyId, recoveryKey);
 
-      let crossSigningStatus = await crypto.getCrossSigningStatus();
-      if (!crossSigningStatus.publicKeysOnDevice) {
-        const hasCrossSigningKeys = await crypto.userHasCrossSigningKeys(userId, true);
-        if (!hasCrossSigningKeys) {
+      // A key backup can be valid even when cross-signing has not synced yet
+      // (or is not configured for an older account). Do not make restoring
+      // historical messages conditional on device verification.
+      let verificationNotice: string | undefined;
+      try {
+        let crossSigningStatus = await crypto.getCrossSigningStatus();
+        if (!crossSigningStatus.publicKeysOnDevice) {
+          const hasCrossSigningKeys = await crypto.userHasCrossSigningKeys(userId, true);
+          if (!hasCrossSigningKeys) {
+            throw new Error(
+              '当前账号没有可恢复的设备验证数据。请先在已验证设备上启用设备验证，或改用其他已验证设备来完成验证。'
+            );
+          }
+          crossSigningStatus = await waitForCrossSigningKeysReady(crypto, userId);
+        }
+
+        if (!crossSigningStatus.publicKeysOnDevice) {
+          throw new Error('设备验证数据正在同步，请稍等几秒后再试一次。');
+        }
+
+        const hasCrossSigningPrivateKeys =
+          crossSigningStatus.privateKeysInSecretStorage ||
+          Object.values(crossSigningStatus.privateKeysCachedLocally).some(Boolean);
+
+        if (!hasCrossSigningPrivateKeys) {
           throw new Error(
             '当前账号没有可恢复的设备验证数据。请先在已验证设备上启用设备验证，或改用其他已验证设备来完成验证。'
           );
         }
-        crossSigningStatus = await waitForCrossSigningKeysReady(crypto, userId);
-      }
 
-      if (!crossSigningStatus.publicKeysOnDevice) {
-        throw new Error('设备验证数据正在同步，请稍等几秒后再试一次。');
-      }
-
-      const hasCrossSigningPrivateKeys =
-        crossSigningStatus.privateKeysInSecretStorage ||
-        Object.values(crossSigningStatus.privateKeysCachedLocally).some(Boolean);
-
-      if (!hasCrossSigningPrivateKeys) {
-        throw new Error(
-          '当前账号没有可恢复的设备验证数据。请先在已验证设备上启用设备验证，或改用其他已验证设备来完成验证。'
-        );
-      }
-
-      let bootstrapCrossSigningError: Error | undefined;
-      for (const delayMs of CROSS_SIGNING_SYNC_RETRY_DELAYS_MS) {
-        if (delayMs > 0) {
-          await wait(delayMs);
-        }
-
-        try {
-          await crypto.bootstrapCrossSigning({});
-          bootstrapCrossSigningError = undefined;
-          break;
-        } catch (error) {
-          if (!(error instanceof Error) || !isTransientVerificationError(error)) {
-            throw error;
+        let bootstrapCrossSigningError: Error | undefined;
+        for (const delayMs of CROSS_SIGNING_SYNC_RETRY_DELAYS_MS) {
+          if (delayMs > 0) {
+            await wait(delayMs);
           }
 
-          bootstrapCrossSigningError = error;
-          crossSigningStatus = await waitForCrossSigningKeysReady(crypto, userId);
-        }
-      }
+          try {
+            await crypto.bootstrapCrossSigning({});
+            bootstrapCrossSigningError = undefined;
+            break;
+          } catch (error) {
+            if (!(error instanceof Error) || !isTransientVerificationError(error)) {
+              throw error;
+            }
 
-      if (bootstrapCrossSigningError) {
-        throw new Error('设备验证数据正在同步，请稍等几秒后再试一次。');
+            bootstrapCrossSigningError = error;
+            crossSigningStatus = await waitForCrossSigningKeysReady(crypto, userId);
+          }
+        }
+
+        if (bootstrapCrossSigningError) {
+          throw new Error('设备验证数据正在同步，请稍等几秒后再试一次。');
+        }
+      } catch {
+        verificationNotice =
+          '\u8bbe\u5907\u9a8c\u8bc1\u6682\u65f6\u65e0\u6cd5\u5b8c\u6210\uff0c\u4f46\u52a0\u5bc6\u5907\u4efd\u6062\u590d\u5c06\u7ee7\u7eed\u8fdb\u884c\u3002';
       }
 
       await crypto.bootstrapSecretStorage({});
@@ -330,7 +339,7 @@ export function ManualVerificationTile({
         throw error;
       }
 
-      return undefined;
+      return verificationNotice;
     },
     [mx, secretStorageKeyId]
   );

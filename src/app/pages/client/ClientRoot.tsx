@@ -27,6 +27,7 @@ import {
   clearCacheAndReload,
   clearResourceCaches,
   clearAllLocalData,
+  clearExpiredSessionAfterLogout,
   clearLocalSessionAfterLogout,
   clearLoginData,
   initClient,
@@ -170,7 +171,7 @@ function ClientRootOptions({ mx }: { mx?: MatrixClient }) {
 const useLogoutListener = (mx?: MatrixClient) => {
   useEffect(() => {
     const handleLogout: HttpApiEventHandlerMap[HttpApiEvent.SessionLoggedOut] = async () => {
-      await clearLocalSessionAfterLogout(mx);
+      await clearExpiredSessionAfterLogout(mx);
       window.location.reload();
     };
 

@@ -61,8 +61,10 @@ export function SecretStorageRecoveryPassphrase({
     const target = evt.target as HTMLFormElement | undefined;
     const recoveryPassphraseInput = target?.recoveryPassphraseInput as HTMLInputElement | undefined;
     if (!recoveryPassphraseInput) return;
-    const recoveryPassphrase = recoveryPassphraseInput.value.trim();
-    if (!recoveryPassphrase) return;
+    // A recovery passphrase is deliberately opaque: unlike a recovery key,
+    // leading and trailing spaces are meaningful and must not be normalised.
+    const recoveryPassphrase = recoveryPassphraseInput.value;
+    if (recoveryPassphrase.length === 0) return;
 
     const { salt, iterations, bits } = passphraseContent;
     submitPassphrase(recoveryPassphrase, salt, iterations, bits).then((decodedRecoveryKey) => {
