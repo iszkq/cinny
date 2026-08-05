@@ -16,9 +16,14 @@ export const Toolbar = style({
   background: color.SurfaceVariant.Container,
 });
 
-export const RoomSelect = style({
+export const RoomPicker = style({
+  position: 'relative',
   flex: '1 1 15rem',
   minWidth: 0,
+});
+
+export const RoomSearchInput = style({
+  width: '100%',
   height: toRem(40),
   padding: `0 ${config.space.S300}`,
   border: `1px solid ${color.Surface.ContainerLine}`,
@@ -33,6 +38,74 @@ export const RoomSelect = style({
       boxShadow: `0 0 0 2px ${color.Primary.Container}`,
     },
   },
+});
+
+export const RoomOptions = style({
+  position: 'absolute',
+  zIndex: 20,
+  top: `calc(100% + ${config.space.S100})`,
+  left: 0,
+  right: 0,
+  maxHeight: `min(${toRem(288)}, calc(100vh - ${toRem(180)}))`,
+  overflowY: 'auto',
+  padding: config.space.S100,
+  border: `1px solid ${color.Surface.ContainerLine}`,
+  borderRadius: config.radii.R300,
+  background: color.Surface.Container,
+  boxShadow: `0 ${toRem(8)} ${toRem(24)} rgba(0, 0, 0, 0.18)`,
+});
+
+export const RoomOption = style({
+  display: 'flex',
+  flexDirection: 'column',
+  gap: config.space.S100,
+  width: '100%',
+  minWidth: 0,
+  padding: `${config.space.S200} ${config.space.S300}`,
+  border: 0,
+  borderRadius: config.radii.R300,
+  color: color.Surface.OnContainer,
+  background: 'transparent',
+  textAlign: 'left',
+  font: 'inherit',
+  cursor: 'pointer',
+  selectors: {
+    '&:hover, &[aria-selected="true"]': {
+      background: color.Surface.ContainerHover,
+    },
+    '&:focus-visible': {
+      outline: `2px solid ${color.Primary.Main}`,
+      outlineOffset: -2,
+    },
+  },
+});
+
+export const RoomOptionName = style({
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+});
+
+export const RoomOptionId = style({
+  overflow: 'hidden',
+  color: color.SurfaceVariant.OnContainer,
+  fontSize: toRem(12),
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  opacity: 0.7,
+});
+
+export const RoomOptionEmpty = style({
+  padding: config.space.S400,
+  color: color.SurfaceVariant.OnContainer,
+  textAlign: 'center',
+});
+
+export const RoomOptionHint = style({
+  padding: config.space.S200,
+  color: color.SurfaceVariant.OnContainer,
+  fontSize: toRem(12),
+  textAlign: 'center',
 });
 
 export const Status = style({

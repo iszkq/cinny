@@ -110,6 +110,9 @@ const FIELD_PATTERN = FIELD_ALIASES.map(([alias]) =>
 ).join('|');
 const FIELD_REGEX = new RegExp(`(${FIELD_PATTERN})\\s*[:：]\\s*`, 'giu');
 
+const LOCATION_HINT_REGEX =
+  /(?:小圆|球队通密|球闪通密|通密|zoom|会议号|meeting\s*id|webinar|⏱|⏲|⏰|◷|🕐|🕒|🕔|🕘)/iu;
+
 const normalizeAlias = (value: string): string =>
   value.normalize('NFKC').toLocaleLowerCase().replace(/\s+/g, ' ').trim();
 
@@ -240,7 +243,11 @@ const extractFields = (body: string): Partial<Record<FieldKind, string>> => {
     const kind = ALIAS_TO_KIND.get(label);
     if (!kind || fields[kind] !== undefined || match.index === undefined) return;
     const contentStart = match.index + match[0].length;
-    const contentEnd = matches[index + 1]?.index ?? normalizedBody.length;
+    const lineEnd = normalizedBody.indexOf('\n', contentStart);
+    const contentEnd = Math.min(
+      matches[index + 1]?.index ?? normalizedBody.length,
+      lineEnd < 0 ? normalizedBody.length : lineEnd
+    );
     const fieldValue = normalizedBody.slice(contentStart, contentEnd).trim();
     if (fieldValue) fields[kind] = fieldValue;
   });
@@ -359,12 +366,19 @@ const parseMeetingTimes = (value: string): { startTime?: string; endTime?: strin
   const text = value.normalize('NFKC').toLocaleLowerCase();
   const clockRegex =
     /(?:(早上|上午|中午|下午|晚上|凌晨|am|pm)\s*)?(\d{1,2})(?::(\d{1,2})|点(?:(\d{1,2})分?)?)\s*(am|pm)?/giu;
-  const matches = Array.from(text.matchAll(clockRegex)).slice(0, 2);
+  const matches = Array.from(text.matchAll(clockRegex))
+    .filter((match) => !!(match[1] || match[3] || match[4] || match[5]))
+    .slice(0, 2);
   if (matches.length === 0) return {};
 
   const firstPeriod = matches[0][1] ?? matches[0][5];
   const startTime = parseClock(matches[0][2], matches[0][3] ?? matches[0][4], firstPeriod);
   if (!startTime || matches.length === 1) return { startTime };
+
+  const firstEnd = (matches[0].index ?? 0) + matches[0][0].length;
+  const secondStart = matches[1].index ?? firstEnd;
+  const separator = text.slice(firstEnd, secondStart);
+  if (!/[-–—~～至到]/u.test(separator)) return { startTime };
 
   const secondPeriod = matches[1][1] ?? matches[1][5] ?? firstPeriod;
   const endTime = parseClock(matches[1][2], matches[1][3] ?? matches[1][4], secondPeriod);
@@ -376,6 +390,33 @@ const extractZoomMeetingId = (value: string): string | undefined => {
   return candidates
     .map((candidate) => candidate.replace(/\D/g, ''))
     .find((candidate) => candidate.length >= 9 && candidate.length <= 11);
+};
+
+const extractMeetingLocation = (
+  body: string,
+  explicitLocation?: string
+): { zoomMeetingId: string; locationText: string } | undefined => {
+  if (explicitLocation) {
+    const zoomMeetingId = extractZoomMeetingId(explicitLocation);
+    if (zoomMeetingId) return { zoomMeetingId, locationText: explicitLocation };
+  }
+
+  const locationLine = body
+    .normalize('NFKC')
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .find((line) => LOCATION_HINT_REGEX.test(line) && extractZoomMeetingId(line));
+  const fallbackLine =
+    locationLine ??
+    body
+      .normalize('NFKC')
+      .split(/\r?\n/u)
+      .map((line) => line.trim())
+      .find((line) => extractZoomMeetingId(line));
+  if (!fallbackLine) return undefined;
+
+  const zoomMeetingId = extractZoomMeetingId(fallbackLine);
+  return zoomMeetingId ? { zoomMeetingId, locationText: fallbackLine } : undefined;
 };
 
 const normalizeTitle = (value: string): string =>
@@ -402,23 +443,23 @@ const getMessageBody = (event: MatrixEvent): { body?: string; sourceEventId?: st
   };
 };
 
-export const parseMeetingEvent = (
-  event: MatrixEvent,
+export const parseMeetingBody = (
+  body: string,
+  sourceEventId: string,
+  sourceTimestamp: number,
   now = Date.now()
 ): ParsedMeeting | undefined => {
-  const { body, sourceEventId } = getMessageBody(event);
-  if (!body || !sourceEventId) return undefined;
-
   const fields = extractFields(body);
-  if (!fields.when || !fields.where) return undefined;
-  const zoomMeetingId = extractZoomMeetingId(fields.where);
-  if (!zoomMeetingId) return undefined;
+  const location = extractMeetingLocation(body, fields.where);
+  if (!location) return undefined;
 
-  const sourceTimestamp = event.getTs() || now;
-  const meetingDate = parseMeetingDate(fields.when, sourceTimestamp, now);
+  const meetingDate = [fields.when, fields.what, body]
+    .filter((value): value is string => !!value)
+    .map((value) => parseMeetingDate(value, sourceTimestamp, now))
+    .find((value): value is Date => !!value);
   if (!meetingDate) return undefined;
   const title = fields.what?.replace(/\s+/g, ' ').trim() || UNNAMED_MEETING;
-  const times = parseMeetingTimes(fields.when);
+  const times = parseMeetingTimes(fields.when ?? body);
 
   return {
     sourceEventId,
@@ -426,9 +467,17 @@ export const parseMeetingEvent = (
     title,
     date: formatLocalDate(meetingDate),
     ...times,
-    zoomMeetingId,
-    locationText: fields.where,
+    ...location,
   };
+};
+
+export const parseMeetingEvent = (
+  event: MatrixEvent,
+  now = Date.now()
+): ParsedMeeting | undefined => {
+  const { body, sourceEventId } = getMessageBody(event);
+  if (!body || !sourceEventId) return undefined;
+  return parseMeetingBody(body, sourceEventId, event.getTs() || now, now);
 };
 
 const sameMeetingDetails = (a: WeeklyCalendarMeeting, b: ParsedMeeting): boolean =>
@@ -668,7 +717,9 @@ export const synchronizeWeeklyCalendar = (
     if (!active.roomId || !mx.getRoom(active.roomId)) return active;
 
     const firstScan = !active.initialScanCompleted;
-    const since = firstScan
+    const recoveryScan = manual && active.meetings.length === 0;
+    const fullScan = firstScan || recoveryScan;
+    const since = fullScan
       ? getStartOfWeek(now).getTime()
       : Math.max(getStartOfWeek(now).getTime(), (active.lastProcessedAt ?? now) - 1000);
     const events = await fetchRoomEventsSince(mx, active.roomId, since);
@@ -679,7 +730,7 @@ export const synchronizeWeeklyCalendar = (
       lastProcessedAt = Math.max(lastProcessedAt, event.getTs());
       const parsed = parseMeetingEvent(event, now);
       if (!parsed) return;
-      next = upsertMeeting(next, parsed, firstScan, now).content;
+      next = upsertMeeting(next, parsed, fullScan, now).content;
     });
 
     const saved: WeeklyCalendarContent = {

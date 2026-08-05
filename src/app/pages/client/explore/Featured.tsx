@@ -2,7 +2,7 @@ import classNames from 'classnames';
 import FocusTrap from 'focus-trap-react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { SyncState } from 'matrix-js-sdk';
-import React, { ChangeEventHandler, useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Box,
   Button,
@@ -67,6 +67,11 @@ export function FeaturedRooms() {
   const screenSize = useScreenSizeContext();
   const showBackButton = !isDesktopLikeScreenSize(screenSize);
   const calendar = storedCalendar ?? getWeeklyCalendarContent(mx);
+  const selectedRoomName = calendar.roomId
+    ? (mx.getRoom(calendar.roomId)?.name ?? calendar.roomId)
+    : '';
+  const [roomQuery, setRoomQuery] = useState(selectedRoomName);
+  const [roomPickerOpen, setRoomPickerOpen] = useState(false);
   const todayKey = formatLocalDate(new Date());
   const weekDates = useMemo(
     () => getWeekDates(new Date(`${calendar.weekStart}T00:00:00`).getTime()),
@@ -82,14 +87,30 @@ export function FeaturedRooms() {
     [allRooms, mx]
   );
 
+  const filteredRooms = useMemo(() => {
+    const query = roomQuery.normalize('NFKC').toLocaleLowerCase().trim();
+    const matches = query
+      ? rooms.filter((room) =>
+          `${room.name ?? ''} ${room.roomId}`.normalize('NFKC').toLocaleLowerCase().includes(query)
+        )
+      : rooms;
+    return matches.slice(0, 50);
+  }, [roomQuery, rooms]);
+
+  useEffect(() => {
+    if (!roomPickerOpen) setRoomQuery(selectedRoomName);
+  }, [roomPickerOpen, selectedRoomName]);
+
   useSyncState(
     mx,
     useCallback((current) => setConnectionState(current), [])
   );
 
-  const handleRoomChange: ChangeEventHandler<HTMLSelectElement> = async (event) => {
-    const roomId = event.currentTarget.value;
-    if (!roomId || roomId === calendar.roomId) return;
+  const handleRoomSelect = async (roomId: string) => {
+    const roomName = mx.getRoom(roomId)?.name ?? roomId;
+    setRoomQuery(roomName);
+    setRoomPickerOpen(false);
+    if (roomId === calendar.roomId) return;
     setCalendarSyncState({ status: 'syncing', message: '正在扫描本周消息…' });
     try {
       const selected = await selectWeeklyCalendarRoom(mx, roomId);
@@ -180,20 +201,74 @@ export function FeaturedRooms() {
               </PageHeroSection>
 
               <Box className={css.Toolbar}>
-                <select
-                  className={css.RoomSelect}
-                  aria-label="选择监测房间"
-                  value={calendar.roomId ?? ''}
-                  onChange={handleRoomChange}
-                  disabled={syncState.status === 'syncing'}
-                >
-                  <option value="">选择一个房间</option>
-                  {rooms.map((room) => (
-                    <option key={room.roomId} value={room.roomId}>
-                      {room.name ?? room.roomId}
-                    </option>
-                  ))}
-                </select>
+                <div className={css.RoomPicker}>
+                  <input
+                    className={css.RoomSearchInput}
+                    type="search"
+                    role="combobox"
+                    aria-label="搜索并选择监测房间"
+                    aria-controls="weekly-calendar-room-options"
+                    aria-expanded={roomPickerOpen}
+                    aria-autocomplete="list"
+                    placeholder="输入关键词搜索房间"
+                    value={roomQuery}
+                    disabled={syncState.status === 'syncing'}
+                    onFocus={(event) => {
+                      event.currentTarget.select();
+                      setRoomQuery('');
+                      setRoomPickerOpen(true);
+                    }}
+                    onChange={(event) => {
+                      setRoomQuery(event.currentTarget.value);
+                      setRoomPickerOpen(true);
+                    }}
+                    onBlur={() => {
+                      setRoomPickerOpen(false);
+                      setRoomQuery(selectedRoomName);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Escape') {
+                        setRoomPickerOpen(false);
+                        event.currentTarget.blur();
+                      }
+                      if (event.key === 'Enter' && filteredRooms[0]) {
+                        event.preventDefault();
+                        handleRoomSelect(filteredRooms[0].roomId);
+                      }
+                    }}
+                  />
+                  {roomPickerOpen && (
+                    <div
+                      id="weekly-calendar-room-options"
+                      className={css.RoomOptions}
+                      role="listbox"
+                    >
+                      {filteredRooms.length === 0 ? (
+                        <div className={css.RoomOptionEmpty}>没有匹配的房间</div>
+                      ) : (
+                        filteredRooms.map((room) => (
+                          <button
+                            key={room.roomId}
+                            type="button"
+                            role="option"
+                            aria-selected={room.roomId === calendar.roomId}
+                            className={css.RoomOption}
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => handleRoomSelect(room.roomId)}
+                          >
+                            <span className={css.RoomOptionName}>{room.name ?? room.roomId}</span>
+                            {room.name && (
+                              <span className={css.RoomOptionId}>{room.roomId}</span>
+                            )}
+                          </button>
+                        ))
+                      )}
+                      {filteredRooms.length === 50 && (
+                        <div className={css.RoomOptionHint}>结果较多，请继续输入关键词缩小范围</div>
+                      )}
+                    </div>
+                  )}
+                </div>
                 <Box grow="Yes" className={css.Status}>
                   <Text size="T300" priority="300">
                     {calendar.roomId

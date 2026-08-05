@@ -1,4 +1,4 @@
-export const WEEKLY_CALENDAR_VERSION = 1;
+export const WEEKLY_CALENDAR_VERSION = 2;
 
 export type WeeklyCalendarMeeting = {
   id: string;
