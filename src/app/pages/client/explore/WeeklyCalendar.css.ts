@@ -14,12 +14,24 @@ export const Toolbar = style({
   border: `1px solid ${color.SurfaceVariant.ContainerLine}`,
   borderRadius: config.radii.R400,
   background: color.SurfaceVariant.Container,
+  '@media': {
+    'screen and (max-width: 700px)': {
+      alignItems: 'stretch',
+      flexDirection: 'column',
+    },
+  },
 });
 
 export const RoomPicker = style({
   position: 'relative',
   flex: '1 1 15rem',
   minWidth: 0,
+  '@media': {
+    'screen and (max-width: 700px)': {
+      flexBasis: 'auto',
+      width: '100%',
+    },
+  },
 });
 
 export const RoomSearchInput = style({
@@ -53,6 +65,11 @@ export const RoomOptions = style({
   borderRadius: config.radii.R300,
   background: color.Surface.Container,
   boxShadow: `0 ${toRem(8)} ${toRem(24)} rgba(0, 0, 0, 0.18)`,
+  '@media': {
+    'screen and (max-width: 700px)': {
+      maxHeight: `min(${toRem(240)}, calc(100vh - ${toRem(220)}))`,
+    },
+  },
 });
 
 export const RoomOption = style({
@@ -115,12 +132,25 @@ export const Status = style({
   justifyContent: 'space-between',
   gap: config.space.S200,
   minWidth: 0,
+  '@media': {
+    'screen and (max-width: 700px)': {
+      alignItems: 'flex-start',
+      flexDirection: 'column',
+      gap: config.space.S100,
+      width: '100%',
+    },
+  },
 });
 
 export const WeekScroller = style({
   width: '100%',
   overflowX: 'auto',
   paddingBottom: config.space.S100,
+  '@media': {
+    'screen and (max-width: 700px)': {
+      overflowX: 'visible',
+    },
+  },
 });
 
 export const WeekGrid = style({
@@ -128,6 +158,12 @@ export const WeekGrid = style({
   gridTemplateColumns: 'repeat(7, minmax(8.5rem, 1fr))',
   gap: config.space.S200,
   minWidth: toRem(980),
+  '@media': {
+    'screen and (max-width: 700px)': {
+      gridTemplateColumns: 'minmax(0, 1fr)',
+      minWidth: 0,
+    },
+  },
 });
 
 export const DayColumn = style({
@@ -137,6 +173,11 @@ export const DayColumn = style({
   border: `1px solid ${color.SurfaceVariant.ContainerLine}`,
   borderRadius: config.radii.R400,
   background: color.SurfaceVariant.Container,
+  '@media': {
+    'screen and (max-width: 700px)': {
+      minHeight: 0,
+    },
+  },
 });
 
 export const TodayColumn = style({
@@ -204,6 +245,11 @@ export const EmptyDay = style({
   color: color.SurfaceVariant.OnContainer,
   textAlign: 'center',
   opacity: 0.65,
+  '@media': {
+    'screen and (max-width: 700px)': {
+      padding: `${config.space.S300} ${config.space.S100}`,
+    },
+  },
 });
 
 export const EmptyCalendar = style({
@@ -212,6 +258,12 @@ export const EmptyCalendar = style({
   border: `1px dashed ${color.SurfaceVariant.ContainerLine}`,
   borderRadius: config.radii.R400,
   background: color.SurfaceVariant.Container,
+  '@media': {
+    'screen and (max-width: 700px)': {
+      minHeight: toRem(240),
+      padding: config.space.S400,
+    },
+  },
 });
 
 export const Dialog = style({
@@ -226,6 +278,12 @@ export const DetailRow = style({
   gridTemplateColumns: '4.5rem minmax(0, 1fr)',
   gap: config.space.S200,
   alignItems: 'start',
+  '@media': {
+    'screen and (max-width: 480px)': {
+      gridTemplateColumns: 'minmax(0, 1fr)',
+      gap: config.space.S100,
+    },
+  },
 });
 
 export const BreakText = style({
