@@ -69,6 +69,7 @@ import { isAndroidApp } from '../../utils/nativePlatform';
 import { checkForAndroidUpdate, type PendingAndroidUpdate } from '../../utils/androidUpdater';
 import { AndroidUpdatePrompt } from '../../components/AndroidUpdatePrompt';
 import { primeCachedMediaObjectUrl, primePersistentMediaUrl } from '../../utils/mediaUrlCache';
+import { WeeklyCalendarMonitor } from '../../features/weekly-calendar/WeeklyCalendarMonitor';
 
 const EXTERNAL_LINK_SELECTOR = 'a[href]';
 const DESKTOP_UPDATE_AUTO_CHECK_DELAY_MS = 30000;
@@ -1199,6 +1200,7 @@ export function ClientNonUIFeatures({ children }: ClientNonUIFeaturesProps) {
       <DesktopTaskbarUnreadBadgeFeature />
       <InviteNotifications />
       <MessageNotifications />
+      <WeeklyCalendarMonitor />
       <GlobalImageViewer />
       {children}
     </>

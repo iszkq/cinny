@@ -9,6 +9,7 @@ export enum AccountDataEvent {
   CinnyFavoriteItems = 'in.cinny.favorite_items',
   CinnyFavoriteNotes = 'in.cinny.favorite_notes',
   CinnyExploreSources = 'in.cinny.explore_sources',
+  CinnyWeeklyCalendar = 'in.cinny.weekly_calendar',
   CinnyAISettings = 'in.cinny.ai_settings',
   CinnyAppearanceSettings = 'in.cinny.appearance_settings',
   CinnyAvatarFrame = 'in.cinny.avatar_frame',

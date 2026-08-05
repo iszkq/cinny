@@ -770,11 +770,11 @@ export function Explore() {
                 <NavItemContent>
                   <Box as="span" grow="Yes" alignItems="Center" gap="200">
                     <Avatar size="200" radii="400">
-                      <Icon src={Icons.Bulb} size="100" filled={featuredSelected} />
+                      <Icon src={Icons.RecentClock} size="100" filled={featuredSelected} />
                     </Avatar>
                     <Box as="span" grow="Yes">
                       <Text as="span" size="Inherit" truncate>
-                        推荐
+                        日程日历
                       </Text>
                     </Box>
                   </Box>
