@@ -26,7 +26,25 @@ test('Rust Crypto storage is isolated per account and device', async () => {
   assert.match(source, /getRustCryptoDatabasePrefix/);
   assert.match(source, /encodeURIComponent\(session\.userId\)/);
   assert.match(source, /encodeURIComponent\(session\.deviceId\)/);
-  assert.match(source, /cryptoDatabasePrefix: getRustCryptoDatabasePrefix\(session\)/);
+  assert.match(source, /LEGACY_RUST_CRYPTO_DATABASE_PREFIX = 'matrix-js-sdk'/);
+  assert.match(source, /hasRustCryptoDatabase\(LEGACY_RUST_CRYPTO_DATABASE_PREFIX\)/);
+  assert.match(source, /isRustCryptoAccountMismatch/);
+  assert.match(source, /cryptoDatabasePrefix: scopedPrefix/);
+});
+
+test('device verification accepts both cross-signing and local SDK trust', async () => {
+  const source = await readSource('src/app/utils/matrix-crypto.ts');
+
+  assert.match(source, /status\.crossSigningVerified \|\| status\.localVerified/);
+});
+
+test('completed device verification refreshes verification badges', async () => {
+  const verificationSource = await readSource('src/app/components/DeviceVerification.tsx');
+  const statusHookSource = await readSource('src/app/hooks/useDeviceVerificationStatus.ts');
+
+  assert.match(verificationSource, /CryptoEvent\.DevicesUpdated/);
+  assert.match(verificationSource, /request\.otherUserId/);
+  assert.match(statusHookSource, /useUserTrustStatusChange/);
 });
 
 test('browser call controls do not extend the Node events shim', async () => {

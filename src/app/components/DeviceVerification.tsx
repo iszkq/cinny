@@ -1,4 +1,5 @@
 import {
+  CryptoEvent,
   ShowSasCallbacks,
   VerificationPhase,
   VerificationRequest,
@@ -30,6 +31,7 @@ import {
 } from '../hooks/useVerificationRequest';
 import { AsyncStatus, useAsyncCallback } from '../hooks/useAsyncCallback';
 import { ContainerColor } from '../styles/ContainerColor.css';
+import { useMatrixClient } from '../hooks/useMatrixClient';
 
 const DialogHeaderStyles: CSSProperties = {
   padding: `0 ${config.space.S200} 0 ${config.space.S400}`,
@@ -232,6 +234,7 @@ type DeviceVerificationProps = {
   onExit: () => void;
 };
 export function DeviceVerification({ request, onExit }: DeviceVerificationProps) {
+  const mx = useMatrixClient();
   const phase = useVerificationRequestPhase(request);
 
   const handleCancel = useCallback(() => {
@@ -245,6 +248,14 @@ export function DeviceVerification({ request, onExit }: DeviceVerificationProps)
   const handleStart = useCallback(async () => {
     await request.startVerification(VerificationMethod.Sas);
   }, [request]);
+
+  const handleDone = useCallback(() => {
+    // A completed SAS flow changes device trust locally, but Rust Crypto does
+    // not consistently emit DevicesUpdated for that local-only transition.
+    // Notify all verification badges and device rows before closing the flow.
+    mx.emit(CryptoEvent.DevicesUpdated, [request.otherUserId], false);
+    onExit();
+  }, [mx, request, onExit]);
 
   return (
     <Overlay open backdrop={<OverlayBackdrop />}>
@@ -287,7 +298,7 @@ export function DeviceVerification({ request, onExit }: DeviceVerificationProps)
                     onClose={handleCancel}
                   />
                 ))}
-              {phase === VerificationPhase.Done && <VerificationDone onExit={onExit} />}
+              {phase === VerificationPhase.Done && <VerificationDone onExit={handleDone} />}
               {phase === VerificationPhase.Cancelled && (
                 <VerificationCanceled onClose={handleCancel} />
               )}

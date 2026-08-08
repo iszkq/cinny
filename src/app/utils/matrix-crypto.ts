@@ -10,7 +10,9 @@ export const verifiedDevice = async (
 
   if (!status) return null;
 
-  const verified = status.crossSigningVerified;
+  // Rust Crypto can record a successful verification either through cross
+  // signing or as local device trust. Treat both SDK trust paths as verified.
+  const verified = status.crossSigningVerified || status.localVerified;
   return verified;
 };
 

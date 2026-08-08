@@ -5,6 +5,7 @@ import { useAlive } from './useAlive';
 import { fulfilledPromiseSettledResult } from '../utils/common';
 import { useMatrixClient } from './useMatrixClient';
 import { useDeviceListChange } from './useDeviceList';
+import { useUserTrustStatusChange } from './useUserTrustStatusChange';
 
 export enum VerificationStatus {
   Unknown,
@@ -42,6 +43,17 @@ export const useDeviceVerificationDetect = (
     useCallback(
       (userIds) => {
         if (userIds.includes(userId)) {
+          updateStatus();
+        }
+      },
+      [userId, updateStatus]
+    )
+  );
+
+  useUserTrustStatusChange(
+    useCallback(
+      (changedUserId) => {
+        if (changedUserId === userId) {
           updateStatus();
         }
       },

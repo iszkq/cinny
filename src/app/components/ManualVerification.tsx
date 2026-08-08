@@ -1,5 +1,5 @@
-import React, { MouseEventHandler, ReactNode, useCallback, useState } from 'react';
-import type { CryptoApi } from 'matrix-js-sdk/lib/crypto-api';
+import React, { MouseEventHandler, ReactNode, useCallback, useEffect, useState } from 'react';
+import { CryptoEvent, type CryptoApi } from 'matrix-js-sdk/lib/crypto-api';
 import {
   Box,
   Text,
@@ -350,6 +350,12 @@ export function ManualVerificationTile({
     [Uint8Array]
   >(verifyAndRestoreBackup);
   const verifying = verifyState.status === AsyncStatus.Loading;
+
+  useEffect(() => {
+    if (verifyState.status === AsyncStatus.Success) {
+      mx.emit(CryptoEvent.DevicesUpdated, [mx.getSafeUserId()], false);
+    }
+  }, [mx, verifyState.status]);
 
   return (
     <Box direction="Column" gap="200">

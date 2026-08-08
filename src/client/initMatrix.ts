@@ -18,6 +18,12 @@ type Session = {
 };
 
 const MALFORMED_ENCRYPTED_EVENT_WARNING = 'missing field `algorithm`';
+const LEGACY_RUST_CRYPTO_DATABASE_PREFIX = 'matrix-js-sdk';
+
+const getRustCryptoDatabaseNames = (prefix: string): string[] => [
+  `${prefix}::matrix-sdk-crypto`,
+  `${prefix}::matrix-sdk-crypto-meta`,
+];
 
 /**
  * Rust Crypto stores the local Olm machine (including the device identity),
@@ -28,6 +34,78 @@ const MALFORMED_ENCRYPTED_EVENT_WARNING = 'missing field `algorithm`';
  */
 const getRustCryptoDatabasePrefix = (session: Session): string =>
   `cinny-rust-crypto-${encodeURIComponent(session.userId)}-${encodeURIComponent(session.deviceId)}`;
+
+const indexedDbDatabaseExists = (databaseName: string): Promise<boolean> =>
+  new Promise((resolve) => {
+    let settled = false;
+    const finish = (exists: boolean) => {
+      if (settled) return;
+      settled = true;
+      resolve(exists);
+    };
+    const request = global.indexedDB.open(databaseName);
+
+    request.onupgradeneeded = () => {
+      // Opening a missing database would create it. Abort that transaction so
+      // this compatibility probe remains read-only.
+      request.transaction?.abort();
+      finish(false);
+    };
+    request.onsuccess = () => {
+      request.result.close();
+      finish(true);
+    };
+    request.onerror = () => finish(false);
+    request.onblocked = () => finish(false);
+  });
+
+const hasRustCryptoDatabase = async (prefix: string): Promise<boolean> => {
+  try {
+    const expectedNames = getRustCryptoDatabaseNames(prefix);
+    if (typeof global.indexedDB?.databases === 'function') {
+      const databases = await global.indexedDB.databases();
+      const existingNames = new Set(databases.map(({ name }) => name));
+      return expectedNames.some((name) => existingNames.has(name));
+    }
+
+    return indexedDbDatabaseExists(expectedNames[0]);
+  } catch {
+    return false;
+  }
+};
+
+const isRustCryptoAccountMismatch = (error: unknown): boolean => {
+  const message = error instanceof Error ? error.message : String(error);
+  const normalizedMessage = message.toLowerCase();
+  return (
+    normalizedMessage.includes('account in the store') &&
+    normalizedMessage.includes('match the account')
+  );
+};
+
+const initRustCryptoForSession = async (mx: MatrixClient, session: Session): Promise<void> => {
+  const scopedPrefix = getRustCryptoDatabasePrefix(session);
+
+  // Releases before v1.8.12 used the SDK default database. Prefer it when it
+  // exists so an upgrade keeps the device identity, verification trust and
+  // message keys that are already stored locally. If it belongs to a previous
+  // login/device, the SDK reports an account mismatch and we safely fall back
+  // to the account-and-device-scoped database.
+  if (await hasRustCryptoDatabase(LEGACY_RUST_CRYPTO_DATABASE_PREFIX)) {
+    try {
+      await mx.initRustCrypto({
+        cryptoDatabasePrefix: LEGACY_RUST_CRYPTO_DATABASE_PREFIX,
+      });
+      return;
+    } catch (error) {
+      if (!isRustCryptoAccountMismatch(error)) throw error;
+    }
+  }
+
+  await mx.initRustCrypto({
+    cryptoDatabasePrefix: scopedPrefix,
+  });
+};
 
 let webMatrixLoggerFilterInstalled = false;
 
@@ -74,9 +152,7 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
   });
 
   await indexedDBStore.startup();
-  await mx.initRustCrypto({
-    cryptoDatabasePrefix: getRustCryptoDatabasePrefix(session),
-  });
+  await initRustCryptoForSession(mx, session);
 
   mx.setMaxListeners(200);
 
