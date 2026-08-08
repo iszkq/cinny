@@ -20,6 +20,23 @@ test('an expired Matrix session keeps the local encryption store', async () => {
   assert.match(rootSource, /await clearExpiredSessionAfterLogout\(mx\)/);
 });
 
+test('Rust Crypto storage is isolated per account and device', async () => {
+  const source = await readSource('src/client/initMatrix.ts');
+
+  assert.match(source, /getRustCryptoDatabasePrefix/);
+  assert.match(source, /encodeURIComponent\(session\.userId\)/);
+  assert.match(source, /encodeURIComponent\(session\.deviceId\)/);
+  assert.match(source, /cryptoDatabasePrefix: getRustCryptoDatabasePrefix\(session\)/);
+});
+
+test('browser call controls do not extend the Node events shim', async () => {
+  const source = await readSource('src/app/plugins/call/CallControl.ts');
+
+  assert.match(source, /class CallControlEmitter/);
+  assert.match(source, /extends CallControlEmitter/);
+  assert.doesNotMatch(source, /from ['"]events['"]/);
+});
+
 test('recovery passphrases retain meaningful surrounding whitespace', async () => {
   const source = await readSource('src/app/components/SecretStorage.tsx');
 

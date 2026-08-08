@@ -25,6 +25,9 @@ test('weekly calendar switches to a narrow-screen single column layout', async (
 
   assert.match(styleSource, /screen and \(max-width: 700px\)/);
   assert.match(styleSource, /gridTemplateColumns: 'minmax\(0, 1fr\)'/);
+  assert.match(styleSource, /width: '100%'/);
+  assert.match(styleSource, /gridTemplateColumns: 'repeat\(7, minmax\(0, 1fr\)\)'/);
+  assert.match(styleSource, /max-width: 900px.*min-width: 701px/);
   assert.match(styleSource, /flexDirection: 'column'/);
   assert.match(styleSource, /screen and \(max-width: 480px\)/);
   assert.doesNotMatch(dayColumnStyle, /maxHeight|overflow(?:Y)?: 'hidden'/);

@@ -155,10 +155,18 @@ export const WeekScroller = style({
 
 export const WeekGrid = style({
   display: 'grid',
-  gridTemplateColumns: 'repeat(7, minmax(8.5rem, 1fr))',
+  width: '100%',
+  boxSizing: 'border-box',
+  gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
   gap: config.space.S200,
-  minWidth: toRem(980),
+  minWidth: 0,
   '@media': {
+    // Keep each day readable on tablet-sized windows while allowing the
+    // desktop layout to show the complete week without clipping.
+    'screen and (max-width: 900px) and (min-width: 701px)': {
+      gridTemplateColumns: 'repeat(7, minmax(8.5rem, 1fr))',
+      minWidth: toRem(980),
+    },
     'screen and (max-width: 700px)': {
       gridTemplateColumns: 'minmax(0, 1fr)',
       minWidth: 0,

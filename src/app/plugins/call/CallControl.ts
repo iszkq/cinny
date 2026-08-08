@@ -1,13 +1,41 @@
 import { ClientWidgetApi } from 'matrix-widget-api';
-import EventEmitter from 'events';
 import { CallControlState } from './CallControlState';
 import { ElementMediaStateDetail, ElementMediaStatePayload, ElementWidgetActions } from './types';
+
+type CallControlListener = () => void;
+
+/** A tiny browser-safe emitter for the control's single state-update event. */
+class CallControlEmitter {
+  private listeners = new Map<string, Set<CallControlListener>>();
+
+  public on(event: string, listener: CallControlListener): this {
+    const listeners = this.listeners.get(event) ?? new Set<CallControlListener>();
+    listeners.add(listener);
+    this.listeners.set(event, listeners);
+    return this;
+  }
+
+  public off(event: string, listener: CallControlListener): this {
+    const listeners = this.listeners.get(event);
+    if (!listeners) return this;
+    listeners.delete(listener);
+    if (listeners.size === 0) this.listeners.delete(event);
+    return this;
+  }
+
+  protected emit(event: string): boolean {
+    const listeners = this.listeners.get(event);
+    if (!listeners) return false;
+    listeners.forEach((listener) => listener());
+    return true;
+  }
+}
 
 export enum CallControlEvent {
   StateUpdate = 'state_update',
 }
 
-export class CallControl extends EventEmitter implements CallControlState {
+export class CallControl extends CallControlEmitter implements CallControlState {
   private state: CallControlState;
 
   private call: ClientWidgetApi;

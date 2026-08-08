@@ -19,6 +19,16 @@ type Session = {
 
 const MALFORMED_ENCRYPTED_EVENT_WARNING = 'missing field `algorithm`';
 
+/**
+ * Rust Crypto stores the local Olm machine (including the device identity),
+ * so the IndexedDB prefix must be unique per Matrix account and device. The
+ * SDK default is a single `matrix-js-sdk` database, which causes Android
+ * WebViews to reopen a previous device's store after a re-login and fail with
+ * an "account in the store doesn't match" error.
+ */
+const getRustCryptoDatabasePrefix = (session: Session): string =>
+  `cinny-rust-crypto-${encodeURIComponent(session.userId)}-${encodeURIComponent(session.deviceId)}`;
+
 let webMatrixLoggerFilterInstalled = false;
 
 const isIgnorableWebMatrixWarning = (messages: unknown[]): boolean => {
@@ -64,7 +74,9 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
   });
 
   await indexedDBStore.startup();
-  await mx.initRustCrypto();
+  await mx.initRustCrypto({
+    cryptoDatabasePrefix: getRustCryptoDatabasePrefix(session),
+  });
 
   mx.setMaxListeners(200);
 
