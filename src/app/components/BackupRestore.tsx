@@ -36,10 +36,11 @@ import {
 import { stopPropagation } from '../utils/keyboard';
 import { getBackupRestoreErrorMessage, runKeyBackupRestore } from '../utils/restoreKeyBackup';
 import { useMatrixClient } from '../hooks/useMatrixClient';
+import { decryptAllTimelineEvent } from '../utils/room';
 
 const RESTORE_PROGRESS_STALL_TIMEOUT_MS = 12_000;
 const RESTORE_PROGRESS_STALL_MESSAGE =
-  '恢复仍在后台继续，你可以正常使用；完成或失败后这里会自动更新。';
+  '备份密钥已连接，正在优先解密当前房间；完整恢复仍在后台继续。';
 
 type BackupStatusProps = {
   enabled: boolean;
@@ -243,13 +244,20 @@ export function BackupRestoreTile({ crypto }: BackupRestoreTileProps) {
           crypto,
           setRestoreProgress,
           setBackupRestoreProgress,
+          retryTimelineDecryption: async () => {
+            await Promise.allSettled(
+              mx.getRooms().map((room) =>
+                decryptAllTimelineEvent(mx, room.getLiveTimeline(), { retryFailures: true })
+              )
+            );
+          },
         });
         return undefined;
       } catch (error) {
         setBackupRestoreProgress({ status: BackupProgressStatus.Idle });
         throw error;
       }
-    }, [crypto, setBackupRestoreProgress, setRestoreProgress])
+    }, [crypto, mx, setBackupRestoreProgress, setRestoreProgress])
   );
 
   const handleRestore = () => {

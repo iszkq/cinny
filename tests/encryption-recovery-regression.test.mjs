@@ -279,6 +279,18 @@ test('backup restoration is not blocked by cross-signing failures', async () => 
   assert.match(source, /const backupPreparation = verification\.then/);
   assert.match(source, /const backupRecovery = backupPreparation\.then/);
   assert.match(source, /recoverKeyBackupSingleFlight\(crypto, async \(\) =>/);
+  assert.match(source, /const earlyBackupPreparation = recoveryKeyReady\.then/);
+  assert.match(source, /await crypto\.loadSessionBackupPrivateKeyFromSecretStorage\(\)/);
+  assert.match(source, /await crypto\.checkKeyBackupAndEnable\(\)/);
+  assert.match(source, /const recentRooms = \[\.\.\.mx\.getRooms\(\)\]/);
+  assert.ok(
+    source.indexOf('const earlyBackupPreparation = recoveryKeyReady.then') <
+      source.indexOf('const verification = earlyBackupPreparation.then')
+  );
+  assert.ok(
+    source.indexOf('await crypto.loadSessionBackupPrivateKeyFromSecretStorage();') <
+      source.indexOf('await bootstrapCrossSigningSingleFlight(crypto);')
+  );
   assert.ok(
     source.indexOf('await bootstrapCrossSigningSingleFlight(crypto);') <
       source.indexOf('const backupPreparation = verification.then')
@@ -320,6 +332,10 @@ test('manual recovery exposes real decrypt progress and a durable completion mar
   assert.match(progressSource, /RESTORE_PROGRESS_STALL_TIMEOUT_MS = 12_000/);
   assert.match(progressSource, /BackupProgressStatus\.Background/);
   assert.match(progressSource, /恢复仍在后台继续/);
+  assert.match(progressSource, /retryTimelineDecryption/);
+  assert.match(progressSource, /decryptAllTimelineEvent/);
+  assert.match(restoreSource, /BackupProgressStatus\.Decrypting/);
+  assert.match(restoreSource, /await retryTimelineDecryption\(\)/);
   assert.match(manualSource, /assertCompleteKeyBackupRestore\(restoreResult\)/);
   assert.match(manualSource, /AsyncStatus\.Success && !recoveryFailed/);
   assert.match(restoreSource, /result\.imported < result\.total/);

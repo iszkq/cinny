@@ -78,6 +78,7 @@ type RunKeyBackupRestoreOptions = {
   crypto: CryptoApi;
   setRestoreProgress: (progress: ImportRoomKeyProgressData) => void;
   setBackupRestoreProgress: (progress: IBackupProgress) => void;
+  retryTimelineDecryption?: () => Promise<void>;
   backgroundMessage?: string;
   timeoutMs?: number;
 };
@@ -88,6 +89,7 @@ export const runKeyBackupRestore = async ({
   crypto,
   setRestoreProgress,
   setBackupRestoreProgress,
+  retryTimelineDecryption,
   backgroundMessage = RESTORE_BACKGROUND_MESSAGE,
   timeoutMs = RESTORE_BACKGROUND_TIMEOUT_MS,
 }: RunKeyBackupRestoreOptions): Promise<KeyBackupRestoreRunResult> => {
@@ -122,6 +124,10 @@ export const runKeyBackupRestore = async ({
       },
     });
     assertCompleteKeyBackupRestore(result);
+    if (retryTimelineDecryption) {
+      updateRestoreState({ status: BackupProgressStatus.Decrypting });
+      await retryTimelineDecryption();
+    }
   })();
 
   return new Promise<KeyBackupRestoreRunResult>((resolve, reject) => {

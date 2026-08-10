@@ -61,3 +61,19 @@ test('Matrix logger warning wrapper preserves its receiver during push-rule star
   assert.match(source, /matrixLogger\.warn = \(\.\.\.messages: unknown\[\]\) =>/);
   assert.match(source, /Reflect\.apply\(originalWarn, matrixLogger, messages\)/);
 });
+
+test('the first room list is revealed in cancellable activity-sorted batches', async () => {
+  const utilsSource = await readSource('src/app/state/room-list/utils.ts');
+  const roomListSource = await readSource('src/app/state/room-list/roomList.ts');
+  const inviteListSource = await readSource('src/app/state/room-list/inviteList.ts');
+
+  assert.match(utilsSource, /INITIAL_ROOM_BATCH_SIZE = 24/);
+  assert.match(utilsSource, /ROOM_BATCH_SIZE = 48/);
+  assert.match(utilsSource, /sort\(factoryRoomIdByActivity\(mx\)\)/);
+  assert.match(utilsSource, /type: 'INITIALIZE',[\s\S]*slice\(0, INITIAL_ROOM_BATCH_SIZE\)/);
+  assert.match(utilsSource, /type: 'APPEND', rooms: nextRoomIds/);
+  assert.match(utilsSource, /initializationGenerationRef/);
+  assert.match(utilsSource, /window\.clearTimeout\(batchTimerRef\.current\)/);
+  assert.match(roomListSource, /action\.type === 'APPEND'/);
+  assert.match(inviteListSource, /action\.type === 'APPEND'/);
+});

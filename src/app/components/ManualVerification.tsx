@@ -398,10 +398,52 @@ export function ManualVerificationTile({
         // Only the workflow which wins the single-flight race may replace the
         // cached recovery key. Reopening the panel with another value while a
         // background workflow is active must not change the key under it.
-        const verification = initializationLease.waitForTurn.then(
+        const recoveryKeyReady = initializationLease.waitForTurn.then(() => {
+          storePrivateKey(secretStorageKeyId, recoveryKey);
+        });
+
+        // Enable the backup key before device verification. Rust crypto can then
+        // fetch only the missing sessions for visible messages while the slower
+        // full backup restore and cross-signing work continue in the background.
+        const earlyBackupPreparation = recoveryKeyReady.then(
+          async (): Promise<BackupPreparationStageResult> => {
+            setBackupRestoreProgress({ status: BackupProgressStatus.Fetching });
+            try {
+              await prepareKeyBackupSingleFlight(crypto, async () => {
+                const backupInfo = await waitForBackupVersionReady(crypto);
+                if (!backupInfo?.version) {
+                  throw new Error('No backup info available');
+                }
+                await crypto.loadSessionBackupPrivateKeyFromSecretStorage();
+                await crypto.checkKeyBackupAndEnable();
+              });
+
+              setBackupRestoreProgress({ status: BackupProgressStatus.Decrypting });
+              const recentRooms = [...mx.getRooms()]
+                .sort((a, b) => b.getLastActiveTimestamp() - a.getLastActiveTimestamp())
+                .slice(0, 8);
+              await Promise.allSettled(
+                recentRooms.map((room) =>
+                  decryptAllTimelineEvent(mx, room.getLiveTimeline(), { retryFailures: true })
+                )
+              );
+              return { status: 'completed' };
+            } catch (error) {
+              const normalizedError = toError(error, '消息备份准备失败。');
+              setBackupRestoreProgress({
+                status: BackupProgressStatus.Error,
+                message:
+                  getBackupRestoreNotice(normalizedError) ??
+                  getBackupRestoreErrorMessage(normalizedError),
+              });
+              return { status: 'error', error: normalizedError };
+            }
+          }
+        );
+
+        const verification = earlyBackupPreparation.then(
           async (): Promise<VerificationStageResult> => {
             try {
-              storePrivateKey(secretStorageKeyId, recoveryKey);
               let crossSigningStatus = await crypto.getCrossSigningStatus();
               if (!crossSigningStatus.publicKeysOnDevice) {
                 const hasCrossSigningKeys = await withTimeout(
