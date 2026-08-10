@@ -48,22 +48,30 @@ test('re-login reuses the saved Matrix device identity for the same homeserver',
   assert.match(loginSource, /mx\.loginRequest\(loginRequest\)/);
 });
 
-test('the recovery-key input remains reachable outside the unverified state', async () => {
+test('verified devices restore the upstream encrypted-backup status and progress tile', async () => {
   const devicesSource = await readSource('src/app/features/settings/devices/Devices.tsx');
+  const backupSource = await readSource('src/app/components/BackupRestore.tsx');
   const verificationSource = await readSource('src/app/features/settings/devices/Verification.tsx');
 
-  assert.match(devicesSource, /verificationStatus !== VerificationStatus\.Unverified/);
-  assert.match(devicesSource, /<RecoveryKeyAccessTile/);
-  assert.match(verificationSource, /输入恢复密钥/);
-  assert.match(verificationSource, /initialMethod=\{ManualVerificationMethod\.RecoveryKey\}/);
-  assert.match(verificationSource, /不会自动验证下方列出的其他设备/);
+  assert.match(devicesSource, /verificationStatus === VerificationStatus\.Verified/);
+  assert.match(devicesSource, /<BackupRestoreTile/);
+  assert.match(backupSource, /<ProgressBar/);
+  assert.match(backupSource, /解密密钥已恢复/);
+  assert.match(verificationSource, /VerifyCurrentDeviceTile/);
 });
 
 test('the device page separates current-device trust from other devices', async () => {
   const devicesSource = await readSource('src/app/features/settings/devices/Devices.tsx');
   const verificationSource = await readSource('src/app/features/settings/devices/Verification.tsx');
+  const otherDevicesSource = await readSource(
+    'src/app/features/settings/devices/OtherDevices.tsx'
+  );
+  const deviceVerificationSource = await readSource(
+    'src/app/components/DeviceVerification.tsx'
+  );
+  const routerSource = await readSource('src/app/pages/Router.tsx');
 
-  assert.doesNotMatch(devicesSource, /BackupRestoreTile/);
+  assert.match(devicesSource, /BackupRestoreTile/);
   assert.match(devicesSource, /恢复密钥只验证正在使用的本机/);
   assert.match(devicesSource, /const currentDeviceId = mx\.getDeviceId\(\)/);
   assert.match(verificationSource, /CurrentDeviceVerificationBadge/);
@@ -74,6 +82,12 @@ test('the device page separates current-device trust from other devices', async 
   assert.match(verificationSource, /正在读取其他设备状态/);
   assert.match(verificationSource, /台其他设备未验证/);
   assert.match(verificationSource, /其他设备均已验证/);
+  assert.doesNotMatch(verificationSource, /其他设备状态暂不可用/);
+  assert.match(verificationSource, /VerifyCurrentDeviceTile/);
+  assert.match(verificationSource, /VerifyOtherDeviceTile/);
+  assert.match(otherDevicesSource, /<VerifyOtherDeviceTile/);
+  assert.match(deviceVerificationSource, /ReceiveSelfDeviceVerification/);
+  assert.match(routerSource, /<ReceiveSelfDeviceVerification/);
 });
 
 test('the sidebar keeps a critical security reminder on first login', async () => {
@@ -166,10 +180,15 @@ test('setup and manual recovery share one destructive crypto initialization gate
   );
 });
 
-test('device verification accepts both cross-signing and local SDK trust', async () => {
-  const source = await readSource('src/app/utils/matrix-crypto.ts');
+test('current-device verification requires cross-signing while other devices accept SDK trust', async () => {
+  const cryptoSource = await readSource('src/app/utils/matrix-crypto.ts');
+  const sidebarSource = await readSource('src/app/pages/client/sidebar/UnverifiedTab.tsx');
+  const devicesSource = await readSource('src/app/features/settings/devices/Devices.tsx');
 
-  assert.match(source, /status\.crossSigningVerified \|\| status\.localVerified/);
+  assert.match(cryptoSource, /if \(requireCrossSigning\) return status\.crossSigningVerified/);
+  assert.match(cryptoSource, /status\.crossSigningVerified \|\| status\.localVerified/);
+  assert.match(sidebarSource, /currentDeviceId,\s*true/);
+  assert.match(devicesSource, /currentDeviceId,\s*true/);
 });
 
 test('completed device verification persists trust before reporting success', async () => {

@@ -21,7 +21,8 @@ export const LogoutDialog = forwardRef<HTMLDivElement, LogoutDialogProps>(
     const verificationStatus = useDeviceVerificationStatus(
       mx.getCrypto(),
       mx.getSafeUserId(),
-      mx.getDeviceId() ?? undefined
+      mx.getDeviceId() ?? undefined,
+      true
     );
 
     const [logoutState, logout] = useAsyncCallback<void, Error, []>(

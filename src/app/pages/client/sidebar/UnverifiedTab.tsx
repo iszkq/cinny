@@ -37,7 +37,8 @@ function UnverifiedIndicator({ requestOpenSettings }: UnverifiedIndicatorProps) 
   const verificationStatus = useDeviceVerificationStatus(
     crypto,
     mx.getSafeUserId(),
-    currentDeviceId
+    currentDeviceId,
+    true
   );
   const unverified =
     securitySyncReady &&

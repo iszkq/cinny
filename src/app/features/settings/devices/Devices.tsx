@@ -6,6 +6,7 @@ import { SequenceCardStyle } from '../styles.css';
 import { SettingTile } from '../../../components/setting-tile';
 import { useDeviceIds, useDeviceList, useSplitCurrentDevice } from '../../../hooks/useDeviceList';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { BackupRestoreTile } from '../../../components/BackupRestore';
 import { LocalBackup } from './LocalBackup';
 import { DeviceLogoutBtn, DeviceKeyDetails, DeviceTile, DeviceTilePlaceholder } from './DeviceTile';
 import { OtherDevices } from './OtherDevices';
@@ -13,7 +14,6 @@ import {
   CurrentDeviceVerificationBadge,
   DeviceVerificationOptions,
   EnableVerification,
-  RecoveryKeyAccessTile,
   VerificationStatusBadge,
   VerifyCurrentDeviceTile,
 } from './Verification';
@@ -62,7 +62,8 @@ export function Devices({ requestClose }: DevicesProps) {
   const verificationStatus = useDeviceVerificationStatus(
     crypto,
     mx.getSafeUserId(),
-    currentDeviceId
+    currentDeviceId,
+    true
   );
 
   const otherDevicesId = useDeviceIds(otherDevices);
@@ -159,14 +160,9 @@ export function Devices({ requestClose }: DevicesProps) {
                           secretStorageKeyContent={defaultSecretStorageKeyContent}
                         />
                       )}
-                    {verificationStatus !== VerificationStatus.Unverified &&
-                      defaultSecretStorageKeyId &&
-                      defaultSecretStorageKeyContent && (
-                        <RecoveryKeyAccessTile
-                          secretStorageKeyId={defaultSecretStorageKeyId}
-                          secretStorageKeyContent={defaultSecretStorageKeyContent}
-                        />
-                      )}
+                    {crypto && verificationStatus === VerificationStatus.Verified && (
+                      <BackupRestoreTile crypto={crypto} />
+                    )}
                   </SequenceCard>
                 ) : (
                   <DeviceTilePlaceholder />

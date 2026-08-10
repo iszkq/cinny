@@ -19,7 +19,8 @@ const waitForTrustToSettle = (): Promise<void> =>
 const queryVerifiedDevice = (
   crypto: CryptoApi,
   userId: string,
-  deviceId: string
+  deviceId: string,
+  requireCrossSigning: boolean
 ): Promise<boolean | null> =>
   new Promise((resolve, reject) => {
     const timeoutId = globalThis.setTimeout(
@@ -27,7 +28,7 @@ const queryVerifiedDevice = (
       DEVICE_TRUST_QUERY_TIMEOUT_MS
     );
 
-    verifiedDevice(crypto, userId, deviceId).then(
+    verifiedDevice(crypto, userId, deviceId, requireCrossSigning).then(
       (status) => {
         globalThis.clearTimeout(timeoutId);
         resolve(status);
@@ -42,16 +43,17 @@ const queryVerifiedDevice = (
 const readVerifiedDevice = async (
   crypto: CryptoApi,
   userId: string,
-  deviceId: string
+  deviceId: string,
+  requireCrossSigning = false
 ): Promise<boolean | null> => {
-  const status = await queryVerifiedDevice(crypto, userId, deviceId);
+  const status = await queryVerifiedDevice(crypto, userId, deviceId, requireCrossSigning);
   if (status !== false) return status;
 
   // Device-list and cross-signing events can arrive just before Rust Crypto's
   // trust query reflects the update. Confirm a downgrade once so a late result
   // cannot briefly turn a successfully verified device back to "unverified".
   await waitForTrustToSettle();
-  return queryVerifiedDevice(crypto, userId, deviceId);
+  return queryVerifiedDevice(crypto, userId, deviceId, requireCrossSigning);
 };
 
 export enum VerificationStatus {
@@ -66,7 +68,8 @@ export const useDeviceVerificationDetect = (
   crypto: CryptoApi | undefined,
   userId: string,
   deviceId: string | undefined,
-  callback: (status: VerificationStatus) => void
+  callback: (status: VerificationStatus) => void,
+  requireCrossSigning = false
 ): void => {
   const mx = useMatrixClient();
   const alive = useAlive();
@@ -87,7 +90,12 @@ export const useDeviceVerificationDetect = (
       }
 
       try {
-        const data = await readVerifiedDevice(crypto, userId, deviceId);
+        const data = await readVerifiedDevice(
+          crypto,
+          userId,
+          deviceId,
+          requireCrossSigning
+        );
         if (!alive() || requestId !== latestRequestRef.current) return;
 
         if (data === null) {
@@ -113,7 +121,7 @@ export const useDeviceVerificationDetect = (
         }
       }
     },
-    [alive, crypto, deviceId, userId, callback]
+    [alive, crypto, deviceId, userId, callback, requireCrossSigning]
   );
 
   useEffect(() => {
@@ -146,11 +154,18 @@ export const useDeviceVerificationDetect = (
 export const useDeviceVerificationStatus = (
   crypto: CryptoApi | undefined,
   userId: string,
-  deviceId: string | undefined
+  deviceId: string | undefined,
+  requireCrossSigning = false
 ): VerificationStatus => {
   const [verificationStatus, setVerificationStatus] = useState(VerificationStatus.Unknown);
 
-  useDeviceVerificationDetect(crypto, userId, deviceId, setVerificationStatus);
+  useDeviceVerificationDetect(
+    crypto,
+    userId,
+    deviceId,
+    setVerificationStatus,
+    requireCrossSigning
+  );
 
   return verificationStatus;
 };

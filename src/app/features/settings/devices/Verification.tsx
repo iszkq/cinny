@@ -22,10 +22,7 @@ import FocusTrap from 'focus-trap-react';
 import { CryptoApi, VerificationRequest } from 'matrix-js-sdk/lib/crypto-api';
 import { VerificationStatus } from '../../../hooks/useDeviceVerificationStatus';
 import { InfoCard } from '../../../components/info-card';
-import {
-  ManualVerificationMethod,
-  ManualVerificationTile,
-} from '../../../components/ManualVerification';
+import { ManualVerificationTile } from '../../../components/ManualVerification';
 import { SecretStorageKeyContent } from '../../../../types/matrix/accountData';
 import { AsyncState, AsyncStatus, useAsync } from '../../../hooks/useAsyncCallback';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
@@ -96,11 +93,7 @@ function OtherDevicesVerificationBadge({
   }
 
   if (otherUnverifiedCount < 0) {
-    return (
-      <Badge variant="Secondary" fill="Soft" size="500">
-        <Text size="L400">其他设备状态暂不可用</Text>
-      </Badge>
-    );
+    return null;
   }
 
   if (otherUnverifiedCount > 0) {
@@ -217,61 +210,6 @@ export function VerifyCurrentDeviceTile({
               fill="Soft"
               radii="Pill"
               onClick={handleCancelVerification}
-            >
-              <Icon size="100" src={Icons.Cross} />
-            </Chip>
-          }
-        />
-      )}
-    </>
-  );
-}
-
-type RecoveryKeyAccessTileProps = {
-  secretStorageKeyId: string;
-  secretStorageKeyContent: SecretStorageKeyContent;
-};
-export function RecoveryKeyAccessTile({
-  secretStorageKeyId,
-  secretStorageKeyContent,
-}: RecoveryKeyAccessTileProps) {
-  const [recoveryOpen, setRecoveryOpen] = useState(false);
-
-  return (
-    <>
-      <InfoCard
-        variant="Surface"
-        title="恢复密钥"
-        description="用于重新验证这台当前设备并恢复旧消息；不会自动验证下方列出的其他设备。"
-        after={
-          !recoveryOpen && (
-            <Button
-              size="300"
-              variant="Primary"
-              fill="Soft"
-              radii="300"
-              outlined
-              onClick={() => setRecoveryOpen(true)}
-            >
-              <Text as="span" size="B300">
-                输入恢复密钥
-              </Text>
-            </Button>
-          )
-        }
-      />
-      {recoveryOpen && (
-        <ManualVerificationTile
-          secretStorageKeyId={secretStorageKeyId}
-          secretStorageKeyContent={secretStorageKeyContent}
-          initialMethod={ManualVerificationMethod.RecoveryKey}
-          options={
-            <Chip
-              type="button"
-              variant="Secondary"
-              fill="Soft"
-              radii="Pill"
-              onClick={() => setRecoveryOpen(false)}
             >
               <Icon size="100" src={Icons.Cross} />
             </Chip>

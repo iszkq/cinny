@@ -71,11 +71,18 @@ const crossSignDevicesWithRetry = async (
 export const verifiedDevice = async (
   api: CryptoApi,
   userId: string,
-  deviceId: string
+  deviceId: string,
+  requireCrossSigning = false
 ): Promise<boolean | null> => {
   const status = await api.getDeviceVerificationStatus(userId, deviceId);
 
   if (!status) return null;
+
+  // Rust Crypto can trust the current device locally before the user has
+  // proved possession of the account recovery key. Current-device UI must
+  // therefore require cross-signing trust so a fresh login is not presented
+  // as verified before recovery/device verification has completed.
+  if (requireCrossSigning) return status.crossSigningVerified;
 
   // Rust Crypto can record a successful verification either through cross
   // signing or as local device trust. Treat both SDK trust paths as verified.
