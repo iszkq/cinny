@@ -181,10 +181,12 @@ const installWebMatrixLoggerFilter = () => {
 
   webMatrixLoggerFilterInstalled = true;
 
+  // loglevel methods depend on their logger instance (`this.prefix`). Keep the
+  // receiver when wrapping warn or Matrix push-rule startup can fail forever.
   const originalWarn = matrixLogger.warn;
   matrixLogger.warn = (...messages: unknown[]) => {
     if (isIgnorableWebMatrixWarning(messages)) return;
-    originalWarn(...messages);
+    Reflect.apply(originalWarn, matrixLogger, messages);
   };
 };
 

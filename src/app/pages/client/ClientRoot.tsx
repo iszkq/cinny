@@ -52,7 +52,7 @@ import { isNativeApp } from '../../utils/nativePlatform';
 import { MobileSettingsProvider } from './MobileSettings';
 
 const CLIENT_STORE_PERSIST_INTERVAL_MS = 30_000;
-const INITIAL_SYNC_TIMEOUT_MS = 20_000;
+const INITIAL_SYNC_ENTRY_FALLBACK_MS = 8_000;
 
 function ClientRootLoading() {
   return (
@@ -60,47 +60,6 @@ function ClientRootLoading() {
       <Box direction="Column" grow="Yes" alignItems="Center" justifyContent="Center" gap="400">
         <Spinner variant="Secondary" size="600" />
         <Text>正在启动</Text>
-      </Box>
-    </SplashScreen>
-  );
-}
-
-type InitialSyncTimeoutProps = {
-  error?: unknown;
-  onRetry: () => void;
-  onClearSyncCache: () => void;
-};
-
-function InitialSyncTimeout({ error, onRetry, onClearSyncCache }: InitialSyncTimeoutProps) {
-  const errorMessage = error instanceof Error ? error.message : undefined;
-
-  return (
-    <SplashScreen>
-      <Box direction="Column" grow="Yes" alignItems="Center" justifyContent="Center" gap="400">
-        <Dialog>
-          <Box direction="Column" gap="400" style={{ padding: config.space.S400 }}>
-            <Box direction="Column" gap="100">
-              <Text size="H4">房间同步超时</Text>
-              <Text size="T300">
-                初始同步超过 20
-                秒仍未完成。可以直接重试；若仍卡住，只清理房间同步缓存后重载，不会删除设备身份或本地加密密钥。
-              </Text>
-              {errorMessage && <Text size="T200">{`服务器返回：${errorMessage}`}</Text>}
-            </Box>
-            <Box gap="200" justifyContent="End" wrap="Wrap">
-              <Button variant="Secondary" onClick={onClearSyncCache}>
-                <Text as="span" size="B400">
-                  清理房间缓存并重载
-                </Text>
-              </Button>
-              <Button variant="Primary" onClick={onRetry}>
-                <Text as="span" size="B400">
-                  重新同步
-                </Text>
-              </Button>
-            </Box>
-          </Box>
-        </Dialog>
       </Box>
     </SplashScreen>
   );
@@ -227,12 +186,10 @@ type ClientRootProps = {
   children: ReactNode;
 };
 export function ClientRoot({ children }: ClientRootProps) {
-  // Match upstream: do not mount room-dependent features before the first
-  // successful sync. Starting the whole application early can fan out room,
-  // calendar and media work while /sync is still preparing.
+  // Prefer the upstream behavior of waiting for the first successful sync.
+  // A bounded fallback below still lets the user enter if optional startup
+  // data is malformed while the background sync recovers.
   const [loading, setLoading] = useState(true);
-  const [initialSyncTimedOut, setInitialSyncTimedOut] = useState(false);
-  const [initialSyncError, setInitialSyncError] = useState<unknown>();
   const lastStorePersistedAtRef = useRef(0);
   const { baseUrl, userId } = getFallbackSession() ?? {};
 
@@ -304,21 +261,23 @@ export function ClientRoot({ children }: ClientRootProps) {
   }, [mx, startMatrix]);
 
   useEffect(() => {
-    if (!mx || !loading || startState.status === AsyncStatus.Error) return undefined;
+    if (!mx || !loading) return undefined;
 
-    const timeout = window.setTimeout(() => {
-      setInitialSyncTimedOut(true);
-    }, INITIAL_SYNC_TIMEOUT_MS);
+    // A malformed optional startup response must never lock the user out of
+    // the client shell. Sync continues in the background and can recover.
+    const fallback = window.setTimeout(() => {
+      setLoading(false);
+    }, INITIAL_SYNC_ENTRY_FALLBACK_MS);
 
     return () => {
-      window.clearTimeout(timeout);
+      window.clearTimeout(fallback);
     };
-  }, [loading, mx, startState.status]);
+  }, [loading, mx]);
 
   useSyncState(
     mx,
     useCallback(
-      (state, _previous, data) => {
+      (state) => {
         if (
           state === SyncState.Prepared ||
           state === SyncState.Syncing ||
@@ -329,30 +288,16 @@ export function ClientRoot({ children }: ClientRootProps) {
             lastStorePersistedAtRef.current = now;
             persistClientStore(mx);
           }
-          setInitialSyncTimedOut(false);
-          setInitialSyncError(undefined);
           if (loading) setLoading(false);
-          return;
-        }
-
-        if (data && typeof data === 'object' && 'error' in data) {
-          setInitialSyncError((data as { error?: unknown }).error);
         }
       },
       [loading, mx]
     )
   );
 
-  const retryInitialSync = useCallback(() => {
-    // Reloading keeps the existing session, device identity and crypto store,
-    // while safely creating a fresh MatrixClient and sync loop.
-    window.location.reload();
-  }, []);
-
   const clientReady = !!mx && !loading;
   const startupFailed =
     loadState.status === AsyncStatus.Error || startState.status === AsyncStatus.Error;
-  const showInitialSyncTimeout = !!mx && loading && initialSyncTimedOut && !startupFailed;
 
   return (
     <AutoDiscovery userId={userId!} baseUrl={baseUrl!}>
@@ -376,7 +321,7 @@ export function ClientRoot({ children }: ClientRootProps) {
                   {startState.status === AsyncStatus.Error && (
                     <Text>{`客户端启动失败：${startState.error.message}`}</Text>
                   )}
-                  <Button variant="Critical" onClick={retryInitialSync}>
+                  <Button variant="Critical" onClick={() => window.location.reload()}>
                     <Text as="span" size="B400">
                       重新加载
                     </Text>
@@ -385,12 +330,6 @@ export function ClientRoot({ children }: ClientRootProps) {
               </Dialog>
             </Box>
           </SplashScreen>
-        ) : showInitialSyncTimeout ? (
-          <InitialSyncTimeout
-            error={initialSyncError}
-            onRetry={retryInitialSync}
-            onClearSyncCache={() => clearCacheAndReload(mx)}
-          />
         ) : !clientReady ? (
           <ClientRootLoading />
         ) : clientReady ? (
