@@ -36,6 +36,7 @@ type SessionInfo = {
  * Store session per client (tab)
  */
 const sessions = new Map<string, SessionInfo>();
+let mediaFetchSessionGeneration = 0;
 
 const clientToResolve = new Map<string, (value: SessionInfo | undefined) => void>();
 const clientToSessionPromise = new Map<string, Promise<SessionInfo | undefined>>();
@@ -54,6 +55,7 @@ async function cleanupDeadClients() {
 }
 
 function setSession(clientId: string, accessToken: unknown, baseUrl: unknown, userId: unknown) {
+  const previousSession = sessions.get(clientId);
   if (typeof accessToken === 'string' && typeof baseUrl === 'string') {
     sessions.set(clientId, {
       accessToken,
@@ -63,6 +65,17 @@ function setSession(clientId: string, accessToken: unknown, baseUrl: unknown, us
   } else {
     // Logout or invalid session
     sessions.delete(clientId);
+  }
+
+  const nextSession = sessions.get(clientId);
+  if (
+    previousSession?.accessToken !== nextSession?.accessToken ||
+    previousSession?.baseUrl !== nextSession?.baseUrl ||
+    previousSession?.userId !== nextSession?.userId
+  ) {
+    mediaFetchSessionGeneration += 1;
+    pendingMediaFetches.clear();
+    failedMediaFetches.clear();
   }
 
   const resolveSession = clientToResolve.get(clientId);
@@ -138,7 +151,14 @@ self.addEventListener('message', (event: ExtendableMessageEvent) => {
   }
 });
 
-const MEDIA_PATHS = ['/_matrix/client/v1/media/download', '/_matrix/client/v1/media/thumbnail'];
+const MEDIA_PATHS = [
+  '/_matrix/client/v1/media/download',
+  '/_matrix/client/v1/media/thumbnail',
+  '/_matrix/media/v3/download',
+  '/_matrix/media/v3/thumbnail',
+  '/_matrix/media/r0/download',
+  '/_matrix/media/r0/thumbnail',
+];
 const AUTH_MEDIA_PATH_TO_FALLBACK_PATH: Record<string, string[]> = {
   '/_matrix/client/v1/media/download': ['/_matrix/media/v3/download', '/_matrix/media/r0/download'],
   '/_matrix/client/v1/media/thumbnail': [
@@ -146,6 +166,21 @@ const AUTH_MEDIA_PATH_TO_FALLBACK_PATH: Record<string, string[]> = {
     '/_matrix/media/r0/thumbnail',
   ],
 };
+const MEDIA_FETCH_FAILURE_BASE_RETRY_MS = 3_000;
+const MEDIA_FETCH_NOT_FOUND_BASE_RETRY_MS = 5_000;
+const MEDIA_FETCH_MAX_RETRY_MS = 60_000;
+const MEDIA_FETCH_FAILURE_RESET_MS = 5 * 60 * 1000;
+const MAX_MEDIA_FETCH_FAILURES = 512;
+
+type MediaFetchFailure = {
+  retryAt: number;
+  status: number;
+  attempts: number;
+  failedAt: number;
+};
+
+const pendingMediaFetches = new Map<string, Promise<Response>>();
+const failedMediaFetches = new Map<string, MediaFetchFailure>();
 const removeAllowRedirectParam = (url: string): string => {
   try {
     const parsed = new URL(url);
@@ -165,20 +200,17 @@ function mediaPath(url: string): boolean {
   }
 }
 
-function validMediaRequest(url: string, baseUrl: string): boolean {
-  return MEDIA_PATHS.some((p) => {
-    const validUrl = new URL(p, baseUrl);
-    return url.startsWith(validUrl.href);
-  });
-}
-
-function fetchConfig(token: string): RequestInit {
-  return {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-    cache: 'default',
-  };
+function isAuthenticatedClientMediaRequest(url: string, baseUrl: string): boolean {
+  try {
+    const mediaUrl = new URL(url);
+    const homeserverUrl = new URL(baseUrl);
+    return (
+      mediaUrl.origin === homeserverUrl.origin &&
+      /^\/_matrix\/client\/[^/]+\/media\/(?:download|thumbnail)\//i.test(mediaUrl.pathname)
+    );
+  } catch {
+    return false;
+  }
 }
 
 function getPublicMediaFallbackUrls(url: string): string[] {
@@ -206,19 +238,17 @@ function getPublicMediaFallbackUrls(url: string): string[] {
 
 function getMediaRequestUrls(url: string): string[] {
   const strippedUrl = removeAllowRedirectParam(url);
-  const requestUrls = [url, strippedUrl];
-
-  getPublicMediaFallbackUrls(url).forEach((fallbackUrl) => {
-    requestUrls.push(fallbackUrl);
-  });
+  const requestUrls = [strippedUrl];
   getPublicMediaFallbackUrls(strippedUrl).forEach((fallbackUrl) => {
     requestUrls.push(fallbackUrl);
   });
 
-  return requestUrls.filter(
-    (requestUrl, index) =>
-      requestUrl.length > 0 && requestUrls.findIndex((value) => value === requestUrl) === index
-  );
+  return requestUrls
+    .filter(
+      (requestUrl, index) =>
+        requestUrl.length > 0 && requestUrls.findIndex((value) => value === requestUrl) === index
+    )
+    .slice(0, 3);
 }
 
 async function toSafeMediaResponse(response: Response): Promise<Response | undefined> {
@@ -239,48 +269,162 @@ async function toSafeMediaResponse(response: Response): Promise<Response | undef
   }
 }
 
-async function fetchMediaWithFallback(
+async function performMediaFetchWithFallback(
   request: Request,
   session: SessionInfo | undefined
 ): Promise<Response> {
+  // Complete the compatibility chain in one layer. The canonical failure is recorded only after
+  // client/v1, v3 and r0 have all failed; subsequent app-layer candidates then hit that cooldown
+  // instead of repeating network requests.
   const requestUrls = getMediaRequestUrls(request.url);
   let lastResponse: Response | undefined;
+  let lastError: unknown;
 
   for (const requestUrl of requestUrls) {
-    const shouldTryAuth = !!session && validMediaRequest(requestUrl, session.baseUrl);
-    const requestAttempts = shouldTryAuth ? [true, false] : [false];
-
-    for (const useAuth of requestAttempts) {
-      // eslint-disable-next-line no-await-in-loop
-      const response = await fetch(
-        useAuth ? requestUrl : new Request(requestUrl, request),
-        useAuth && session ? fetchConfig(session.accessToken) : undefined
-      ).catch(() => undefined);
-
-      if (!response) {
-        continue;
-      }
-
-      if (response.ok) {
-        // eslint-disable-next-line no-await-in-loop
-        const safeResponse = await toSafeMediaResponse(response);
-        if (safeResponse) {
-          return safeResponse;
-        }
-      }
-
-      lastResponse = response;
+    const shouldTryAuth =
+      !!session && isAuthenticatedClientMediaRequest(requestUrl, session.baseUrl);
+    const requestHeaders = new Headers(request.headers);
+    if (shouldTryAuth && session) {
+      requestHeaders.set('Authorization', `Bearer ${session.accessToken}`);
+    } else {
+      requestHeaders.delete('Authorization');
     }
+    // eslint-disable-next-line no-await-in-loop
+    const response = await fetch(requestUrl, {
+      headers: requestHeaders,
+      cache: 'default',
+    }).catch((error) => {
+      lastError = error;
+      return undefined;
+    });
+
+    if (!response) {
+      continue;
+    }
+
+    if (response.ok) {
+      // eslint-disable-next-line no-await-in-loop
+      const safeResponse = await toSafeMediaResponse(response);
+      if (safeResponse) {
+        return safeResponse;
+      }
+    }
+
+    lastResponse = response;
   }
 
   if (lastResponse && !lastResponse.ok) {
     return lastResponse;
   }
 
+  if (isAbortError(lastError)) {
+    throw lastError;
+  }
+
   return new Response(null, {
     status: 502,
     statusText: 'Media fetch failed',
   });
+}
+
+function getCanonicalMediaFetchUrl(url: string): string {
+  try {
+    const mediaUrl = new URL(removeAllowRedirectParam(url));
+    mediaUrl.searchParams.delete('access_token');
+    mediaUrl.pathname = mediaUrl.pathname.replace(
+      /^\/_matrix\/media\/(?:v3|r0)\/(download|thumbnail)\//i,
+      '/_matrix/client/v1/media/$1/'
+    );
+    mediaUrl.searchParams.sort();
+    return mediaUrl.toString();
+  } catch {
+    return url;
+  }
+}
+
+function getMediaFetchKey(request: Request, session: SessionInfo | undefined): string {
+  return `${mediaFetchSessionGeneration}\n${session?.baseUrl?.toLowerCase() ?? 'guest'}\n${
+    session?.userId?.toLowerCase() ?? 'guest'
+  }\n${getCanonicalMediaFetchUrl(request.url)}\n${request.headers.get('range') ?? ''}`;
+}
+
+function rememberMediaFetchFailure(key: string, status: number) {
+  const now = Date.now();
+  const previousFailure = failedMediaFetches.get(key);
+  const attempts =
+    previousFailure && now - previousFailure.failedAt < MEDIA_FETCH_FAILURE_RESET_MS
+      ? previousFailure.attempts + 1
+      : 1;
+  const baseDelay =
+    status === 404 ? MEDIA_FETCH_NOT_FOUND_BASE_RETRY_MS : MEDIA_FETCH_FAILURE_BASE_RETRY_MS;
+  const retryDelay = Math.min(baseDelay * 2 ** Math.min(attempts - 1, 4), MEDIA_FETCH_MAX_RETRY_MS);
+
+  failedMediaFetches.delete(key);
+  failedMediaFetches.set(key, {
+    retryAt: now + retryDelay,
+    status: status >= 400 && status <= 599 ? status : 502,
+    attempts,
+    failedAt: now,
+  });
+
+  while (failedMediaFetches.size > MAX_MEDIA_FETCH_FAILURES) {
+    const oldestKey = failedMediaFetches.keys().next().value;
+    if (typeof oldestKey !== 'string') break;
+    failedMediaFetches.delete(oldestKey);
+  }
+}
+
+function getActiveMediaFetchFailure(key: string): MediaFetchFailure | undefined {
+  const failure = failedMediaFetches.get(key);
+  return failure && failure.retryAt > Date.now() ? failure : undefined;
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError';
+}
+
+async function fetchMediaWithFallback(
+  request: Request,
+  session: SessionInfo | undefined
+): Promise<Response> {
+  const fetchKey = getMediaFetchKey(request, session);
+  const recentFailure = getActiveMediaFetchFailure(fetchKey);
+  if (recentFailure) {
+    return new Response(null, {
+      status: recentFailure.status,
+      statusText: 'Media request temporarily unavailable',
+    });
+  }
+
+  const pendingFetch = pendingMediaFetches.get(fetchKey);
+  if (pendingFetch) {
+    return (await pendingFetch).clone();
+  }
+
+  let requestPromise: Promise<Response>;
+  requestPromise = performMediaFetchWithFallback(request, session)
+    .then((response) => {
+      if (response.ok) {
+        failedMediaFetches.delete(fetchKey);
+      } else {
+        rememberMediaFetchFailure(fetchKey, response.status);
+      }
+      return response;
+    })
+    .catch((error) => {
+      if (!isAbortError(error)) {
+        rememberMediaFetchFailure(fetchKey, 502);
+      }
+      throw error;
+    })
+    .finally(() => {
+      if (pendingMediaFetches.get(fetchKey) === requestPromise) {
+        pendingMediaFetches.delete(fetchKey);
+      }
+    });
+
+  pendingMediaFetches.set(fetchKey, requestPromise);
+  return requestPromise;
 }
 
 self.addEventListener('fetch', (event: FetchEvent) => {

@@ -45,33 +45,29 @@ type VerificationStatusBadgeProps = {
   verificationStatus: VerificationStatus;
   otherUnverifiedCount?: number;
 };
-export function VerificationStatusBadge({
+
+export function CurrentDeviceVerificationBadge({
   verificationStatus,
-  otherUnverifiedCount,
-}: VerificationStatusBadgeProps) {
+}: Pick<VerificationStatusBadgeProps, 'verificationStatus'>) {
   if (
     verificationStatus === VerificationStatus.Unsupported ||
     verificationStatus === VerificationStatus.Unavailable
   ) {
     return (
       <Badge variant="Secondary" fill="Soft" size="500">
-        <Text size="L400">验证状态暂不可用</Text>
+        <Text size="L400">本机验证状态暂不可用</Text>
       </Badge>
     );
   }
-  if (
-    verificationStatus === VerificationStatus.Unknown ||
-    typeof otherUnverifiedCount !== 'number'
-  ) {
-    return <Spinner size="400" variant="Secondary" />;
-  }
-  if (otherUnverifiedCount < 0) {
+  if (verificationStatus === VerificationStatus.Unknown) {
     return (
-      <Badge variant="Secondary" fill="Soft" size="500">
-        <Text size="L400">其他设备状态暂不可用</Text>
-      </Badge>
+      <Box gap="100" alignItems="Center">
+        <Spinner size="300" variant="Secondary" />
+        <Text size="T200">正在读取本机验证状态…</Text>
+      </Box>
     );
   }
+
   if (verificationStatus === VerificationStatus.Unverified) {
     return (
       <Badge variant="Critical" fill="Solid" size="500">
@@ -80,23 +76,57 @@ export function VerificationStatusBadge({
     );
   }
 
-  if (otherUnverifiedCount > 0) {
+  return (
+    <Badge variant="Success" fill="Solid" size="500">
+      <Text size="L400">本机已验证</Text>
+    </Badge>
+  );
+}
+
+function OtherDevicesVerificationBadge({
+  otherUnverifiedCount,
+}: Pick<VerificationStatusBadgeProps, 'otherUnverifiedCount'>) {
+  if (typeof otherUnverifiedCount !== 'number') {
     return (
-      <Box gap="200" alignItems="Center" wrap="Wrap">
-        <Badge variant="Success" fill="Solid" size="500">
-          <Text size="L400">本机已验证</Text>
-        </Badge>
-        <Badge variant="Warning" fill="Solid" size="500">
-          <Text size="L400">{`${otherUnverifiedCount} 台其他设备未验证`}</Text>
-        </Badge>
+      <Box gap="100" alignItems="Center">
+        <Spinner size="300" variant="Secondary" />
+        <Text size="T200">正在读取其他设备状态…</Text>
       </Box>
     );
   }
 
+  if (otherUnverifiedCount < 0) {
+    return (
+      <Badge variant="Secondary" fill="Soft" size="500">
+        <Text size="L400">其他设备状态暂不可用</Text>
+      </Badge>
+    );
+  }
+
+  if (otherUnverifiedCount > 0) {
+    return (
+      <Badge variant="Warning" fill="Solid" size="500">
+        <Text size="L400">{`${otherUnverifiedCount} 台其他设备未验证`}</Text>
+      </Badge>
+    );
+  }
+
   return (
-    <Badge variant="Success" fill="Solid" size="500">
-      <Text size="L400">全部设备已验证</Text>
+    <Badge variant="Success" fill="Soft" size="500">
+      <Text size="L400">其他设备均已验证</Text>
     </Badge>
+  );
+}
+
+export function VerificationStatusBadge({
+  verificationStatus,
+  otherUnverifiedCount,
+}: VerificationStatusBadgeProps) {
+  return (
+    <Box gap="200" alignItems="Center" wrap="Wrap">
+      <CurrentDeviceVerificationBadge verificationStatus={verificationStatus} />
+      <OtherDevicesVerificationBadge otherUnverifiedCount={otherUnverifiedCount} />
+    </Box>
   );
 }
 

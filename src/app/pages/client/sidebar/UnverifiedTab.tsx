@@ -17,6 +17,7 @@ import {
 import { useCrossSigningActive } from '../../../hooks/useCrossSigning';
 import { Modal500 } from '../../../components/Modal500';
 import { Settings, SettingsPages } from '../../../features/settings';
+import { useClientSyncReady } from '../../../hooks/useClientSyncReady';
 
 type UnverifiedIndicatorProps = {
   requestOpenSettings?: () => void;
@@ -26,16 +27,21 @@ function UnverifiedIndicator({ requestOpenSettings }: UnverifiedIndicatorProps) 
   const mx = useMatrixClient();
 
   const crypto = mx.getCrypto();
+  const securitySyncReady = useClientSyncReady(mx);
+  const crossSigningActive = useCrossSigningActive();
   const [devices] = useDeviceList();
 
   const [currentDevice, otherDevices] = useSplitCurrentDevice(devices);
+  const currentDeviceId = mx.getDeviceId() ?? currentDevice?.device_id;
 
   const verificationStatus = useDeviceVerificationStatus(
     crypto,
     mx.getSafeUserId(),
-    currentDevice?.device_id
+    currentDeviceId
   );
-  const unverified = verificationStatus === VerificationStatus.Unverified;
+  const unverified =
+    securitySyncReady &&
+    (!crossSigningActive || verificationStatus === VerificationStatus.Unverified);
 
   const otherDevicesId = useDeviceIds(otherDevices);
   const unverifiedDeviceCount = useUnverifiedDeviceCount(
@@ -47,18 +53,29 @@ function UnverifiedIndicator({ requestOpenSettings }: UnverifiedIndicatorProps) 
   const [settings, setSettings] = useState(false);
   const closeSettings = () => setSettings(false);
 
-  const hasUnverified =
-    unverified || (unverifiedDeviceCount !== undefined && unverifiedDeviceCount > 0);
+  const hasOtherUnverified =
+    securitySyncReady &&
+    crossSigningActive &&
+    unverifiedDeviceCount !== undefined &&
+    unverifiedDeviceCount > 0;
+  const hasUnverified = unverified || hasOtherUnverified;
+  let tooltip = `${unverifiedDeviceCount ?? 0} 台其他设备未验证`;
+  if (!crossSigningActive) {
+    tooltip = '设备验证尚未启用';
+  } else if (unverified) {
+    tooltip = '本机尚未验证';
+  }
   return (
     <>
       {hasUnverified && (
         <SidebarItem active={settings} className={css.UnverifiedTab}>
-          <SidebarItemTooltip tooltip={unverified ? 'Unverified Device' : 'Unverified Devices'}>
+          <SidebarItemTooltip tooltip={tooltip}>
             {(triggerRef) => (
               <SidebarAvatar
                 className={unverified ? css.UnverifiedAvatar : css.UnverifiedOtherAvatar}
                 as="button"
                 ref={triggerRef}
+                aria-label={tooltip}
                 outlined
                 onPointerDown={(evt: React.PointerEvent<HTMLButtonElement>) =>
                   evt.stopPropagation()
@@ -81,7 +98,12 @@ function UnverifiedIndicator({ requestOpenSettings }: UnverifiedIndicatorProps) 
               </SidebarAvatar>
             )}
           </SidebarItemTooltip>
-          {!unverified && unverifiedDeviceCount && unverifiedDeviceCount > 0 && (
+          {unverified && (
+            <SidebarItemBadge>
+              <Badge variant="Critical" size="200" fill="Solid" radii="Pill" outlined={false} />
+            </SidebarItemBadge>
+          )}
+          {!unverified && hasOtherUnverified && (
             <SidebarItemBadge hasCount>
               <Badge variant="Warning" size="400" fill="Solid" radii="Pill" outlined={false}>
                 <Text as="span" size="L400">
@@ -106,9 +128,5 @@ type UnverifiedTabProps = {
 };
 
 export function UnverifiedTab({ requestOpenSettings }: UnverifiedTabProps) {
-  const crossSigningActive = useCrossSigningActive();
-
-  if (!crossSigningActive) return null;
-
   return <UnverifiedIndicator requestOpenSettings={requestOpenSettings} />;
 }

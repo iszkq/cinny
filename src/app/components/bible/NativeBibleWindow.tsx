@@ -39,21 +39,21 @@ function BibleWindowFallback() {
 
 function NativeBibleWindowContent() {
   const closeEmittedRef = useRef(false);
+  const closingRef = useRef(false);
 
-  const emitClose = useCallback(() => {
+  const emitClose = useCallback(async () => {
     if (closeEmittedRef.current) return;
     closeEmittedRef.current = true;
-    emitNativeBibleWindowClose().catch(() => undefined);
+    await emitNativeBibleWindowClose().catch(() => undefined);
   }, []);
 
   const handleClose = useCallback(() => {
-    emitClose();
-    closeCurrentNativeWindow().catch(() => undefined);
-  }, [emitClose]);
-
-  useEffect(() => {
-    window.addEventListener('pagehide', emitClose);
-    return () => window.removeEventListener('pagehide', emitClose);
+    if (closingRef.current) return;
+    closingRef.current = true;
+    emitClose()
+      .then(closeCurrentNativeWindow)
+      .catch(() => closeCurrentNativeWindow())
+      .catch(() => undefined);
   }, [emitClose]);
 
   useEffect(() => {

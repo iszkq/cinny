@@ -22,8 +22,8 @@ import {
 import FocusTrap from 'focus-trap-react';
 import {
   BackupProgressStatus,
-  backupRestoreProgressAtom,
-  setBackupRestoreProgressAtom,
+  getBackupRestoreAtoms,
+  type IBackupProgress,
 } from '../state/backupRestore';
 import { InfoCard } from './info-card';
 import { AsyncStatus, useAsyncCallback } from '../hooks/useAsyncCallback';
@@ -35,6 +35,7 @@ import {
 } from '../hooks/useKeyBackup';
 import { stopPropagation } from '../utils/keyboard';
 import { getBackupRestoreErrorMessage, runKeyBackupRestore } from '../utils/restoreKeyBackup';
+import { useMatrixClient } from '../hooks/useMatrixClient';
 
 type BackupStatusProps = {
   enabled: boolean;
@@ -116,6 +117,43 @@ function BackupMessage({ message, tone }: BackupMessageProps) {
   );
 }
 
+type BackupRestoreProgressProps = {
+  progress: IBackupProgress;
+};
+
+export function BackupRestoreProgress({ progress }: BackupRestoreProgressProps) {
+  if (progress.status === BackupProgressStatus.Idle) return null;
+  if (progress.status === BackupProgressStatus.Fetching) return <BackupProgressFetching />;
+  if (progress.status === BackupProgressStatus.Loading) {
+    return <BackupProgress total={progress.data.total} downloaded={progress.data.downloaded} />;
+  }
+  if (progress.status === BackupProgressStatus.Decrypting) {
+    return (
+      <Box gap="200" alignItems="Center">
+        <Spinner size="100" variant="Secondary" fill="Soft" />
+        <Text size="T200">
+          <b>解密密钥已恢复，正在重新解密已进入房间的旧消息…</b>
+        </Text>
+      </Box>
+    );
+  }
+  if (progress.status === BackupProgressStatus.Background) {
+    return <BackupMessage message={progress.message} tone="warning" />;
+  }
+  if (progress.status === BackupProgressStatus.Error) {
+    return <BackupMessage message={progress.message} tone="critical" />;
+  }
+
+  return (
+    <Box gap="100" alignItems="Center">
+      <Icon size="100" src={Icons.Check} style={{ color: color.Success.Main }} />
+      <Text size="T200" style={{ color: color.Success.Main }}>
+        <b>{progress.message ?? '备份密钥已恢复，旧消息将在打开时逐步解密。'}</b>
+      </Text>
+    </Box>
+  );
+}
+
 type BackupTrustInfoProps = {
   crypto: CryptoApi;
   backupInfo: KeyBackupInfo;
@@ -153,11 +191,14 @@ type BackupRestoreTileProps = {
   crypto: CryptoApi;
 };
 export function BackupRestoreTile({ crypto }: BackupRestoreTileProps) {
+  const mx = useMatrixClient();
+  const { backupRestoreProgressAtom, setBackupRestoreProgressAtom } = getBackupRestoreAtoms(mx);
   const [restoreProgress, setRestoreProgress] = useAtom(backupRestoreProgressAtom);
   const setBackupRestoreProgress = useSetAtom(setBackupRestoreProgressAtom);
   const restoring =
     restoreProgress.status === BackupProgressStatus.Fetching ||
     restoreProgress.status === BackupProgressStatus.Loading ||
+    restoreProgress.status === BackupProgressStatus.Decrypting ||
     restoreProgress.status === BackupProgressStatus.Background;
 
   const backupEnabled = useKeyBackupStatus(crypto);
@@ -289,19 +330,7 @@ export function BackupRestoreTile({ crypto }: BackupRestoreTileProps) {
         </Box>
       )}
       {restoreState.status === AsyncStatus.Loading && !restoring && <BackupProgressFetching />}
-      {restoreProgress.status === BackupProgressStatus.Fetching && <BackupProgressFetching />}
-      {restoreProgress.status === BackupProgressStatus.Loading && (
-        <BackupProgress
-          total={restoreProgress.data.total}
-          downloaded={restoreProgress.data.downloaded}
-        />
-      )}
-      {restoreProgress.status === BackupProgressStatus.Background && (
-        <BackupMessage message={restoreProgress.message} tone="warning" />
-      )}
-      {restoreProgress.status === BackupProgressStatus.Error && (
-        <BackupMessage message={restoreProgress.message} tone="critical" />
-      )}
+      <BackupRestoreProgress progress={restoreProgress} />
       {restoreState.status === AsyncStatus.Error && (
         <BackupMessage message={getBackupRestoreErrorMessage(restoreState.error)} tone="critical" />
       )}

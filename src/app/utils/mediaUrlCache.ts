@@ -10,8 +10,10 @@ import {
 
 const LEGACY_PERSISTENT_MEDIA_CACHES = ['cinny-auth-media-v2', 'cinny-auth-media-v3'];
 const PERSISTENT_MEDIA_CACHE_PREFIX = 'cinny-auth-media-v4';
-const FAILED_MEDIA_RETRY_DELAY_MS = 30 * 1000;
-const FAILED_MEDIA_NOT_FOUND_RETRY_DELAY_MS = 5 * 60 * 1000;
+const FAILED_MEDIA_RETRY_DELAY_MS = 3_000;
+const FAILED_MEDIA_NOT_FOUND_RETRY_DELAY_MS = 5_000;
+const FAILED_MEDIA_MAX_RETRY_DELAY_MS = 60_000;
+const FAILED_MEDIA_ATTEMPT_RESET_MS = 5 * 60 * 1000;
 
 type MediaCachePriority = 'visible' | 'background';
 
@@ -194,15 +196,22 @@ type ObjectUrlMediaTask = {
   priority: MediaCachePriority;
 };
 
+type FailedMediaEntry = {
+  retryAt: number;
+  attempts: number;
+  failedAt: number;
+};
+
 const objectUrlMediaCache = new Map<string, ObjectUrlMediaEntry>();
 const objectUrlMediaUrls = new Set<string>();
 const pendingObjectUrlMedia = new Map<string, Promise<string | undefined>>();
 const queuedObjectUrlMediaTasks = new Map<string, ObjectUrlMediaTask>();
 const objectUrlMediaListeners = new Map<string, Set<(objectUrl: string | undefined) => void>>();
-const failedMediaRetryAt = new Map<string, number>();
+const failedMediaRetryAt = new Map<string, FailedMediaEntry>();
 const visibleObjectUrlMediaQueue: ObjectUrlMediaTask[] = [];
 const backgroundObjectUrlMediaQueue: ObjectUrlMediaTask[] = [];
 let objectUrlMediaCleanupBound = false;
+let failedMediaOnlineResetBound = false;
 let objectUrlMediaBytes = 0;
 let activeObjectUrlMediaTasks = 0;
 let currentCacheNamespace: string | undefined;
@@ -237,17 +246,33 @@ const clearFailedMediaEntry = (src: string) => {
 };
 
 const markFailedMediaEntry = (src: string, retryDelayMs: number) => {
-  failedMediaRetryAt.set(src, Date.now() + retryDelayMs);
+  const now = Date.now();
+  const previousFailure = failedMediaRetryAt.get(src);
+  const attempts =
+    previousFailure && now - previousFailure.failedAt < FAILED_MEDIA_ATTEMPT_RESET_MS
+      ? previousFailure.attempts + 1
+      : 1;
+  failedMediaRetryAt.set(src, {
+    retryAt:
+      now +
+      Math.min(retryDelayMs * 2 ** Math.min(attempts - 1, 4), FAILED_MEDIA_MAX_RETRY_DELAY_MS),
+    attempts,
+    failedAt: now,
+  });
+
+  if (!failedMediaOnlineResetBound && typeof window !== 'undefined') {
+    failedMediaOnlineResetBound = true;
+    window.addEventListener('online', clearFailedMediaEntries);
+  }
 };
 
 const canRetryFailedMediaEntry = (src: string): boolean => {
-  const retryAt = failedMediaRetryAt.get(src);
-  if (retryAt === undefined) {
+  const failure = failedMediaRetryAt.get(src);
+  if (!failure) {
     return true;
   }
 
-  if (retryAt <= Date.now()) {
-    failedMediaRetryAt.delete(src);
+  if (failure.retryAt <= Date.now()) {
     return true;
   }
 

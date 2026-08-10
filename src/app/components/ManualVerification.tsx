@@ -1,4 +1,5 @@
 import React, { MouseEventHandler, ReactNode, useCallback, useEffect, useState } from 'react';
+import { useAtom, useSetAtom } from 'jotai';
 import { CryptoEvent, type CryptoApi } from 'matrix-js-sdk/lib/crypto-api';
 import {
   Box,
@@ -24,6 +25,12 @@ import { storePrivateKey } from '../../client/secretStorageKeys';
 import { decryptAllTimelineEvent } from '../utils/room';
 import { persistCurrentDeviceVerification } from '../utils/matrix-crypto';
 import { queueCryptoInitialization } from '../utils/cryptoInitializationGate';
+import { BackupRestoreProgress } from './BackupRestore';
+import { BackupProgressStatus, getBackupRestoreAtoms } from '../state/backupRestore';
+import {
+  assertCompleteKeyBackupRestore,
+  getBackupRestoreErrorMessage,
+} from '../utils/restoreKeyBackup';
 
 export enum ManualVerificationMethod {
   RecoveryPassphrase = 'passphrase',
@@ -123,6 +130,17 @@ const recoverKeyBackupSingleFlight = (
 type ManualVerificationResult = {
   status: 'completed' | 'background';
   notice?: string;
+};
+
+const getManualVerificationSuccessMessage = (
+  result: ManualVerificationResult,
+  backgroundRecoverySettled: boolean
+): string => {
+  if (result.status !== 'background') return '设备验证成功。';
+  if (backgroundRecoverySettled) {
+    return '安全恢复后台任务已结束，请查看下方结果和本机验证状态。';
+  }
+  return '安全恢复仍在后台处理中。';
 };
 
 type VerificationStageResult =
@@ -354,6 +372,9 @@ export function ManualVerificationTile({
   initialMethod,
 }: ManualVerificationTileProps) {
   const mx = useMatrixClient();
+  const { backupRestoreProgressAtom, setBackupRestoreProgressAtom } = getBackupRestoreAtoms(mx);
+  const [restoreProgress, setRestoreProgress] = useAtom(backupRestoreProgressAtom);
+  const setBackupRestoreProgress = useSetAtom(setBackupRestoreProgressAtom);
 
   const hasPassphrase = !!secretStorageKeyContent.passphrase;
   const [method, setMethod] = useState(
@@ -372,6 +393,7 @@ export function ManualVerificationTile({
       }
 
       const workflow = getOrCreateManualVerificationWorkflow(crypto, () => {
+        setBackupRestoreProgress({ status: BackupProgressStatus.Idle });
         const initializationLease = queueCryptoInitialization(crypto);
         // Only the workflow which wins the single-flight race may replace the
         // cached recovery key. Reopening the panel with another value while a
@@ -468,6 +490,7 @@ export function ManualVerificationTile({
         // verification has genuinely settled so the two stateful SDK bootstraps cannot overlap.
         const backupPreparation = verification.then(
           async (): Promise<BackupPreparationStageResult> => {
+            setBackupRestoreProgress({ status: BackupProgressStatus.Fetching });
             try {
               await prepareKeyBackupSingleFlight(crypto, async () => {
                 await crypto.bootstrapSecretStorage({});
@@ -480,9 +503,16 @@ export function ManualVerificationTile({
               });
               return { status: 'completed' };
             } catch (error) {
+              const normalizedError = toError(error, '消息备份准备失败。');
+              setBackupRestoreProgress({
+                status: BackupProgressStatus.Error,
+                message:
+                  getBackupRestoreNotice(normalizedError) ??
+                  getBackupRestoreErrorMessage(normalizedError),
+              });
               return {
                 status: 'error',
-                error: toError(error, '消息备份准备失败。'),
+                error: normalizedError,
               };
             }
           }
@@ -496,7 +526,13 @@ export function ManualVerificationTile({
 
             try {
               await recoverKeyBackupSingleFlight(crypto, async () => {
-                await crypto.restoreKeyBackup();
+                const restoreResult = await crypto.restoreKeyBackup({
+                  progressCallback(progress) {
+                    setRestoreProgress(progress);
+                  },
+                });
+                assertCompleteKeyBackupRestore(restoreResult);
+                setBackupRestoreProgress({ status: BackupProgressStatus.Decrypting });
                 await Promise.allSettled(
                   mx.getRooms().map((room) =>
                     decryptAllTimelineEvent(mx, room.getLiveTimeline(), {
@@ -505,11 +541,22 @@ export function ManualVerificationTile({
                   )
                 );
               });
+              setBackupRestoreProgress({
+                status: BackupProgressStatus.Done,
+                message: '可恢复的旧消息已解密完成。',
+              });
               return { status: 'completed' };
             } catch (error) {
+              const normalizedError = toError(error, '消息备份恢复失败。');
+              setBackupRestoreProgress({
+                status: BackupProgressStatus.Error,
+                message:
+                  getBackupRestoreNotice(normalizedError) ??
+                  getBackupRestoreErrorMessage(normalizedError),
+              });
               return {
                 status: 'error',
-                error: toError(error, '消息备份恢复失败。'),
+                error: normalizedError,
               };
             }
           }
@@ -582,7 +629,7 @@ export function ManualVerificationTile({
         notice: [verificationResult.notice, backupNotice].filter(Boolean).join(' ') || undefined,
       };
     },
-    [mx, secretStorageKeyId]
+    [mx, secretStorageKeyId, setBackupRestoreProgress, setRestoreProgress]
   );
 
   const [verifyState, handleDecodedRecoveryKey] = useAsyncCallback<
@@ -598,6 +645,11 @@ export function ManualVerificationTile({
     }
   }, [mx, verifyState.status]);
 
+  const backgroundRecoverySettled =
+    restoreProgress.status === BackupProgressStatus.Done ||
+    restoreProgress.status === BackupProgressStatus.Error;
+  const recoveryFailed = restoreProgress.status === BackupProgressStatus.Error;
+
   return (
     <Box direction="Column" gap="200">
       <SettingTile
@@ -612,7 +664,7 @@ export function ManualVerificationTile({
           </Box>
         }
       />
-      {verifyState.status === AsyncStatus.Success ? (
+      {verifyState.status === AsyncStatus.Success && !recoveryFailed ? (
         <Box direction="Column" gap="100">
           <Text
             size="T200"
@@ -622,15 +674,13 @@ export function ManualVerificationTile({
             }}
           >
             <b>
-              {verifyState.data.status === 'background'
-                ? '安全恢复仍在后台处理中。'
-                : '设备验证成功。'}
+              {getManualVerificationSuccessMessage(verifyState.data, backgroundRecoverySettled)}
             </b>
           </Text>
-          {verifyState.data.status === 'background' && (
+          {verifyState.data.status === 'background' && !backgroundRecoverySettled && (
             <Text size="T200">可以关闭此面板，稍后再回来查看设备验证和旧消息恢复状态。</Text>
           )}
-          {verifyState.data.notice && (
+          {verifyState.data.notice && !backgroundRecoverySettled && (
             <Text size="T200" style={{ color: color.Warning.Main }}>
               <b>{verifyState.data.notice}</b>
             </Text>
@@ -661,6 +711,7 @@ export function ManualVerificationTile({
           )}
         </Box>
       )}
+      <BackupRestoreProgress progress={restoreProgress} />
     </Box>
   );
 }

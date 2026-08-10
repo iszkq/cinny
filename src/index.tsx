@@ -20,6 +20,7 @@ import { isDesktopUpdaterSupported } from './app/utils/desktopUpdater';
 import { applyDesktopStartupPinLock } from './app/utils/pinLock';
 import { isNativeImagePreviewWindow } from './app/utils/nativeImagePreview';
 import { isNativeBibleWindow } from './app/utils/nativeBibleWindow';
+import { isNativeOfficeWindow } from './app/utils/nativeOfficeWindow';
 import { initializePWAInstall } from './app/utils/pwaInstall';
 import { initializeAndroidAppShell, isAndroidApp } from './app/utils/nativePlatform';
 import { DownloadPage } from './app/pages/download';
@@ -242,6 +243,11 @@ const LazyNativeBibleWindow = lazy(() =>
     default: (await import('./app/components/bible/NativeBibleWindow')).NativeBibleWindow,
   }))
 );
+const LazyNativeOfficeWindow = lazy(() =>
+  loadLazyModule(async () => ({
+    default: (await import('./app/components/file-viewer/NativeOfficeWindow')).NativeOfficeWindow,
+  }))
+);
 const LazyApp = lazy(() => loadLazyModule(() => import('./app/pages/App')));
 
 function RootStartupFallback() {
@@ -311,7 +317,8 @@ class RootErrorBoundary extends React.Component<RootErrorBoundaryProps, RootErro
 
 const nativeImagePreviewWindow = isDesktopUpdaterSupported() && isNativeImagePreviewWindow();
 const nativeBibleWindow = isDesktopUpdaterSupported() && isNativeBibleWindow();
-const desktopSubWindow = nativeImagePreviewWindow || nativeBibleWindow;
+const nativeOfficeWindow = isDesktopUpdaterSupported() && isNativeOfficeWindow();
+const desktopSubWindow = nativeImagePreviewWindow || nativeBibleWindow || nativeOfficeWindow;
 const fallbackSession = desktopSubWindow ? undefined : getFallbackSession();
 const webDownloadPage = /(?:^|\/)download\/?$/i.test(window.location.pathname);
 
@@ -372,6 +379,14 @@ const renderRootApp = () => {
     return (
       <Suspense fallback={<RootStartupFallback />}>
         <LazyNativeBibleWindow />
+      </Suspense>
+    );
+  }
+
+  if (nativeOfficeWindow) {
+    return (
+      <Suspense fallback={<RootStartupFallback />}>
+        <LazyNativeOfficeWindow />
       </Suspense>
     );
   }

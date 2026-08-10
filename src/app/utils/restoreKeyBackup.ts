@@ -1,5 +1,5 @@
 import { CryptoApi, ImportRoomKeyProgressData } from 'matrix-js-sdk/lib/crypto-api';
-import type { KeyBackupInfo } from 'matrix-js-sdk/lib/crypto-api/keybackup';
+import type { KeyBackupInfo, KeyBackupRestoreResult } from 'matrix-js-sdk/lib/crypto-api/keybackup';
 import { BackupProgressStatus, IBackupProgress } from '../state/backupRestore';
 
 const RESTORE_BACKGROUND_TIMEOUT_MS = 45000;
@@ -25,6 +25,12 @@ const hasUsableBackup = (
   backupInfo: KeyBackupInfo | null | undefined
 ): backupInfo is KeyBackupInfo => Boolean(backupInfo?.version);
 
+export const assertCompleteKeyBackupRestore = (result: KeyBackupRestoreResult): void => {
+  if (result.imported < result.total) {
+    throw new Error(`消息备份仅恢复 ${result.imported} / ${result.total} 条密钥，请重试。`);
+  }
+};
+
 export const getBackupRestoreErrorMessage = (error: unknown): string => {
   const normalizedError = normalizeRestoreError(error);
   const { message } = normalizedError;
@@ -46,7 +52,9 @@ export const getBackupRestoreErrorMessage = (error: unknown): string => {
   }
 
   if (
-    message.includes('getBackupDecryptor: key backup on server does not match the decryption key') ||
+    message.includes(
+      'getBackupDecryptor: key backup on server does not match the decryption key'
+    ) ||
     message.includes('decryption key does not match backup info')
   ) {
     return '当前服务器上的消息备份与这把恢复密钥不匹配，请在已验证设备上重新开启消息备份后再试。';
@@ -108,11 +116,12 @@ export const runKeyBackupRestore = async ({
       throw new Error('当前账号没有可恢复的消息备份。');
     }
 
-    await crypto.restoreKeyBackup({
+    const result = await crypto.restoreKeyBackup({
       progressCallback(progress) {
         updateRestoreProgress(progress);
       },
     });
+    assertCompleteKeyBackupRestore(result);
   })();
 
   return new Promise<KeyBackupRestoreRunResult>((resolve, reject) => {
@@ -128,7 +137,10 @@ export const runKeyBackupRestore = async ({
     restoreTask
       .then(() => {
         window.clearTimeout(timeoutId);
-        updateRestoreState({ status: BackupProgressStatus.Done });
+        updateRestoreState({
+          status: BackupProgressStatus.Done,
+          message: '备份密钥已恢复，旧消息将在打开时逐步解密。',
+        });
         resolve('completed');
       })
       .catch((error) => {

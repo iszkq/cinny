@@ -65,9 +65,29 @@ test('the device page separates current-device trust from other devices', async 
 
   assert.doesNotMatch(devicesSource, /BackupRestoreTile/);
   assert.match(devicesSource, /恢复密钥只验证正在使用的本机/);
+  assert.match(devicesSource, /const currentDeviceId = mx\.getDeviceId\(\)/);
+  assert.match(verificationSource, /CurrentDeviceVerificationBadge/);
+  assert.match(devicesSource, /<CurrentDeviceVerificationBadge/);
+  assert.match(verificationSource, /OtherDevicesVerificationBadge/);
   assert.match(verificationSource, /本机已验证/);
+  assert.match(verificationSource, /本机验证状态暂不可用/);
+  assert.match(verificationSource, /正在读取其他设备状态/);
   assert.match(verificationSource, /台其他设备未验证/);
-  assert.match(verificationSource, /全部设备已验证/);
+  assert.match(verificationSource, /其他设备均已验证/);
+});
+
+test('the sidebar keeps a critical security reminder on first login', async () => {
+  const source = await readSource('src/app/pages/client/sidebar/UnverifiedTab.tsx');
+
+  assert.match(source, /useClientSyncReady\(mx\)/);
+  assert.match(source, /const currentDeviceId = mx\.getDeviceId\(\)/);
+  assert.match(
+    source,
+    /securitySyncReady &&[\s\S]*!crossSigningActive \|\|[\s\S]*VerificationStatus\.Unverified/
+  );
+  assert.match(source, /设备验证尚未启用/);
+  assert.match(source, /<Badge variant="Critical" size="200"/);
+  assert.doesNotMatch(source, /if \(!crossSigningActive\) return null/);
 });
 
 test('new security stores cannot be initialized before the first Matrix sync is ready', async () => {
@@ -220,7 +240,7 @@ test('backup restoration is not blocked by cross-signing failures', async () => 
   assert.match(source, /恢复密钥正确，但当前设备验证失败/);
   assert.match(source, /await crypto\.loadSessionBackupPrivateKeyFromSecretStorage\(\)/);
   assert.match(source, /await crypto\.checkKeyBackupAndEnable\(\)/);
-  assert.match(source, /crypto\.restoreKeyBackup\(\)/);
+  assert.match(source, /crypto\.restoreKeyBackup\(\{[\s\S]*progressCallback/);
   assert.match(source, /BACKUP_RECOVERY_FOREGROUND_TIMEOUT_MS/);
   assert.match(source, /SINGLE_FLIGHT_FOREGROUND_DEADLINE_MS/);
   assert.match(source, /const crossSigningBootstrapTasks = new WeakMap/);
@@ -258,4 +278,39 @@ test('backup restoration is not blocked by cross-signing failures', async () => 
   assert.match(cryptoSource, /crypto\.setDeviceVerified\(userId, deviceId, true\)/);
   assert.match(cryptoSource, /crossSignDevicesWithRetry\(crypto, \[deviceId\]\)/);
   assert.match(cryptoSource, /crypto\.getDeviceVerificationStatus\(userId, deviceId\)/);
+});
+
+test('manual recovery exposes real decrypt progress and a durable completion marker', async () => {
+  const manualSource = await readSource('src/app/components/ManualVerification.tsx');
+  const progressSource = await readSource('src/app/components/BackupRestore.tsx');
+  const stateSource = await readSource('src/app/state/backupRestore.ts');
+  const restoreSource = await readSource('src/app/utils/restoreKeyBackup.ts');
+
+  assert.match(manualSource, /useAtom\(backupRestoreProgressAtom\)/);
+  assert.match(stateSource, /new WeakMap<MatrixClient, BackupRestoreAtoms>/);
+  assert.match(manualSource, /getBackupRestoreAtoms\(mx\)/);
+  assert.match(manualSource, /progressCallback\(progress\)[\s\S]*setRestoreProgress\(progress\)/);
+  assert.match(manualSource, /BackupProgressStatus\.Decrypting/);
+  assert.match(manualSource, /BackupProgressStatus\.Done/);
+  assert.match(manualSource, /<BackupRestoreProgress progress=\{restoreProgress\} \/>/);
+  assert.match(manualSource, /const backgroundRecoverySettled/);
+  assert.match(manualSource, /安全恢复后台任务已结束，请查看下方结果和本机验证状态/);
+  assert.match(progressSource, /<ProgressBar/);
+  assert.match(manualSource, /可恢复的旧消息已解密完成/);
+  assert.match(progressSource, /备份密钥已恢复，旧消息将在打开时逐步解密/);
+  assert.match(manualSource, /assertCompleteKeyBackupRestore\(restoreResult\)/);
+  assert.match(manualSource, /AsyncStatus\.Success && !recoveryFailed/);
+  assert.match(restoreSource, /result\.imported < result\.total/);
+  assert.match(stateSource, /BackupProgressStatus\.Decrypting/);
+
+  const restoreIndex = manualSource.indexOf('await crypto.restoreKeyBackup({');
+  const timelineDecryptIndex = manualSource.indexOf('await Promise.allSettled', restoreIndex);
+  const doneIndex = manualSource.indexOf('BackupProgressStatus.Done', timelineDecryptIndex);
+  assert.ok(restoreIndex > 0);
+  assert.ok(timelineDecryptIndex > restoreIndex);
+  assert.ok(doneIndex > timelineDecryptIndex);
+
+  const loadKeysIndex = stateSource.indexOf('if (progress.stage === ImportRoomKeyStage.LoadKeys)');
+  assert.ok(loadKeysIndex > 0);
+  assert.doesNotMatch(stateSource.slice(loadKeysIndex), /BackupProgressStatus\.Done/);
 });

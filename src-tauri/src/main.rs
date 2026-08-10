@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod desktop_media_cache;
+mod office_binary_exchange;
 
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine};
 use reqwest::{
@@ -1142,6 +1143,7 @@ fn main() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
+            let _ = office_binary_exchange::clear_office_session_runtime(app.handle());
             let app_handle = app.handle().clone();
             let main_window = app
                 .get_webview_window("main")
@@ -1162,6 +1164,9 @@ fn main() {
             desktop_media_cache::prepare_desktop_media_asset_runtime_file,
             desktop_media_cache::clear_desktop_media_runtime_cache,
             desktop_media_cache::clear_desktop_media_cache,
+            office_binary_exchange::write_office_session_binary,
+            office_binary_exchange::consume_office_session_binary,
+            office_binary_exchange::clear_office_session_binaries,
             open_external_url,
             open_external_url_window,
             get_desktop_updater_proxy,

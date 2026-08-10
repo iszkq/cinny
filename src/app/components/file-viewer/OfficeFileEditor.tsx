@@ -29,6 +29,22 @@ import {
   mxcUrlToHttp,
 } from '../../utils/matrix';
 import { saveDownloadedFile } from '../../utils/saveDownloadedFile';
+import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
+import {
+  clearNativeOfficeBinaries,
+  closeNativeOfficeWindow,
+  consumeNativeOfficeBinary,
+  emitNativeOfficeCommand,
+  emitNativeOfficePayload,
+  listenNativeOfficeAction,
+  NativeOfficeBinaryDescriptor,
+  NativeOfficeBridgeMessage,
+  NativeOfficeWindowHandle,
+  NativeOfficeWindowAction,
+  NativeOfficeWindowPayload,
+  openNativeOfficeWindow,
+  writeNativeOfficeBinary,
+} from '../../utils/nativeOfficeWindow';
 import * as css from './OfficeFileEditor.css';
 
 const DEFAULT_OFFICE_EDITOR_URL = 'https://office.221819.best/editor';
@@ -44,14 +60,19 @@ const OFFICE_BRIDGE_CANCEL_SAVE = 'xinghuo-office-cancel-save';
 const DEFAULT_EXPORT_TIMEOUT_SECONDS = 45;
 const DEFAULT_PREPARE_TIMEOUT_SECONDS = 60;
 const DEFAULT_UPLOAD_TIMEOUT_SECONDS = 120;
+const SOURCE_LOAD_TIMEOUT_MS = 60_000;
+const IFRAME_BRIDGE_READY_TIMEOUT_MS = 30_000;
+const DOCUMENT_OPENED_TIMEOUT_MS = 45_000;
 
 type EditorMode = 'preview' | 'edit';
 type EditorPhase = 'loading' | 'ready' | 'saving' | 'uploading' | 'publishing' | 'saved' | 'error';
 type BridgeSaveProtocol = 'unknown' | 'legacy' | 'save-id';
+type NativeWindowState = 'inactive' | 'opening' | 'active' | 'fallback';
 
 type EditorSession = {
   mode: EditorMode;
   requestId: string;
+  nativeSessionId: string;
   src: string;
 };
 
@@ -123,6 +144,9 @@ const getEditorUrl = (
   target.searchParams.set('mimeType', mimeType);
   target.searchParams.set('editing', mode === 'edit' ? '1' : '0');
   target.searchParams.set('lang', 'zh-CN');
+  const compactViewport = window.matchMedia('(max-width: 750px)').matches;
+  target.searchParams.set('mobile', compactViewport ? '1' : '0');
+  target.searchParams.set('compactToolbar', compactViewport ? '1' : '0');
   return target.toString();
 };
 
@@ -158,6 +182,13 @@ export function OfficeFileEditor({
   const bridgeSaveProtocolRef = useRef<BridgeSaveProtocol>('unknown');
   const legacyExportInvalidatedRef = useRef(false);
   const mountedRef = useRef(true);
+  const bridgeMessageHandlerRef = useRef<(message: OfficeBridgeMessage) => void>();
+  const bridgeReadyTimeoutRef = useRef<number>();
+  const documentOpenedTimeoutRef = useRef<number>();
+  const nativeWindowRef = useRef<NativeOfficeWindowHandle>();
+  const nativeWindowStateRef = useRef<NativeWindowState>('inactive');
+  const nativePayloadRef = useRef<NativeOfficeWindowPayload>();
+  const nativeActionHandlerRef = useRef<(action: NativeOfficeWindowAction) => void>();
 
   const [session, setSession] = useState<EditorSession>();
   const [phase, setPhase] = useState<EditorPhase>('loading');
@@ -168,8 +199,12 @@ export function OfficeFileEditor({
   const [backgroundPublishing, setBackgroundPublishing] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState(false);
+  const [nativeWindowState, setNativeWindowState] = useState<NativeWindowState>('inactive');
+  const [nativeSourceBinary, setNativeSourceBinary] = useState<NativeOfficeBinaryDescriptor>();
 
   const officeKind = getOfficeDocumentKind(body, mimeType);
+  const iconMeta = officeKind ? OFFICE_ICON_META[officeKind] : OFFICE_ICON_META.word;
+  const desktopNativeOffice = isDesktopUpdaterSupported();
   const officeEditorUrl = clientConfig.officeEditor?.url?.trim() || DEFAULT_OFFICE_EDITOR_URL;
   const exportTimeoutMs = getTimeoutMs(
     clientConfig.officeEditor?.exportTimeoutSeconds,
@@ -194,8 +229,58 @@ export function OfficeFileEditor({
       : downloadMedia(mediaUrl);
   }, [encInfo, mimeType, mx, url, useAuthentication]);
 
+  const clearOpenTimeouts = useCallback(() => {
+    if (bridgeReadyTimeoutRef.current !== undefined) {
+      window.clearTimeout(bridgeReadyTimeoutRef.current);
+      bridgeReadyTimeoutRef.current = undefined;
+    }
+    if (documentOpenedTimeoutRef.current !== undefined) {
+      window.clearTimeout(documentOpenedTimeoutRef.current);
+      documentOpenedTimeoutRef.current = undefined;
+    }
+  }, []);
+
+  const armBridgeReadyTimeout = useCallback((requestId: string) => {
+    if (bridgeReadyTimeoutRef.current !== undefined) {
+      window.clearTimeout(bridgeReadyTimeoutRef.current);
+    }
+    bridgeReadyTimeoutRef.current = window.setTimeout(() => {
+      if (sessionRef.current?.requestId !== requestId) return;
+      setErrorMessage('Office 页面连接超时。请重新打开文档，或关闭窗口后再试。');
+      setPhase('error');
+    }, IFRAME_BRIDGE_READY_TIMEOUT_MS);
+  }, []);
+
+  const armDocumentOpenedTimeout = useCallback((requestId: string) => {
+    if (documentOpenedTimeoutRef.current !== undefined) {
+      window.clearTimeout(documentOpenedTimeoutRef.current);
+    }
+    documentOpenedTimeoutRef.current = window.setTimeout(() => {
+      if (sessionRef.current?.requestId !== requestId) return;
+      setErrorMessage('Office 打开文档超时。你可以重新打开，或直接关闭窗口。');
+      setPhase('error');
+    }, DOCUMENT_OPENED_TIMEOUT_MS);
+  }, []);
+
   const postToOffice = useCallback((message: Record<string, unknown>) => {
     const activeSession = sessionRef.current;
+    const nativeWindow = nativeWindowRef.current;
+    if (
+      activeSession &&
+      nativeWindow?.sessionId === activeSession.nativeSessionId &&
+      typeof message.type === 'string'
+    ) {
+      emitNativeOfficeCommand(nativeWindow.label, {
+        type: 'bridge',
+        sessionId: activeSession.nativeSessionId,
+        requestId: activeSession.requestId,
+        message: {
+          type: message.type,
+          saveId: typeof message.saveId === 'string' ? message.saveId : undefined,
+        },
+      }).catch(() => undefined);
+      return;
+    }
     const targetWindow = iframeRef.current?.contentWindow;
     if (!activeSession || !targetWindow) return;
 
@@ -278,6 +363,7 @@ export function OfficeFileEditor({
     iframeReadyRef.current = false;
     bridgeSaveProtocolRef.current = 'unknown';
     legacyExportInvalidatedRef.current = false;
+    clearOpenTimeouts();
     setSession(undefined);
     dirtyRef.current = false;
     setDirty(false);
@@ -286,7 +372,10 @@ export function OfficeFileEditor({
     setLegacyRetryBlocked(false);
     setBackgroundPublishing(publishing);
     setPhase('loading');
-  }, [cancelSaveOperation]);
+    nativeWindowStateRef.current = 'inactive';
+    setNativeWindowState('inactive');
+    setNativeSourceBinary(undefined);
+  }, [cancelSaveOperation, clearOpenTimeouts]);
 
   const failSaveOperation = useCallback(
     (saveId: string, message: string) => {
@@ -392,20 +481,24 @@ export function OfficeFileEditor({
       [buffer]
     );
     sourceBufferRef.current = undefined;
-  }, [body, mimeType]);
+    armDocumentOpenedTimeout(activeSession.requestId);
+  }, [armDocumentOpenedTimeout, body, mimeType]);
 
   const openEditor = useCallback(
-    (mode: EditorMode) => {
+    (mode: EditorMode, forceInline = false) => {
       if (!officeKind || (mode === 'edit' && !canEdit)) return;
       if (saveOperationRef.current?.stage === 'publishing') return;
 
       const requestId = makeRequestId();
+      const nativeSessionId = makeRequestId();
       const nextSession: EditorSession = {
         mode,
         requestId,
+        nativeSessionId,
         src: getEditorUrl(officeEditorUrl, requestId, mode, body, mimeType),
       };
       cancelSaveOperation();
+      clearOpenTimeouts();
       sessionRef.current = nextSession;
       sourceBufferRef.current = undefined;
       iframeReadyRef.current = false;
@@ -419,25 +512,80 @@ export function OfficeFileEditor({
       setErrorMessage(undefined);
       setLegacyRetryBlocked(false);
       setBackgroundPublishing(false);
+      setNativeSourceBinary(undefined);
+      const shouldUseNativeWindow = desktopNativeOffice && !forceInline;
+      const nextNativeWindowState: NativeWindowState = shouldUseNativeWindow
+        ? 'opening'
+        : desktopNativeOffice
+        ? 'fallback'
+        : 'inactive';
+      nativeWindowStateRef.current = nextNativeWindowState;
+      setNativeWindowState(nextNativeWindowState);
+      armBridgeReadyTimeout(requestId);
 
-      loadSourceFile()
+      let sourceLoadTimeout: number | undefined;
+      const sourceLoadTimedOut = new Promise<never>((_resolve, reject) => {
+        sourceLoadTimeout = window.setTimeout(
+          () => reject(new Error('Office source load timed out.')),
+          SOURCE_LOAD_TIMEOUT_MS
+        );
+      });
+
+      Promise.race([loadSourceFile(), sourceLoadTimedOut])
         .then((file) => file.arrayBuffer())
-        .then((buffer) => {
+        .then(async (buffer) => {
           if (sessionRef.current?.requestId !== requestId) return;
           sourceBufferRef.current = buffer;
+
+          if (shouldUseNativeWindow) {
+            if (nativeWindowStateRef.current === 'fallback') {
+              transferSourceIfReady();
+              return;
+            }
+            try {
+              const descriptor = await writeNativeOfficeBinary(nativeSessionId, buffer);
+              if (sessionRef.current?.requestId !== requestId) {
+                clearNativeOfficeBinaries(nativeSessionId).catch(() => undefined);
+                return;
+              }
+              if ((nativeWindowStateRef.current as NativeWindowState) === 'fallback') {
+                clearNativeOfficeBinaries(nativeSessionId).catch(() => undefined);
+                transferSourceIfReady();
+                return;
+              }
+              setNativeSourceBinary(descriptor);
+              return;
+            } catch {
+              if (sessionRef.current?.requestId !== requestId) return;
+              nativeWindowStateRef.current = 'fallback';
+              setNativeWindowState('fallback');
+              setErrorMessage(undefined);
+              setPhase('loading');
+              closeNativeOfficeWindow(nativeSessionId).catch(() => undefined);
+              armBridgeReadyTimeout(requestId);
+            }
+          }
+
           transferSourceIfReady();
         })
         .catch(() => {
           if (sessionRef.current?.requestId === requestId) {
-            setErrorMessage('文档加载失败，请检查网络后关闭窗口并重试。');
+            clearOpenTimeouts();
+            setErrorMessage('文档下载或解密超时。请检查网络后重新打开，或直接关闭窗口。');
             setPhase('error');
           }
+        })
+        .finally(() => {
+          if (sourceLoadTimeout !== undefined) window.clearTimeout(sourceLoadTimeout);
         });
     },
     [
+      armBridgeReadyTimeout,
       body,
       canEdit,
       cancelSaveOperation,
+      clearOpenTimeouts,
+      desktopNativeOffice,
       loadSourceFile,
       mimeType,
       officeEditorUrl,
@@ -538,26 +686,31 @@ export function OfficeFileEditor({
   );
 
   useEffect(() => {
-    const handleOfficeMessage = (event: MessageEvent<OfficeBridgeMessage>) => {
+    const handleOfficeData = (data: OfficeBridgeMessage) => {
       const activeSession = sessionRef.current;
-      const targetWindow = iframeRef.current?.contentWindow;
-      if (!activeSession || event.source !== targetWindow) return;
-      if (event.origin !== new URL(activeSession.src).origin) return;
-      if (event.data?.requestId !== activeSession.requestId) return;
+      if (!activeSession || data?.requestId !== activeSession.requestId) return;
 
-      if (event.data.type === OFFICE_BRIDGE_READY) {
+      if (data.type === OFFICE_BRIDGE_READY) {
+        if (bridgeReadyTimeoutRef.current !== undefined) {
+          window.clearTimeout(bridgeReadyTimeoutRef.current);
+          bridgeReadyTimeoutRef.current = undefined;
+        }
         iframeReadyRef.current = true;
         transferSourceIfReady();
         return;
       }
-      if (event.data.type === OFFICE_BRIDGE_OPENED) {
+      if (data.type === OFFICE_BRIDGE_OPENED) {
+        if (documentOpenedTimeoutRef.current !== undefined) {
+          window.clearTimeout(documentOpenedTimeoutRef.current);
+          documentOpenedTimeoutRef.current = undefined;
+        }
         if (!saveOperationRef.current) {
           setErrorMessage(undefined);
           setPhase('ready');
         }
         return;
       }
-      if (event.data.type === OFFICE_BRIDGE_DIRTY && event.data.dirty === true) {
+      if (data.type === OFFICE_BRIDGE_DIRTY && data.dirty === true) {
         dirtyRef.current = true;
         setDirty(true);
         if (!saveOperationRef.current) {
@@ -566,17 +719,17 @@ export function OfficeFileEditor({
         }
         return;
       }
-      if (event.data.type === OFFICE_BRIDGE_SAVING) {
+      if (data.type === OFFICE_BRIDGE_SAVING) {
         const operation = saveOperationRef.current;
         if (operation) {
-          if (!acceptBridgeSaveMessage(operation, event.data.saveId)) return;
+          if (!acceptBridgeSaveMessage(operation, data.saveId)) return;
           if (operation.stage === 'exporting') setPhase('saving');
           return;
         }
 
         // The bridge can initiate this path for an Office-internal Ctrl/Cmd+S.
         if (!dirtyRef.current) return;
-        if (event.data.saveId) {
+        if (data.saveId) {
           bridgeSaveProtocolRef.current = 'save-id';
         } else {
           if (bridgeSaveProtocolRef.current === 'save-id' || legacyExportInvalidatedRef.current) {
@@ -584,30 +737,31 @@ export function OfficeFileEditor({
           }
           bridgeSaveProtocolRef.current = 'legacy';
         }
-        beginSaveOperation(false, false, event.data.saveId);
+        beginSaveOperation(false, false, data.saveId);
         return;
       }
-      if (event.data.type === OFFICE_BRIDGE_ERROR) {
+      if (data.type === OFFICE_BRIDGE_ERROR) {
         const operation = saveOperationRef.current;
         if (operation) {
-          if (!acceptBridgeSaveMessage(operation, event.data.saveId)) return;
+          if (!acceptBridgeSaveMessage(operation, data.saveId)) return;
           failSaveOperation(
             operation.id,
             'Office 无法生成最新文件。请重试；如果问题持续，可以直接关闭窗口。'
           );
           return;
         }
-        if (event.data.saveId) return;
+        if (data.saveId) return;
         if (legacyExportInvalidatedRef.current) return;
+        clearOpenTimeouts();
         setErrorMessage('Office 无法打开文档。请检查网络后关闭窗口并重试。');
         setPhase('error');
         return;
       }
-      if (event.data.type === OFFICE_BRIDGE_SAVED) {
+      if (data.type === OFFICE_BRIDGE_SAVED) {
         const operation = saveOperationRef.current;
         if (!operation || operation.stage !== 'exporting') return;
-        if (!acceptBridgeSaveMessage(operation, event.data.saveId)) return;
-        if (!(event.data.buffer instanceof ArrayBuffer) || event.data.buffer.byteLength === 0) {
+        if (!acceptBridgeSaveMessage(operation, data.saveId)) return;
+        if (!(data.buffer instanceof ArrayBuffer) || data.buffer.byteLength === 0) {
           failSaveOperation(operation.id, 'Office 返回的文件为空或无效，请重试。');
           return;
         }
@@ -623,7 +777,7 @@ export function OfficeFileEditor({
           prepareTimeoutMs,
           '文件准备超时：未能完成加密或文件处理。你可以重试或关闭窗口。'
         );
-        replaceOriginalFile(event.data.buffer, event.data.mimeType, operation.id)
+        replaceOriginalFile(data.buffer, data.mimeType, operation.id)
           .then(() => {
             const activeOperation = saveOperationRef.current;
             if (!activeOperation || activeOperation.id !== operation.id) return;
@@ -662,12 +816,27 @@ export function OfficeFileEditor({
       }
     };
 
+    bridgeMessageHandlerRef.current = handleOfficeData;
+    const handleOfficeMessage = (event: MessageEvent<OfficeBridgeMessage>) => {
+      const activeSession = sessionRef.current;
+      const targetWindow = iframeRef.current?.contentWindow;
+      if (!activeSession || event.source !== targetWindow) return;
+      if (event.origin !== new URL(activeSession.src).origin) return;
+      handleOfficeData(event.data);
+    };
+
     window.addEventListener('message', handleOfficeMessage);
-    return () => window.removeEventListener('message', handleOfficeMessage);
+    return () => {
+      window.removeEventListener('message', handleOfficeMessage);
+      if (bridgeMessageHandlerRef.current === handleOfficeData) {
+        bridgeMessageHandlerRef.current = undefined;
+      }
+    };
   }, [
     acceptBridgeSaveMessage,
     armSaveTimeout,
     beginSaveOperation,
+    clearOpenTimeouts,
     closeModal,
     failSaveOperation,
     prepareTimeoutMs,
@@ -689,8 +858,9 @@ export function OfficeFileEditor({
       sessionRef.current = undefined;
       sourceBufferRef.current = undefined;
       iframeReadyRef.current = false;
+      clearOpenTimeouts();
     };
-  }, [cancelSaveOperation]);
+  }, [cancelSaveOperation, clearOpenTimeouts]);
 
   useEffect(() => {
     if (!backgroundPublishing && (!session || !dirty)) return undefined;
@@ -755,6 +925,229 @@ export function OfficeFileEditor({
     closeModal();
   }, [closeModal, dirty, legacyRetryBlocked, phase, session]);
 
+  const nativePayload: NativeOfficeWindowPayload | undefined = session
+    ? {
+        sessionId: session.nativeSessionId,
+        requestId: session.requestId,
+        mode: session.mode,
+        src: session.src,
+        body,
+        mimeType,
+        iconLabel: iconMeta.label,
+        iconColor: iconMeta.color,
+        phase,
+        dirty,
+        showClosePrompt,
+        legacyRetryBlocked,
+        errorMessage,
+        sourceBinary: nativeSourceBinary,
+      }
+    : undefined;
+  nativePayloadRef.current = nativePayload;
+
+  nativeActionHandlerRef.current = (action: NativeOfficeWindowAction) => {
+    const activeSession = sessionRef.current;
+    if (
+      !activeSession ||
+      action.sessionId !== activeSession.nativeSessionId ||
+      action.requestId !== activeSession.requestId
+    ) {
+      return;
+    }
+
+    if (action.type === 'bridge') {
+      const { binary, ...message } = action.message;
+      if (!binary) {
+        bridgeMessageHandlerRef.current?.(message as OfficeBridgeMessage);
+        return;
+      }
+
+      consumeNativeOfficeBinary(activeSession.nativeSessionId, binary.token)
+        .then((buffer) => {
+          if (
+            sessionRef.current?.requestId !== activeSession.requestId ||
+            buffer.byteLength !== binary.byteLength
+          ) {
+            throw new Error('Invalid native Office save result.');
+          }
+          bridgeMessageHandlerRef.current?.({ ...message, buffer } as OfficeBridgeMessage);
+        })
+        .catch(() => {
+          if (sessionRef.current?.requestId !== activeSession.requestId) return;
+          bridgeMessageHandlerRef.current?.({
+            type: OFFICE_BRIDGE_ERROR,
+            requestId: activeSession.requestId,
+            saveId: message.saveId,
+            message: '保存结果无法从独立窗口读取。',
+          });
+        });
+      return;
+    }
+    if (action.type === 'save') {
+      requestSave(false);
+      return;
+    }
+    if (action.type === 'save-close') {
+      requestSave(true);
+      return;
+    }
+    if (action.type === 'close') {
+      requestClose();
+      return;
+    }
+    if (action.type === 'discard') {
+      closeModal();
+      return;
+    }
+    if (action.type === 'continue-editing') {
+      setShowClosePrompt(false);
+      return;
+    }
+    if (action.type === 'retry-open') {
+      openEditor(activeSession.mode);
+      return;
+    }
+    if (action.type === 'source-consumed') {
+      sourceBufferRef.current = undefined;
+      armDocumentOpenedTimeout(activeSession.requestId);
+      return;
+    }
+    if (action.type === 'native-error') {
+      const canFallback = Boolean(sourceBufferRef.current?.byteLength);
+      if (canFallback) {
+        nativeWindowStateRef.current = 'fallback';
+        setNativeWindowState('fallback');
+        nativeWindowRef.current = undefined;
+        iframeReadyRef.current = false;
+        setErrorMessage(undefined);
+        setPhase('loading');
+        closeNativeOfficeWindow(activeSession.nativeSessionId).catch(() => undefined);
+        armBridgeReadyTimeout(activeSession.requestId);
+      } else {
+        closeNativeOfficeWindow(activeSession.nativeSessionId).catch(() => undefined);
+        openEditor(activeSession.mode, true);
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (!desktopNativeOffice || !session || nativeWindowStateRef.current === 'fallback') {
+      return undefined;
+    }
+
+    const { nativeSessionId, requestId } = session;
+    const initialPayload = nativePayloadRef.current;
+    if (!initialPayload || initialPayload.requestId !== requestId) return undefined;
+
+    let disposed = false;
+    let unlistenAction: (() => void) | undefined;
+    let openedHandle: NativeOfficeWindowHandle | undefined;
+    const openingController = new AbortController();
+
+    const fallbackToInlineWindow = () => {
+      if (disposed || sessionRef.current?.requestId !== requestId) return;
+      if (nativeWindowRef.current?.sessionId === nativeSessionId) {
+        nativeWindowRef.current = undefined;
+      }
+      openedHandle?.unlistenReady();
+      openedHandle?.unlistenDestroyed();
+      closeNativeOfficeWindow(nativeSessionId).catch(() => undefined);
+      clearNativeOfficeBinaries(nativeSessionId).catch(() => undefined);
+      nativeWindowStateRef.current = 'fallback';
+      setNativeWindowState('fallback');
+      iframeReadyRef.current = false;
+      armBridgeReadyTimeout(requestId);
+    };
+
+    const openWindow = async () => {
+      unlistenAction = await listenNativeOfficeAction(nativeSessionId, requestId, (action) => {
+        nativeActionHandlerRef.current?.(action);
+      });
+      if (disposed) {
+        unlistenAction();
+        return;
+      }
+
+      openedHandle = await openNativeOfficeWindow(initialPayload, openingController.signal, () => {
+        if (
+          !disposed &&
+          nativeWindowStateRef.current === 'active' &&
+          sessionRef.current?.requestId === requestId
+        ) {
+          nativeActionHandlerRef.current?.({
+            type: 'discard',
+            sessionId: nativeSessionId,
+            requestId,
+          });
+        }
+      });
+      if (disposed) {
+        if (openedHandle) closeNativeOfficeWindow(nativeSessionId).catch(() => undefined);
+        return;
+      }
+      if (!openedHandle) {
+        fallbackToInlineWindow();
+        return;
+      }
+
+      nativeWindowRef.current = openedHandle;
+      nativeWindowStateRef.current = 'active';
+      setNativeWindowState('active');
+      const latestPayload = nativePayloadRef.current;
+      if (latestPayload?.requestId === requestId) {
+        emitNativeOfficePayload(openedHandle.label, latestPayload).catch(() => {
+          fallbackToInlineWindow();
+        });
+      }
+    };
+
+    openWindow().catch(fallbackToInlineWindow);
+
+    return () => {
+      disposed = true;
+      openingController.abort();
+      unlistenAction?.();
+      if (nativeWindowRef.current?.sessionId === nativeSessionId) {
+        nativeWindowRef.current = undefined;
+      }
+      openedHandle?.unlistenReady();
+      openedHandle?.unlistenDestroyed();
+      closeNativeOfficeWindow(nativeSessionId).catch(() => undefined);
+      clearNativeOfficeBinaries(nativeSessionId).catch(() => undefined);
+    };
+  }, [armBridgeReadyTimeout, desktopNativeOffice, session]);
+
+  useEffect(() => {
+    const handle = nativeWindowRef.current;
+    const latestPayload = nativePayloadRef.current;
+    if (
+      nativeWindowState !== 'active' ||
+      !handle ||
+      !latestPayload ||
+      handle.sessionId !== latestPayload.sessionId
+    ) {
+      return;
+    }
+
+    emitNativeOfficePayload(handle.label, latestPayload).catch(() => {
+      nativeActionHandlerRef.current?.({
+        type: 'native-error',
+        sessionId: latestPayload.sessionId,
+        requestId: latestPayload.requestId,
+        message: 'Office 独立窗口通信中断。',
+      });
+    });
+  }, [
+    dirty,
+    errorMessage,
+    legacyRetryBlocked,
+    nativeSourceBinary,
+    nativeWindowState,
+    phase,
+    session,
+    showClosePrompt,
+  ]);
+
   const handleModalKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
     if (event.key === 'Escape') {
       event.stopPropagation();
@@ -778,7 +1171,6 @@ export function OfficeFileEditor({
 
   if (!officeKind) return null;
 
-  const iconMeta = OFFICE_ICON_META[officeKind];
   const extLabel = (getFileNameExt(body) || mimeTypeToExt(mimeType)).toUpperCase();
   const sizeLabel = typeof infoSize === 'number' ? bytesToSize(infoSize) : undefined;
   const publishing = phase === 'publishing';
@@ -842,6 +1234,7 @@ export function OfficeFileEditor({
       </div>
 
       {session &&
+        (!desktopNativeOffice || nativeWindowState === 'fallback') &&
         typeof document !== 'undefined' &&
         createPortal(
           <Overlay open backdrop={<OverlayBackdrop onClick={requestClose} />}>
@@ -927,6 +1320,17 @@ export function OfficeFileEditor({
                           {errorMessage || '文档打开或保存失败，请检查网络后重试。'}
                         </Text>
                         <Box gap="200" justifyContent="Center" wrap="Wrap">
+                          {!dirty && (
+                            <Button
+                              variant="Primary"
+                              fill="Solid"
+                              size="300"
+                              radii="300"
+                              onClick={() => openEditor(session.mode)}
+                            >
+                              <Text size="B300">重新打开</Text>
+                            </Button>
+                          )}
                           {session.mode === 'edit' && dirty && !legacyRetryBlocked && (
                             <Button
                               variant="Primary"

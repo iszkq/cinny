@@ -149,10 +149,13 @@ export const overlayCenter = style([
     alignItems: 'center',
     justifyContent: 'center',
     padding: toRem(20),
+    overflow: 'hidden',
     pointerEvents: 'none',
     '@media': {
       'screen and (max-width: 750px)': {
         padding: 0,
+        alignItems: 'stretch',
+        justifyContent: 'stretch',
       },
     },
   },
@@ -176,10 +179,11 @@ export const editorModal = style([
     boxShadow: '0 26px 80px rgba(15, 23, 42, 0.32)',
     '@media': {
       'screen and (max-width: 750px)': {
-        width: '100vw',
+        width: '100%',
         height: 'var(--app-height, 100dvh)',
-        minHeight: 'var(--app-height, 100dvh)',
-        paddingTop: 'var(--safe-area-top, env(safe-area-inset-top, 0px))',
+        minHeight: 0,
+        maxWidth: '100vw',
+        maxHeight: 'var(--app-height, 100dvh)',
         borderRadius: 0,
       },
     },
@@ -197,6 +201,23 @@ export const editorHeader = style([
     padding: `${config.space.S200} ${config.space.S300}`,
     borderBottom: `${config.borderWidth.B300} solid ${color.Surface.ContainerLine}`,
     background: color.Surface.Container,
+    '@media': {
+      'screen and (max-width: 750px)': {
+        minHeight: toRem(56),
+        paddingTop: `max(${config.space.S200}, var(--safe-area-top, env(safe-area-inset-top, 0px)))`,
+        paddingRight: `max(${config.space.S200}, var(--safe-area-right, env(safe-area-inset-right, 0px)))`,
+        paddingBottom: config.space.S200,
+        paddingLeft: `max(${config.space.S200}, var(--safe-area-left, env(safe-area-inset-left, 0px)))`,
+      },
+      'screen and (max-width: 410px)': {
+        gap: config.space.S100,
+      },
+      'screen and (max-height: 520px) and (orientation: landscape)': {
+        minHeight: toRem(48),
+        paddingTop: `max(${config.space.S100}, var(--safe-area-top, env(safe-area-inset-top, 0px)))`,
+        paddingBottom: config.space.S100,
+      },
+    },
   },
 ]);
 
@@ -211,6 +232,13 @@ export const headerIcon = style([
     borderRadius: toRem(5),
     color: '#fff',
     fontWeight: 700,
+    '@media': {
+      'screen and (max-width: 410px)': {
+        width: toRem(28),
+        height: toRem(32),
+        fontSize: toRem(13),
+      },
+    },
   },
 ]);
 
@@ -220,7 +248,16 @@ export const editorBody = style([
     position: 'relative',
     flex: 1,
     minHeight: 0,
+    minWidth: 0,
+    overflow: 'hidden',
     background: '#eef1f5',
+    '@media': {
+      'screen and (max-width: 750px)': {
+        paddingRight: 'var(--safe-area-right, env(safe-area-inset-right, 0px))',
+        paddingBottom: 'var(--safe-area-bottom, env(safe-area-inset-bottom, 0px))',
+        paddingLeft: 'var(--safe-area-left, env(safe-area-inset-left, 0px))',
+      },
+    },
   },
 ]);
 
@@ -230,8 +267,11 @@ export const editorFrame = style([
     display: 'block',
     width: '100%',
     height: '100%',
+    minWidth: 0,
+    minHeight: 0,
     border: 0,
     background: '#fff',
+    touchAction: 'manipulation',
   },
 ]);
 
@@ -282,7 +322,7 @@ export const saveStatus = style([
       'screen and (max-width: 520px)': {
         alignItems: 'stretch',
         flexDirection: 'column',
-        bottom: config.space.S200,
+        bottom: `calc(${config.space.S200} + var(--safe-area-bottom, env(safe-area-inset-bottom, 0px)))`,
       },
     },
   },
@@ -308,10 +348,93 @@ export const promptCard = style([
     flexDirection: 'column',
     gap: config.space.S400,
     width: `min(${toRem(460)}, calc(100vw - ${toRem(40)}))`,
+    maxHeight:
+      'calc(var(--app-height, 100dvh) - var(--safe-area-top, env(safe-area-inset-top, 0px)) - var(--safe-area-bottom, env(safe-area-inset-bottom, 0px)) - 32px)',
     padding: config.space.S500,
+    overflowY: 'auto',
     borderRadius: config.radii.R500,
     background: color.Surface.Container,
     color: color.Surface.OnContainer,
     boxShadow: '0 18px 54px rgba(15, 23, 42, 0.28)',
+  },
+]);
+
+export const nativeEditorWindow = style([
+  DefaultReset,
+  {
+    display: 'flex',
+    flexDirection: 'column',
+    width: '100vw',
+    height: '100vh',
+    minWidth: 0,
+    minHeight: 0,
+    overflow: 'hidden',
+    background: color.Surface.Container,
+    color: color.Surface.OnContainer,
+  },
+]);
+
+export const nativeWindowFallback = style([
+  DefaultReset,
+  {
+    width: '100vw',
+    height: '100vh',
+    background: color.Surface.Container,
+    color: color.Surface.OnContainer,
+  },
+]);
+
+export const nativeWindowControls = style([
+  DefaultReset,
+  {
+    display: 'flex',
+    alignItems: 'center',
+    gap: config.space.S100,
+    paddingLeft: config.space.S100,
+    borderLeft: `${config.borderWidth.B300} solid ${color.Surface.ContainerLine}`,
+  },
+]);
+
+export const nativeWindowMaximizeGlyph = style([
+  DefaultReset,
+  {
+    display: 'inline-block',
+    width: toRem(13),
+    height: toRem(13),
+    border: '1.7px solid currentColor',
+    borderRadius: toRem(2),
+  },
+]);
+
+export const nativeWindowRestoreGlyph = style([
+  DefaultReset,
+  {
+    position: 'relative',
+    display: 'inline-block',
+    width: toRem(14),
+    height: toRem(14),
+    selectors: {
+      '&::before': {
+        content: '',
+        position: 'absolute',
+        top: 0,
+        right: 0,
+        width: toRem(10),
+        height: toRem(10),
+        border: '1.5px solid currentColor',
+        borderRadius: toRem(2),
+      },
+      '&::after': {
+        content: '',
+        position: 'absolute',
+        left: 0,
+        bottom: 0,
+        width: toRem(10),
+        height: toRem(10),
+        borderLeft: '1.5px solid currentColor',
+        borderBottom: '1.5px solid currentColor',
+        borderRadius: toRem(2),
+      },
+    },
   },
 ]);

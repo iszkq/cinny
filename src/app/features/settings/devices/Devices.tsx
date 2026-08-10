@@ -10,6 +10,7 @@ import { LocalBackup } from './LocalBackup';
 import { DeviceLogoutBtn, DeviceKeyDetails, DeviceTile, DeviceTilePlaceholder } from './DeviceTile';
 import { OtherDevices } from './OtherDevices';
 import {
+  CurrentDeviceVerificationBadge,
   DeviceVerificationOptions,
   EnableVerification,
   RecoveryKeyAccessTile,
@@ -57,10 +58,11 @@ export function Devices({ requestClose }: DevicesProps) {
   const [devices, refreshDeviceList] = useDeviceList();
 
   const [currentDevice, otherDevices] = useSplitCurrentDevice(devices);
+  const currentDeviceId = mx.getDeviceId() ?? currentDevice?.device_id;
   const verificationStatus = useDeviceVerificationStatus(
     crypto,
     mx.getSafeUserId(),
-    currentDevice?.device_id
+    currentDeviceId
   );
 
   const otherDevicesId = useDeviceIds(otherDevices);
@@ -140,7 +142,12 @@ export function Devices({ requestClose }: DevicesProps) {
                     <DeviceTile
                       device={currentDevice}
                       refreshDeviceList={refreshDeviceList}
-                      options={<DeviceLogoutBtn />}
+                      options={
+                        <Box gap="200" alignItems="Center" wrap="Wrap">
+                          <CurrentDeviceVerificationBadge verificationStatus={verificationStatus} />
+                          <DeviceLogoutBtn />
+                        </Box>
+                      }
                     >
                       {crypto && <DeviceKeyDetails crypto={crypto} />}
                     </DeviceTile>

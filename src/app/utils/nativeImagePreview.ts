@@ -38,7 +38,6 @@ const DATA_URL_RE = /^data:/i;
 const BLOB_URL_RE = /^blob:/i;
 const NATIVE_IMAGE_PREVIEW_READY_TIMEOUT_MS = 15_000;
 let nativePreviewWindowSeq = 0;
-let latestNativeImagePreviewPayload: NativeImagePreviewPayload | undefined;
 
 const getNativePreviewWindowUrl = (previewId: string): string => {
   const url = new URL(window.location.href);
@@ -93,7 +92,8 @@ export const createNativeImagePreviewId = (): string => {
   return `${Date.now().toString(36)}-${nativePreviewWindowSeq.toString(36)}`;
 };
 
-export const getNativeImagePreviewWindowLabel = (): string => NATIVE_IMAGE_PREVIEW_WINDOW_LABEL;
+export const getNativeImagePreviewWindowLabel = (previewId: string): string =>
+  `${NATIVE_IMAGE_PREVIEW_WINDOW_LABEL}-${previewId.replace(/[^a-zA-Z0-9-]/g, '-')}`;
 
 const closeNativeImagePreviewWindowByLabel = async (label: string): Promise<void> => {
   const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow');
@@ -111,13 +111,15 @@ export const openNativeImagePreviewWindow = async (
   onDestroyed?: () => void
 ): Promise<NativeImagePreviewWindowHandle | undefined> => {
   if (!isDesktopUpdaterSupported()) return undefined;
-  latestNativeImagePreviewPayload = payload;
 
   const [{ WebviewWindow }, { emitTo, listen }] = await Promise.all([
     import('@tauri-apps/api/webviewWindow'),
     import('@tauri-apps/api/event'),
   ]);
-  const label = getNativeImagePreviewWindowLabel();
+  // Tauri can briefly retain a destroyed window in its label registry on Windows. A label that is
+  // unique to this preview keeps a quick close/reopen from finding that stale WebView and treating
+  // failed show/focus calls as a successful open.
+  const label = getNativeImagePreviewWindowLabel(payload.previewId);
   let previewWindow: InstanceType<typeof WebviewWindow> | undefined;
   let windowCreated: Promise<void> | undefined;
   let disposeWindowCreationListeners: () => void = () => undefined;
@@ -143,10 +145,16 @@ export const openNativeImagePreviewWindow = async (
       unlistenDestroyed = await existingWindow.once('tauri://destroyed', onDestroyed);
     }
 
-    await emitTo(label, NATIVE_IMAGE_PREVIEW_UPDATE_EVENT, payload);
-    await existingWindow.unminimize().catch(() => undefined);
-    await existingWindow.show().catch(() => undefined);
-    await existingWindow.setFocus().catch(() => undefined);
+    try {
+      await emitTo(label, NATIVE_IMAGE_PREVIEW_UPDATE_EVENT, payload);
+      await existingWindow.unminimize();
+      await existingWindow.show();
+      await existingWindow.setFocus();
+    } catch (error) {
+      unlistenDestroyed();
+      await existingWindow.destroy().catch(() => undefined);
+      throw error;
+    }
 
     return {
       label,
@@ -159,7 +167,7 @@ export const openNativeImagePreviewWindow = async (
     NATIVE_IMAGE_PREVIEW_READY_EVENT,
     (event: EventPayload<{ previewId?: string }>) => {
       if (event.payload?.previewId !== payload.previewId) return;
-      emitTo(label, NATIVE_IMAGE_PREVIEW_UPDATE_EVENT, latestNativeImagePreviewPayload ?? payload)
+      emitTo(label, NATIVE_IMAGE_PREVIEW_UPDATE_EVENT, payload)
         .then(() => settleInitialPayload(resolveInitialPayload))
         .catch((error) => settleInitialPayload(() => rejectInitialPayload(error)));
     }
@@ -297,8 +305,8 @@ export const openNativeImagePreviewWindow = async (
     const disposePreviewWindow = async () => {
       const currentPreviewWindow = previewWindow;
       if (currentPreviewWindow) {
-        await currentPreviewWindow.close().catch(async () => {
-          await currentPreviewWindow.destroy().catch(() => undefined);
+        await currentPreviewWindow.destroy().catch(async () => {
+          await currentPreviewWindow.close().catch(() => undefined);
         });
       }
       await closeNativeImagePreviewWindowByLabel(label).catch(() => undefined);

@@ -35,6 +35,24 @@ const MATRIX_MEDIA_PATH_MATCHER =
 const MEDIA_BROWSER_REQUEST_TIMEOUT_MS = 25_000;
 const MEDIA_NATIVE_CONNECT_TIMEOUT_MS = 15_000;
 const MEDIA_NATIVE_READ_TIMEOUT_MS = 45_000;
+const MEDIA_FETCH_FAILURE_BASE_RETRY_MS = 3_000;
+const MEDIA_FETCH_NOT_FOUND_BASE_RETRY_MS = 5_000;
+const MEDIA_FETCH_MAX_RETRY_MS = 60_000;
+const MEDIA_FETCH_FAILURE_RESET_MS = 5 * 60 * 1000;
+const MAX_MEDIA_FETCH_FAILURES = 512;
+
+type MediaFetchFailure = {
+  retryAt: number;
+  status: number;
+  attempts: number;
+  failedAt: number;
+};
+
+const pendingMediaFetches = new Map<string, Promise<Response>>();
+const failedMediaFetches = new Map<string, MediaFetchFailure>();
+let mediaFetchOnlineListenerBound = false;
+let currentMediaFetchSessionSignature: string | undefined;
+let mediaFetchSessionGeneration = 0;
 
 const removeAllowRedirectParam = (src: string): string => {
   try {
@@ -145,13 +163,14 @@ const withMediaAccessToken = (src: string, accessToken: string): string => {
   }
 };
 
-export const fetchMediaWithAuth = async (src: string, init?: RequestInit): Promise<Response> => {
+const performMediaFetchWithAuth = async (src: string, init?: RequestInit): Promise<Response> => {
   const session = getFallbackSession();
   if (!session || !isSessionMediaUrl(src, session.baseUrl)) {
     return fetchMediaWithAndroidFallback(src, init);
   }
 
   const baseHeaders = new Headers(init?.headers);
+  baseHeaders.delete('Authorization');
   const authHeaders = new Headers(baseHeaders);
   if (!authHeaders.has('Authorization')) {
     authHeaders.set('Authorization', `Bearer ${session.accessToken}`);
@@ -162,14 +181,18 @@ export const fetchMediaWithAuth = async (src: string, init?: RequestInit): Promi
   let lastError: unknown;
 
   for (const requestUrl of requestUrls) {
-    const sessionMediaRequest = isSessionMediaUrl(requestUrl, session.baseUrl);
-    const requestAttempts: Array<{ url: string; headers: Headers }> = sessionMediaRequest
+    const mediaUrl = getAbsoluteUrl(requestUrl, session.baseUrl);
+    const authenticatedMediaRequest = Boolean(
+      mediaUrl &&
+        mediaUrl.origin === getAbsoluteUrl(session.baseUrl, session.baseUrl)?.origin &&
+        AUTH_MEDIA_PATHS.some((path) => mediaUrl.pathname.startsWith(path))
+    );
+    const requestAttempts: Array<{ url: string; headers: Headers }> = authenticatedMediaRequest
       ? [
           { url: requestUrl, headers: authHeaders },
           ...(isAndroidApp()
             ? [{ url: withMediaAccessToken(requestUrl, session.accessToken), headers: baseHeaders }]
             : []),
-          { url: requestUrl, headers: baseHeaders },
         ]
       : [{ url: requestUrl, headers: baseHeaders }];
 
@@ -256,19 +279,142 @@ const getPublicMediaFallbackUrls = (src: string, baseUrl: string): string[] => {
 
 const getMediaRequestUrls = (src: string, baseUrl: string): string[] => {
   const strippedSrc = removeAllowRedirectParam(src);
-  const requestUrls = [src, strippedSrc];
-
-  getPublicMediaFallbackUrls(src, baseUrl).forEach((fallbackUrl) => {
-    requestUrls.push(fallbackUrl);
-  });
+  const requestUrls = [strippedSrc];
   getPublicMediaFallbackUrls(strippedSrc, baseUrl).forEach((fallbackUrl) => {
     requestUrls.push(fallbackUrl);
   });
 
-  return requestUrls.filter(
-    (requestUrl, index) =>
-      requestUrl.length > 0 && requestUrls.findIndex((url) => url === requestUrl) === index
+  return requestUrls
+    .filter(
+      (requestUrl, index) =>
+        requestUrl.length > 0 && requestUrls.findIndex((url) => url === requestUrl) === index
+    )
+    .slice(0, 3);
+};
+
+const getCanonicalMediaFetchUrl = (src: string, baseUrl: string): string => {
+  const mediaUrl = getAbsoluteUrl(removeAllowRedirectParam(src), baseUrl);
+  if (!mediaUrl) return src;
+
+  mediaUrl.searchParams.delete('access_token');
+  mediaUrl.pathname = mediaUrl.pathname.replace(
+    /^\/_matrix\/media\/(?:v3|r0)\/(download|thumbnail)\//i,
+    '/_matrix/client/v1/media/$1/'
   );
+  mediaUrl.searchParams.sort();
+  return mediaUrl.toString();
+};
+
+const getMediaFetchKey = (src: string, init: RequestInit | undefined): string | undefined => {
+  const session = getFallbackSession();
+  const method = init?.method?.toUpperCase() ?? 'GET';
+  if (method !== 'GET' || init?.signal || !session || !isSessionMediaUrl(src, session.baseUrl)) {
+    return undefined;
+  }
+
+  const sessionSignature = `${session.baseUrl.toLowerCase()}\n${session.userId.toLowerCase()}\n${
+    session.accessToken
+  }`;
+  if (currentMediaFetchSessionSignature !== sessionSignature) {
+    currentMediaFetchSessionSignature = sessionSignature;
+    mediaFetchSessionGeneration += 1;
+    pendingMediaFetches.clear();
+    failedMediaFetches.clear();
+  }
+
+  const range = new Headers(init?.headers).get('range') ?? '';
+  return `${mediaFetchSessionGeneration}\n${session.baseUrl.toLowerCase()}\n${session.userId.toLowerCase()}\n${getCanonicalMediaFetchUrl(
+    src,
+    session.baseUrl
+  )}\n${range}`;
+};
+
+const bindMediaFetchOnlineReset = () => {
+  if (mediaFetchOnlineListenerBound || typeof window === 'undefined') return;
+  mediaFetchOnlineListenerBound = true;
+  window.addEventListener('online', () => failedMediaFetches.clear());
+};
+
+const rememberMediaFetchFailure = (key: string, status: number) => {
+  const now = Date.now();
+  const previousFailure = failedMediaFetches.get(key);
+  const attempts =
+    previousFailure && now - previousFailure.failedAt < MEDIA_FETCH_FAILURE_RESET_MS
+      ? previousFailure.attempts + 1
+      : 1;
+  const baseDelay =
+    status === 404 ? MEDIA_FETCH_NOT_FOUND_BASE_RETRY_MS : MEDIA_FETCH_FAILURE_BASE_RETRY_MS;
+  const retryDelay = Math.min(baseDelay * 2 ** Math.min(attempts - 1, 4), MEDIA_FETCH_MAX_RETRY_MS);
+
+  failedMediaFetches.delete(key);
+  failedMediaFetches.set(key, {
+    retryAt: now + retryDelay,
+    status: status >= 400 && status <= 599 ? status : 502,
+    attempts,
+    failedAt: now,
+  });
+
+  while (failedMediaFetches.size > MAX_MEDIA_FETCH_FAILURES) {
+    const oldestKey = failedMediaFetches.keys().next().value;
+    if (typeof oldestKey !== 'string') break;
+    failedMediaFetches.delete(oldestKey);
+  }
+};
+
+const getActiveMediaFetchFailure = (key: string): MediaFetchFailure | undefined => {
+  const failure = failedMediaFetches.get(key);
+  if (!failure) return undefined;
+  if (failure.retryAt > Date.now()) return failure;
+  return undefined;
+};
+
+const isAbortError = (error: unknown): boolean =>
+  error instanceof Error && error.name === 'AbortError';
+
+export const fetchMediaWithAuth = async (src: string, init?: RequestInit): Promise<Response> => {
+  const fetchKey = getMediaFetchKey(src, init);
+  if (!fetchKey) {
+    return performMediaFetchWithAuth(src, init);
+  }
+
+  bindMediaFetchOnlineReset();
+  const recentFailure = getActiveMediaFetchFailure(fetchKey);
+  if (recentFailure) {
+    return new Response(null, {
+      status: recentFailure.status,
+      statusText: 'Media request temporarily unavailable',
+    });
+  }
+
+  const pendingFetch = pendingMediaFetches.get(fetchKey);
+  if (pendingFetch) {
+    return (await pendingFetch).clone();
+  }
+
+  let requestPromise: Promise<Response>;
+  requestPromise = performMediaFetchWithAuth(src, init)
+    .then((response) => {
+      if (isUsableMediaResponse(response)) {
+        failedMediaFetches.delete(fetchKey);
+      } else {
+        rememberMediaFetchFailure(fetchKey, response.ok ? 502 : response.status);
+      }
+      return response;
+    })
+    .catch((error) => {
+      if (!isAbortError(error)) {
+        rememberMediaFetchFailure(fetchKey, 502);
+      }
+      throw error;
+    })
+    .finally(() => {
+      if (pendingMediaFetches.get(fetchKey) === requestPromise) {
+        pendingMediaFetches.delete(fetchKey);
+      }
+    });
+
+  pendingMediaFetches.set(fetchKey, requestPromise);
+  return requestPromise;
 };
 
 export const isServerName = (serverName: string): boolean => DOMAIN_REGEX.test(serverName);

@@ -50,11 +50,11 @@ function NativeImagePreviewWindowContent() {
   const [payload, setPayload] = useState<NativeImagePreviewPayload>();
   const [maximized, setMaximized] = useState(false);
 
-  const emitCloseAction = useCallback(() => {
+  const emitCloseAction = useCallback(async () => {
     const currentPreviewId = payload?.previewId ?? previewId;
     if (!currentPreviewId || closeEmittedRef.current) return;
     closeEmittedRef.current = true;
-    emitNativeImagePreviewAction({ previewId: currentPreviewId, type: 'close' }).catch(
+    await emitNativeImagePreviewAction({ previewId: currentPreviewId, type: 'close' }).catch(
       () => undefined
     );
   }, [payload?.previewId, previewId]);
@@ -62,8 +62,10 @@ function NativeImagePreviewWindowContent() {
   const handleClose = useCallback(() => {
     if (closingRef.current) return;
     closingRef.current = true;
-    emitCloseAction();
-    closeCurrentNativeWindow().catch(() => undefined);
+    emitCloseAction()
+      .then(closeCurrentNativeWindow)
+      .catch(() => closeCurrentNativeWindow())
+      .catch(() => undefined);
   }, [emitCloseAction]);
 
   const handleMinimize = useCallback(() => {
@@ -162,11 +164,6 @@ function NativeImagePreviewWindowContent() {
       unlisten?.();
     };
   }, [previewId]);
-
-  useEffect(() => {
-    window.addEventListener('pagehide', emitCloseAction);
-    return () => window.removeEventListener('pagehide', emitCloseAction);
-  }, [emitCloseAction]);
 
   useEffect(() => {
     const handleKeyDown = (evt: KeyboardEvent) => {

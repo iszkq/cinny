@@ -30,6 +30,7 @@ import { getImageViewerModalStyle } from '../../utils/imageViewerModal';
 import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
 import { mobileOrTablet } from '../../utils/user-agent';
 import {
+  closeNativeImagePreviewWindow,
   createNativeImagePreviewId,
   emitNativeImagePreviewPayload,
   focusNativeImagePreviewWindow,
@@ -138,7 +139,7 @@ export function ImageViewerDialog({
     dragCleanupRef.current = null;
   }, []);
 
-  const closeNativePreview = useCallback(() => {
+  const closeNativePreview = useCallback((closeWindow = true) => {
     const nativePreview = nativePreviewRef.current;
     if (!nativePreview) return;
 
@@ -147,6 +148,10 @@ export function ImageViewerDialog({
     nativePreview.unlistenDestroyed();
     nativePreviewRef.current = undefined;
     setNativePreviewActive(false);
+
+    if (closeWindow) {
+      closeNativeImagePreviewWindow(nativePreview.label).catch(() => undefined);
+    }
   }, []);
 
   const getClampedWindowOffset = useCallback((nextOffset: WindowOffset): WindowOffset => {
@@ -287,6 +292,7 @@ export function ImageViewerDialog({
     }
 
     let cancelled = false;
+    const openAbortController = new AbortController();
     const previewId = createNativeImagePreviewId();
     let unlistenAction: (() => void) | undefined;
     let unlistenReady: (() => void) | undefined;
@@ -302,7 +308,7 @@ export function ImageViewerDialog({
       closeHandled = true;
 
       if (nativePreviewRef.current?.previewId === previewId) {
-        closeNativePreview();
+        closeNativePreview(false);
       } else {
         releaseActionListener();
         unlistenReady?.();
@@ -344,7 +350,7 @@ export function ImageViewerDialog({
 
       const nativePreview = await openNativeImagePreviewWindow(
         payload,
-        undefined,
+        openAbortController.signal,
         handleNativeClosed
       );
       if (!nativePreview) {
@@ -359,6 +365,7 @@ export function ImageViewerDialog({
         releaseActionListener();
         nativePreview.unlistenReady();
         nativePreview.unlistenDestroyed();
+        await closeNativeImagePreviewWindow(nativePreview.label).catch(() => undefined);
         return;
       }
 
@@ -387,6 +394,7 @@ export function ImageViewerDialog({
 
     return () => {
       cancelled = true;
+      openAbortController.abort();
       releaseActionListener();
     };
   }, [buildNativePreviewPayload, closeNativePreview, desktopNativePreview, open]);

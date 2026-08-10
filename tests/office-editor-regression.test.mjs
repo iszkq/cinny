@@ -31,7 +31,7 @@ test('host-window Office shortcuts prevent browser downloads and use the bridge 
   assert.match(source, /window\.addEventListener\('keydown', handleSaveShortcut, true\)/);
   assert.match(
     source,
-    /OFFICE_BRIDGE_SAVING[\s\S]*beginSaveOperation\(false, false, event\.data\.saveId\)/
+    /OFFICE_BRIDGE_SAVING[\s\S]*beginSaveOperation\(false, false, data\.saveId\)/
   );
   assert.match(source, /postToOffice\(\{ type: OFFICE_BRIDGE_SAVE, saveId: operation\.id \}\)/);
 });
@@ -46,7 +46,7 @@ test('Office saves are deduplicated and bounded by export and upload timeouts', 
   assert.match(source, /armSaveTimeout\(\s*operation,\s*exportTimeoutMs/);
   assert.match(source, /armSaveTimeout\(\s*operation,\s*prepareTimeoutMs/);
   assert.match(source, /armSaveTimeout\(\s*activeOperation,\s*uploadTimeoutMs/);
-  assert.match(source, /event\.data\.buffer\.byteLength === 0/);
+  assert.match(source, /data\.buffer\.byteLength === 0/);
   assert.match(source, /保存超时：Office 未能生成最新文件/);
   assert.match(source, /文件准备超时：未能完成加密或文件处理/);
   assert.match(source, /上传超时：聊天服务器未完成媒体上传/);
@@ -79,10 +79,7 @@ test('a late legacy SAVING message cannot restart a clean or already-saved docum
     '// The bridge can initiate this path for an Office-internal Ctrl/Cmd+S.'
   );
   const dirtyGuard = source.indexOf('if (!dirtyRef.current) return;', bridgeStart);
-  const beginSave = source.indexOf(
-    'beginSaveOperation(false, false, event.data.saveId)',
-    dirtyGuard
-  );
+  const beginSave = source.indexOf('beginSaveOperation(false, false, data.saveId)', dirtyGuard);
 
   assert.ok(bridgeStart > -1);
   assert.ok(bridgeStart < dirtyGuard);
@@ -90,7 +87,7 @@ test('a late legacy SAVING message cannot restart a clean or already-saved docum
   assert.match(source, /dirtyRef\.current = false;\s*setDirty\(false\);\s*setErrorMessage/);
   assert.match(
     source,
-    /OFFICE_BRIDGE_DIRTY && event\.data\.dirty === true\) \{\s*dirtyRef\.current = true/
+    /OFFICE_BRIDGE_DIRTY && data\.dirty === true\) \{\s*dirtyRef\.current = true/
   );
 });
 
@@ -152,4 +149,61 @@ test('Office exporting and media upload can be cancelled or closed without trapp
   assert.doesNotMatch(source, /disabled=\{busy\}/);
   assert.match(source, />重试保存</);
   assert.match(source, /setErrorMessage\(failureMessage\)/);
+});
+
+test('desktop Office uses an isolated native window and raw bounded binary exchange', async () => {
+  const editorSource = await readSource('src/app/components/file-viewer/OfficeFileEditor.tsx');
+  const windowSource = await readSource('src/app/utils/nativeOfficeWindow.ts');
+  const nativeViewSource = await readSource(
+    'src/app/components/file-viewer/NativeOfficeWindow.tsx'
+  );
+  const rustSource = await readSource('src-tauri/src/office_binary_exchange.rs');
+  const rootSource = await readSource('src/index.tsx');
+  const capabilitySource = await readSource('src-tauri/capabilities/default.json');
+
+  assert.match(editorSource, /nativeSessionId: string/);
+  assert.match(editorSource, /sessionId: session\.nativeSessionId/);
+  assert.match(editorSource, /requestId: session\.requestId/);
+  assert.match(editorSource, /writeNativeOfficeBinary\(nativeSessionId, buffer\)/);
+  assert.match(
+    editorSource,
+    /if \(nativeWindowStateRef\.current === 'fallback'\) \{[\s\S]*transferSourceIfReady\(\)/
+  );
+  assert.match(editorSource, /nativeWindowState === 'fallback'/);
+  assert.match(windowSource, /NATIVE_OFFICE_WINDOW_LABEL_PREFIX = 'office-window-'/);
+  assert.match(windowSource, /NATIVE_OFFICE_REQUEST_QUERY_PARAM/);
+  assert.match(windowSource, /write_office_session_binary/);
+  assert.match(windowSource, /consume_office_session_binary/);
+  assert.doesNotMatch(windowSource, /base64|data:/i);
+  assert.match(nativeViewSource, /getNativeOfficeRequestId/);
+  assert.match(nativeViewSource, /nextPayload\.requestId !== requestId/);
+  assert.match(nativeViewSource, /const sourceBinaryToken = payload\?\.sourceBinary\?\.token/);
+  assert.match(nativeViewSource, /sourceBinaryByteLength,/);
+  assert.doesNotMatch(
+    nativeViewSource,
+    /consumeNativeOfficeBinary[\s\S]{0,900}\}, \[emitSessionAction, payload,/
+  );
+  assert.match(rustSource, /OFFICE_BINARY_MAX_BYTES: usize = 256 \* 1024 \* 1024/);
+  assert.match(rustSource, /InvokeBody::Raw\(bytes\)/);
+  assert.match(rustSource, /Ok\(Response::new\(bytes\)\)/);
+  assert.match(rootSource, /isNativeOfficeWindow/);
+  assert.match(rootSource, /<LazyNativeOfficeWindow \/>/);
+  assert.match(capabilitySource, /"office-window-\*"/);
+});
+
+test('Office opening is bounded and mobile layout respects the viewport safe area', async () => {
+  const editorSource = await readSource('src/app/components/file-viewer/OfficeFileEditor.tsx');
+  const styleSource = await readSource('src/app/components/file-viewer/OfficeFileEditor.css.ts');
+
+  assert.match(editorSource, /SOURCE_LOAD_TIMEOUT_MS = 60_000/);
+  assert.match(editorSource, /IFRAME_BRIDGE_READY_TIMEOUT_MS = 30_000/);
+  assert.match(editorSource, /DOCUMENT_OPENED_TIMEOUT_MS = 45_000/);
+  assert.match(editorSource, /Office 页面连接超时/);
+  assert.match(editorSource, /Office 打开文档超时/);
+  assert.match(editorSource, />重新打开</);
+  assert.match(editorSource, /compactToolbar/);
+  assert.match(styleSource, /var\(--safe-area-top/);
+  assert.match(styleSource, /var\(--safe-area-right/);
+  assert.match(styleSource, /var\(--safe-area-bottom/);
+  assert.match(styleSource, /orientation: landscape/);
 });

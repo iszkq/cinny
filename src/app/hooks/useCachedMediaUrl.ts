@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
   getCachedMediaObjectUrl,
-  invalidateCachedMediaUrl,
   primeCachedMediaObjectUrl,
   subscribeCachedMediaObjectUrl,
 } from '../utils/mediaUrlCache';
@@ -19,6 +18,7 @@ type CachedMediaState = {
 
 const DESKTOP_MEDIA_RETRY_DELAY_MS = 250;
 const DESKTOP_OBJECT_URL_FALLBACK_DELAY_MS = 350;
+const MEDIA_OBJECT_URL_RETRY_DELAYS_MS = [3_000, 8_000, 20_000] as const;
 
 const getCachedMediaState = (src: string | undefined): CachedMediaState => ({
   src,
@@ -57,28 +57,28 @@ export const useCachedMediaUrls = (
     let disposed = false;
     let fallbackTimer: number | undefined;
     let retryTimer: number | undefined;
-    let retryCount = 0;
-    const primeObjectUrl = (retryFailed = false) => {
+    let retryIndex = 0;
+    const primeObjectUrl = () => {
       const primePromise = primeCachedMediaObjectUrl(
         src,
-        desktopSupported ? 'background' : 'visible',
-        retryFailed
+        desktopSupported ? 'background' : 'visible'
       );
       if (!primePromise) return;
 
       primePromise.then((objectUrl) => {
-        if (disposed || objectUrl || desktopSupported || retryCount >= 2) return;
+        if (disposed) return;
+        if (objectUrl) {
+          setCachedState({ src, url: objectUrl });
+          return;
+        }
 
-        retryCount += 1;
-        retryTimer = window.setTimeout(
-          () => {
-            retryTimer = undefined;
-            invalidateCachedMediaUrl(src).then(() => {
-              if (!disposed) primeObjectUrl(true);
-            });
-          },
-          retryCount === 1 ? 400 : 1200
-        );
+        const retryDelay = MEDIA_OBJECT_URL_RETRY_DELAYS_MS[retryIndex];
+        if (retryDelay === undefined) return;
+        retryIndex += 1;
+        retryTimer = window.setTimeout(() => {
+          retryTimer = undefined;
+          primeObjectUrl();
+        }, retryDelay);
       });
     };
 
@@ -88,6 +88,14 @@ export const useCachedMediaUrls = (
       primeObjectUrl();
     }
 
+    const handleOnline = () => {
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
+      retryTimer = undefined;
+      retryIndex = 0;
+      primeObjectUrl();
+    };
+    window.addEventListener('online', handleOnline);
+
     return () => {
       disposed = true;
       if (typeof fallbackTimer === 'number') {
@@ -96,6 +104,7 @@ export const useCachedMediaUrls = (
       if (typeof retryTimer === 'number') {
         window.clearTimeout(retryTimer);
       }
+      window.removeEventListener('online', handleOnline);
       unsubscribe();
     };
   }, [desktopSupported, src]);
