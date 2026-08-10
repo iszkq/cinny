@@ -242,6 +242,17 @@ export function VerifyOtherDeviceTile({ crypto, deviceId }: VerifyOtherDeviceTil
 
   const requestVerification = useAsync<VerificationRequest, Error, []>(
     useCallback(() => {
+      // Reuse an incoming/in-flight request for this exact device instead of
+      // creating a competing SAS transaction. Two parallel transactions can
+      // otherwise leave one device showing "completed" and the other one
+      // showing "cancelled" after Matrix resolves the race.
+      const existingRequest = crypto
+        .getVerificationRequestsToDeviceInProgress(mx.getSafeUserId())
+        .find((request) => request.otherDeviceId === deviceId && request.pending);
+      if (existingRequest) {
+        return Promise.resolve(existingRequest);
+      }
+
       const requestPromise = crypto.requestDeviceVerification(mx.getSafeUserId(), deviceId);
       return requestPromise;
     }, [mx, crypto, deviceId]),

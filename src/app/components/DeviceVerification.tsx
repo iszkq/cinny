@@ -26,12 +26,15 @@ import FocusTrap from 'focus-trap-react';
 import {
   useVerificationRequestPhase,
   useVerificationRequestReceived,
-  useVerifierCancel,
   useVerifierShowSas,
 } from '../hooks/useVerificationRequest';
-import { AsyncStatus, useAsyncCallback } from '../hooks/useAsyncCallback';
+import { AsyncState, AsyncStatus, useAsyncCallback } from '../hooks/useAsyncCallback';
 import { ContainerColor } from '../styles/ContainerColor.css';
 import { useMatrixClient } from '../hooks/useMatrixClient';
+import {
+  CompletedDeviceVerificationResult,
+  persistCompletedDeviceVerification,
+} from '../utils/matrix-crypto';
 
 const DialogHeaderStyles: CSSProperties = {
   padding: `0 ${config.space.S200} 0 ${config.space.S400}`,
@@ -179,16 +182,17 @@ function CompareEmoji({ sasData }: { sasData: ShowSasCallbacks }) {
 
 type SasVerificationProps = {
   verifier: Verifier;
-  onCancel: () => void;
 };
-function SasVerification({ verifier, onCancel }: SasVerificationProps) {
+function SasVerification({ verifier }: SasVerificationProps) {
   const [sasData, setSasData] = useState<ShowSasCallbacks>();
 
   useVerifierShowSas(verifier, setSasData);
-  useVerifierCancel(verifier, onCancel);
 
   useEffect(() => {
-    verifier.verify();
+    // Cancellation is already reflected by VerificationRequest.phase. Do not
+    // call request.cancel() again from the verifier rejection: during SAS
+    // tie-breaking or final synchronization that can cancel the winning flow.
+    void verifier.verify().catch(() => undefined);
   }, [verifier]);
 
   if (sasData) {
@@ -203,14 +207,40 @@ function SasVerification({ verifier, onCancel }: SasVerificationProps) {
 }
 
 type VerificationDoneProps = {
+  state: AsyncState<CompletedDeviceVerificationResult, Error>;
+  onRetry: () => void;
   onExit: () => void;
 };
-function VerificationDone({ onExit }: VerificationDoneProps) {
+function VerificationDone({ state, onRetry, onExit }: VerificationDoneProps) {
+  if (state.status === AsyncStatus.Idle || state.status === AsyncStatus.Loading) {
+    return (
+      <Box direction="Column" gap="400">
+        <WaitingMessage message="表情验证已通过，正在保存设备可信状态..." />
+        <Text size="T200">保存完成前请不要关闭此窗口。</Text>
+      </Box>
+    );
+  }
+
+  if (state.status === AsyncStatus.Error) {
+    return (
+      <Box direction="Column" gap="400">
+        <Text>表情验证已通过，但设备可信状态保存失败。</Text>
+        <Text size="T200">{state.error.message}</Text>
+        <Button variant="Primary" fill="Solid" onClick={onRetry}>
+          <Text size="B400">重新保存</Text>
+        </Button>
+      </Box>
+    );
+  }
+
   return (
     <Box direction="Column" gap="400">
       <div>
-        <Text>设备验证已完成。</Text>
+        <Text>设备验证已完成，可信状态已保存。</Text>
       </div>
+      {!state.data.crossSigningSynced && (
+        <Text size="T200">本机可信状态已保存；跨设备签名会在加密数据同步后自动补齐。</Text>
+      )}
       <Button variant="Primary" fill="Solid" onClick={onExit}>
         <Text size="B400">完成</Text>
       </Button>
@@ -219,12 +249,26 @@ function VerificationDone({ onExit }: VerificationDoneProps) {
 }
 
 type VerificationCanceledProps = {
+  request: VerificationRequest;
   onClose: () => void;
 };
-function VerificationCanceled({ onClose }: VerificationCanceledProps) {
+function VerificationCanceled({ request, onClose }: VerificationCanceledProps) {
+  const message = (() => {
+    if (request.cancellationCode === 'm.accepted') {
+      return '此请求已由另一台设备或另一个验证窗口接管，请在仍在进行的验证窗口中完成操作。';
+    }
+    if (request.cancellationCode === 'm.timeout') {
+      return '设备验证已超时。请保持两台设备在线并重新发起验证。';
+    }
+    if (request.cancellationCode === 'm.mismatched_sas') {
+      return '两台设备确认的表情不一致，验证已安全取消。';
+    }
+    return '设备验证已取消，本次请求没有写入任何错误的可信状态。';
+  })();
+
   return (
     <Box direction="Column" gap="400">
-      <Text>设备验证已取消。</Text>
+      <Text>{message}</Text>
       <Button variant="Secondary" fill="Soft" onClick={onClose}>
         <Text size="B400">关闭</Text>
       </Button>
@@ -240,6 +284,32 @@ export function DeviceVerification({ request, onExit }: DeviceVerificationProps)
   const mx = useMatrixClient();
   const phase = useVerificationRequestPhase(request);
 
+  const persistVerification = useCallback(async () => {
+    const crypto = mx.getCrypto();
+    if (!crypto) {
+      throw new Error('未找到加密模块，请重新打开应用后重试。');
+    }
+
+    const result = await persistCompletedDeviceVerification(
+      crypto,
+      request,
+      mx.getDeviceId() ?? undefined
+    );
+    mx.emit(CryptoEvent.DevicesUpdated, [request.otherUserId], false);
+    return result;
+  }, [mx, request]);
+  const [persistState, runPersistVerification] = useAsyncCallback<
+    CompletedDeviceVerificationResult,
+    Error,
+    []
+  >(persistVerification);
+
+  useEffect(() => {
+    if (phase === VerificationPhase.Done && persistState.status === AsyncStatus.Idle) {
+      void runPersistVerification().catch(() => undefined);
+    }
+  }, [phase, persistState.status, runPersistVerification]);
+
   const handleCancel = useCallback(() => {
     if (request.phase !== VerificationPhase.Done && request.phase !== VerificationPhase.Cancelled) {
       request.cancel();
@@ -252,13 +322,7 @@ export function DeviceVerification({ request, onExit }: DeviceVerificationProps)
     await request.startVerification(VerificationMethod.Sas);
   }, [request]);
 
-  const handleDone = useCallback(() => {
-    // A completed SAS flow changes device trust locally, but Rust Crypto does
-    // not consistently emit DevicesUpdated for that local-only transition.
-    // Notify all verification badges and device rows before closing the flow.
-    mx.emit(CryptoEvent.DevicesUpdated, [request.otherUserId], false);
-    onExit();
-  }, [mx, request, onExit]);
+  const handleDone = useCallback(() => onExit(), [onExit]);
 
   return (
     <Overlay open backdrop={<OverlayBackdrop />}>
@@ -275,7 +339,16 @@ export function DeviceVerification({ request, onExit }: DeviceVerificationProps)
               <Box grow="Yes">
                 <Text size="H4">设备验证</Text>
               </Box>
-              <IconButton size="300" radii="300" onClick={handleCancel}>
+              <IconButton
+                size="300"
+                radii="300"
+                onClick={handleCancel}
+                disabled={
+                  phase === VerificationPhase.Done &&
+                  (persistState.status === AsyncStatus.Idle ||
+                    persistState.status === AsyncStatus.Loading)
+                }
+              >
                 <Icon src={Icons.Cross} />
               </IconButton>
             </Header>
@@ -294,16 +367,24 @@ export function DeviceVerification({ request, onExit }: DeviceVerificationProps)
                 ))}
               {phase === VerificationPhase.Started &&
                 (request.verifier ? (
-                  <SasVerification verifier={request.verifier} onCancel={handleCancel} />
+                  <SasVerification verifier={request.verifier} />
                 ) : (
                   <VerificationUnexpected
                     message="验证流程出现异常：验证已开始，但缺少验证器。"
                     onClose={handleCancel}
                   />
                 ))}
-              {phase === VerificationPhase.Done && <VerificationDone onExit={handleDone} />}
+              {phase === VerificationPhase.Done && (
+                <VerificationDone
+                  state={persistState}
+                  onRetry={() => {
+                    void runPersistVerification().catch(() => undefined);
+                  }}
+                  onExit={handleDone}
+                />
+              )}
               {phase === VerificationPhase.Cancelled && (
-                <VerificationCanceled onClose={handleCancel} />
+                <VerificationCanceled request={request} onClose={handleCancel} />
               )}
             </Box>
           </Dialog>

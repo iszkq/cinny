@@ -63,10 +63,32 @@ test('device verification accepts both cross-signing and local SDK trust', async
   assert.match(source, /status\.crossSigningVerified \|\| status\.localVerified/);
 });
 
-test('completed device verification refreshes verification badges', async () => {
+test('completed device verification persists trust before reporting success', async () => {
   const verificationSource = await readSource('src/app/components/DeviceVerification.tsx');
+  const settingsVerificationSource = await readSource(
+    'src/app/features/settings/devices/Verification.tsx'
+  );
+  const cryptoSource = await readSource('src/app/utils/matrix-crypto.ts');
   const statusHookSource = await readSource('src/app/hooks/useDeviceVerificationStatus.ts');
 
+  assert.match(verificationSource, /persistCompletedDeviceVerification/);
+  assert.match(verificationSource, /正在保存设备可信状态/);
+  assert.match(verificationSource, /可信状态已保存/);
+  assert.doesNotMatch(verificationSource, /useVerifierCancel/);
+  assert.match(verificationSource, /request\.cancellationCode === 'm\.accepted'/);
+  assert.match(
+    settingsVerificationSource,
+    /getVerificationRequestsToDeviceInProgress\(mx\.getSafeUserId\(\)\)/
+  );
+  assert.match(
+    settingsVerificationSource,
+    /request\.otherDeviceId === deviceId && request\.pending/
+  );
+  assert.match(cryptoSource, /request\.phase !== VerificationPhase\.Done/);
+  assert.match(cryptoSource, /request\.isSelfVerification/);
+  assert.match(cryptoSource, /api\.setDeviceVerified\(otherUserId, otherDeviceId, true\)/);
+  assert.match(cryptoSource, /api\.crossSignDevice\(deviceId\)/);
+  assert.match(cryptoSource, /persistedStatus\.localVerified/);
   assert.match(verificationSource, /CryptoEvent\.DevicesUpdated/);
   assert.match(verificationSource, /request\.otherUserId/);
   assert.match(statusHookSource, /useUserTrustStatusChange/);

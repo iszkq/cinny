@@ -1,6 +1,6 @@
 {
   "name": "cinny",
-  "version": "1.8.14",
+  "version": "1.8.15",
   "description": "Yet another matrix client",
   "main": "index.js",
   "type": "module",
