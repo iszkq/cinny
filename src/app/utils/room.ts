@@ -37,6 +37,7 @@ import {
   UNSTABLE_POLL_END_EVENT_TYPE,
   UNSTABLE_POLL_RESPONSE_EVENT_TYPE,
 } from './polls';
+import { isLegacyCrossSenderOfficeFileReplacement } from './officeFile';
 import { sanitizeCustomHtml } from './sanitize';
 
 type FullyReadContent = {
@@ -967,14 +968,21 @@ export const getLatestEdit = (
   targetEvent: MatrixEvent,
   editEvents: MatrixEvent[]
 ): MatrixEvent | undefined => {
-  const targetIsOfficeFile =
-    targetEvent.getContent().msgtype === MsgType.File &&
-    editEvents.some((event) => event.getContent()['com.xinghuo.office_update'] === true);
-  const allowedReplacement = (replacementEvent: MatrixEvent) =>
-    replacementEvent.getSender() === targetEvent.getSender() ||
-    (targetIsOfficeFile && replacementEvent.getContent()['com.xinghuo.office_update'] === true);
+  const targetEventId = targetEvent.getId();
+  const targetContent = targetEvent.getOriginalContent();
 
-  return editEvents.sort((m1, m2) => m2.getTs() - m1.getTs()).find(allowedReplacement);
+  return [...editEvents]
+    .sort((m1, m2) => m2.getTs() - m1.getTs())
+    .find(
+      (replacementEvent) =>
+        replacementEvent.getSender() === targetEvent.getSender() ||
+        isLegacyCrossSenderOfficeFileReplacement(
+          targetEventId,
+          targetContent,
+          replacementEvent.getOriginalContent(),
+          replacementEvent.getTs()
+        )
+    );
 };
 
 export const getEditedEvent = (

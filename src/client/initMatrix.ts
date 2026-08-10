@@ -87,18 +87,27 @@ const indexedDbDatabaseExists = (databaseName: string): Promise<boolean> =>
     request.onblocked = () => finish(false);
   });
 
-const hasRustCryptoDatabase = async (prefix: string): Promise<boolean> => {
+const findExistingRustCryptoDatabasePrefixes = async (prefixes: string[]): Promise<Set<string>> => {
   try {
-    const expectedNames = getRustCryptoDatabaseNames(prefix);
     if (typeof global.indexedDB?.databases === 'function') {
       const databases = await global.indexedDB.databases();
       const existingNames = new Set(databases.map(({ name }) => name));
-      return expectedNames.some((name) => existingNames.has(name));
+      return new Set(
+        prefixes.filter((prefix) =>
+          getRustCryptoDatabaseNames(prefix).some((name) => existingNames.has(name))
+        )
+      );
     }
 
-    return indexedDbDatabaseExists(expectedNames[0]);
+    const results = await Promise.all(
+      prefixes.map(
+        async (prefix) =>
+          [prefix, await indexedDbDatabaseExists(getRustCryptoDatabaseNames(prefix)[0])] as const
+      )
+    );
+    return new Set(results.filter(([, exists]) => exists).map(([prefix]) => prefix));
   } catch {
-    return false;
+    return new Set();
   }
 };
 
@@ -114,10 +123,15 @@ const isRustCryptoAccountMismatch = (error: unknown): boolean => {
 const initRustCryptoForSession = async (mx: MatrixClient, session: Session): Promise<string> => {
   const scopedPrefix = getRustCryptoDatabasePrefix(session);
   const savedPrefix = getSavedRustCryptoDatabasePrefix(session);
-  const [legacyExists, scopedExists] = await Promise.all([
-    hasRustCryptoDatabase(LEGACY_RUST_CRYPTO_DATABASE_PREFIX),
-    hasRustCryptoDatabase(scopedPrefix),
+  // Enumerate IndexedDB only once. Some WebViews make this surprisingly
+  // expensive, and the old implementation performed the same full scan twice
+  // on every launch before Rust Crypto could even start.
+  const existingPrefixes = await findExistingRustCryptoDatabasePrefixes([
+    LEGACY_RUST_CRYPTO_DATABASE_PREFIX,
+    scopedPrefix,
   ]);
+  const legacyExists = existingPrefixes.has(LEGACY_RUST_CRYPTO_DATABASE_PREFIX);
+  const scopedExists = existingPrefixes.has(scopedPrefix);
   const candidates: string[] = [];
   const addCandidate = (prefix: string) => {
     if (!candidates.includes(prefix)) candidates.push(prefix);
@@ -225,13 +239,13 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
 // Match the SDK's safe default: enough recent events to paint the room and a
 // reliable backward-pagination token, while older history keeps loading on
 // demand instead of blocking the whole account's first sync.
-const WEB_INITIAL_SYNC_LIMIT = 8;
+const INITIAL_SYNC_LIMIT = 8;
 
 export const startClient = async (mx: MatrixClient) => {
   await mx.startClient({
     lazyLoadMembers: true,
     disablePresence: true,
-    ...(!isDesktopUpdaterSupported() ? { initialSyncLimit: WEB_INITIAL_SYNC_LIMIT } : {}),
+    initialSyncLimit: INITIAL_SYNC_LIMIT,
   });
 };
 

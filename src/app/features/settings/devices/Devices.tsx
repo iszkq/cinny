@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, useState } from 'react';
 import { Box, Text, IconButton, Icon, Icons, Scroll } from 'folds';
 import { Page, PageContent, PageHeader } from '../../../components/page';
 import { SequenceCard } from '../../../components/sequence-card';
@@ -26,6 +26,8 @@ import {
   useSecretStorageKeyContent,
 } from '../../../hooks/useSecretStorage';
 import { useCrossSigningActive } from '../../../hooks/useCrossSigning';
+import { isClientSyncReady } from '../../../hooks/useClientSyncReady';
+import { useSyncState } from '../../../hooks/useSyncState';
 
 function DevicesPlaceholder() {
   return (
@@ -43,6 +45,15 @@ export function Devices({ requestClose }: DevicesProps) {
   const mx = useMatrixClient();
   const crypto = mx.getCrypto();
   const crossSigningActive = useCrossSigningActive();
+  const [securitySyncReady, setSecuritySyncReady] = useState(() =>
+    isClientSyncReady(mx.getSyncState())
+  );
+  useSyncState(
+    mx,
+    useCallback((state) => {
+      setSecuritySyncReady(isClientSyncReady(state));
+    }, [])
+  );
   const [devices, refreshDeviceList] = useDeviceList();
 
   const [currentDevice, otherDevices] = useSplitCurrentDevice(devices);
@@ -97,7 +108,12 @@ export function Devices({ requestClose }: DevicesProps) {
                     description="恢复密钥只验证正在使用的本机；其他设备需在下方逐台点击“验证”，并在两台设备上比对表情。"
                     after={
                       <>
-                        <EnableVerification visible={!crossSigningActive} />
+                        {!crossSigningActive &&
+                          (securitySyncReady ? (
+                            <EnableVerification visible />
+                          ) : (
+                            <Text size="T200">正在同步安全设置…</Text>
+                          ))}
                         {crossSigningActive && (
                           <Box gap="200" alignItems="Center">
                             <VerificationStatusBadge

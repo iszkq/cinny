@@ -28,7 +28,8 @@ test('Rust Crypto storage is isolated per account and device', async () => {
   assert.match(source, /encodeURIComponent\(session\.userId\)/);
   assert.match(source, /encodeURIComponent\(session\.deviceId\)/);
   assert.match(source, /LEGACY_RUST_CRYPTO_DATABASE_PREFIX = 'matrix-js-sdk'/);
-  assert.match(source, /hasRustCryptoDatabase\(LEGACY_RUST_CRYPTO_DATABASE_PREFIX\)/);
+  assert.match(source, /findExistingRustCryptoDatabasePrefixes/);
+  assert.match(source, /existingPrefixes\.has\(LEGACY_RUST_CRYPTO_DATABASE_PREFIX\)/);
   assert.match(source, /isRustCryptoAccountMismatch/);
   assert.match(source, /RUST_CRYPTO_DATABASE_SELECTION_KEY_PREFIX/);
   assert.match(source, /saveRustCryptoDatabasePrefix\(session, prefix\)/);
@@ -69,6 +70,82 @@ test('the device page separates current-device trust from other devices', async 
   assert.match(verificationSource, /全部设备已验证/);
 });
 
+test('new security stores cannot be initialized before the first Matrix sync is ready', async () => {
+  const devicesSource = await readSource('src/app/features/settings/devices/Devices.tsx');
+  const setupSource = await readSource('src/app/components/DeviceVerificationSetup.tsx');
+  const syncReadySource = await readSource('src/app/hooks/useClientSyncReady.ts');
+
+  assert.match(syncReadySource, /SyncState\.Prepared/);
+  assert.match(syncReadySource, /SyncState\.Syncing/);
+  assert.match(syncReadySource, /SyncState\.Catchup/);
+  assert.match(devicesSource, /isClientSyncReady\(mx\.getSyncState\(\)\)/);
+  assert.match(devicesSource, /useSyncState\(/);
+  assert.match(devicesSource, /setSecuritySyncReady\(isClientSyncReady\(state\)\)/);
+  assert.match(devicesSource, /securitySyncReady \? \(/);
+  assert.match(devicesSource, /<EnableVerification visible \/>/);
+  assert.match(devicesSource, /正在同步安全设置…/);
+
+  assert.match(setupSource, /const assertSecuritySyncReady/);
+  assert.match(setupSource, /isClientSyncReady\(mx\.getSyncState\(\)\)/);
+  assert.match(setupSource, /尚未开始写入本次设置/);
+  assert.match(
+    setupSource,
+    /assertSecuritySyncReady\(mx\);[\s\S]*clearSecretStorageKeys\(\);[\s\S]*bootstrapSecretStorage/
+  );
+  assert.equal((setupSource.match(/assertSecuritySyncReady\(mx\);/g) ?? []).length, 2);
+  const firstWriteIndex = setupSource.indexOf('clearSecretStorageKeys();');
+  assert.ok(firstWriteIndex > 0);
+  assert.equal(setupSource.indexOf('assertSecuritySyncReady(mx);', firstWriteIndex), -1);
+  assert.match(
+    setupSource.slice(0, firstWriteIndex),
+    /session\.recoveryKey = recoveryKeyData\.encodedPrivateKey/
+  );
+  assert.doesNotMatch(setupSource, /useAlive|if \(!alive\(\)\) return/);
+  assert.match(setupSource, /<RecoveryKeyDisplay recoveryKey=\{generatedRecoveryKey\} \/>/);
+  assert.match(setupSource, /本次写入可能已经使用了下面的恢复密钥/);
+});
+
+test('security setup survives dialog remounts as a single resumable transaction', async () => {
+  const source = await readSource('src/app/components/DeviceVerificationSetup.tsx');
+
+  assert.match(source, /new WeakMap<CryptoApi, VerificationSetupSession>\(\)/);
+  assert.match(source, /if \(existingSession\?\.flow === flow\) return existingSession\.task/);
+  assert.match(source, /session\.recoveryKey = recoveryKeyData\.encodedPrivateKey/);
+  assert.match(source, /uiaAction\?: UIAAction<void>/);
+  assert.match(source, /setSessionUIAAction\(crypto, session, action\)/);
+  assert.match(source, /if \(activeRequest\) return activeRequest/);
+  assert.match(source, /onCancel=\{uiaAction\.cancelCallback\}/);
+  assert.match(
+    source,
+    /session\.status === VerificationSetupStatus\.Running\)[\s\S]*return;[\s\S]*verificationSetupSessions\.delete\(crypto\)/
+  );
+  assert.match(source, /你可以关闭窗口，重新打开后会继续显示并完成同一次设置/);
+  assert.match(source, /flow=\{VerificationSetupFlow\.Enable\}/);
+  assert.match(source, /flow=\{VerificationSetupFlow\.Reset\}/);
+  assert.match(source, /session\.flow !== flow/);
+});
+
+test('setup and manual recovery share one destructive crypto initialization gate', async () => {
+  const setupSource = await readSource('src/app/components/DeviceVerificationSetup.tsx');
+  const manualSource = await readSource('src/app/components/ManualVerification.tsx');
+  const gateSource = await readSource('src/app/utils/cryptoInitializationGate.ts');
+
+  assert.match(gateSource, /new WeakMap<CryptoApi, Promise<void>>\(\)/);
+  assert.match(gateSource, /const previousTurn = cryptoInitializationTails\.get\(crypto\)/);
+  assert.match(gateSource, /await lease\.waitForTurn/);
+  assert.match(gateSource, /finally \{\s*lease\.release\(\);/);
+  assert.match(setupSource, /runCryptoInitializationExclusive\(crypto, \(\) =>/);
+  assert.match(manualSource, /const initializationLease = queueCryptoInitialization\(crypto\)/);
+  assert.match(
+    manualSource,
+    /initializationLease\.waitForTurn\.then\([\s\S]*storePrivateKey\(secretStorageKeyId, recoveryKey\)/
+  );
+  assert.match(
+    manualSource,
+    /backupRecovery\.then\(initializationLease\.release, initializationLease\.release\)/
+  );
+});
+
 test('device verification accepts both cross-signing and local SDK trust', async () => {
   const source = await readSource('src/app/utils/matrix-crypto.ts');
 
@@ -104,6 +181,16 @@ test('completed device verification persists trust before reporting success', as
   assert.match(verificationSource, /CryptoEvent\.DevicesUpdated/);
   assert.match(verificationSource, /request\.otherUserId/);
   assert.match(statusHookSource, /useUserTrustStatusChange/);
+  assert.match(statusHookSource, /latestRequestRef/);
+  assert.match(statusHookSource, /readVerifiedDevice/);
+  assert.match(statusHookSource, /DEVICE_TRUST_QUERY_TIMEOUT_MS/);
+  assert.match(statusHookSource, /VerificationStatus\.Unavailable/);
+  assert.match(statusHookSource, /Do not report "all verified"/);
+  assert.match(statusHookSource, /trustResult\.value === null/);
+  assert.match(cryptoSource, /CryptoOperationTimeoutError/);
+  assert.match(cryptoSource, /CROSS_SIGN_ATTEMPT_TIMEOUT_MS/);
+  assert.match(verificationSource, /可关闭此窗口，可信状态仍会在后台继续保存/);
+  assert.doesNotMatch(verificationSource, /disabled=\{\s*phase === VerificationPhase\.Done/);
 });
 
 test('browser call controls do not extend the Node events shim', async () => {
@@ -119,6 +206,8 @@ test('recovery passphrases retain meaningful surrounding whitespace', async () =
 
   assert.match(source, /const recoveryPassphrase = recoveryPassphraseInput\.value;/);
   assert.doesNotMatch(source, /recoveryPassphraseInput\.value\.trim\(\)/);
+  assert.match(source, /evt\.preventDefault\(\);\s*if \(loading\) return;/);
+  assert.match(source, /submitRecoveryKey\(recoveryKey\)[\s\S]*\.catch\(\(\) => undefined\)/);
 });
 
 test('backup restoration is not blocked by cross-signing failures', async () => {
@@ -132,6 +221,40 @@ test('backup restoration is not blocked by cross-signing failures', async () => 
   assert.match(source, /await crypto\.loadSessionBackupPrivateKeyFromSecretStorage\(\)/);
   assert.match(source, /await crypto\.checkKeyBackupAndEnable\(\)/);
   assert.match(source, /crypto\.restoreKeyBackup\(\)/);
+  assert.match(source, /BACKUP_RECOVERY_FOREGROUND_TIMEOUT_MS/);
+  assert.match(source, /SINGLE_FLIGHT_FOREGROUND_DEADLINE_MS/);
+  assert.match(source, /const crossSigningBootstrapTasks = new WeakMap/);
+  assert.match(source, /const backupPreparationTasks = new WeakMap/);
+  assert.match(source, /const backupRecoveryTasks = new WeakMap/);
+  assert.match(source, /const manualVerificationWorkflows = new WeakMap/);
+  assert.match(source, /bootstrapCrossSigningSingleFlight\(crypto\)/);
+  assert.doesNotMatch(source, /withTimeout\(\s*crypto\.bootstrapCrossSigning/);
+  assert.match(source, /waitForTaskForegroundDeadline\(\s*workflow\.verification/);
+  assert.match(source, /waitForTaskForegroundDeadline\(\s*workflow\.backupPreparation/);
+  assert.match(source, /cachedPrivateKeys\.every\(Boolean\)/);
+  assert.doesNotMatch(source, /privateKeysCachedLocally[\s\S]{0,160}\.some\(Boolean\)/);
+  assert.match(
+    source,
+    /prepareKeyBackupSingleFlight\(crypto, async \(\) => \{[\s\S]*bootstrapSecretStorage[\s\S]*checkKeyBackupAndEnable/
+  );
+  assert.match(source, /const backupPreparation = verification\.then/);
+  assert.match(source, /const backupRecovery = backupPreparation\.then/);
+  assert.match(source, /recoverKeyBackupSingleFlight\(crypto, async \(\) =>/);
+  assert.ok(
+    source.indexOf('await bootstrapCrossSigningSingleFlight(crypto);') <
+      source.indexOf('const backupPreparation = verification.then')
+  );
+  assert.match(source, /No backup info available/);
+  assert.match(source, /type ManualVerificationResult/);
+  assert.match(source, /status: 'completed' \| 'background'/);
+  assert.match(source, /verifyState\.data\.status === 'background'/);
+  assert.match(source, /安全恢复仍在后台处理中/);
+  assert.match(source, /可以关闭此面板，稍后再回来查看/);
+  const deadlineStart = source.indexOf('const waitForTaskForegroundDeadline');
+  const deadlineEnd = source.indexOf('const crossSigningBootstrapTasks', deadlineStart);
+  const deadlineSource = source.slice(deadlineStart, deadlineEnd);
+  assert.match(deadlineSource, /task\.then\(/);
+  assert.doesNotMatch(deadlineSource, /\.delete\(|taskFactory/);
   assert.match(cryptoSource, /crypto\.setDeviceVerified\(userId, deviceId, true\)/);
   assert.match(cryptoSource, /crossSignDevicesWithRetry\(crypto, \[deviceId\]\)/);
   assert.match(cryptoSource, /crypto\.getDeviceVerificationStatus\(userId, deviceId\)/);

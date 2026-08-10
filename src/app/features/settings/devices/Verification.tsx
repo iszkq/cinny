@@ -50,10 +50,27 @@ export function VerificationStatusBadge({
   otherUnverifiedCount,
 }: VerificationStatusBadgeProps) {
   if (
+    verificationStatus === VerificationStatus.Unsupported ||
+    verificationStatus === VerificationStatus.Unavailable
+  ) {
+    return (
+      <Badge variant="Secondary" fill="Soft" size="500">
+        <Text size="L400">验证状态暂不可用</Text>
+      </Badge>
+    );
+  }
+  if (
     verificationStatus === VerificationStatus.Unknown ||
     typeof otherUnverifiedCount !== 'number'
   ) {
     return <Spinner size="400" variant="Secondary" />;
+  }
+  if (otherUnverifiedCount < 0) {
+    return (
+      <Badge variant="Secondary" fill="Soft" size="500">
+        <Text size="L400">其他设备状态暂不可用</Text>
+      </Badge>
+    );
   }
   if (verificationStatus === VerificationStatus.Unverified) {
     return (
@@ -283,7 +300,9 @@ export function VerifyOtherDeviceTile({ crypto, deviceId }: VerifyOtherDeviceTil
           size="300"
           variant="Warning"
           radii="300"
-          onClick={requestVerification}
+          onClick={() => {
+            requestVerification().catch(() => undefined);
+          }}
           before={requesting && <Spinner size="100" variant="Warning" fill="Solid" />}
           disabled={requesting}
         >
@@ -348,7 +367,7 @@ export function DeviceVerificationOptions() {
 
   const openManagementUrl = useCallback((url: string) => {
     if (isDesktopUpdaterSupported()) {
-      void openExternalUrl(url);
+      openExternalUrl(url).catch(() => undefined);
       return;
     }
 

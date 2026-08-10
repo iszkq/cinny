@@ -71,6 +71,8 @@ export const actions = style([
   {
     display: 'grid',
     gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+    columnGap: toRem(3),
+    padding: `${toRem(5)} ${toRem(6)}`,
     borderTop: `${config.borderWidth.B300} solid ${color.SurfaceVariant.ContainerLine}`,
     background: color.Surface.Container,
   },
@@ -84,36 +86,55 @@ export const actionButton = style([
     alignItems: 'center',
     justifyContent: 'center',
     minWidth: 0,
-    minHeight: toRem(48),
-    padding: `${config.space.S200} ${config.space.S100}`,
+    minHeight: toRem(40),
+    padding: toRem(2),
     border: 0,
     background: 'transparent',
     color: color.Primary.Main,
     font: 'inherit',
     fontWeight: 500,
     cursor: 'pointer',
-    transition: 'background-color 120ms ease, color 120ms ease',
+    transition: 'color 120ms ease',
     selectors: {
       '&:not(:first-child)::before': {
         content: '',
         position: 'absolute',
-        left: 0,
-        top: '25%',
+        left: toRem(-2),
+        top: '22%',
         width: config.borderWidth.B300,
-        height: '50%',
+        height: '56%',
         background: color.SurfaceVariant.ContainerLine,
       },
-      '&:hover:not(:disabled)': {
-        background: color.Primary.Container,
-      },
       '&:focus-visible': {
-        outline: `2px solid ${color.Primary.Main}`,
-        outlineOffset: '-2px',
+        outline: 'none',
       },
       '&:disabled': {
         color: color.SurfaceVariant.OnContainer,
         cursor: 'not-allowed',
         opacity: 0.46,
+      },
+    },
+  },
+]);
+
+export const actionLabel = style([
+  DefaultReset,
+  {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    maxWidth: '100%',
+    minHeight: toRem(32),
+    paddingBlock: 0,
+    paddingInline: config.space.S200,
+    borderRadius: toRem(999),
+    transition: 'background-color 120ms ease, box-shadow 120ms ease',
+    selectors: {
+      [`${actionButton}:hover:not(:disabled) &`]: {
+        background: color.SurfaceVariant.Container,
+      },
+      [`${actionButton}:focus-visible &`]: {
+        boxShadow: '0 0 0 2px currentColor',
       },
     },
   },
@@ -232,7 +253,38 @@ export const loadingLayer = style([
 export const errorLayer = style([
   loadingLayer,
   {
+    zIndex: 3,
+    padding: config.space.S500,
     color: color.Critical.Main,
+  },
+]);
+
+export const saveStatus = style([
+  DefaultReset,
+  {
+    position: 'absolute',
+    zIndex: 4,
+    left: '50%',
+    bottom: config.space.S300,
+    transform: 'translateX(-50%)',
+    display: 'flex',
+    alignItems: 'center',
+    gap: config.space.S300,
+    width: `min(${toRem(520)}, calc(100% - ${toRem(32)}))`,
+    minWidth: 0,
+    padding: `${config.space.S200} ${config.space.S300}`,
+    border: `${config.borderWidth.B300} solid ${color.Surface.ContainerLine}`,
+    borderRadius: config.radii.R500,
+    background: color.Surface.Container,
+    color: color.Surface.OnContainer,
+    boxShadow: '0 12px 36px rgba(15, 23, 42, 0.22)',
+    '@media': {
+      'screen and (max-width: 520px)': {
+        alignItems: 'stretch',
+        flexDirection: 'column',
+        bottom: config.space.S200,
+      },
+    },
   },
 ]);
 

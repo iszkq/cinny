@@ -14,7 +14,7 @@ type SecretStorageRecoveryPassphraseProps = {
   processing?: boolean;
   keyContent: SecretStorageKeyContent;
   passphraseContent: SecretStoragePassphraseContent;
-  onDecodedRecoveryKey: (recoveryKey: Uint8Array) => void;
+  onDecodedRecoveryKey: (recoveryKey: Uint8Array) => void | Promise<unknown>;
 };
 export function SecretStorageRecoveryPassphrase({
   processing,
@@ -55,8 +55,8 @@ export function SecretStorageRecoveryPassphrase({
   const loading = drivingKey || processing;
 
   const handleSubmit: FormEventHandler<HTMLFormElement> = (evt) => {
-    if (loading) return;
     evt.preventDefault();
+    if (loading) return;
 
     const target = evt.target as HTMLFormElement | undefined;
     const recoveryPassphraseInput = target?.recoveryPassphraseInput as HTMLInputElement | undefined;
@@ -67,12 +67,13 @@ export function SecretStorageRecoveryPassphrase({
     if (recoveryPassphrase.length === 0) return;
 
     const { salt, iterations, bits } = passphraseContent;
-    submitPassphrase(recoveryPassphrase, salt, iterations, bits).then((decodedRecoveryKey) => {
-      if (alive()) {
+    submitPassphrase(recoveryPassphrase, salt, iterations, bits)
+      .then((decodedRecoveryKey) => {
+        if (!alive()) return undefined;
         recoveryPassphraseInput.value = '';
-        onDecodedRecoveryKey(decodedRecoveryKey);
-      }
-    });
+        return onDecodedRecoveryKey(decodedRecoveryKey);
+      })
+      .catch(() => undefined);
   };
 
   return (
@@ -118,7 +119,7 @@ export function SecretStorageRecoveryPassphrase({
 type SecretStorageRecoveryKeyProps = {
   processing?: boolean;
   keyContent: SecretStorageKeyContent;
-  onDecodedRecoveryKey: (recoveryKey: Uint8Array) => void;
+  onDecodedRecoveryKey: (recoveryKey: Uint8Array) => void | Promise<unknown>;
 };
 export function SecretStorageRecoveryKey({
   processing,
@@ -150,6 +151,7 @@ export function SecretStorageRecoveryKey({
 
   const handleSubmit: FormEventHandler<HTMLFormElement> = (evt) => {
     evt.preventDefault();
+    if (loading) return;
 
     const target = evt.target as HTMLFormElement | undefined;
     const recoveryKeyInput = target?.recoveryKeyInput as HTMLInputElement | undefined;
@@ -157,12 +159,13 @@ export function SecretStorageRecoveryKey({
     const recoveryKey = recoveryKeyInput.value.trim();
     if (!recoveryKey) return;
 
-    submitRecoveryKey(recoveryKey).then((decodedRecoveryKey) => {
-      if (alive()) {
+    submitRecoveryKey(recoveryKey)
+      .then((decodedRecoveryKey) => {
+        if (!alive()) return undefined;
         recoveryKeyInput.value = '';
-        onDecodedRecoveryKey(decodedRecoveryKey);
-      }
-    });
+        return onDecodedRecoveryKey(decodedRecoveryKey);
+      })
+      .catch(() => undefined);
   };
 
   return (

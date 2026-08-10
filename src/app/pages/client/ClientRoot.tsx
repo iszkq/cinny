@@ -28,7 +28,6 @@ import {
   clearResourceCaches,
   clearAllLocalData,
   clearExpiredSessionAfterLogout,
-  clearLocalSessionAfterLogout,
   clearLoginData,
   initClient,
   logoutClient,
@@ -52,7 +51,7 @@ import { isNativeApp } from '../../utils/nativePlatform';
 import { MobileSettingsProvider } from './MobileSettings';
 
 const CLIENT_STORE_PERSIST_INTERVAL_MS = 30_000;
-const INITIAL_SYNC_ENTRY_FALLBACK_MS = 8_000;
+const INITIAL_SYNC_ENTRY_FALLBACK_MS = 3_000;
 
 function ClientRootLoading() {
   return (
@@ -250,15 +249,24 @@ export function ClientRoot({ children }: ClientRootProps) {
 
   useEffect(() => {
     if (loadState.status === AsyncStatus.Idle) {
-      loadMatrix();
+      loadMatrix().catch(() => undefined);
     }
   }, [loadState, loadMatrix]);
 
   useEffect(() => {
     if (mx && !mx.clientRunning) {
-      startMatrix(mx);
+      startMatrix(mx).catch(() => undefined);
     }
   }, [mx, startMatrix]);
+
+  useEffect(() => {
+    if (mx && loading && mx.getRooms().length > 0) {
+      // The IndexedDB store is already hydrated at this point. Returning users
+      // can enter the cached shell immediately while the incremental sync runs
+      // in the background instead of watching another full-screen spinner.
+      setLoading(false);
+    }
+  }, [loading, mx]);
 
   useEffect(() => {
     if (!mx || !loading) return undefined;
@@ -295,9 +303,12 @@ export function ClientRoot({ children }: ClientRootProps) {
     )
   );
 
-  const clientReady = !!mx && !loading;
   const startupFailed =
     loadState.status === AsyncStatus.Error || startState.status === AsyncStatus.Error;
+  // startClient first performs homeserver capability requests before it starts
+  // the sync loop. Do not let a slow optional request hide an already hydrated
+  // cached client; destructive security setup is gated on a real sync state.
+  const clientReady = !startupFailed && !!mx && !loading;
 
   return (
     <AutoDiscovery userId={userId!} baseUrl={baseUrl!}>
@@ -321,9 +332,20 @@ export function ClientRoot({ children }: ClientRootProps) {
                   {startState.status === AsyncStatus.Error && (
                     <Text>{`客户端启动失败：${startState.error.message}`}</Text>
                   )}
-                  <Button variant="Critical" onClick={() => window.location.reload()}>
+                  <Button
+                    variant="Critical"
+                    onClick={() => {
+                      if (startState.status === AsyncStatus.Error) {
+                        window.location.reload();
+                        return;
+                      }
+                      if (loadState.status === AsyncStatus.Error) {
+                        loadMatrix().catch(() => undefined);
+                      }
+                    }}
+                  >
                     <Text as="span" size="B400">
-                      重新加载
+                      重试
                     </Text>
                   </Button>
                 </Box>

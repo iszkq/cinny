@@ -1,5 +1,5 @@
 import React from 'react';
-import { MsgType, Room } from 'matrix-js-sdk';
+import { MatrixEvent, MsgType, Room } from 'matrix-js-sdk';
 import { HTMLReactParserOptions } from 'html-react-parser';
 import { Opts } from 'linkifyjs';
 import { config } from 'folds';
@@ -37,7 +37,7 @@ import { JitsiMeetCard } from './jitsi-meet';
 import { testMatrixTo } from '../plugins/matrix-to';
 import { useMatrixClient } from '../hooks/useMatrixClient';
 import { useMediaAuthentication } from '../hooks/useMediaAuthentication';
-import { IImageContent } from '../../types/matrix/common';
+import { IFileContent, IImageContent } from '../../types/matrix/common';
 import {
   isPollMessage,
   POLL_MSGTYPE,
@@ -48,7 +48,17 @@ import { getJitsiMeetInfo } from '../utils/jitsiMeet';
 import { getMxIdLocalPart, mxcUrlToHttp } from '../utils/matrix';
 import { getMemberAvatarMxc, getMemberDisplayName } from '../utils/room';
 import { getOfficeDocumentKind } from '../utils/mimeTypes';
+import { OfficeFileTimelineEvent, resolveLatestOfficeFileRevision } from '../utils/officeFile';
 import type { ViewerImageItem } from './message/content/ImageContent';
+
+const toOfficeTimelineEvent = (event: MatrixEvent): OfficeFileTimelineEvent => ({
+  eventId: event.getId(),
+  senderId: event.getSender(),
+  eventType: event.getType(),
+  timestamp: event.getTs(),
+  redacted: event.isRedacted(),
+  content: event.getContent<Record<string, unknown>>(),
+});
 
 type RenderMessageContentProps = {
   displayName: string;
@@ -134,81 +144,123 @@ export function RenderMessageContent({
     return null;
   };
 
-  const renderFile = () => (
-    <>
-      <MFile
-        content={getContent()}
-        renderFileContent={({ body, mimeType, info, encInfo, url }) => {
-          if (getOfficeDocumentKind(body, mimeType)) {
-            return (
-              <OfficeFileEditor
-                body={body}
-                mimeType={mimeType}
-                url={url}
-                encInfo={encInfo}
-                infoSize={info.size}
-                room={room}
-                eventId={eventId}
-              />
-            );
-          }
+  const renderFile = () => {
+    const currentContent = getContent<IFileContent>();
+    const filename = currentContent.filename ?? currentContent.body ?? '';
+    const currentMimeType = currentContent.info?.mimetype ?? 'application/octet-stream';
+    let officeContent = currentContent;
+    let officeSourceEventId = eventId;
 
-          return (
-            <FileContent
-              body={body}
-              mimeType={mimeType}
-              renderAsPdfFile={() => (
-                <ReadPdfFile
+    if (
+      room &&
+      eventId &&
+      currentContent.msgtype === MsgType.File &&
+      getOfficeDocumentKind(filename, currentMimeType)
+    ) {
+      const eventMap = new Map<string, OfficeFileTimelineEvent>();
+      const addEvent = (event: MatrixEvent | undefined) => {
+        if (!event) return;
+        const descriptor = toOfficeTimelineEvent(event);
+        if (descriptor.eventId) eventMap.set(descriptor.eventId, descriptor);
+      };
+      room.getUnfilteredTimelineSet().getLiveTimeline().getEvents().forEach(addEvent);
+      const currentEvent = room.findEventById(eventId);
+      addEvent(currentEvent);
+      addEvent(currentEvent?.replacingEvent() ?? undefined);
+      const relation = currentEvent?.getContent<Record<string, unknown>>()['m.relates_to'];
+      if (typeof relation === 'object' && relation !== null) {
+        const referencedEventId = (relation as Record<string, unknown>).event_id;
+        if (typeof referencedEventId === 'string') addEvent(room.findEventById(referencedEventId));
+      }
+
+      const resolved = resolveLatestOfficeFileRevision({
+        currentEventId: eventId,
+        currentContent: currentContent as unknown as Record<string, unknown>,
+        currentEventTimestamp: ts,
+        timelineEvents: Array.from(eventMap.values()),
+      });
+      if (resolved) {
+        officeContent = resolved.content as unknown as IFileContent;
+        officeSourceEventId = resolved.sourceEventId;
+      }
+    }
+
+    return (
+      <>
+        <MFile
+          content={officeContent}
+          renderFileContent={({ body, mimeType, info, encInfo, url }) => {
+            if (getOfficeDocumentKind(body, mimeType)) {
+              return (
+                <OfficeFileEditor
                   body={body}
                   mimeType={mimeType}
                   url={url}
                   encInfo={encInfo}
-                  renderViewer={(p) => <PdfViewer {...p} />}
+                  infoSize={info.size}
+                  room={room}
+                  eventId={officeSourceEventId}
                 />
-              )}
-              renderAsTextFile={() => (
-                <ReadTextFile
-                  body={body}
-                  mimeType={mimeType}
-                  url={url}
-                  encInfo={encInfo}
-                  renderViewer={(p) => <TextViewer {...p} />}
-                />
-              )}
-              renderAsSpreadsheetFile={() => (
-                <ReadSpreadsheetFile
-                  body={body}
-                  mimeType={mimeType}
-                  url={url}
-                  encInfo={encInfo}
-                  renderViewer={(p) => <SpreadsheetViewer {...p} />}
-                />
-              )}
-              renderAsDocxFile={() => (
-                <ReadDocxFile
-                  body={body}
-                  mimeType={mimeType}
-                  url={url}
-                  encInfo={encInfo}
-                  renderViewer={(p) => <DocxViewer {...p} />}
-                />
-              )}
-            >
-              <DownloadFile
+              );
+            }
+
+            return (
+              <FileContent
                 body={body}
                 mimeType={mimeType}
-                url={url}
-                encInfo={encInfo}
-                info={info}
-              />
-            </FileContent>
-          );
-        }}
-        outlined={outlineAttachment}
-      />
-      {renderCaption()}
-    </>
-  );
+                renderAsPdfFile={() => (
+                  <ReadPdfFile
+                    body={body}
+                    mimeType={mimeType}
+                    url={url}
+                    encInfo={encInfo}
+                    renderViewer={(p) => <PdfViewer {...p} />}
+                  />
+                )}
+                renderAsTextFile={() => (
+                  <ReadTextFile
+                    body={body}
+                    mimeType={mimeType}
+                    url={url}
+                    encInfo={encInfo}
+                    renderViewer={(p) => <TextViewer {...p} />}
+                  />
+                )}
+                renderAsSpreadsheetFile={() => (
+                  <ReadSpreadsheetFile
+                    body={body}
+                    mimeType={mimeType}
+                    url={url}
+                    encInfo={encInfo}
+                    renderViewer={(p) => <SpreadsheetViewer {...p} />}
+                  />
+                )}
+                renderAsDocxFile={() => (
+                  <ReadDocxFile
+                    body={body}
+                    mimeType={mimeType}
+                    url={url}
+                    encInfo={encInfo}
+                    renderViewer={(p) => <DocxViewer {...p} />}
+                  />
+                )}
+              >
+                <DownloadFile
+                  body={body}
+                  mimeType={mimeType}
+                  url={url}
+                  encInfo={encInfo}
+                  info={info}
+                />
+              </FileContent>
+            );
+          }}
+          outlined={outlineAttachment}
+        />
+        {renderCaption()}
+      </>
+    );
+  };
 
   if (msgType === MsgType.Text) {
     const content = getContent<Record<string, unknown>>();
@@ -344,10 +396,11 @@ export function RenderMessageContent({
         <MAudio
           content={getContent()}
           renderAsFile={renderFile}
-          renderAudioContent={(props) => (
+          renderAudioContent={({ url, ...props }) => (
             <AudioContent
               {...props}
-              transcriptionId={eventId ?? props.url}
+              url={url}
+              transcriptionId={eventId ?? url}
               renderMediaControl={(p) => <MediaControl {...p} />}
             />
           )}

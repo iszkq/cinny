@@ -114,7 +114,7 @@ export const useAsyncCallbackValue = <TData, TError>(
   const [state, load] = useAsyncCallback<TData, TError, []>(asyncCallback);
 
   useEffect(() => {
-    load();
+    load().catch(() => undefined);
   }, [load]);
 
   return [state, load];

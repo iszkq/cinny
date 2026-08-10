@@ -81,7 +81,7 @@ type VerificationAcceptProps = {
   onAccept: () => Promise<void>;
 };
 function VerificationAccept({ onAccept }: VerificationAcceptProps) {
-  const [acceptState, accept] = useAsyncCallback(onAccept);
+  const [acceptState, accept] = useAsyncCallback<void, Error, []>(onAccept);
 
   const accepting = acceptState.status === AsyncStatus.Loading;
   return (
@@ -90,12 +90,17 @@ function VerificationAccept({ onAccept }: VerificationAcceptProps) {
       <Button
         variant="Primary"
         fill="Solid"
-        onClick={accept}
+        onClick={() => {
+          accept().catch(() => undefined);
+        }}
         before={accepting && <Spinner size="100" variant="Primary" fill="Solid" />}
         disabled={accepting}
       >
         <Text size="B400">接受</Text>
       </Button>
+      {acceptState.status === AsyncStatus.Error && (
+        <Text size="T200">接受验证请求失败：{acceptState.error.message}</Text>
+      )}
     </Box>
   );
 }
@@ -113,9 +118,28 @@ type VerificationStartProps = {
   onStart: () => Promise<void>;
 };
 function AutoVerificationStart({ onStart }: VerificationStartProps) {
+  const [startState, start] = useAsyncCallback<void, Error, []>(onStart);
+
   useEffect(() => {
-    onStart();
-  }, [onStart]);
+    start().catch(() => undefined);
+  }, [start]);
+
+  if (startState.status === AsyncStatus.Error) {
+    return (
+      <Box direction="Column" gap="400">
+        <Text>启动设备验证失败：{startState.error.message}</Text>
+        <Button
+          variant="Primary"
+          fill="Soft"
+          onClick={() => {
+            start().catch(() => undefined);
+          }}
+        >
+          <Text size="B400">重试</Text>
+        </Button>
+      </Box>
+    );
+  }
 
   return (
     <Box direction="Column" gap="400">
@@ -125,7 +149,9 @@ function AutoVerificationStart({ onStart }: VerificationStartProps) {
 }
 
 function CompareEmoji({ sasData }: { sasData: ShowSasCallbacks }) {
-  const [confirmState, confirm] = useAsyncCallback(useCallback(() => sasData.confirm(), [sasData]));
+  const [confirmState, confirm] = useAsyncCallback<void, Error, []>(
+    useCallback(() => sasData.confirm(), [sasData])
+  );
 
   const confirming =
     confirmState.status === AsyncStatus.Loading || confirmState.status === AsyncStatus.Success;
@@ -161,12 +187,17 @@ function CompareEmoji({ sasData }: { sasData: ShowSasCallbacks }) {
         <Button
           variant="Primary"
           fill="Soft"
-          onClick={confirm}
+          onClick={() => {
+            confirm().catch(() => undefined);
+          }}
           disabled={confirming}
           before={confirming && <Spinner size="100" variant="Primary" />}
         >
           <Text size="B400">一致</Text>
         </Button>
+        {confirmState.status === AsyncStatus.Error && (
+          <Text size="T200">确认失败：{confirmState.error.message}</Text>
+        )}
         <Button
           variant="Primary"
           fill="Soft"
@@ -192,7 +223,7 @@ function SasVerification({ verifier }: SasVerificationProps) {
     // Cancellation is already reflected by VerificationRequest.phase. Do not
     // call request.cancel() again from the verifier rejection: during SAS
     // tie-breaking or final synchronization that can cancel the winning flow.
-    void verifier.verify().catch(() => undefined);
+    verifier.verify().catch(() => undefined);
   }, [verifier]);
 
   if (sasData) {
@@ -216,7 +247,7 @@ function VerificationDone({ state, onRetry, onExit }: VerificationDoneProps) {
     return (
       <Box direction="Column" gap="400">
         <WaitingMessage message="表情验证已通过，正在保存设备可信状态..." />
-        <Text size="T200">保存完成前请不要关闭此窗口。</Text>
+        <Text size="T200">可关闭此窗口，可信状态仍会在后台继续保存。</Text>
       </Box>
     );
   }
@@ -306,7 +337,7 @@ export function DeviceVerification({ request, onExit }: DeviceVerificationProps)
 
   useEffect(() => {
     if (phase === VerificationPhase.Done && persistState.status === AsyncStatus.Idle) {
-      void runPersistVerification().catch(() => undefined);
+      runPersistVerification().catch(() => undefined);
     }
   }, [phase, persistState.status, runPersistVerification]);
 
@@ -339,16 +370,7 @@ export function DeviceVerification({ request, onExit }: DeviceVerificationProps)
               <Box grow="Yes">
                 <Text size="H4">设备验证</Text>
               </Box>
-              <IconButton
-                size="300"
-                radii="300"
-                onClick={handleCancel}
-                disabled={
-                  phase === VerificationPhase.Done &&
-                  (persistState.status === AsyncStatus.Idle ||
-                    persistState.status === AsyncStatus.Loading)
-                }
-              >
+              <IconButton size="300" radii="300" onClick={handleCancel}>
                 <Icon src={Icons.Cross} />
               </IconButton>
             </Header>
@@ -378,7 +400,7 @@ export function DeviceVerification({ request, onExit }: DeviceVerificationProps)
                 <VerificationDone
                   state={persistState}
                   onRetry={() => {
-                    void runPersistVerification().catch(() => undefined);
+                    runPersistVerification().catch(() => undefined);
                   }}
                   onExit={handleDone}
                 />

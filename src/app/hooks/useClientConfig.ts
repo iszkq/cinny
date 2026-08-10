@@ -46,6 +46,12 @@ export type ClientConfig = {
   officeEditor?: {
     /** ZIZIYI Office editor page with the Xinghuo postMessage bridge enabled. */
     url?: string;
+    /** Maximum time to wait for the embedded editor to export the updated file. */
+    exportTimeoutSeconds?: number;
+    /** Maximum time to encrypt and prepare an Office update before media upload starts. */
+    prepareTimeoutSeconds?: number;
+    /** Maximum time for Matrix media upload; publishing the room event is intentionally excluded. */
+    uploadTimeoutSeconds?: number;
   };
 
   featuredCommunities?: {
