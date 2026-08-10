@@ -43,6 +43,11 @@ export type ClientConfig = {
     model?: string;
   };
 
+  officeEditor?: {
+    /** ZIZIYI Office editor page. Defaults to the public Cloudflare deployment. */
+    url?: string;
+  };
+
   featuredCommunities?: {
     openAsDefault?: boolean;
     spaces?: string[];

@@ -967,9 +967,14 @@ export const getLatestEdit = (
   targetEvent: MatrixEvent,
   editEvents: MatrixEvent[]
 ): MatrixEvent | undefined => {
-  const eventByTargetSender = (rEvent: MatrixEvent) =>
-    rEvent.getSender() === targetEvent.getSender();
-  return editEvents.sort((m1, m2) => m2.getTs() - m1.getTs()).find(eventByTargetSender);
+  const targetIsOfficeFile =
+    targetEvent.getContent().msgtype === MsgType.File &&
+    editEvents.some((event) => event.getContent()['com.xinghuo.office_update'] === true);
+  const allowedReplacement = (replacementEvent: MatrixEvent) =>
+    replacementEvent.getSender() === targetEvent.getSender() ||
+    (targetIsOfficeFile && replacementEvent.getContent()['com.xinghuo.office_update'] === true);
+
+  return editEvents.sort((m1, m2) => m2.getTs() - m1.getTs()).find(allowedReplacement);
 };
 
 export const getEditedEvent = (

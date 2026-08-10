@@ -18,6 +18,9 @@
     "baseUrl": "https://api.inferera.com/v1",
     "model": "glm-ocr"
   },
+  "officeEditor": {
+    "url": "https://office.ziziyi.com/editor"
+  },
   "agoraVoice": {
     "appId": "5e589f6998834f71be88c2198cc2aad6",
     "appCertificate": "ff2d316da1c54300861e7a97a126d48b",

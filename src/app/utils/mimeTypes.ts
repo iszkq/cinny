@@ -120,10 +120,13 @@ export const ALLOWED_BLOB_MIME_TYPES = [
 export const FALLBACK_MIMETYPE = 'application/octet-stream';
 
 export const DOCX_MIME_TYPES = [
+  'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'application/vnd.ms-word.document.macroenabled.12',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.template',
   'application/vnd.ms-word.template.macroenabled.12',
+  'application/rtf',
+  'application/vnd.oasis.opendocument.text',
 ];
 
 export const SPREADSHEET_MIME_TYPES = [
@@ -136,7 +139,88 @@ export const SPREADSHEET_MIME_TYPES = [
   'application/vnd.ms-excel',
   'text/csv',
   'text/tab-separated-values',
+  'application/vnd.oasis.opendocument.spreadsheet',
 ];
+
+export const PRESENTATION_MIME_TYPES = [
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/vnd.openxmlformats-officedocument.presentationml.slideshow',
+  'application/vnd.openxmlformats-officedocument.presentationml.template',
+  'application/vnd.ms-powerpoint.presentation.macroenabled.12',
+  'application/vnd.ms-powerpoint.slideshow.macroenabled.12',
+  'application/vnd.ms-powerpoint.template.macroenabled.12',
+  'application/vnd.oasis.opendocument.presentation',
+];
+
+const WORD_FILE_EXTENSIONS = [
+  'doc',
+  'docx',
+  'docm',
+  'dotx',
+  'dotm',
+  'odt',
+  'rtf',
+] as const;
+const SPREADSHEET_FILE_EXTENSIONS = [
+  'xlsx',
+  'xlsm',
+  'xltx',
+  'xltm',
+  'xlam',
+  'xlsb',
+  'xls',
+  'ods',
+  'csv',
+  'tsv',
+] as const;
+const PRESENTATION_FILE_EXTENSIONS = [
+  'ppt',
+  'pptx',
+  'pptm',
+  'ppsx',
+  'ppsm',
+  'potx',
+  'potm',
+  'odp',
+] as const;
+
+export const OFFICE_FILE_EXTENSIONS = [
+  ...WORD_FILE_EXTENSIONS,
+  ...SPREADSHEET_FILE_EXTENSIONS,
+  ...PRESENTATION_FILE_EXTENSIONS,
+] as const;
+
+export type OfficeDocumentKind = 'word' | 'spreadsheet' | 'presentation';
+
+export const getOfficeDocumentKind = (
+  fileName: string,
+  mimeType: string
+): OfficeDocumentKind | undefined => {
+  const normalizedMimeType = getNormalizedMimeType(mimeType);
+  const ext = getFileNameExt(fileName);
+
+  if (
+    DOCX_MIME_TYPES.includes(normalizedMimeType) ||
+    WORD_FILE_EXTENSIONS.includes(ext as (typeof WORD_FILE_EXTENSIONS)[number])
+  ) {
+    return 'word';
+  }
+  if (
+    SPREADSHEET_MIME_TYPES.includes(normalizedMimeType) ||
+    SPREADSHEET_FILE_EXTENSIONS.includes(ext as (typeof SPREADSHEET_FILE_EXTENSIONS)[number])
+  ) {
+    return 'spreadsheet';
+  }
+  if (
+    PRESENTATION_MIME_TYPES.includes(normalizedMimeType) ||
+    PRESENTATION_FILE_EXTENSIONS.includes(ext as (typeof PRESENTATION_FILE_EXTENSIONS)[number])
+  ) {
+    return 'presentation';
+  }
+
+  return undefined;
+};
 
 export type FilePreviewKind = 'none' | 'text' | 'pdf' | 'spreadsheet' | 'docx';
 

@@ -1,7 +1,12 @@
 import { Badge, Box, Icon, IconButton, Icons, Spinner, Text, as, toRem } from 'folds';
 import React, { ReactNode, useCallback } from 'react';
 import { EncryptedAttachmentInfo } from 'browser-encrypt-attachment';
-import { getFileNameExt, mimeTypeToExt } from '../../utils/mimeTypes';
+import {
+  OfficeDocumentKind,
+  getFileNameExt,
+  getOfficeDocumentKind,
+  mimeTypeToExt,
+} from '../../utils/mimeTypes';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
@@ -14,6 +19,34 @@ import {
 import { saveDownloadedFile } from '../../utils/saveDownloadedFile';
 
 const badgeStyles = { maxWidth: toRem(100) };
+
+const OFFICE_ICON_META: Record<OfficeDocumentKind, { label: string; background: string }> = {
+  word: { label: 'W', background: '#185ABD' },
+  spreadsheet: { label: 'X', background: '#107C41' },
+  presentation: { label: 'P', background: '#C43E1C' },
+};
+
+function OfficeDocumentIcon({ kind }: { kind: OfficeDocumentKind }) {
+  const meta = OFFICE_ICON_META[kind];
+  return (
+    <Box
+      alignItems="Center"
+      justifyContent="Center"
+      shrink="No"
+      aria-label={`${kind} document`}
+      style={{
+        width: toRem(32),
+        height: toRem(32),
+        borderRadius: toRem(6),
+        color: '#fff',
+        backgroundColor: meta.background,
+        boxShadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.18)',
+      }}
+    >
+      <Text size="B400">{meta.label}</Text>
+    </Box>
+  );
+}
 
 type FileDownloadButtonProps = {
   filename: string;
@@ -74,6 +107,7 @@ export const FileHeader = as<'div', FileHeaderProps>(
   ({ body, mimeType, after, actionPlacement = 'end', ...props }, ref) => {
     const nameExt = getFileNameExt(body);
     const extLabel = nameExt && nameExt !== body ? nameExt : mimeTypeToExt(mimeType);
+    const officeKind = getOfficeDocumentKind(body, mimeType);
 
     if (actionPlacement === 'badge') {
       return (
@@ -87,6 +121,7 @@ export const FileHeader = as<'div', FileHeaderProps>(
           ref={ref}
         >
           <Box alignItems="Center" gap="100">
+            {officeKind && <OfficeDocumentIcon kind={officeKind} />}
             <Badge style={badgeStyles} variant="Secondary" radii="Pill">
               <Text size="O400" truncate>
                 {extLabel}
@@ -111,6 +146,7 @@ export const FileHeader = as<'div', FileHeaderProps>(
         {...props}
         ref={ref}
       >
+        {officeKind && <OfficeDocumentIcon kind={officeKind} />}
         <Box shrink="No">
           <Badge style={badgeStyles} variant="Secondary" radii="Pill">
             <Text size="O400" truncate>

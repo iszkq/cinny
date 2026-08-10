@@ -31,7 +31,7 @@ import { UrlPreviewCard, UrlPreviewHolder } from './url-preview';
 import { Image, MediaControl, Video } from './media';
 import { ImageViewer } from './image-viewer';
 import { PdfViewer } from './Pdf-viewer';
-import { DocxViewer, SpreadsheetViewer } from './file-viewer';
+import { DocxViewer, OfficeFileEditor, SpreadsheetViewer } from './file-viewer';
 import { TextViewer } from './text-viewer';
 import { JitsiMeetCard } from './jitsi-meet';
 import { testMatrixTo } from '../plugins/matrix-to';
@@ -178,6 +178,15 @@ export function RenderMessageContent({
               />
             )}
           >
+            <OfficeFileEditor
+              body={body}
+              mimeType={mimeType}
+              url={url}
+              encInfo={encInfo}
+              infoSize={info.size}
+              room={room}
+              eventId={eventId}
+            />
             <DownloadFile body={body} mimeType={mimeType} url={url} encInfo={encInfo} info={info} />
           </FileContent>
         )}
