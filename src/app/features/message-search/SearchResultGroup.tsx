@@ -148,6 +148,7 @@ export function SearchResultGroup({
         outlineAttachment
         room={room}
         eventId={event.event_id}
+        eventSenderId={event.sender}
       />
     );
   };
@@ -176,6 +177,7 @@ export function SearchResultGroup({
             outlineAttachment
             room={room}
             eventId={event.event_id}
+            eventSenderId={event.sender}
           />
         );
       },

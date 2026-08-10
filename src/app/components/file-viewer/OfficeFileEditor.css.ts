@@ -5,7 +5,9 @@ export const card = style([
   DefaultReset,
   {
     width: '100%',
+    boxSizing: 'border-box',
     overflow: 'hidden',
+    background: color.Surface.Container,
   },
 ]);
 
@@ -16,8 +18,10 @@ export const fileSummary = style([
     alignItems: 'center',
     gap: config.space.S300,
     minWidth: 0,
+    minHeight: toRem(78),
     padding: `${config.space.S300} ${config.space.S400}`,
-    background: color.SurfaceVariant.Container,
+    background: color.Surface.Container,
+    color: color.Surface.OnContainer,
   },
 ]);
 

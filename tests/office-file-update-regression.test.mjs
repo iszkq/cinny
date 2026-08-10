@@ -14,7 +14,9 @@ const loadOfficeFileUtils = async () => {
       target: ts.ScriptTarget.ES2022,
     },
   }).outputText;
-  const moduleUrl = `data:text/javascript;base64,${Buffer.from(output).toString('base64')}`;
+  const moduleUrl = `data:text/javascript;base64,${Buffer.from(output).toString(
+    'base64'
+  )}#${Date.now()}-${Math.random()}`;
   return import(moduleUrl);
 };
 
@@ -40,6 +42,7 @@ test('the original sender publishes a spec-compatible m.file replacement', async
   });
 
   assert.equal(result.mode, 'replace');
+  assert.equal(result.eventType, 'm.room.message');
   assert.equal(result.content.msgtype, 'm.file');
   assert.equal(result.content.body, '* report.docx');
   assert.deepEqual(result.content['m.relates_to'], {
@@ -68,6 +71,7 @@ test('a collaborator publishes a visible standalone m.file revision', async () =
   });
 
   assert.equal(result.mode, 'successor');
+  assert.equal(result.eventType, 'm.room.message');
   assert.equal(result.content.msgtype, 'm.file');
   assert.equal(result.content.body, 'report.docx');
   assert.equal(result.content.url, 'mxc://example.org/new-revision');
@@ -117,6 +121,7 @@ test('an unknown source sender cannot create an invalid replacement relation', a
   });
 
   assert.equal(result.mode, 'successor');
+  assert.equal(result.eventType, 'm.room.message');
   assert.deepEqual(result.content['m.relates_to'], {
     rel_type: 'm.reference',
     event_id: '$missing-from-timeline',
@@ -328,6 +333,82 @@ test('the newest valid standalone successor is used by the original and successo
   assert.equal(fromOlderCard.content.url, 'mxc://example.org/newest');
 });
 
+test('an acknowledged collaborator revision immediately updates a search result before timeline sync', async () => {
+  const { OFFICE_UPDATE_PROPERTY, rememberOfficeFileRevision, resolveLatestOfficeFileRevision } =
+    await loadOfficeFileUtils();
+  const sourceContent = { ...latestFileContent, url: 'mxc://example.org/original' };
+  const revisionContent = {
+    ...latestFileContent,
+    url: 'mxc://example.org/hidden-revision',
+    [OFFICE_UPDATE_PROPERTY]: { source_event_id: '$original', updated_at: 2000 },
+    'm.relates_to': { rel_type: 'm.reference', event_id: '$original' },
+  };
+
+  rememberOfficeFileRevision({
+    sourceEventId: '$original',
+    revisionEventId: '$hidden-revision',
+    senderId: '@bob:example.org',
+    eventType: 'm.room.message',
+    timestamp: 2000,
+    content: revisionContent,
+  });
+
+  const resolved = resolveLatestOfficeFileRevision({
+    currentEventId: '$original',
+    currentContent: sourceContent,
+    currentEventTimestamp: 1000,
+    timelineEvents: [
+      {
+        eventId: '$original',
+        senderId: '@alice:example.org',
+        eventType: 'm.room.message',
+        timestamp: 1000,
+        content: sourceContent,
+      },
+    ],
+  });
+
+  assert.equal(resolved.revisionEventId, '$hidden-revision');
+  assert.equal(resolved.content.url, 'mxc://example.org/hidden-revision');
+
+  const newerContent = {
+    ...revisionContent,
+    url: 'mxc://example.org/newer-server-revision',
+    [OFFICE_UPDATE_PROPERTY]: { source_event_id: '$original', updated_at: 1800 },
+  };
+  const afterSync = resolveLatestOfficeFileRevision({
+    currentEventId: '$original',
+    currentContent: sourceContent,
+    currentEventTimestamp: 1000,
+    timelineEvents: [
+      {
+        eventId: '$original',
+        senderId: '@alice:example.org',
+        eventType: 'm.room.message',
+        timestamp: 1000,
+        content: sourceContent,
+      },
+      {
+        eventId: '$hidden-revision',
+        senderId: '@bob:example.org',
+        eventType: 'm.room.message',
+        timestamp: 1500,
+        content: revisionContent,
+      },
+      {
+        eventId: '$newer-server-revision',
+        senderId: '@carol:example.org',
+        eventType: 'm.room.message',
+        timestamp: 1800,
+        content: newerContent,
+      },
+    ],
+  });
+
+  assert.equal(afterSync.revisionEventId, '$newer-server-revision');
+  assert.equal(afterSync.content.url, 'mxc://example.org/newer-server-revision');
+});
+
 test('successor selection rejects unrelated, malformed, redacted, and local events', async () => {
   const { OFFICE_UPDATE_PROPERTY, resolveLatestOfficeFileRevision } = await loadOfficeFileUtils();
   const sourceContent = { ...latestFileContent, url: 'mxc://example.org/original' };
@@ -494,14 +575,25 @@ test('the Office editor chooses replacement or successor from the source sender'
   const source = await readSource('src/app/components/file-viewer/OfficeFileEditor.tsx');
 
   assert.match(source, /buildOfficeFileUpdateMessage\(\{/);
-  assert.match(source, /sourceSenderId: room\.findEventById\(eventId\)\?\.getSender\(\)/);
+  assert.match(
+    source,
+    /sourceSenderId: sourceSenderId \?\? room\.findEventById\(eventId\)\?\.getSender\(\)/
+  );
   assert.match(source, /currentUserId: mx\.getSafeUserId\(\)/);
   assert.match(source, /await mx\.sendMessage\(room\.roomId, content as never\)/);
+  assert.match(source, /rememberOfficeFileRevision\(\{/);
   assert.doesNotMatch(source, /const OFFICE_UPDATE_PROPERTY/);
+});
+
+test('message search passes the source sender so saving can update the original card', async () => {
+  const source = await readSource('src/app/features/message-search/SearchResultGroup.tsx');
+  assert.match(source, /eventSenderId=\{event\.sender\}/);
 });
 
 test('Office revision resolution includes the SDK aggregated replacement event', async () => {
   const source = await readSource('src/app/components/RenderMessageContent.tsx');
 
   assert.match(source, /addEvent\(currentEvent\?\.replacingEvent\(\) \?\? undefined\)/);
+  assert.match(source, /RelationType\.Reference,\s+'m\.room\.message'/);
+  assert.match(source, /RelationType\.Replace,\s+'m\.room\.message'/);
 });

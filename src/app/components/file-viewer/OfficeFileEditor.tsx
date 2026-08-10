@@ -20,7 +20,11 @@ import { useClientConfig } from '../../hooks/useClientConfig';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 import { bytesToSize } from '../../utils/common';
 import { getFileNameExt, getOfficeDocumentKind, mimeTypeToExt } from '../../utils/mimeTypes';
-import { buildOfficeFileUpdateMessage, OfficeFileMessageContent } from '../../utils/officeFile';
+import {
+  buildOfficeFileUpdateMessage,
+  OfficeFileMessageContent,
+  rememberOfficeFileRevision,
+} from '../../utils/officeFile';
 import {
   decryptFile,
   downloadEncryptedMedia,
@@ -197,6 +201,7 @@ export type OfficeFileEditorProps = {
   infoSize?: number;
   room?: Room;
   eventId?: string;
+  sourceSenderId?: string;
 };
 
 const OFFICE_ICON_META = {
@@ -258,6 +263,7 @@ export function OfficeFileEditor({
   infoSize,
   room,
   eventId,
+  sourceSenderId,
 }: OfficeFileEditorProps) {
   const mx = useMatrixClient();
   const clientConfig = useClientConfig();
@@ -798,9 +804,9 @@ export function OfficeFileEditor({
         latestContent.url = replacementMxc;
       }
 
-      const { content } = buildOfficeFileUpdateMessage({
+      const { content, eventType } = buildOfficeFileUpdateMessage({
         sourceEventId: eventId,
-        sourceSenderId: room.findEventById(eventId)?.getSender(),
+        sourceSenderId: sourceSenderId ?? room.findEventById(eventId)?.getSender(),
         currentUserId: mx.getSafeUserId(),
         latestContent,
       });
@@ -813,9 +819,16 @@ export function OfficeFileEditor({
       ) {
         setPhase('publishing');
       }
-      await mx.sendMessage(room.roomId, content as never);
+      const sendResult = await mx.sendMessage(room.roomId, content as never);
+      rememberOfficeFileRevision({
+        sourceEventId: eventId,
+        revisionEventId: sendResult?.event_id,
+        senderId: mx.getSafeUserId(),
+        eventType,
+        content,
+      });
     },
-    [armSaveTimeout, body, eventId, mimeType, mx, room, uploadTimeoutMs]
+    [armSaveTimeout, body, eventId, mimeType, mx, room, sourceSenderId, uploadTimeoutMs]
   );
 
   useEffect(() => {

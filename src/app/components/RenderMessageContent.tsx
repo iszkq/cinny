@@ -1,5 +1,5 @@
 import React from 'react';
-import { MatrixEvent, MsgType, Room } from 'matrix-js-sdk';
+import { Direction, MatrixEvent, MsgType, RelationType, Room } from 'matrix-js-sdk';
 import { HTMLReactParserOptions } from 'html-react-parser';
 import { Opts } from 'linkifyjs';
 import { config } from 'folds';
@@ -48,7 +48,12 @@ import { getJitsiMeetInfo } from '../utils/jitsiMeet';
 import { getMxIdLocalPart, mxcUrlToHttp } from '../utils/matrix';
 import { getMemberAvatarMxc, getMemberDisplayName } from '../utils/room';
 import { getOfficeDocumentKind } from '../utils/mimeTypes';
-import { OfficeFileTimelineEvent, resolveLatestOfficeFileRevision } from '../utils/officeFile';
+import {
+  OFFICE_UPDATE_PROPERTY,
+  OfficeFileTimelineEvent,
+  resolveLatestOfficeFileRevision,
+  subscribeOfficeFileRevisions,
+} from '../utils/officeFile';
 import type { ViewerImageItem } from './message/content/ImageContent';
 
 const toOfficeTimelineEvent = (event: MatrixEvent): OfficeFileTimelineEvent => ({
@@ -59,6 +64,24 @@ const toOfficeTimelineEvent = (event: MatrixEvent): OfficeFileTimelineEvent => (
   redacted: event.isRedacted(),
   content: event.getContent<Record<string, unknown>>(),
 });
+
+const getOfficeSourceEventId = (eventId: string, content: Record<string, unknown>): string => {
+  const metadata = content[OFFICE_UPDATE_PROPERTY];
+  const relation = content['m.relates_to'];
+  if (
+    typeof metadata === 'object' &&
+    metadata !== null &&
+    typeof relation === 'object' &&
+    relation !== null
+  ) {
+    const sourceEventId = (metadata as Record<string, unknown>).source_event_id;
+    const relatedEventId = (relation as Record<string, unknown>).event_id;
+    if (typeof sourceEventId === 'string' && sourceEventId === relatedEventId) {
+      return sourceEventId;
+    }
+  }
+  return eventId;
+};
 
 type RenderMessageContentProps = {
   displayName: string;
@@ -75,6 +98,7 @@ type RenderMessageContentProps = {
   outlineAttachment?: boolean;
   room?: Room;
   eventId?: string;
+  eventSenderId?: string;
   imageViewerItems?: ViewerImageItem[];
 };
 export function RenderMessageContent({
@@ -92,8 +116,13 @@ export function RenderMessageContent({
   outlineAttachment,
   room,
   eventId,
+  eventSenderId,
   imageViewerItems,
 }: RenderMessageContentProps) {
+  const [, setOfficeRevision] = React.useState(0);
+  const [fetchedOfficeEvents, setFetchedOfficeEvents] = React.useState<OfficeFileTimelineEvent[]>(
+    []
+  );
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
   const myUserId = mx.getSafeUserId();
@@ -109,6 +138,65 @@ export function RenderMessageContent({
       mxcUrlToHttp(mx, myAvatarMxc, useAuthentication, 128, 128, 'crop') ??
       undefined
     : undefined;
+
+  const revisionContent = msgType === MsgType.File ? getContent<IFileContent>() : undefined;
+  const revisionFilename = revisionContent?.filename ?? revisionContent?.body ?? '';
+  const revisionMimeType = revisionContent?.info?.mimetype ?? 'application/octet-stream';
+  const isOfficeFile = Boolean(getOfficeDocumentKind(revisionFilename, revisionMimeType));
+  const revisionSourceEventId =
+    eventId && revisionContent
+      ? getOfficeSourceEventId(eventId, revisionContent as unknown as Record<string, unknown>)
+      : undefined;
+
+  React.useEffect(() => {
+    if (!isOfficeFile) return undefined;
+    return subscribeOfficeFileRevisions(() => setOfficeRevision((revision) => revision + 1));
+  }, [isOfficeFile]);
+
+  React.useEffect(() => {
+    let disposed = false;
+    setFetchedOfficeEvents([]);
+    if (!room || !revisionSourceEventId || !isOfficeFile) return undefined;
+
+    const loadRelations = async () => {
+      const requests = await Promise.allSettled([
+        mx.relations(room.roomId, revisionSourceEventId, RelationType.Reference, 'm.room.message', {
+          dir: Direction.Backward,
+          limit: 50,
+        }),
+        mx.relations(room.roomId, revisionSourceEventId, RelationType.Replace, 'm.room.message', {
+          dir: Direction.Backward,
+          limit: 50,
+        }),
+      ]);
+      if (disposed) return;
+
+      const events = new Map<string, OfficeFileTimelineEvent>();
+      requests.forEach((request) => {
+        if (request.status !== 'fulfilled') return;
+        const addEvent = (event: MatrixEvent | null | undefined) => {
+          if (!event) return;
+          const descriptor = toOfficeTimelineEvent(event);
+          if (descriptor.eventId) events.set(descriptor.eventId, descriptor);
+          const replacement = event.replacingEvent();
+          if (replacement) {
+            const replacementDescriptor = toOfficeTimelineEvent(replacement);
+            if (replacementDescriptor.eventId) {
+              events.set(replacementDescriptor.eventId, replacementDescriptor);
+            }
+          }
+        };
+        addEvent(request.value.originalEvent);
+        request.value.events.forEach(addEvent);
+      });
+      setFetchedOfficeEvents(Array.from(events.values()));
+    };
+
+    void loadRelations();
+    return () => {
+      disposed = true;
+    };
+  }, [isOfficeFile, mx, revisionSourceEventId, room]);
 
   const renderUrlsPreview = (urls: string[]) => {
     const filteredUrls = urls.filter((url) => !testMatrixTo(url));
@@ -150,6 +238,7 @@ export function RenderMessageContent({
     const currentMimeType = currentContent.info?.mimetype ?? 'application/octet-stream';
     let officeContent = currentContent;
     let officeSourceEventId = eventId;
+    let officeSourceSenderId = eventSenderId;
 
     if (
       room &&
@@ -164,8 +253,21 @@ export function RenderMessageContent({
         if (descriptor.eventId) eventMap.set(descriptor.eventId, descriptor);
       };
       room.getUnfilteredTimelineSet().getLiveTimeline().getEvents().forEach(addEvent);
+      fetchedOfficeEvents.forEach((event) => {
+        if (event.eventId) eventMap.set(event.eventId, event);
+      });
       const currentEvent = room.findEventById(eventId);
       addEvent(currentEvent);
+      const currentSenderId = currentEvent?.getSender() ?? eventSenderId;
+      if (currentSenderId) {
+        eventMap.set(eventId, {
+          eventId,
+          senderId: currentSenderId,
+          eventType: eventType ?? 'm.room.message',
+          timestamp: ts,
+          content: currentContent as unknown as Record<string, unknown>,
+        });
+      }
       addEvent(currentEvent?.replacingEvent() ?? undefined);
       const relation = currentEvent?.getContent<Record<string, unknown>>()['m.relates_to'];
       if (typeof relation === 'object' && relation !== null) {
@@ -182,6 +284,7 @@ export function RenderMessageContent({
       if (resolved) {
         officeContent = resolved.content as unknown as IFileContent;
         officeSourceEventId = resolved.sourceEventId;
+        officeSourceSenderId = eventMap.get(resolved.sourceEventId)?.senderId;
       }
     }
 
@@ -200,6 +303,7 @@ export function RenderMessageContent({
                   infoSize={info.size}
                   room={room}
                   eventId={officeSourceEventId}
+                  sourceSenderId={officeSourceSenderId}
                 />
               );
             }

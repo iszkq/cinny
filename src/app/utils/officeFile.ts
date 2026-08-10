@@ -23,6 +23,7 @@ export type OfficeFileUpdateMode = 'replace' | 'successor';
 
 export type OfficeFileUpdateMessage = {
   content: OfficeFileMessageContent;
+  eventType: typeof ROOM_MESSAGE_EVENT_TYPE;
   mode: OfficeFileUpdateMode;
 };
 
@@ -47,6 +48,54 @@ type ResolveOfficeFileRevisionOptions = {
   currentContent: Record<string, unknown>;
   currentEventTimestamp: number;
   timelineEvents: OfficeFileTimelineEvent[];
+};
+
+// An Office revision can be acknowledged by the send request before the room
+// timeline receives its local echo. Keep only the lightweight
+// event metadata briefly so reopening the same card does not fall back to the
+// old media URI during that sync window. The Matrix event remains authoritative
+// after it arrives, and no document bytes are retained here.
+const optimisticRevisions = new Map<string, OfficeFileTimelineEvent>();
+const MAX_OPTIMISTIC_REVISIONS = 128;
+const optimisticRevisionListeners = new Set<() => void>();
+
+export const subscribeOfficeFileRevisions = (listener: () => void): (() => void) => {
+  optimisticRevisionListeners.add(listener);
+  return () => optimisticRevisionListeners.delete(listener);
+};
+
+export const rememberOfficeFileRevision = ({
+  sourceEventId,
+  revisionEventId,
+  senderId,
+  eventType,
+  content,
+  timestamp = Date.now(),
+}: {
+  sourceEventId: string;
+  revisionEventId?: string;
+  senderId: string;
+  eventType: string;
+  content: Record<string, unknown>;
+  timestamp?: number;
+}): void => {
+  const eventId =
+    revisionEventId && isServerEventId(revisionEventId)
+      ? revisionEventId
+      : `$local-office-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  optimisticRevisions.set(sourceEventId, {
+    eventId,
+    senderId,
+    eventType,
+    timestamp,
+    content: { ...content },
+  });
+  while (optimisticRevisions.size > MAX_OPTIMISTIC_REVISIONS) {
+    const oldest = optimisticRevisions.keys().next().value;
+    if (typeof oldest !== 'string') break;
+    optimisticRevisions.delete(oldest);
+  }
+  optimisticRevisionListeners.forEach((listener) => listener());
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -211,9 +260,9 @@ const parseReplacement = (
 };
 
 /**
- * Resolve an Office card to the newest known valid revision. Successors remain ordinary visible
- * timeline messages; this helper only makes every card in the chain open and download the same
- * latest media. Candidate ordering always uses the homeserver event timestamp.
+ * Resolve an Office card to the newest known valid revision. Collaborator revisions are visible
+ * referenced file messages while same-sender revisions use standard replacements. Candidate
+ * ordering always uses the homeserver event timestamp.
  */
 export const resolveLatestOfficeFileRevision = ({
   currentEventId,
@@ -258,6 +307,18 @@ export const resolveLatestOfficeFileRevision = ({
     const replacement = parseReplacement(event, sourceEvent, sourceContent);
     if (replacement) candidates.push(replacement);
   });
+  const optimisticRevision = optimisticRevisions.get(sourceEventId);
+  if (
+    optimisticRevision &&
+    timelineEvents.some((event) => event.eventId === optimisticRevision.eventId)
+  ) {
+    optimisticRevisions.delete(sourceEventId);
+  } else if (optimisticRevision) {
+    const successor = parseSuccessor(optimisticRevision, sourceEventId, sourceContent);
+    if (successor) candidates.push(successor);
+    const replacement = parseReplacement(optimisticRevision, sourceEvent, sourceContent);
+    if (replacement) candidates.push(replacement);
+  }
   candidates.sort((a, b) => b.timestamp - a.timestamp || b.eventId.localeCompare(a.eventId));
 
   const currentMediaUrl = getMediaUrl(currentContent);
@@ -373,6 +434,7 @@ export const buildOfficeFileUpdateMessage = ({
   if (sourceSenderId && sourceSenderId === currentUserId) {
     return {
       mode: 'replace',
+      eventType: ROOM_MESSAGE_EVENT_TYPE,
       content: {
         ...newContent,
         body: `* ${newContent.body}`,
@@ -387,6 +449,7 @@ export const buildOfficeFileUpdateMessage = ({
 
   return {
     mode: 'successor',
+    eventType: ROOM_MESSAGE_EVENT_TYPE,
     content: {
       ...newContent,
       'm.relates_to': {
