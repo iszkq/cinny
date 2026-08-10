@@ -19,9 +19,6 @@ const CONNECTION_ISSUE_VISIBLE_DELAY_MS = 20000;
 const isConnectionIssueState = (state: SyncState | null): boolean =>
   state === SyncState.Reconnecting || state === SyncState.Error;
 
-const isHealthySyncState = (state: SyncState | null): boolean =>
-  state === SyncState.Prepared || state === SyncState.Syncing || state === SyncState.Catchup;
-
 const getSyncError = (data: unknown): unknown =>
   typeof data === 'object' && data !== null && 'error' in data
     ? (data as { error?: unknown }).error
@@ -43,16 +40,11 @@ export function SyncStatus({ mx }: SyncStatusProps) {
     previous: undefined,
   });
   const [visibleStateData, setVisibleStateData] = useState<StateData>(stateData);
-  const [syncEstablished, setSyncEstablished] = useState(false);
   const [connectionIssueSince, setConnectionIssueSince] = useState<number | null>(null);
 
   useSyncState(
     mx,
     useCallback((current, previous, data) => {
-      if (isHealthySyncState(current)) {
-        setSyncEstablished(true);
-      }
-
       const error = getSyncError(data);
       setStateData((s) => {
         if (s.current === current && s.previous === previous && s.error === error) {
@@ -76,10 +68,7 @@ export function SyncStatus({ mx }: SyncStatusProps) {
   useEffect(() => {
     if (isVisibleConnectionIssue(stateData)) {
       const issueSince = connectionIssueSince ?? Date.now();
-      const visibleInMs = Math.max(
-        0,
-        issueSince + CONNECTION_ISSUE_VISIBLE_DELAY_MS - Date.now()
-      );
+      const visibleInMs = Math.max(0, issueSince + CONNECTION_ISSUE_VISIBLE_DELAY_MS - Date.now());
       const reconnectingTimer = window.setTimeout(() => {
         setVisibleStateData(stateData);
       }, visibleInMs);
@@ -92,13 +81,6 @@ export function SyncStatus({ mx }: SyncStatusProps) {
     setVisibleStateData(stateData);
     return undefined;
   }, [connectionIssueSince, stateData]);
-
-  if (
-    !syncEstablished &&
-    isVisibleConnectionIssue(visibleStateData)
-  ) {
-    return null;
-  }
 
   if (
     visibleStateData.current === SyncState.Reconnecting &&
@@ -121,10 +103,7 @@ export function SyncStatus({ mx }: SyncStatusProps) {
     );
   }
 
-  if (
-    visibleStateData.current === SyncState.Error &&
-    !isAbortError(visibleStateData.error)
-  ) {
+  if (visibleStateData.current === SyncState.Error && !isAbortError(visibleStateData.error)) {
     return (
       <Box direction="Column" shrink="No">
         <Box
