@@ -11,7 +11,6 @@ import { LocalBackup } from './LocalBackup';
 import { DeviceLogoutBtn, DeviceKeyDetails, DeviceTile, DeviceTilePlaceholder } from './DeviceTile';
 import { OtherDevices } from './OtherDevices';
 import {
-  CurrentDeviceVerificationBadge,
   DeviceVerificationOptions,
   EnableVerification,
   VerificationStatusBadge,
@@ -144,10 +143,7 @@ export function Devices({ requestClose }: DevicesProps) {
                       device={currentDevice}
                       refreshDeviceList={refreshDeviceList}
                       options={
-                        <Box gap="200" alignItems="Center" wrap="Wrap">
-                          <CurrentDeviceVerificationBadge verificationStatus={verificationStatus} />
-                          <DeviceLogoutBtn />
-                        </Box>
+                        <DeviceLogoutBtn />
                       }
                     >
                       {crypto && <DeviceKeyDetails crypto={crypto} />}

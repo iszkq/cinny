@@ -1,4 +1,4 @@
-import React, { MouseEventHandler, useCallback, useState } from 'react';
+import React, { MouseEventHandler, useCallback, useEffect, useState } from 'react';
 import { useAtom, useSetAtom } from 'jotai';
 import { CryptoApi } from 'matrix-js-sdk/lib/crypto-api';
 import type { KeyBackupInfo } from 'matrix-js-sdk/lib/crypto-api/keybackup';
@@ -36,6 +36,10 @@ import {
 import { stopPropagation } from '../utils/keyboard';
 import { getBackupRestoreErrorMessage, runKeyBackupRestore } from '../utils/restoreKeyBackup';
 import { useMatrixClient } from '../hooks/useMatrixClient';
+
+const RESTORE_PROGRESS_STALL_TIMEOUT_MS = 12_000;
+const RESTORE_PROGRESS_STALL_MESSAGE =
+  '恢复仍在后台继续，你可以正常使用；完成或失败后这里会自动更新。';
 
 type BackupStatusProps = {
   enabled: boolean;
@@ -200,6 +204,27 @@ export function BackupRestoreTile({ crypto }: BackupRestoreTileProps) {
     restoreProgress.status === BackupProgressStatus.Loading ||
     restoreProgress.status === BackupProgressStatus.Decrypting ||
     restoreProgress.status === BackupProgressStatus.Background;
+  const activelyRestoring =
+    restoreProgress.status === BackupProgressStatus.Fetching ||
+    restoreProgress.status === BackupProgressStatus.Loading ||
+    restoreProgress.status === BackupProgressStatus.Decrypting;
+
+  useEffect(() => {
+    if (!activelyRestoring) return undefined;
+
+    // The SDK restore promise is not cancellable and can occasionally stop
+    // emitting progress while it waits for the homeserver. Do not leave a
+    // permanent spinner on screen: detach the UI into a truthful background
+    // state. Any later progress, completion, or error will replace this state.
+    const timeoutId = window.setTimeout(() => {
+      setBackupRestoreProgress({
+        status: BackupProgressStatus.Background,
+        message: RESTORE_PROGRESS_STALL_MESSAGE,
+      });
+    }, RESTORE_PROGRESS_STALL_TIMEOUT_MS);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [activelyRestoring, restoreProgress, setBackupRestoreProgress]);
 
   const backupEnabled = useKeyBackupStatus(crypto);
   const backupInfo = useKeyBackupInfo(crypto);

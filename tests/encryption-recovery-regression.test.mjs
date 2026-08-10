@@ -75,7 +75,7 @@ test('the device page separates current-device trust from other devices', async 
   assert.match(devicesSource, /恢复密钥只验证正在使用的本机/);
   assert.match(devicesSource, /const currentDeviceId = mx\.getDeviceId\(\)/);
   assert.match(verificationSource, /CurrentDeviceVerificationBadge/);
-  assert.match(devicesSource, /<CurrentDeviceVerificationBadge/);
+  assert.doesNotMatch(devicesSource, /<CurrentDeviceVerificationBadge/);
   assert.match(verificationSource, /OtherDevicesVerificationBadge/);
   assert.match(verificationSource, /本机已验证/);
   assert.match(verificationSource, /本机验证状态暂不可用/);
@@ -317,6 +317,9 @@ test('manual recovery exposes real decrypt progress and a durable completion mar
   assert.match(progressSource, /<ProgressBar/);
   assert.match(manualSource, /可恢复的旧消息已解密完成/);
   assert.match(progressSource, /备份密钥已恢复，旧消息将在打开时逐步解密/);
+  assert.match(progressSource, /RESTORE_PROGRESS_STALL_TIMEOUT_MS = 12_000/);
+  assert.match(progressSource, /BackupProgressStatus\.Background/);
+  assert.match(progressSource, /恢复仍在后台继续/);
   assert.match(manualSource, /assertCompleteKeyBackupRestore\(restoreResult\)/);
   assert.match(manualSource, /AsyncStatus\.Success && !recoveryFailed/);
   assert.match(restoreSource, /result\.imported < result\.total/);
