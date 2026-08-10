@@ -92,6 +92,7 @@ type MatrixUploadPromise = ReturnType<ReturnType<typeof useMatrixClient>['upload
 type SaveOperation = {
   id: string;
   requestId: string;
+  dirtyRevision: number;
   closeAfterSave: boolean;
   stage: 'exporting' | 'uploading' | 'publishing';
   detached: boolean;
@@ -179,6 +180,7 @@ export function OfficeFileEditor({
   const saveOperationRef = useRef<SaveOperation>();
   const lastSettledSaveIdRef = useRef<string>();
   const dirtyRef = useRef(false);
+  const dirtyRevisionRef = useRef(0);
   const bridgeSaveProtocolRef = useRef<BridgeSaveProtocol>('unknown');
   const legacyExportInvalidatedRef = useRef(false);
   const mountedRef = useRef(true);
@@ -432,6 +434,7 @@ export function OfficeFileEditor({
       const operation: SaveOperation = {
         id: requestedSaveId || makeRequestId(),
         requestId: activeSession.requestId,
+        dirtyRevision: dirtyRevisionRef.current,
         closeAfterSave,
         stage: 'exporting',
         detached: false,
@@ -507,6 +510,7 @@ export function OfficeFileEditor({
       setSession(nextSession);
       setPhase('loading');
       dirtyRef.current = false;
+      dirtyRevisionRef.current = 0;
       setDirty(false);
       setShowClosePrompt(false);
       setErrorMessage(undefined);
@@ -711,6 +715,7 @@ export function OfficeFileEditor({
         return;
       }
       if (data.type === OFFICE_BRIDGE_DIRTY && data.dirty === true) {
+        dirtyRevisionRef.current += 1;
         dirtyRef.current = true;
         setDirty(true);
         if (!saveOperationRef.current) {
@@ -784,13 +789,15 @@ export function OfficeFileEditor({
 
             const shouldClose = activeOperation.closeAfterSave;
             const { detached } = activeOperation;
+            const hasNewerChanges =
+              dirtyRevisionRef.current > activeOperation.dirtyRevision;
             if (!settleSaveOperation(activeOperation)) return;
             if (mountedRef.current) setBackgroundPublishing(false);
             if (!mountedRef.current || detached) return;
-            dirtyRef.current = false;
-            setDirty(false);
+            dirtyRef.current = hasNewerChanges;
+            setDirty(hasNewerChanges);
             setErrorMessage(undefined);
-            setPhase('saved');
+            setPhase(hasNewerChanges ? 'ready' : 'saved');
             if (shouldClose) closeModal();
           })
           .catch(() => {

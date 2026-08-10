@@ -84,11 +84,30 @@ test('a late legacy SAVING message cannot restart a clean or already-saved docum
   assert.ok(bridgeStart > -1);
   assert.ok(bridgeStart < dirtyGuard);
   assert.ok(dirtyGuard < beginSave);
-  assert.match(source, /dirtyRef\.current = false;\s*setDirty\(false\);\s*setErrorMessage/);
   assert.match(
     source,
-    /OFFICE_BRIDGE_DIRTY && data\.dirty === true\) \{\s*dirtyRef\.current = true/
+    /dirtyRef\.current = hasNewerChanges;\s*setDirty\(hasNewerChanges\);\s*setErrorMessage/
   );
+  assert.match(
+    source,
+    /OFFICE_BRIDGE_DIRTY && data\.dirty === true\) \{\s*dirtyRevisionRef\.current \+= 1;\s*dirtyRef\.current = true/
+  );
+});
+
+test('successive Office saves preserve edits made after the exported snapshot', async () => {
+  const source = await readSource('src/app/components/file-viewer/OfficeFileEditor.tsx');
+
+  assert.match(source, /dirtyRevision: number/);
+  assert.match(source, /dirtyRevision: dirtyRevisionRef\.current/);
+  assert.match(
+    source,
+    /OFFICE_BRIDGE_DIRTY && data\.dirty === true\) \{\s*dirtyRevisionRef\.current \+= 1/
+  );
+  assert.match(
+    source,
+    /const hasNewerChanges =\s*dirtyRevisionRef\.current > activeOperation\.dirtyRevision/
+  );
+  assert.match(source, /setPhase\(hasNewerChanges \? 'ready' : 'saved'\)/);
 });
 
 test('media upload timeout ends before the non-cancellable publish stage', async () => {
