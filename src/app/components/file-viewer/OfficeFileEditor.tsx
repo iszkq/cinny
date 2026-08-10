@@ -47,7 +47,7 @@ import {
 } from '../../utils/nativeOfficeWindow';
 import * as css from './OfficeFileEditor.css';
 
-const DEFAULT_OFFICE_EDITOR_URL = 'https://office.221819.best/editor';
+const DEFAULT_OFFICE_EDITOR_URL = 'https://124.222.193.241:6258/editor';
 const OFFICE_BRIDGE_READY = 'xinghuo-office-ready';
 const OFFICE_BRIDGE_OPEN = 'xinghuo-office-open';
 const OFFICE_BRIDGE_OPENED = 'xinghuo-office-opened';

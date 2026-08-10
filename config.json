@@ -19,7 +19,7 @@
     "model": "glm-ocr"
   },
   "officeEditor": {
-    "url": "https://office.221819.best/editor",
+    "url": "https://124.222.193.241:6258/editor",
     "exportTimeoutSeconds": 45,
     "prepareTimeoutSeconds": 60,
     "uploadTimeoutSeconds": 120
