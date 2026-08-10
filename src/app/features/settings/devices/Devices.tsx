@@ -26,7 +26,6 @@ import {
   useSecretStorageKeyContent,
 } from '../../../hooks/useSecretStorage';
 import { useCrossSigningActive } from '../../../hooks/useCrossSigning';
-import { BackupRestoreTile } from '../../../components/BackupRestore';
 
 function DevicesPlaceholder() {
   return (
@@ -95,9 +94,7 @@ export function Devices({ requestClose }: DevicesProps) {
                 >
                   <SettingTile
                     title={'\u8bbe\u5907\u9a8c\u8bc1'}
-                    description={
-                      '\u7528\u4e8e\u9a8c\u8bc1\u8bbe\u5907\u8eab\u4efd\uff0c\u5e76\u6388\u4e88\u52a0\u5bc6\u6d88\u606f\u7684\u8bbf\u95ee\u6743\u9650\u3002'
-                    }
+                    description="恢复密钥只验证正在使用的本机；其他设备需在下方逐台点击“验证”，并在两台设备上比对表情。"
                     after={
                       <>
                         <EnableVerification visible={!crossSigningActive} />
@@ -147,9 +144,6 @@ export function Devices({ requestClose }: DevicesProps) {
                           secretStorageKeyContent={defaultSecretStorageKeyContent}
                         />
                       )}
-                    {crypto && verificationStatus === VerificationStatus.Verified && (
-                      <BackupRestoreTile crypto={crypto} />
-                    )}
                   </SequenceCard>
                 ) : (
                   <DeviceTilePlaceholder />

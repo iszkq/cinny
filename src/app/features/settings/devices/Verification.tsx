@@ -58,22 +58,27 @@ export function VerificationStatusBadge({
   if (verificationStatus === VerificationStatus.Unverified) {
     return (
       <Badge variant="Critical" fill="Solid" size="500">
-        <Text size="L400">{'\u672a\u9a8c\u8bc1'}</Text>
+        <Text size="L400">本机未验证</Text>
       </Badge>
     );
   }
 
   if (otherUnverifiedCount > 0) {
     return (
-      <Badge variant="Warning" fill="Solid" size="500">
-        <Text size="L400">{`${otherUnverifiedCount} \u4e2a\u672a\u9a8c\u8bc1`}</Text>
-      </Badge>
+      <Box gap="200" alignItems="Center" wrap="Wrap">
+        <Badge variant="Success" fill="Solid" size="500">
+          <Text size="L400">本机已验证</Text>
+        </Badge>
+        <Badge variant="Warning" fill="Solid" size="500">
+          <Text size="L400">{`${otherUnverifiedCount} 台其他设备未验证`}</Text>
+        </Badge>
+      </Box>
     );
   }
 
   return (
     <Badge variant="Success" fill="Solid" size="500">
-      <Text size="L400">{'\u5df2\u9a8c\u8bc1'}</Text>
+      <Text size="L400">全部设备已验证</Text>
     </Badge>
   );
 }
@@ -190,7 +195,7 @@ export function RecoveryKeyAccessTile({
       <InfoCard
         variant="Surface"
         title="恢复密钥"
-        description="无论设备验证或加密备份当前显示什么状态，都可以从这里重新输入恢复密钥。"
+        description="用于重新验证这台当前设备并恢复旧消息；不会自动验证下方列出的其他设备。"
         after={
           !recoveryOpen && (
             <Button

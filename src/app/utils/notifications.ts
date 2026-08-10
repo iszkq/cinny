@@ -1,4 +1,4 @@
-import { MatrixClient, MatrixEvent } from 'matrix-js-sdk';
+import { EventType, MatrixClient, MatrixEvent } from 'matrix-js-sdk';
 import { isDesktopUpdaterSupported } from './desktopUpdater';
 import { isAndroidApp } from './nativePlatform';
 import {
@@ -11,7 +11,7 @@ import { setOptimisticRoomReadMarker } from './room';
 export type AppNotificationPermission = PermissionState;
 export const ROOM_MARKED_AS_READ = 'cinny.room_marked_as_read';
 const PENDING_ROOM_READ_MARKERS_STORAGE_KEY = 'cinny:pending-room-read-markers';
-const MARKED_UNREAD_EVENT_TYPE = 'm.marked_unread';
+const MARKED_UNREAD_EVENT_TYPE = EventType.MarkedUnread;
 const PRIVATE_READ_RECEIPT_STABLE_VERSION = 'v1.4';
 const PRIVATE_READ_RECEIPT_UNSTABLE_FEATURE = 'org.matrix.msc2285.stable';
 

@@ -2,6 +2,7 @@ import { Room } from 'matrix-js-sdk';
 import {
   MatrixRTCSession,
   MatrixRTCSessionEvent,
+  MatrixRTCSessionEventHandlerMap,
 } from 'matrix-js-sdk/lib/matrixrtc/MatrixRTCSession';
 import { CallMembership } from 'matrix-js-sdk/lib/matrixrtc/CallMembership';
 import { useEffect, useState } from 'react';
@@ -53,36 +54,31 @@ export const useCallSession = (room: Room): MatrixRTCSession => {
   return session;
 };
 
-export const useCallMembers = (room: Room, session: MatrixRTCSession): CallMembership[] => {
-  relaxCallEventListenerLimit(session);
-
-  const [memberships, setMemberships] = useState<CallMembership[]>(
-    MatrixRTCSession.sessionMembershipsForRoom(room, session.sessionDescription)
-  );
-
-  useEffect(() => {
-    const updateMemberships = () => {
-      setMemberships(MatrixRTCSession.sessionMembershipsForRoom(room, session.sessionDescription));
-    };
-
-    updateMemberships();
-
-    session.on(MatrixRTCSessionEvent.MembershipsChanged, updateMemberships);
-    return () => {
-      session.removeListener(MatrixRTCSessionEvent.MembershipsChanged, updateMemberships);
-    };
-  }, [session, room]);
-
-  return memberships;
-};
-
-export const useCallMembersChange = (session: MatrixRTCSession, callback: () => void): void => {
+export const useCallMembersChange = (
+  session: MatrixRTCSession,
+  callback: (members: CallMembership[]) => void
+): void => {
   relaxCallEventListenerLimit(session);
 
   useEffect(() => {
-    session.on(MatrixRTCSessionEvent.MembershipsChanged, callback);
+    const handleMembershipsChange: MatrixRTCSessionEventHandlerMap[MatrixRTCSessionEvent.MembershipsChanged] =
+      (_oldestMembership, newMemberships) => {
+        callback(newMemberships);
+      };
+
+    session.on(MatrixRTCSessionEvent.MembershipsChanged, handleMembershipsChange);
     return () => {
-      session.removeListener(MatrixRTCSessionEvent.MembershipsChanged, callback);
+      session.removeListener(MatrixRTCSessionEvent.MembershipsChanged, handleMembershipsChange);
     };
   }, [session, callback]);
+};
+
+export const useCallMembers = (session: MatrixRTCSession): CallMembership[] => {
+  relaxCallEventListenerLimit(session);
+
+  const [memberships, setMemberships] = useState<CallMembership[]>(session.memberships);
+
+  useCallMembersChange(session, setMemberships);
+
+  return memberships;
 };

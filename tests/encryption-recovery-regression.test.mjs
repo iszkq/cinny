@@ -55,6 +55,18 @@ test('the recovery-key input remains reachable outside the unverified state', as
   assert.match(devicesSource, /<RecoveryKeyAccessTile/);
   assert.match(verificationSource, /输入恢复密钥/);
   assert.match(verificationSource, /initialMethod=\{ManualVerificationMethod\.RecoveryKey\}/);
+  assert.match(verificationSource, /不会自动验证下方列出的其他设备/);
+});
+
+test('the device page separates current-device trust from other devices', async () => {
+  const devicesSource = await readSource('src/app/features/settings/devices/Devices.tsx');
+  const verificationSource = await readSource('src/app/features/settings/devices/Verification.tsx');
+
+  assert.doesNotMatch(devicesSource, /BackupRestoreTile/);
+  assert.match(devicesSource, /恢复密钥只验证正在使用的本机/);
+  assert.match(verificationSource, /本机已验证/);
+  assert.match(verificationSource, /台其他设备未验证/);
+  assert.match(verificationSource, /全部设备已验证/);
 });
 
 test('device verification accepts both cross-signing and local SDK trust', async () => {
@@ -111,9 +123,16 @@ test('recovery passphrases retain meaningful surrounding whitespace', async () =
 
 test('backup restoration is not blocked by cross-signing failures', async () => {
   const source = await readSource('src/app/components/ManualVerification.tsx');
+  const cryptoSource = await readSource('src/app/utils/matrix-crypto.ts');
 
   assert.match(source, /Do not make restoring[\s\S]*conditional on device verification/);
+  assert.match(source, /persistCurrentDeviceVerification\(mx\)/);
+  assert.match(source, /mx\.emit\(CryptoEvent\.DevicesUpdated, \[userId\], false\)/);
+  assert.match(source, /恢复密钥正确，但当前设备验证失败/);
   assert.match(source, /await crypto\.loadSessionBackupPrivateKeyFromSecretStorage\(\)/);
   assert.match(source, /await crypto\.checkKeyBackupAndEnable\(\)/);
   assert.match(source, /crypto\.restoreKeyBackup\(\)/);
+  assert.match(cryptoSource, /crypto\.setDeviceVerified\(userId, deviceId, true\)/);
+  assert.match(cryptoSource, /crossSignDevicesWithRetry\(crypto, \[deviceId\]\)/);
+  assert.match(cryptoSource, /crypto\.getDeviceVerificationStatus\(userId, deviceId\)/);
 });

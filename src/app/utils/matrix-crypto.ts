@@ -8,6 +8,25 @@ const wait = (timeoutMs: number): Promise<void> =>
     globalThis.setTimeout(resolve, timeoutMs);
   });
 
+const crossSignDevicesWithRetry = async (
+  api: CryptoApi,
+  deviceIds: string[]
+): Promise<string[]> => {
+  let pendingDeviceIds = Array.from(new Set(deviceIds));
+
+  for (const delayMs of CROSS_SIGN_RETRY_DELAYS_MS) {
+    if (pendingDeviceIds.length === 0) break;
+    if (delayMs > 0) await wait(delayMs);
+
+    const results = await Promise.allSettled(
+      pendingDeviceIds.map((deviceId) => api.crossSignDevice(deviceId))
+    );
+    pendingDeviceIds = pendingDeviceIds.filter((_, index) => results[index].status === 'rejected');
+  }
+
+  return pendingDeviceIds;
+};
+
 export const verifiedDevice = async (
   api: CryptoApi,
   userId: string,
@@ -57,17 +76,7 @@ export const persistCompletedDeviceVerification = async (
   const devicesToCrossSign = Array.from(
     new Set([currentDeviceId, otherDeviceId].filter((deviceId): deviceId is string => !!deviceId))
   );
-  let pendingDeviceIds = devicesToCrossSign;
-
-  for (const delayMs of CROSS_SIGN_RETRY_DELAYS_MS) {
-    if (pendingDeviceIds.length === 0) break;
-    if (delayMs > 0) await wait(delayMs);
-
-    const results = await Promise.allSettled(
-      pendingDeviceIds.map((deviceId) => api.crossSignDevice(deviceId))
-    );
-    pendingDeviceIds = pendingDeviceIds.filter((_, index) => results[index].status === 'rejected');
-  }
+  const pendingDeviceIds = await crossSignDevicesWithRetry(api, devicesToCrossSign);
 
   const persistedStatus = await api.getDeviceVerificationStatus(otherUserId, otherDeviceId);
   if (
@@ -82,23 +91,36 @@ export const persistCompletedDeviceVerification = async (
   };
 };
 
-export const crossSignCurrentDevice = async (mx: MatrixClient): Promise<void> => {
+/**
+ * Finish recovery-key verification for the access token's current device.
+ * Call this only after bootstrapCrossSigning has accepted the recovery key.
+ */
+export const persistCurrentDeviceVerification = async (
+  mx: MatrixClient
+): Promise<CompletedDeviceVerificationResult> => {
   const crypto = mx.getCrypto();
   const deviceId = mx.getDeviceId();
+  const userId = mx.getUserId();
 
-  if (!crypto || !deviceId) {
-    return;
+  if (!crypto || !deviceId || !userId) {
+    throw new Error('无法确定当前登录设备，请重新登录后再试。');
   }
 
-  const crossSignDevice = (
-    crypto as CryptoApi & {
-      crossSignDevice?: (targetDeviceId: string) => Promise<unknown>;
-    }
-  ).crossSignDevice;
+  // The recovery key proves possession of this account's cross-signing
+  // secrets. Persist local trust as well as the server-side signature so web
+  // reloads and delayed /keys/query responses cannot revert the badge.
+  await crypto.setDeviceVerified(userId, deviceId, true);
+  const pendingDeviceIds = await crossSignDevicesWithRetry(crypto, [deviceId]);
 
-  if (typeof crossSignDevice !== 'function') {
-    return;
+  const persistedStatus = await crypto.getDeviceVerificationStatus(userId, deviceId);
+  if (
+    !persistedStatus ||
+    (!persistedStatus.crossSigningVerified && !persistedStatus.localVerified)
+  ) {
+    throw new Error('当前设备可信状态未能保存，请重试。');
   }
 
-  await crossSignDevice.call(crypto, deviceId);
+  return {
+    crossSigningSynced: pendingDeviceIds.length === 0,
+  };
 };

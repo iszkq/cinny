@@ -181,7 +181,7 @@ const installWebMatrixLoggerFilter = () => {
 
   webMatrixLoggerFilterInstalled = true;
 
-  const originalWarn = matrixLogger.warn.bind(matrixLogger);
+  const originalWarn = matrixLogger.warn;
   matrixLogger.warn = (...messages: unknown[]) => {
     if (isIgnorableWebMatrixWarning(messages)) return;
     originalWarn(...messages);

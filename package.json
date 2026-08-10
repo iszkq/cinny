@@ -1,6 +1,6 @@
 {
   "name": "cinny",
-  "version": "1.8.15",
+  "version": "1.8.16",
   "description": "Yet another matrix client",
   "main": "index.js",
   "type": "module",
@@ -120,7 +120,7 @@
     "jotai": "2.6.0",
     "linkify-react": "4.3.2",
     "linkifyjs": "4.3.2",
-    "matrix-js-sdk": "38.2.0",
+    "matrix-js-sdk": "41.7.0",
     "matrix-widget-api": "1.13.0",
     "millify": "6.1.0",
     "pako": "1.0.11",

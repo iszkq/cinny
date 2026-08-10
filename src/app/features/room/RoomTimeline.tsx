@@ -31,7 +31,7 @@ import { HTMLReactParserOptions } from 'html-react-parser';
 import classNames from 'classnames';
 import { ReactEditor } from 'slate-react';
 import { Editor } from 'slate';
-import { SessionMembershipData } from 'matrix-js-sdk/lib/matrixrtc/CallMembership';
+import type { SessionMembershipData } from 'matrix-js-sdk/lib/matrixrtc';
 import to from 'await-to-js';
 import { useAtomValue, useSetAtom } from 'jotai';
 import {

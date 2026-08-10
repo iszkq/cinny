@@ -22,6 +22,7 @@ import { useMatrixClient } from '../hooks/useMatrixClient';
 import { AsyncStatus, useAsyncCallback } from '../hooks/useAsyncCallback';
 import { storePrivateKey } from '../../client/secretStorageKeys';
 import { decryptAllTimelineEvent } from '../utils/room';
+import { persistCurrentDeviceVerification } from '../utils/matrix-crypto';
 
 export enum ManualVerificationMethod {
   RecoveryPassphrase = 'passphrase',
@@ -84,7 +85,7 @@ const getBackupRestoreNotice = (error: Error): string | undefined => {
       'loadSessionBackupPrivateKeyFromSecretStorage: missing decryption key in secret storage'
     )
   ) {
-    return '设备验证已完成，但当前账号没有可恢复的消息备份。旧的加密消息可能暂时仍无法解密。';
+    return '当前账号没有可恢复的消息备份，旧的加密消息可能暂时仍无法解密。';
   }
 
   if (
@@ -93,7 +94,7 @@ const getBackupRestoreNotice = (error: Error): string | undefined => {
     ) ||
     error.message.includes('No backup info available')
   ) {
-    return '设备验证已完成，但当前暂时还没读取到消息备份信息。请稍等片刻，旧消息会在备份信息同步后继续恢复；若长时间没有变化，再重试一次。';
+    return '当前暂时还没读取到消息备份信息。请稍等片刻，旧消息会在备份信息同步后继续恢复；若长时间没有变化，再重试一次。';
   }
 
   if (
@@ -104,7 +105,7 @@ const getBackupRestoreNotice = (error: Error): string | undefined => {
       'getBackupDecryptor: key backup on server does not match the decryption key'
     )
   ) {
-    return '设备验证已完成，但当前服务器上的消息备份与这把恢复密钥不匹配。请在已验证设备上重新开启消息备份后再试。';
+    return '当前服务器上的消息备份与这把恢复密钥不匹配。请在已验证设备上重新开启消息备份后再试。';
   }
 
   return undefined;
@@ -243,6 +244,7 @@ export function ManualVerificationTile({
       // (or is not configured for an older account). Do not make restoring
       // historical messages conditional on device verification.
       let verificationNotice: string | undefined;
+      let verificationError: Error | undefined;
       try {
         let crossSigningStatus = await crypto.getCrossSigningStatus();
         if (!crossSigningStatus.publicKeysOnDevice) {
@@ -292,14 +294,24 @@ export function ManualVerificationTile({
         if (bootstrapCrossSigningError) {
           throw new Error('设备验证数据正在同步，请稍等几秒后再试一次。');
         }
-      } catch {
-        verificationNotice =
-          '\u8bbe\u5907\u9a8c\u8bc1\u6682\u65f6\u65e0\u6cd5\u5b8c\u6210\uff0c\u4f46\u52a0\u5bc6\u5907\u4efd\u6062\u590d\u5c06\u7ee7\u7eed\u8fdb\u884c\u3002';
+
+        const verificationResult = await persistCurrentDeviceVerification(mx);
+        // Refresh the current-device badge as soon as trust has really been
+        // persisted. Backup restoration is independent and must not hide a
+        // successful verification if it later fails.
+        mx.emit(CryptoEvent.DevicesUpdated, [userId], false);
+        if (!verificationResult.crossSigningSynced) {
+          verificationNotice =
+            '当前设备的本地可信状态已保存，但跨设备签名暂未上传；请保持联网，若其他设备仍显示未验证，可稍后重新输入恢复密钥重试。';
+        }
+      } catch (error) {
+        verificationError =
+          error instanceof Error ? error : new Error('当前设备验证暂时无法完成。');
       }
 
-      await crypto.bootstrapSecretStorage({});
-
+      let backupNotice: string | undefined;
       try {
+        await crypto.bootstrapSecretStorage({});
         await waitForBackupVersionReady(crypto);
         await crypto.loadSessionBackupPrivateKeyFromSecretStorage();
         await crypto.checkKeyBackupAndEnable();
@@ -331,18 +343,22 @@ export function ManualVerificationTile({
           throw restoreResult.restoreError;
         }
         if (restoreResult.status === 'background') {
-          return '设备验证已完成，旧消息正在后台恢复，已进入过的房间会逐步重新解密。';
+          backupNotice = '旧消息正在后台恢复，已进入过的房间会逐步重新解密。';
         }
       } catch (error) {
-        const backupRestoreNotice =
-          error instanceof Error ? getBackupRestoreNotice(error) : undefined;
-        if (backupRestoreNotice) {
-          return backupRestoreNotice;
+        backupNotice = error instanceof Error ? getBackupRestoreNotice(error) : undefined;
+        if (!backupNotice) {
+          const message = error instanceof Error ? error.message : '未知错误';
+          backupNotice = `消息备份恢复失败：${message}`;
         }
-        throw error;
       }
 
-      return verificationNotice;
+      if (verificationError) {
+        const suffix = backupNotice ? ` ${backupNotice}` : ' 消息备份仍已按恢复密钥继续处理。';
+        throw new Error(`恢复密钥正确，但当前设备验证失败：${verificationError.message}${suffix}`);
+      }
+
+      return [verificationNotice, backupNotice].filter(Boolean).join(' ') || undefined;
     },
     [mx, secretStorageKeyId]
   );

@@ -75,7 +75,7 @@ function CallPrescreen() {
   const hasPermission = permissions.event(StateEvent.GroupCallMemberPrefix, mx.getSafeUserId());
 
   const callSession = useCallSession(room);
-  const callMembers = useCallMembers(room, callSession);
+  const callMembers = useCallMembers(callSession);
   const hasParticipant = callMembers.length > 0;
 
   const callEmbed = useCallEmbed();
