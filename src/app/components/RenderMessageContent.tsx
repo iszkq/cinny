@@ -47,6 +47,7 @@ import {
 import { getJitsiMeetInfo } from '../utils/jitsiMeet';
 import { getMxIdLocalPart, mxcUrlToHttp } from '../utils/matrix';
 import { getMemberAvatarMxc, getMemberDisplayName } from '../utils/room';
+import { getOfficeDocumentKind } from '../utils/mimeTypes';
 import type { ViewerImageItem } from './message/content/ImageContent';
 
 type RenderMessageContentProps = {
@@ -137,59 +138,72 @@ export function RenderMessageContent({
     <>
       <MFile
         content={getContent()}
-        renderFileContent={({ body, mimeType, info, encInfo, url }) => (
-          <FileContent
-            body={body}
-            mimeType={mimeType}
-            renderAsPdfFile={() => (
-              <ReadPdfFile
+        renderFileContent={({ body, mimeType, info, encInfo, url }) => {
+          if (getOfficeDocumentKind(body, mimeType)) {
+            return (
+              <OfficeFileEditor
                 body={body}
                 mimeType={mimeType}
                 url={url}
                 encInfo={encInfo}
-                renderViewer={(p) => <PdfViewer {...p} />}
+                infoSize={info.size}
+                room={room}
+                eventId={eventId}
               />
-            )}
-            renderAsTextFile={() => (
-              <ReadTextFile
-                body={body}
-                mimeType={mimeType}
-                url={url}
-                encInfo={encInfo}
-                renderViewer={(p) => <TextViewer {...p} />}
-              />
-            )}
-            renderAsSpreadsheetFile={() => (
-              <ReadSpreadsheetFile
-                body={body}
-                mimeType={mimeType}
-                url={url}
-                encInfo={encInfo}
-                renderViewer={(p) => <SpreadsheetViewer {...p} />}
-              />
-            )}
-            renderAsDocxFile={() => (
-              <ReadDocxFile
-                body={body}
-                mimeType={mimeType}
-                url={url}
-                encInfo={encInfo}
-                renderViewer={(p) => <DocxViewer {...p} />}
-              />
-            )}
-          >
-            <OfficeFileEditor
+            );
+          }
+
+          return (
+            <FileContent
               body={body}
               mimeType={mimeType}
-              url={url}
-              encInfo={encInfo}
-              infoSize={info.size}
-              room={room}
-              eventId={eventId}
-            />
-            <DownloadFile body={body} mimeType={mimeType} url={url} encInfo={encInfo} info={info} />
-          </FileContent>
-        )}
+              renderAsPdfFile={() => (
+                <ReadPdfFile
+                  body={body}
+                  mimeType={mimeType}
+                  url={url}
+                  encInfo={encInfo}
+                  renderViewer={(p) => <PdfViewer {...p} />}
+                />
+              )}
+              renderAsTextFile={() => (
+                <ReadTextFile
+                  body={body}
+                  mimeType={mimeType}
+                  url={url}
+                  encInfo={encInfo}
+                  renderViewer={(p) => <TextViewer {...p} />}
+                />
+              )}
+              renderAsSpreadsheetFile={() => (
+                <ReadSpreadsheetFile
+                  body={body}
+                  mimeType={mimeType}
+                  url={url}
+                  encInfo={encInfo}
+                  renderViewer={(p) => <SpreadsheetViewer {...p} />}
+                />
+              )}
+              renderAsDocxFile={() => (
+                <ReadDocxFile
+                  body={body}
+                  mimeType={mimeType}
+                  url={url}
+                  encInfo={encInfo}
+                  renderViewer={(p) => <DocxViewer {...p} />}
+                />
+              )}
+            >
+              <DownloadFile
+                body={body}
+                mimeType={mimeType}
+                url={url}
+                encInfo={encInfo}
+                info={info}
+              />
+            </FileContent>
+          );
+        }}
         outlined={outlineAttachment}
       />
       {renderCaption()}

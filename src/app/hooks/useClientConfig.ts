@@ -44,7 +44,7 @@ export type ClientConfig = {
   };
 
   officeEditor?: {
-    /** ZIZIYI Office editor page. Defaults to the public Cloudflare deployment. */
+    /** ZIZIYI Office editor page with the Xinghuo postMessage bridge enabled. */
     url?: string;
   };
 

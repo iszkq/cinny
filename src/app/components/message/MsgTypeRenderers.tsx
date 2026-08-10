@@ -26,7 +26,11 @@ import {
   MATRIX_SPOILER_PROPERTY_NAME,
   MATRIX_SPOILER_REASON_PROPERTY_NAME,
 } from '../../../types/matrix/common';
-import { FALLBACK_MIMETYPE, getBlobSafeMimeType } from '../../utils/mimeTypes';
+import {
+  FALLBACK_MIMETYPE,
+  getBlobSafeMimeType,
+  getOfficeDocumentKind,
+} from '../../utils/mimeTypes';
 import { parseGeoUri, scaleYDimension } from '../../utils/common';
 import { Attachment, AttachmentBox, AttachmentContent, AttachmentHeader } from './attachment';
 import { FileHeader, FileDownloadButton } from './FileHeader';
@@ -92,11 +96,7 @@ type MTextProps = {
 
 const shouldUseJumboEmoji = (body: string, customBody: unknown): boolean =>
   JUMBO_EMOJI_REG.test(body) &&
-  !(
-    isAndroidApp() &&
-    typeof customBody === 'string' &&
-    customBody.includes('data-mx-emoticon')
-  );
+  !(isAndroidApp() && typeof customBody === 'string' && customBody.includes('data-mx-emoticon'));
 
 export function MText({ edited, content, renderBody, renderUrlsPreview, style }: MTextProps) {
   const { body, formatted_body: customBody } = content;
@@ -452,20 +452,23 @@ export function MFile({ content, renderFileContent, outlined }: MFileProps) {
     return <BrokenContent />;
   }
 
+  const filename = content.filename ?? content.body ?? 'Unnamed File';
+  const mimeType = fileInfo?.mimetype ?? FALLBACK_MIMETYPE;
+  const officeFile = Boolean(getOfficeDocumentKind(filename, mimeType));
+
   return (
     <Attachment outlined={outlined}>
-      <AttachmentHeader>
-        <FileHeader
-          body={content.filename ?? content.body ?? 'Unnamed File'}
-          mimeType={fileInfo?.mimetype ?? FALLBACK_MIMETYPE}
-        />
-      </AttachmentHeader>
+      {!officeFile && (
+        <AttachmentHeader>
+          <FileHeader body={filename} mimeType={mimeType} />
+        </AttachmentHeader>
+      )}
       <AttachmentBox>
-        <AttachmentContent>
+        <AttachmentContent style={officeFile ? { padding: 0 } : undefined}>
           {renderFileContent({
-            body: content.filename ?? content.body ?? 'File',
+            body: filename,
             info: fileInfo ?? {},
-            mimeType: fileInfo?.mimetype ?? FALLBACK_MIMETYPE,
+            mimeType,
             url: mxcUrl,
             encInfo: content.file,
           })}
