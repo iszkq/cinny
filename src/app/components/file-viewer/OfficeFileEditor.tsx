@@ -63,6 +63,95 @@ const DEFAULT_UPLOAD_TIMEOUT_SECONDS = 120;
 const SOURCE_LOAD_TIMEOUT_MS = 60_000;
 const IFRAME_BRIDGE_READY_TIMEOUT_MS = 30_000;
 const DOCUMENT_OPENED_TIMEOUT_MS = 45_000;
+const OFFICE_SHELL_WARMUP_DELAY_MS = 600;
+const OFFICE_SHELL_WARMUP_LIFETIME_MS = 15_000;
+const MAX_MEMORY_CACHED_SOURCE_BYTES = 64 * 1024 * 1024;
+
+const officeShellWarmups = new Map<string, Promise<void>>();
+const officePreconnectedOrigins = new Set<string>();
+
+const preconnectOfficeOrigin = (editorUrl: string): void => {
+  if (typeof document === 'undefined') return;
+
+  try {
+    const origin = new URL(editorUrl, window.location.href).origin;
+    if (officePreconnectedOrigins.has(origin)) return;
+    officePreconnectedOrigins.add(origin);
+
+    const link = document.createElement('link');
+    link.rel = 'preconnect';
+    link.href = origin;
+    link.crossOrigin = 'anonymous';
+    document.head.appendChild(link);
+  } catch {
+    // The normal open path will surface an invalid configured URL.
+  }
+};
+
+const warmOfficeEditorShell = (editorUrl: string): Promise<void> => {
+  if (typeof document === 'undefined') return Promise.resolve();
+
+  let target: URL;
+  try {
+    target = new URL(editorUrl, window.location.href);
+  } catch {
+    return Promise.resolve();
+  }
+
+  const warmupKey = `${target.origin}${target.pathname}`;
+  const existingWarmup = officeShellWarmups.get(warmupKey);
+  if (existingWarmup) return existingWarmup;
+
+  preconnectOfficeOrigin(target.toString());
+  target.searchParams.set('embed', '1');
+  target.searchParams.set('parentOrigin', window.location.origin);
+  target.searchParams.set('requestId', `warmup-${Date.now()}`);
+  target.searchParams.set('fileName', 'warmup.docx');
+  target.searchParams.set('fileType', 'docx');
+  target.searchParams.set(
+    'mimeType',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  );
+  target.searchParams.set('editing', '0');
+  target.searchParams.set('lang', 'zh-CN');
+  target.searchParams.set('mobile', '0');
+  target.searchParams.set('compactToolbar', '0');
+
+  const warmup = new Promise<void>((resolve) => {
+    const iframe = document.createElement('iframe');
+    iframe.src = target.toString();
+    iframe.tabIndex = -1;
+    iframe.setAttribute('aria-hidden', 'true');
+    iframe.style.position = 'fixed';
+    iframe.style.width = '1px';
+    iframe.style.height = '1px';
+    iframe.style.left = '-10000px';
+    iframe.style.top = '-10000px';
+    iframe.style.opacity = '0';
+    iframe.style.pointerEvents = 'none';
+
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      iframe.remove();
+      resolve();
+    };
+    const lifetimeTimeout = window.setTimeout(finish, OFFICE_SHELL_WARMUP_LIFETIME_MS);
+    iframe.addEventListener(
+      'error',
+      () => {
+        window.clearTimeout(lifetimeTimeout);
+        finish();
+      },
+      { once: true }
+    );
+    document.body.appendChild(iframe);
+  });
+
+  officeShellWarmups.set(warmupKey, warmup);
+  return warmup;
+};
 
 type EditorMode = 'preview' | 'edit';
 type EditorPhase = 'loading' | 'ready' | 'saving' | 'uploading' | 'publishing' | 'saved' | 'error';
@@ -176,6 +265,8 @@ export function OfficeFileEditor({
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const sessionRef = useRef<EditorSession>();
   const sourceBufferRef = useRef<ArrayBuffer>();
+  const cachedSourceRef = useRef<Blob>();
+  const pendingSourceRef = useRef<Promise<Blob>>();
   const iframeReadyRef = useRef(false);
   const saveOperationRef = useRef<SaveOperation>();
   const lastSettledSaveIdRef = useRef<string>();
@@ -223,13 +314,49 @@ export function OfficeFileEditor({
   const canEdit = Boolean(room && eventId?.startsWith('$'));
 
   const loadSourceFile = useCallback(async (): Promise<Blob> => {
-    const mediaUrl = mxcUrlToHttp(mx, url, useAuthentication);
-    if (!mediaUrl) throw new Error('Invalid media URL');
+    if (cachedSourceRef.current) return cachedSourceRef.current;
+    if (pendingSourceRef.current) return pendingSourceRef.current;
 
-    return encInfo
-      ? downloadEncryptedMedia(mediaUrl, (buffer) => decryptFile(buffer, mimeType, encInfo))
-      : downloadMedia(mediaUrl);
+    const pendingSource = (async () => {
+      const mediaUrl = mxcUrlToHttp(mx, url, useAuthentication);
+      if (!mediaUrl) throw new Error('Invalid media URL');
+
+      const source = encInfo
+        ? await downloadEncryptedMedia(mediaUrl, (buffer) => decryptFile(buffer, mimeType, encInfo))
+        : await downloadMedia(mediaUrl);
+      if (source.size <= MAX_MEMORY_CACHED_SOURCE_BYTES) {
+        cachedSourceRef.current = source;
+      }
+      return source;
+    })();
+    pendingSourceRef.current = pendingSource;
+
+    try {
+      return await pendingSource;
+    } finally {
+      if (pendingSourceRef.current === pendingSource) {
+        pendingSourceRef.current = undefined;
+      }
+    }
   }, [encInfo, mimeType, mx, url, useAuthentication]);
+
+  useEffect(() => {
+    cachedSourceRef.current = undefined;
+    pendingSourceRef.current = undefined;
+  }, [url]);
+
+  useEffect(() => {
+    preconnectOfficeOrigin(officeEditorUrl);
+    const warmupTimeout = window.setTimeout(() => {
+      warmOfficeEditorShell(officeEditorUrl).catch(() => undefined);
+    }, OFFICE_SHELL_WARMUP_DELAY_MS);
+    return () => window.clearTimeout(warmupTimeout);
+  }, [officeEditorUrl]);
+
+  const warmOfficeOpen = useCallback(() => {
+    warmOfficeEditorShell(officeEditorUrl).catch(() => undefined);
+    loadSourceFile().catch(() => undefined);
+  }, [loadSourceFile, officeEditorUrl]);
 
   const clearOpenTimeouts = useCallback(() => {
     if (bridgeReadyTimeoutRef.current !== undefined) {
@@ -491,6 +618,8 @@ export function OfficeFileEditor({
     (mode: EditorMode, forceInline = false) => {
       if (!officeKind || (mode === 'edit' && !canEdit)) return;
       if (saveOperationRef.current?.stage === 'publishing') return;
+
+      warmOfficeEditorShell(officeEditorUrl).catch(() => undefined);
 
       const requestId = makeRequestId();
       const nativeSessionId = makeRequestId();
@@ -789,8 +918,7 @@ export function OfficeFileEditor({
 
             const shouldClose = activeOperation.closeAfterSave;
             const { detached } = activeOperation;
-            const hasNewerChanges =
-              dirtyRevisionRef.current > activeOperation.dirtyRevision;
+            const hasNewerChanges = dirtyRevisionRef.current > activeOperation.dirtyRevision;
             if (!settleSaveOperation(activeOperation)) return;
             if (mountedRef.current) setBackgroundPublishing(false);
             if (!mountedRef.current || detached) return;
@@ -1193,7 +1321,7 @@ export function OfficeFileEditor({
 
   return (
     <>
-      <div className={css.card}>
+      <div className={css.card} onPointerEnter={warmOfficeOpen}>
         <div className={css.fileSummary}>
           <div className={css.fileIcon} style={{ backgroundColor: iconMeta.color }} aria-hidden>
             {iconMeta.label}
@@ -1212,6 +1340,8 @@ export function OfficeFileEditor({
             className={css.actionButton}
             type="button"
             onClick={() => openEditor('preview')}
+            onFocus={warmOfficeOpen}
+            onPointerDown={warmOfficeOpen}
             disabled={backgroundPublishing}
             title={backgroundPublishing ? '最新版本正在发布，请稍候' : '在线预览'}
           >
@@ -1221,6 +1351,8 @@ export function OfficeFileEditor({
             className={css.actionButton}
             type="button"
             onClick={() => openEditor('edit')}
+            onFocus={warmOfficeOpen}
+            onPointerDown={warmOfficeOpen}
             disabled={!canEdit || backgroundPublishing}
             title={editActionTitle}
           >
