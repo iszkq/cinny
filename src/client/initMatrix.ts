@@ -8,7 +8,7 @@ import { restorePinLockStorage, snapshotPinLockStorage } from '../app/utils/pinL
 import { clearDesktopMediaCache } from '../app/utils/desktopMediaAssetCache';
 import { isDesktopUpdaterSupported } from '../app/utils/desktopUpdater';
 import { pushSessionToSW } from '../sw-session';
-import { removeFallbackSession } from '../app/state/sessions';
+import { removeFallbackAccessToken } from '../app/state/sessions';
 
 type Session = {
   baseUrl: string;
@@ -19,6 +19,8 @@ type Session = {
 
 const MALFORMED_ENCRYPTED_EVENT_WARNING = 'missing field `algorithm`';
 const LEGACY_RUST_CRYPTO_DATABASE_PREFIX = 'matrix-js-sdk';
+const RUST_CRYPTO_DATABASE_SELECTION_KEY_PREFIX = 'cinny_rust_crypto_database';
+const rustCryptoDatabasePrefixes = new WeakMap<MatrixClient, string>();
 
 const getRustCryptoDatabaseNames = (prefix: string): string[] => [
   `${prefix}::matrix-sdk-crypto`,
@@ -34,6 +36,32 @@ const getRustCryptoDatabaseNames = (prefix: string): string[] => [
  */
 const getRustCryptoDatabasePrefix = (session: Session): string =>
   `cinny-rust-crypto-${encodeURIComponent(session.userId)}-${encodeURIComponent(session.deviceId)}`;
+
+const getRustCryptoDatabaseSelectionKey = (session: Session): string =>
+  `${RUST_CRYPTO_DATABASE_SELECTION_KEY_PREFIX}:${encodeURIComponent(
+    session.userId
+  )}:${encodeURIComponent(session.deviceId)}`;
+
+const getSavedRustCryptoDatabasePrefix = (session: Session): string | undefined => {
+  try {
+    const prefix = global.localStorage.getItem(getRustCryptoDatabaseSelectionKey(session));
+    const scopedPrefix = getRustCryptoDatabasePrefix(session);
+    return prefix === LEGACY_RUST_CRYPTO_DATABASE_PREFIX || prefix === scopedPrefix
+      ? prefix
+      : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+const saveRustCryptoDatabasePrefix = (session: Session, prefix: string) => {
+  try {
+    global.localStorage.setItem(getRustCryptoDatabaseSelectionKey(session), prefix);
+  } catch {
+    // IndexedDB remains usable when localStorage is unavailable; only the
+    // compatibility selection marker is skipped in that environment.
+  }
+};
 
 const indexedDbDatabaseExists = (databaseName: string): Promise<boolean> =>
   new Promise((resolve) => {
@@ -83,28 +111,60 @@ const isRustCryptoAccountMismatch = (error: unknown): boolean => {
   );
 };
 
-const initRustCryptoForSession = async (mx: MatrixClient, session: Session): Promise<void> => {
+const initRustCryptoForSession = async (mx: MatrixClient, session: Session): Promise<string> => {
   const scopedPrefix = getRustCryptoDatabasePrefix(session);
+  const savedPrefix = getSavedRustCryptoDatabasePrefix(session);
+  const [legacyExists, scopedExists] = await Promise.all([
+    hasRustCryptoDatabase(LEGACY_RUST_CRYPTO_DATABASE_PREFIX),
+    hasRustCryptoDatabase(scopedPrefix),
+  ]);
+  const candidates: string[] = [];
+  const addCandidate = (prefix: string) => {
+    if (!candidates.includes(prefix)) candidates.push(prefix);
+  };
+
+  if (savedPrefix) {
+    const savedDatabaseExists =
+      savedPrefix === LEGACY_RUST_CRYPTO_DATABASE_PREFIX ? legacyExists : scopedExists;
+    const anotherDatabaseExists =
+      savedPrefix === LEGACY_RUST_CRYPTO_DATABASE_PREFIX ? scopedExists : legacyExists;
+
+    // A marker can outlive IndexedDB after Android/WebView storage cleanup.
+    // Only create a fresh store from that marker when no compatible database
+    // remains; otherwise recover the database that still contains the keys.
+    if (savedDatabaseExists || !anotherDatabaseExists) {
+      addCandidate(savedPrefix);
+    }
+  }
 
   // Releases before v1.8.12 used the SDK default database. Prefer it when it
   // exists so an upgrade keeps the device identity, verification trust and
   // message keys that are already stored locally. If it belongs to a previous
   // login/device, the SDK reports an account mismatch and we safely fall back
   // to the account-and-device-scoped database.
-  if (await hasRustCryptoDatabase(LEGACY_RUST_CRYPTO_DATABASE_PREFIX)) {
+  if (!savedPrefix || candidates.length === 0) {
+    if (legacyExists) addCandidate(LEGACY_RUST_CRYPTO_DATABASE_PREFIX);
+    if (scopedExists) addCandidate(scopedPrefix);
+  }
+  if (candidates.length === 0) addCandidate(scopedPrefix);
+
+  // A legacy selection may belong to another login despite having the same
+  // database name. Keep the scoped store as its one safe mismatch fallback.
+  if (candidates[0] === LEGACY_RUST_CRYPTO_DATABASE_PREFIX) addCandidate(scopedPrefix);
+
+  for (const prefix of candidates) {
     try {
-      await mx.initRustCrypto({
-        cryptoDatabasePrefix: LEGACY_RUST_CRYPTO_DATABASE_PREFIX,
-      });
-      return;
+      await mx.initRustCrypto({ cryptoDatabasePrefix: prefix });
+      saveRustCryptoDatabasePrefix(session, prefix);
+      return prefix;
     } catch (error) {
-      if (!isRustCryptoAccountMismatch(error)) throw error;
+      if (prefix !== LEGACY_RUST_CRYPTO_DATABASE_PREFIX || !isRustCryptoAccountMismatch(error)) {
+        throw error;
+      }
     }
   }
 
-  await mx.initRustCrypto({
-    cryptoDatabasePrefix: scopedPrefix,
-  });
+  throw new Error('Unable to initialize the Rust Crypto database.');
 };
 
 let webMatrixLoggerFilterInstalled = false;
@@ -152,7 +212,8 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
   });
 
   await indexedDBStore.startup();
-  await initRustCryptoForSession(mx, session);
+  const cryptoDatabasePrefix = await initRustCryptoForSession(mx, session);
+  rustCryptoDatabasePrefixes.set(mx, cryptoDatabasePrefix);
 
   mx.setMaxListeners(200);
 
@@ -174,6 +235,13 @@ export const startClient = async (mx: MatrixClient) => {
 
 export const persistClientStore = (mx: MatrixClient): Promise<void> =>
   mx.store.save(true).catch(() => undefined);
+
+const clearClientStores = (mx?: MatrixClient): Promise<void> => {
+  if (!mx) return Promise.resolve();
+  return mx.clearStores({
+    cryptoDatabasePrefix: rustCryptoDatabasePrefixes.get(mx),
+  });
+};
 
 const clearAllServiceWorkerCaches = async () => {
   if (typeof window === 'undefined' || typeof window.caches === 'undefined') {
@@ -241,7 +309,7 @@ export const clearAllLocalData = async (mx?: MatrixClient) => {
   mx?.stopClient();
 
   try {
-    await mx?.clearStores();
+    await clearClientStores(mx);
   } catch {
     // Ignore cleanup failures so the rest of local data can still be cleared.
   }
@@ -266,7 +334,7 @@ export const clearLocalSessionAfterLogout = async (mx?: MatrixClient) => {
   pushSessionToSW();
   mx?.stopClient();
   try {
-    await mx?.clearStores();
+    await clearClientStores(mx);
   } catch {
     // ignore cleanup failures so logout can still continue.
   }
@@ -296,7 +364,10 @@ export const clearExpiredSessionAfterLogout = async (mx?: MatrixClient) => {
   } catch {
     // A failed sync-store cleanup must not prevent returning to sign-in.
   }
-  removeFallbackSession();
+  // Keep the homeserver, user and device identity. Reusing the same Matrix
+  // device ID after re-authentication lets this installation reopen the same
+  // encryption store instead of silently becoming an unverified new device.
+  removeFallbackAccessToken();
   await clearDesktopMediaCache();
 };
 

@@ -66,6 +66,9 @@ function VerificationWaitAccept() {
   return (
     <Box direction="Column" gap="400">
       <Text>请在另一台设备上接受验证请求。</Text>
+      <Text size="T200">
+        这里正在验证另一台设备，必须由目标设备接受；恢复密钥只用于恢复当前设备和加密备份。
+      </Text>
       <WaitingMessage message="正在等待另一台设备接受验证请求..." />
     </Box>
   );

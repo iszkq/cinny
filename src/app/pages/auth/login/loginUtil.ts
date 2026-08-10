@@ -10,7 +10,7 @@ import {
   getAfterLoginRedirectPath,
 } from '../../afterLoginRedirectPath';
 import { getHomePath } from '../../pathUtils';
-import { setFallbackSession } from '../../../state/sessions';
+import { getFallbackSessionIdentity, setFallbackSession } from '../../../state/sessions';
 
 export enum GetBaseUrlError {
   NotAllow = 'NotAllow',
@@ -57,6 +57,9 @@ export type CustomLoginResponse = {
   baseUrl: string;
   response: LoginResponse;
 };
+
+const normalizeHomeserverUrl = (url: string): string => url.replace(/\/+$/, '');
+
 export const login = async (
   serverBaseUrl: string | (() => Promise<string>),
   data: LoginRequest
@@ -72,8 +75,17 @@ export const login = async (
     });
   }
 
+  const savedIdentity = getFallbackSessionIdentity();
+  const canReuseDeviceId =
+    savedIdentity &&
+    normalizeHomeserverUrl(savedIdentity.baseUrl) === normalizeHomeserverUrl(url) &&
+    data.device_id === undefined;
+  const loginRequest: LoginRequest = canReuseDeviceId
+    ? { ...data, device_id: savedIdentity.deviceId }
+    : data;
+
   const mx = createClient({ baseUrl: url });
-  const [err, res] = await to<LoginResponse, MatrixError>(mx.loginRequest(data));
+  const [err, res] = await to<LoginResponse, MatrixError>(mx.loginRequest(loginRequest));
 
   if (err) {
     if (err.httpStatus === 400) {

@@ -281,7 +281,12 @@ export function BackupRestoreTile({ crypto }: BackupRestoreTileProps) {
         </Text>
       )}
       {!syncFailure && !backupEnabled && backupInfo && (
-        <BackupTrustInfo crypto={crypto} backupInfo={backupInfo} />
+        <Box direction="Column" gap="200">
+          <Text size="T200">
+            加密备份未连接不会改变本机的设备验证状态；需要重新连接时，可使用上方的恢复密钥入口。
+          </Text>
+          <BackupTrustInfo crypto={crypto} backupInfo={backupInfo} />
+        </Box>
       )}
       {restoreState.status === AsyncStatus.Loading && !restoring && <BackupProgressFetching />}
       {restoreProgress.status === BackupProgressStatus.Fetching && <BackupProgressFetching />}

@@ -15,6 +15,8 @@ export type Session = {
   fallbackSdkStores?: boolean;
 };
 
+export type SessionIdentity = Pick<Session, 'baseUrl' | 'userId' | 'deviceId'>;
+
 export type Sessions = Session[];
 export type SessionStoreName = {
   sync: string;
@@ -46,17 +48,27 @@ export const removeFallbackSession = () => {
   localStorage.removeItem('cinny_device_id');
   localStorage.removeItem('cinny_access_token');
 };
-export const getFallbackSession = (): Session | undefined => {
+export const removeFallbackAccessToken = () => {
+  localStorage.removeItem('cinny_access_token');
+};
+export const getFallbackSessionIdentity = (): SessionIdentity | undefined => {
   const baseUrl = localStorage.getItem('cinny_hs_base_url');
   const userId = localStorage.getItem('cinny_user_id');
   const deviceId = localStorage.getItem('cinny_device_id');
+
+  if (baseUrl && userId && deviceId) {
+    return { baseUrl, userId, deviceId };
+  }
+
+  return undefined;
+};
+export const getFallbackSession = (): Session | undefined => {
+  const identity = getFallbackSessionIdentity();
   const accessToken = localStorage.getItem('cinny_access_token');
 
-  if (baseUrl && userId && deviceId && accessToken) {
+  if (identity && accessToken) {
     const session: Session = {
-      baseUrl,
-      userId,
-      deviceId,
+      ...identity,
       accessToken,
       fallbackSdkStores: true,
     };

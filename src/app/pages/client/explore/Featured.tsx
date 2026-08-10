@@ -68,7 +68,7 @@ export function FeaturedRooms() {
   const showBackButton = !isDesktopLikeScreenSize(screenSize);
   const calendar = storedCalendar ?? getWeeklyCalendarContent(mx);
   const selectedRoomName = calendar.roomId
-    ? (mx.getRoom(calendar.roomId)?.name ?? calendar.roomId)
+    ? mx.getRoom(calendar.roomId)?.name ?? calendar.roomId
     : '';
   const [roomQuery, setRoomQuery] = useState(selectedRoomName);
   const [roomPickerOpen, setRoomPickerOpen] = useState(false);
@@ -257,9 +257,7 @@ export function FeaturedRooms() {
                             onClick={() => handleRoomSelect(room.roomId)}
                           >
                             <span className={css.RoomOptionName}>{room.name ?? room.roomId}</span>
-                            {room.name && (
-                              <span className={css.RoomOptionId}>{room.roomId}</span>
-                            )}
+                            {room.name && <span className={css.RoomOptionId}>{room.roomId}</span>}
                           </button>
                         ))
                       )}
@@ -297,7 +295,7 @@ export function FeaturedRooms() {
                   <Icon src={Icons.RecentClock} size="500" />
                   <Text size="H4">还没有日程来源</Text>
                   <Text priority="300" align="Center">
-                    请先选择一个房间。首次同步只扫描本周消息，不会影响聊天使用。
+                    请先选择一个房间。首次同步会有限回看近期消息，只整理本周会议，不会影响聊天使用。
                   </Text>
                 </Box>
               ) : (

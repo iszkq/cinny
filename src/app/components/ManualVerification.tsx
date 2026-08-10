@@ -211,19 +211,22 @@ type ManualVerificationTileProps = {
   secretStorageKeyId: string;
   secretStorageKeyContent: SecretStorageKeyContent;
   options?: ReactNode;
+  initialMethod?: ManualVerificationMethod;
 };
 export function ManualVerificationTile({
   secretStorageKeyId,
   secretStorageKeyContent,
   options,
+  initialMethod,
 }: ManualVerificationTileProps) {
   const mx = useMatrixClient();
 
   const hasPassphrase = !!secretStorageKeyContent.passphrase;
   const [method, setMethod] = useState(
-    hasPassphrase
-      ? ManualVerificationMethod.RecoveryPassphrase
-      : ManualVerificationMethod.RecoveryKey
+    initialMethod ??
+      (hasPassphrase
+        ? ManualVerificationMethod.RecoveryPassphrase
+        : ManualVerificationMethod.RecoveryKey)
   );
 
   const verifyAndRestoreBackup = useCallback(

@@ -13,7 +13,8 @@ test('an expired Matrix session keeps the local encryption store', async () => {
   const end = clientSource.indexOf('export const logoutClient', start);
   const body = clientSource.slice(start, end);
 
-  assert.match(body, /removeFallbackSession\(\)/);
+  assert.match(body, /removeFallbackAccessToken\(\)/);
+  assert.doesNotMatch(body, /removeFallbackSession\(\)/);
   assert.match(body, /await mx\?\.store\.deleteAllData\(\)/);
   assert.doesNotMatch(body, /clearStores\(\)/);
   assert.doesNotMatch(body, /localStorage\.clear\(\)/);
@@ -29,7 +30,31 @@ test('Rust Crypto storage is isolated per account and device', async () => {
   assert.match(source, /LEGACY_RUST_CRYPTO_DATABASE_PREFIX = 'matrix-js-sdk'/);
   assert.match(source, /hasRustCryptoDatabase\(LEGACY_RUST_CRYPTO_DATABASE_PREFIX\)/);
   assert.match(source, /isRustCryptoAccountMismatch/);
-  assert.match(source, /cryptoDatabasePrefix: scopedPrefix/);
+  assert.match(source, /RUST_CRYPTO_DATABASE_SELECTION_KEY_PREFIX/);
+  assert.match(source, /saveRustCryptoDatabasePrefix\(session, prefix\)/);
+  assert.match(source, /rustCryptoDatabasePrefixes\.set\(mx, cryptoDatabasePrefix\)/);
+  assert.match(source, /cryptoDatabasePrefix: rustCryptoDatabasePrefixes\.get\(mx\)/);
+});
+
+test('re-login reuses the saved Matrix device identity for the same homeserver', async () => {
+  const sessionSource = await readSource('src/app/state/sessions.ts');
+  const loginSource = await readSource('src/app/pages/auth/login/loginUtil.ts');
+
+  assert.match(sessionSource, /getFallbackSessionIdentity/);
+  assert.match(sessionSource, /removeFallbackAccessToken/);
+  assert.match(loginSource, /normalizeHomeserverUrl\(savedIdentity\.baseUrl\)/);
+  assert.match(loginSource, /device_id: savedIdentity\.deviceId/);
+  assert.match(loginSource, /mx\.loginRequest\(loginRequest\)/);
+});
+
+test('the recovery-key input remains reachable outside the unverified state', async () => {
+  const devicesSource = await readSource('src/app/features/settings/devices/Devices.tsx');
+  const verificationSource = await readSource('src/app/features/settings/devices/Verification.tsx');
+
+  assert.match(devicesSource, /verificationStatus !== VerificationStatus\.Unverified/);
+  assert.match(devicesSource, /<RecoveryKeyAccessTile/);
+  assert.match(verificationSource, /输入恢复密钥/);
+  assert.match(verificationSource, /initialMethod=\{ManualVerificationMethod\.RecoveryKey\}/);
 });
 
 test('device verification accepts both cross-signing and local SDK trust', async () => {

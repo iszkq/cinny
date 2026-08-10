@@ -11,7 +11,9 @@ import {
 
 const PAGE_SIZE = 50;
 const MAX_SYNC_PAGES = 80;
+const FULL_SCAN_LOOKBACK_MS = 14 * 24 * 60 * 60 * 1000;
 const UNNAMED_MEETING = '未命名会议';
+const MAX_FALLBACK_TITLE_LENGTH = 48;
 
 type FieldKind = 'when' | 'what' | 'where';
 
@@ -109,6 +111,8 @@ const FIELD_PATTERN = FIELD_ALIASES.map(([alias]) =>
   escapeRegExp(alias).replace(/\\ /g, '\\s+')
 ).join('|');
 const FIELD_REGEX = new RegExp(`(${FIELD_PATTERN})\\s*[:：]\\s*`, 'giu');
+
+const FIELD_LINE_REGEX = new RegExp(`^\\s*(?:${FIELD_PATTERN})\\s*[:：]`, 'iu');
 
 const LOCATION_HINT_REGEX =
   /(?:小圆|球队通密|球闪通密|通密|zoom|会议号|meeting\s*id|webinar|⏱|⏲|⏰|◷|🕐|🕒|🕔|🕘)/iu;
@@ -328,14 +332,33 @@ const parseMeetingDate = (
   }
 
   if (!date) {
-    const chineseWeekday = text.match(/(?:本周|星期|周)([一二三四五六日天])/);
+    const chineseWeekday = text.match(/(?:(本|这|下|上)\s*周|星期|周)\s*([一二三四五六日天])/);
     const englishWeekday = Object.keys(WEEKDAYS)
       .filter((key) => /^[a-z]/.test(key))
       .find((key) => new RegExp(`\\b${key}\\b`, 'i').test(text));
-    const weekday = chineseWeekday?.[1] ?? englishWeekday;
+    const weekday = chineseWeekday?.[2] ?? englishWeekday;
     if (weekday !== undefined) {
       date = getStartOfWeek(sourceTimestamp);
       date.setDate(date.getDate() + WEEKDAYS[weekday.toLocaleLowerCase()]);
+
+      const chineseModifier = chineseWeekday?.[1];
+      const englishModifier = englishWeekday
+        ? text.match(new RegExp(`\\b(this|next|last)\\s+${englishWeekday}\\b`, 'i'))?.[1]
+        : undefined;
+      if (chineseModifier === '下' || englishModifier === 'next') {
+        date.setDate(date.getDate() + 7);
+      } else if (chineseModifier === '上' || englishModifier === 'last') {
+        date.setDate(date.getDate() - 7);
+      } else if (
+        !['本', '这'].includes(chineseModifier ?? '') &&
+        englishModifier !== 'this' &&
+        date.getTime() < reference.getTime()
+      ) {
+        // An unqualified weekday in a schedule normally means the next
+        // occurrence. This is especially important for Sunday announcements
+        // that publish the coming week's Monday meetings in advance.
+        date.setDate(date.getDate() + 7);
+      }
     }
   }
 
@@ -386,7 +409,13 @@ const parseMeetingTimes = (value: string): { startTime?: string; endTime?: strin
 };
 
 const extractZoomMeetingId = (value: string): string | undefined => {
-  const candidates = value.normalize('NFKC').match(/\d[\d\s-]{7,28}\d/g) ?? [];
+  const normalized = value.normalize('NFKC');
+  const zoomUrlId = normalized.match(
+    /https?:\/\/[^\s/]*zoom\.[^\s/]+\/(?:j|wc)\/(\d{9,11})/iu
+  )?.[1];
+  if (zoomUrlId) return zoomUrlId;
+
+  const candidates = normalized.match(/\d[\d\s-]{7,28}\d/g) ?? [];
   return candidates
     .map((candidate) => candidate.replace(/\D/g, ''))
     .find((candidate) => candidate.length >= 9 && candidate.length <= 11);
@@ -401,22 +430,86 @@ const extractMeetingLocation = (
     if (zoomMeetingId) return { zoomMeetingId, locationText: explicitLocation };
   }
 
-  const locationLine = body
-    .normalize('NFKC')
-    .split(/\r?\n/u)
-    .map((line) => line.trim())
-    .find((line) => LOCATION_HINT_REGEX.test(line) && extractZoomMeetingId(line));
+  const normalizedBody = body.normalize('NFKC');
+  const lines = normalizedBody.split(/\r?\n/u).map((line) => line.trim());
+  const locationLine = lines.find(
+    (line) => LOCATION_HINT_REGEX.test(line) && extractZoomMeetingId(line)
+  );
+  const hasZoomContext = LOCATION_HINT_REGEX.test(normalizedBody);
   const fallbackLine =
-    locationLine ??
-    body
-      .normalize('NFKC')
-      .split(/\r?\n/u)
-      .map((line) => line.trim())
-      .find((line) => extractZoomMeetingId(line));
+    locationLine ?? (hasZoomContext ? lines.find(extractZoomMeetingId) : undefined);
   if (!fallbackLine) return undefined;
 
   const zoomMeetingId = extractZoomMeetingId(fallbackLine);
   return zoomMeetingId ? { zoomMeetingId, locationText: fallbackLine } : undefined;
+};
+
+const compactTitle = (value: string): string => {
+  const firstClause = value.split(/[。！？!?；;\n]/u)[0]?.trim() ?? '';
+  if (firstClause.length <= MAX_FALLBACK_TITLE_LENGTH) return firstClause;
+  return `${firstClause.slice(0, MAX_FALLBACK_TITLE_LENGTH - 1).trimEnd()}…`;
+};
+
+const cleanTitleLine = (line: string): string =>
+  line
+    .normalize('NFKC')
+    .replace(/<[^>]+>/gu, ' ')
+    .replace(/^\s*(?:>|[-*+•·])\s*/u, '')
+    .replace(/^\s*#{1,6}\s*/u, '')
+    .replace(/^\s*(?:重点|标题|通知|公告|安排)\s*[:：]\s*/u, '')
+    .replace(/^\*\*(.+)\*\*$/u, '$1')
+    .replace(/\s+/gu, ' ')
+    .trim();
+
+const getFallbackMeetingTitle = (body: string): string | undefined => {
+  const candidates = body
+    .split(/\r?\n/u)
+    .map((originalLine, index) => {
+      const title = cleanTitleLine(originalLine);
+      if (
+        title.length < 2 ||
+        FIELD_LINE_REGEX.test(originalLine) ||
+        /^@(?:room|全体成员)(?:\s|$)/iu.test(title) ||
+        /^https?:\/\//iu.test(title) ||
+        /(?:密码|口令|passcode|password|会议号|meeting\s*id)/iu.test(title) ||
+        extractZoomMeetingId(title) ||
+        /^[\d\s:：/.,，。\-–—~～年月日号星期周一二三四五六天早上中午下午晚上凌晨]+$/u.test(title)
+      ) {
+        return undefined;
+      }
+
+      const highlighted =
+        /^\s*(?:#{1,6}\s|\*\*|【|\[)/u.test(originalLine) ||
+        /(?:会议|聚会|学习|课程|讲座|培训|分享|查经|协调|讨论|发布|计划)/iu.test(title);
+      const score = (highlighted ? 100 : 0) + (title.length <= 32 ? 20 : 0) - index;
+      return { title: compactTitle(title), score };
+    })
+    .filter((candidate): candidate is { title: string; score: number } => !!candidate)
+    .sort((a, b) => b.score - a.score);
+
+  return candidates[0]?.title;
+};
+
+const getMeetingTitle = (explicitTitle: string | undefined, body: string): string => {
+  const title = explicitTitle ? cleanTitleLine(explicitTitle) : undefined;
+  if (title && !/^(?:无|暂无|未提供|n\/?a|[-—–])$/iu.test(title)) {
+    return compactTitle(title);
+  }
+  return getFallbackMeetingTitle(body) ?? UNNAMED_MEETING;
+};
+
+const getMeetingTimes = (
+  explicitWhen: string | undefined,
+  body: string
+): { startTime?: string; endTime?: string } => {
+  const explicitTimes = explicitWhen ? parseMeetingTimes(explicitWhen) : {};
+  const fallbackTimes = parseMeetingTimes(body);
+  const startTime = explicitTimes.startTime ?? fallbackTimes.startTime;
+  const endTime = explicitTimes.endTime ?? fallbackTimes.endTime;
+  return {
+    ...(startTime ? { startTime } : {}),
+    ...(endTime ? { endTime } : {}),
+  };
 };
 
 const normalizeTitle = (value: string): string =>
@@ -458,8 +551,8 @@ export const parseMeetingBody = (
     .map((value) => parseMeetingDate(value, sourceTimestamp, now))
     .find((value): value is Date => !!value);
   if (!meetingDate) return undefined;
-  const title = fields.what?.replace(/\s+/g, ' ').trim() || UNNAMED_MEETING;
-  const times = parseMeetingTimes(fields.when ?? body);
+  const title = getMeetingTitle(fields.what, body);
+  const times = getMeetingTimes(fields.when, body);
 
   return {
     sourceEventId,
@@ -717,10 +810,9 @@ export const synchronizeWeeklyCalendar = (
     if (!active.roomId || !mx.getRoom(active.roomId)) return active;
 
     const firstScan = !active.initialScanCompleted;
-    const recoveryScan = manual && active.meetings.length === 0;
-    const fullScan = firstScan || recoveryScan;
+    const fullScan = firstScan || manual;
     const since = fullScan
-      ? getStartOfWeek(now).getTime()
+      ? getStartOfWeek(now).getTime() - FULL_SCAN_LOOKBACK_MS
       : Math.max(getStartOfWeek(now).getTime(), (active.lastProcessedAt ?? now) - 1000);
     const events = await fetchRoomEventsSince(mx, active.roomId, since);
     let next = active;

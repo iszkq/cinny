@@ -22,7 +22,10 @@ import FocusTrap from 'focus-trap-react';
 import { CryptoApi, VerificationRequest } from 'matrix-js-sdk/lib/crypto-api';
 import { VerificationStatus } from '../../../hooks/useDeviceVerificationStatus';
 import { InfoCard } from '../../../components/info-card';
-import { ManualVerificationTile } from '../../../components/ManualVerification';
+import {
+  ManualVerificationMethod,
+  ManualVerificationTile,
+} from '../../../components/ManualVerification';
 import { SecretStorageKeyContent } from '../../../../types/matrix/accountData';
 import { AsyncState, AsyncStatus, useAsync } from '../../../hooks/useAsyncCallback';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
@@ -54,31 +57,33 @@ export function VerificationStatusBadge({
   }
   if (verificationStatus === VerificationStatus.Unverified) {
     return (
-        <Badge variant="Critical" fill="Solid" size="500">
-          <Text size="L400">{'\u672a\u9a8c\u8bc1'}</Text>
-        </Badge>
+      <Badge variant="Critical" fill="Solid" size="500">
+        <Text size="L400">{'\u672a\u9a8c\u8bc1'}</Text>
+      </Badge>
     );
   }
 
   if (otherUnverifiedCount > 0) {
     return (
-        <Badge variant="Warning" fill="Solid" size="500">
-          <Text size="L400">{`${otherUnverifiedCount} \u4e2a\u672a\u9a8c\u8bc1`}</Text>
-        </Badge>
+      <Badge variant="Warning" fill="Solid" size="500">
+        <Text size="L400">{`${otherUnverifiedCount} \u4e2a\u672a\u9a8c\u8bc1`}</Text>
+      </Badge>
     );
   }
 
   return (
-        <Badge variant="Success" fill="Solid" size="500">
-          <Text size="L400">{'\u5df2\u9a8c\u8bc1'}</Text>
-        </Badge>
+    <Badge variant="Success" fill="Solid" size="500">
+      <Text size="L400">{'\u5df2\u9a8c\u8bc1'}</Text>
+    </Badge>
   );
 }
 
 function LearnStartVerificationFromOtherDevice() {
   return (
     <Box direction="Column">
-      <Text size="T200">{'\u4ece\u5176\u4ed6\u8bbe\u5907\u53d1\u8d77\u9a8c\u8bc1\u7684\u6b65\u9aa4\uff1a'}</Text>
+      <Text size="T200">
+        {'\u4ece\u5176\u4ed6\u8bbe\u5907\u53d1\u8d77\u9a8c\u8bc1\u7684\u6b65\u9aa4\uff1a'}
+      </Text>
       <Text as="div" size="T200">
         <ul style={{ margin: `${config.space.S100} 0` }}>
           <li>{'\u6253\u5f00\u53e6\u4e00\u53f0\u5df2\u9a8c\u8bc1\u7684\u8bbe\u5907\u3002'}</li>
@@ -86,13 +91,16 @@ function LearnStartVerificationFromOtherDevice() {
             {'\u6253\u5f00'} <i>{'\u8bbe\u7f6e'}</i>。
           </li>
           <li>
-            {'\u5728'} <i>{'\u8bbe\u5907 / \u4f1a\u8bdd'}</i> {'\u4e2d\u627e\u5230\u8fd9\u53f0\u8bbe\u5907\u3002'}
+            {'\u5728'} <i>{'\u8bbe\u5907 / \u4f1a\u8bdd'}</i>{' '}
+            {'\u4e2d\u627e\u5230\u8fd9\u53f0\u8bbe\u5907\u3002'}
           </li>
           <li>{'\u5f00\u59cb\u9a8c\u8bc1\u3002'}</li>
         </ul>
       </Text>
       <Text size="T200">
-        {'\u5982\u679c\u4f60\u8fd8\u6ca1\u6709\u4efb\u4f55\u5df2\u9a8c\u8bc1\u8bbe\u5907\uff0c\u8bf7\u70b9\u51fb'}{' '}
+        {
+          '\u5982\u679c\u4f60\u8fd8\u6ca1\u6709\u4efb\u4f55\u5df2\u9a8c\u8bc1\u8bbe\u5907\uff0c\u8bf7\u70b9\u51fb'
+        }{' '}
         <i>{'\u201c\u624b\u52a8\u9a8c\u8bc1\u201d'}</i> {'\u6309\u94ae\u3002'}
       </Text>
     </Box>
@@ -119,7 +127,9 @@ export function VerifyCurrentDeviceTile({
         title={'\u672a\u9a8c\u8bc1'}
         description={
           <>
-            {'\u53ef\u4ee5\u4ece\u5176\u4ed6\u8bbe\u5907\u53d1\u8d77\u9a8c\u8bc1\uff0c\u6216\u8005\u76f4\u63a5\u624b\u52a8\u9a8c\u8bc1\u3002'}{' '}
+            {
+              '\u53ef\u4ee5\u4ece\u5176\u4ed6\u8bbe\u5907\u53d1\u8d77\u9a8c\u8bc1\uff0c\u6216\u8005\u76f4\u63a5\u624b\u52a8\u9a8c\u8bc1\u3002'
+            }{' '}
             <Text as="a" size="T200" onClick={() => setLearnMore(!learnMore)}>
               <b>{learnMore ? '\u6536\u8d77' : '\u4e86\u89e3\u66f4\u591a'}</b>
             </Text>
@@ -165,6 +175,61 @@ export function VerifyCurrentDeviceTile({
   );
 }
 
+type RecoveryKeyAccessTileProps = {
+  secretStorageKeyId: string;
+  secretStorageKeyContent: SecretStorageKeyContent;
+};
+export function RecoveryKeyAccessTile({
+  secretStorageKeyId,
+  secretStorageKeyContent,
+}: RecoveryKeyAccessTileProps) {
+  const [recoveryOpen, setRecoveryOpen] = useState(false);
+
+  return (
+    <>
+      <InfoCard
+        variant="Surface"
+        title="恢复密钥"
+        description="无论设备验证或加密备份当前显示什么状态，都可以从这里重新输入恢复密钥。"
+        after={
+          !recoveryOpen && (
+            <Button
+              size="300"
+              variant="Primary"
+              fill="Soft"
+              radii="300"
+              outlined
+              onClick={() => setRecoveryOpen(true)}
+            >
+              <Text as="span" size="B300">
+                输入恢复密钥
+              </Text>
+            </Button>
+          )
+        }
+      />
+      {recoveryOpen && (
+        <ManualVerificationTile
+          secretStorageKeyId={secretStorageKeyId}
+          secretStorageKeyContent={secretStorageKeyContent}
+          initialMethod={ManualVerificationMethod.RecoveryKey}
+          options={
+            <Chip
+              type="button"
+              variant="Secondary"
+              fill="Soft"
+              radii="Pill"
+              onClick={() => setRecoveryOpen(false)}
+            >
+              <Icon size="100" src={Icons.Cross} />
+            </Chip>
+          }
+        />
+      )}
+    </>
+  );
+}
+
 type VerifyOtherDeviceTileProps = {
   crypto: CryptoApi;
   deviceId: string;
@@ -194,7 +259,9 @@ export function VerifyOtherDeviceTile({ crypto, deviceId }: VerifyOtherDeviceTil
     <InfoCard
       variant="Warning"
       title={'\u672a\u9a8c\u8bc1'}
-      description={'\u9a8c\u8bc1\u8bbe\u5907\u8eab\u4efd\uff0c\u5e76\u6388\u4e88\u52a0\u5bc6\u6d88\u606f\u7684\u8bbf\u95ee\u6743\u9650\u3002'}
+      description={
+        '\u9a8c\u8bc1\u8bbe\u5907\u8eab\u4efd\uff0c\u5e76\u6388\u4e88\u52a0\u5bc6\u6d88\u606f\u7684\u8bbf\u95ee\u6743\u9650\u3002'
+      }
       after={
         <Button
           size="300"
