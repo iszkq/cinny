@@ -84,6 +84,9 @@ const isCompoundOfficeContainer = (buffer: ArrayBuffer): boolean => {
 const officeShellWarmups = new Map<string, Promise<void>>();
 const officePreconnectedOrigins = new Set<string>();
 
+const isCompactOfficeViewport = (): boolean =>
+  window.matchMedia('(max-width: 750px), (max-height: 520px) and (pointer: coarse)').matches;
+
 const preconnectOfficeOrigin = (editorUrl: string): void => {
   if (typeof document === 'undefined') return;
 
@@ -104,6 +107,10 @@ const preconnectOfficeOrigin = (editorUrl: string): void => {
 
 const warmOfficeEditorShell = (editorUrl: string): Promise<void> => {
   if (typeof document === 'undefined') return Promise.resolve();
+  // Mobile browsers have much tighter memory limits. A hidden second
+  // OnlyOffice instance can evict the visible editor and surface a fatal
+  // "error while working with document" dialog.
+  if (isCompactOfficeViewport()) return Promise.resolve();
 
   let target: URL;
   try {
@@ -254,7 +261,7 @@ const getEditorUrl = (
   target.searchParams.set('mimeType', mimeType);
   target.searchParams.set('editing', mode === 'edit' ? '1' : '0');
   target.searchParams.set('lang', 'zh-CN');
-  const compactViewport = window.matchMedia('(max-width: 750px)').matches;
+  const compactViewport = isCompactOfficeViewport();
   target.searchParams.set('mobile', compactViewport ? '1' : '0');
   target.searchParams.set('compactToolbar', compactViewport ? '1' : '0');
   return target.toString();
@@ -370,6 +377,33 @@ export function OfficeFileEditor({
     cachedSourceRef.current = undefined;
     pendingSourceRef.current = undefined;
   }, [url]);
+
+  useEffect(() => {
+    if (!session || desktopNativeOffice) return undefined;
+
+    const updateOfficeViewportHeight = () => {
+      const height = Math.round(window.visualViewport?.height ?? window.innerHeight);
+      document.documentElement.style.setProperty('--office-viewport-height', `${height}px`);
+    };
+
+    updateOfficeViewportHeight();
+    window.addEventListener('resize', updateOfficeViewportHeight, { passive: true });
+    window.addEventListener('orientationchange', updateOfficeViewportHeight, { passive: true });
+    window.visualViewport?.addEventListener('resize', updateOfficeViewportHeight, {
+      passive: true,
+    });
+    window.visualViewport?.addEventListener('scroll', updateOfficeViewportHeight, {
+      passive: true,
+    });
+
+    return () => {
+      window.removeEventListener('resize', updateOfficeViewportHeight);
+      window.removeEventListener('orientationchange', updateOfficeViewportHeight);
+      window.visualViewport?.removeEventListener('resize', updateOfficeViewportHeight);
+      window.visualViewport?.removeEventListener('scroll', updateOfficeViewportHeight);
+      document.documentElement.style.removeProperty('--office-viewport-height');
+    };
+  }, [desktopNativeOffice, session]);
 
   useEffect(() => {
     preconnectOfficeOrigin(officeEditorUrl);
@@ -616,6 +650,9 @@ export function OfficeFileEditor({
 
   const requestSave = useCallback(
     (closeAfterSave = false) => {
+      const activeElement = document.activeElement;
+      if (activeElement instanceof HTMLElement) activeElement.blur();
+      iframeRef.current?.blur();
       beginSaveOperation(closeAfterSave, true);
     },
     [beginSaveOperation]
@@ -1587,7 +1624,7 @@ export function OfficeFileEditor({
                           {passwordError && (
                             <Text size="T200" priority="300">
                               {isPasswordPromptError(passwordError)
-                                ? '密码不正确或文档无法解密，请确认后重试。'
+                                ? '密码不正确，文档未发送到 Office 服务，请确认后重试。'
                                 : passwordError}
                             </Text>
                           )}

@@ -63,12 +63,8 @@ test('verified devices restore the upstream encrypted-backup status and progress
 test('the device page separates current-device trust from other devices', async () => {
   const devicesSource = await readSource('src/app/features/settings/devices/Devices.tsx');
   const verificationSource = await readSource('src/app/features/settings/devices/Verification.tsx');
-  const otherDevicesSource = await readSource(
-    'src/app/features/settings/devices/OtherDevices.tsx'
-  );
-  const deviceVerificationSource = await readSource(
-    'src/app/components/DeviceVerification.tsx'
-  );
+  const otherDevicesSource = await readSource('src/app/features/settings/devices/OtherDevices.tsx');
+  const deviceVerificationSource = await readSource('src/app/components/DeviceVerification.tsx');
   const routerSource = await readSource('src/app/pages/Router.tsx');
 
   assert.match(devicesSource, /BackupRestoreTile/);
@@ -351,4 +347,15 @@ test('manual recovery exposes real decrypt progress and a durable completion mar
   const loadKeysIndex = stateSource.indexOf('if (progress.stage === ImportRoomKeyStage.LoadKeys)');
   assert.ok(loadKeysIndex > 0);
   assert.doesNotMatch(stateSource.slice(loadKeysIndex), /BackupProgressStatus\.Done/);
+});
+
+test('recent live encrypted messages retry while room keys arrive or the desktop regains focus', async () => {
+  const source = await readSource('src/app/features/room/message/EncryptedContent.tsx');
+
+  assert.match(source, /RECENT_DECRYPTION_RETRY_WINDOW_MS = 15 \* 60 \* 1000/);
+  assert.match(source, /DECRYPTION_RETRY_DELAYS_MS = \[0, 500, 2_000, 5_000\]/);
+  assert.match(source, /attemptDecryption\(crypto as CryptoBackend, \{ isRetry: true \}\)/);
+  assert.match(source, /document\.addEventListener\('visibilitychange'/);
+  assert.match(source, /document\.removeEventListener\('visibilitychange'/);
+  assert.match(source, /window\.clearTimeout\(retryTimer\)/);
 });

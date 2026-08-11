@@ -443,7 +443,7 @@ export function NativeOfficeWindow() {
           <div className={css.promptBackdrop}>
             <Box
               as="form"
-              className={css.promptCard}
+              className={`${css.promptCard} ${css.nativePromptCard}`}
               onSubmit={submitPassword}
               role="dialog"
               aria-modal="true"
@@ -536,7 +536,11 @@ export function NativeOfficeWindow() {
           </div>
         )}
         {busy && (
-          <div className={css.saveStatus} role="status" aria-live="polite">
+          <div
+            className={`${css.saveStatus} ${css.nativeSaveStatus}`}
+            role="status"
+            aria-live="polite"
+          >
             <Box alignItems="Center" gap="200" grow="Yes">
               <Spinner size="100" />
               <Text size="T300">{getPhaseLabel(payload)}</Text>
@@ -554,7 +558,11 @@ export function NativeOfficeWindow() {
         )}
         {payload.showClosePrompt && (
           <div className={css.promptBackdrop}>
-            <div className={css.promptCard} role="alertdialog" aria-modal="true">
+            <div
+              className={`${css.promptCard} ${css.nativePromptCard}`}
+              role="alertdialog"
+              aria-modal="true"
+            >
               <Box direction="Column" gap="100">
                 <Text size="H4">保存对文档的修改？</Text>
                 <Text size="T300" priority="300">

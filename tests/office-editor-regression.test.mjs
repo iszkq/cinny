@@ -11,6 +11,8 @@ test('Office attachment actions use compact hover targets', async () => {
   assert.match(cssSource, /padding: `\$\{toRem\(5\)\} \$\{toRem\(6\)\}`/);
   assert.match(cssSource, /export const actionLabel/);
   assert.match(cssSource, /minHeight: toRem\(32\)/);
+  assert.match(cssSource, /whiteSpace: 'nowrap'/);
+  assert.match(cssSource, /max-width: 410px[\s\S]*fontSize: toRem\(12\)/);
   assert.match(cssSource, /borderRadius: toRem\(999\)/);
   assert.match(
     cssSource,
@@ -219,6 +221,12 @@ test('desktop Office uses an isolated native window and raw bounded binary excha
   assert.match(nativeViewSource, /nextPayload\.requestId !== requestId/);
   assert.match(nativeViewSource, /const sourceBinaryToken = payload\?\.sourceBinary\?\.token/);
   assert.match(nativeViewSource, /sourceBinaryByteLength,/);
+  assert.match(nativeViewSource, /css\.promptCard\} \$\{css\.nativePromptCard/);
+  assert.match(nativeViewSource, /css\.saveStatus\} \$\{css\.nativeSaveStatus/);
+  assert.match(
+    await readSource('src/app/components/file-viewer/OfficeFileEditor.css.ts'),
+    /nativePromptCard[\s\S]*background: '#ffffff'[\s\S]*nativeSaveStatus[\s\S]*background: 'rgba\(255, 255, 255, 0\.96\)'/
+  );
   assert.doesNotMatch(
     nativeViewSource,
     /consumeNativeOfficeBinary[\s\S]{0,900}\}, \[emitSessionAction, payload,/
@@ -234,6 +242,8 @@ test('desktop Office uses an isolated native window and raw bounded binary excha
 test('Office opening is bounded and mobile layout respects the viewport safe area', async () => {
   const editorSource = await readSource('src/app/components/file-viewer/OfficeFileEditor.tsx');
   const styleSource = await readSource('src/app/components/file-viewer/OfficeFileEditor.css.ts');
+  const capacitorSource = await readSource('capacitor.config.ts');
+  const androidManifest = await readSource('android/app/src/main/AndroidManifest.xml');
 
   assert.match(editorSource, /SOURCE_LOAD_TIMEOUT_MS = 60_000/);
   assert.match(editorSource, /IFRAME_BRIDGE_READY_TIMEOUT_MS = 30_000/);
@@ -242,8 +252,20 @@ test('Office opening is bounded and mobile layout respects the viewport safe are
   assert.match(editorSource, /Office 打开文档超时/);
   assert.match(editorSource, />重新打开</);
   assert.match(editorSource, /compactToolbar/);
+  assert.match(editorSource, /isCompactOfficeViewport/);
+  assert.match(editorSource, /if \(isCompactOfficeViewport\(\)\) return Promise\.resolve\(\)/);
+  assert.match(editorSource, /window\.visualViewport\?\.height/);
+  assert.match(editorSource, /activeElement instanceof HTMLElement/);
+  assert.match(editorSource, /密码不正确，文档未发送到 Office 服务/);
   assert.match(styleSource, /var\(--safe-area-top/);
   assert.match(styleSource, /var\(--safe-area-right/);
   assert.match(styleSource, /var\(--safe-area-bottom/);
   assert.match(styleSource, /orientation: landscape/);
+  assert.match(styleSource, /var\(--office-viewport-height/);
+  assert.match(
+    capacitorSource,
+    /allowNavigation: \['124\.222\.193\.241', 'office\.221819\.best'\]/
+  );
+  assert.match(androidManifest, /android:screenOrientation="unspecified"/);
+  assert.match(androidManifest, /android:windowSoftInputMode="adjustResize"/);
 });

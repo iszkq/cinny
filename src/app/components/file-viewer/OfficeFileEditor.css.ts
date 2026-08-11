@@ -131,6 +131,7 @@ export const actionLabel = style([
     minHeight: toRem(32),
     paddingBlock: 0,
     paddingInline: config.space.S200,
+    whiteSpace: 'nowrap',
     borderRadius: toRem(999),
     transition: 'background-color 120ms ease, box-shadow 120ms ease',
     selectors: {
@@ -139,6 +140,13 @@ export const actionLabel = style([
       },
       [`${actionButton}:focus-visible &`]: {
         boxShadow: '0 0 0 2px currentColor',
+      },
+    },
+    '@media': {
+      'screen and (max-width: 410px)': {
+        minHeight: toRem(30),
+        paddingInline: toRem(2),
+        fontSize: toRem(12),
       },
     },
   },
@@ -184,10 +192,10 @@ export const editorModal = style([
     '@media': {
       'screen and (max-width: 750px)': {
         width: '100%',
-        height: 'var(--app-height, 100dvh)',
+        height: 'min(var(--app-height, 100dvh), var(--office-viewport-height, 100dvh))',
         minHeight: 0,
         maxWidth: '100vw',
-        maxHeight: 'var(--app-height, 100dvh)',
+        maxHeight: 'min(var(--app-height, 100dvh), var(--office-viewport-height, 100dvh))',
         borderRadius: 0,
       },
     },
@@ -362,6 +370,20 @@ export const promptCard = style([
     boxShadow: '0 18px 54px rgba(15, 23, 42, 0.28)',
   },
 ]);
+
+export const nativePromptCard = style({
+  border: '1px solid rgba(99, 115, 106, 0.18)',
+  background: '#ffffff',
+  color: '#17211c',
+  boxShadow: '0 18px 54px rgba(15, 23, 42, 0.28)',
+});
+
+export const nativeSaveStatus = style({
+  border: '1px solid rgba(99, 115, 106, 0.2)',
+  background: 'rgba(255, 255, 255, 0.96)',
+  color: '#17211c',
+  boxShadow: '0 12px 36px rgba(15, 23, 42, 0.26)',
+});
 
 export const nativeEditorWindow = style([
   DefaultReset,
