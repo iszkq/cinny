@@ -24,6 +24,7 @@ const OFFICE_ICON_META: Record<OfficeDocumentKind, { label: string; background: 
   word: { label: 'W', background: '#185ABD' },
   spreadsheet: { label: 'X', background: '#107C41' },
   presentation: { label: 'P', background: '#C43E1C' },
+  pdf: { label: 'PDF', background: '#E53935' },
 };
 
 function OfficeDocumentIcon({ kind }: { kind: OfficeDocumentKind }) {
@@ -78,7 +79,7 @@ export function FileDownloadButton({ filename, url, mimeType, encInfo }: FileDow
       disabled={downloading}
       onClick={() => {
         if (downloadState.status === AsyncStatus.Success) {
-          void saveDownloadedFile(downloadState.data, filename);
+          saveDownloadedFile(downloadState.data, filename).catch(() => undefined);
           return;
         }
 

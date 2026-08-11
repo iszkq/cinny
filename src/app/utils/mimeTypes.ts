@@ -153,15 +153,7 @@ export const PRESENTATION_MIME_TYPES = [
   'application/vnd.oasis.opendocument.presentation',
 ];
 
-const WORD_FILE_EXTENSIONS = [
-  'doc',
-  'docx',
-  'docm',
-  'dotx',
-  'dotm',
-  'odt',
-  'rtf',
-] as const;
+const WORD_FILE_EXTENSIONS = ['doc', 'docx', 'docm', 'dotx', 'dotm', 'odt', 'rtf'] as const;
 const SPREADSHEET_FILE_EXTENSIONS = [
   'xlsx',
   'xlsm',
@@ -189,32 +181,44 @@ export const OFFICE_FILE_EXTENSIONS = [
   ...WORD_FILE_EXTENSIONS,
   ...SPREADSHEET_FILE_EXTENSIONS,
   ...PRESENTATION_FILE_EXTENSIONS,
+  'pdf',
 ] as const;
 
-export type OfficeDocumentKind = 'word' | 'spreadsheet' | 'presentation';
+export type OfficeDocumentKind = 'word' | 'spreadsheet' | 'presentation' | 'pdf';
 
 export const getOfficeDocumentKind = (
   fileName: string,
   mimeType: string
 ): OfficeDocumentKind | undefined => {
-  const normalizedMimeType = getNormalizedMimeType(mimeType);
-  const ext = getFileNameExt(fileName);
+  const normalizedMimeType =
+    typeof mimeType === 'string'
+      ? mimeType.split(';', 1)[0].trim().toLowerCase()
+      : FALLBACK_MIMETYPE;
+  const extStart = fileName.lastIndexOf('.');
+  const ext =
+    extStart > 0 && extStart < fileName.length - 1
+      ? fileName.slice(extStart + 1).toLowerCase()
+      : '';
+
+  if (normalizedMimeType === 'application/pdf' || ext === 'pdf') {
+    return 'pdf';
+  }
 
   if (
     DOCX_MIME_TYPES.includes(normalizedMimeType) ||
-    WORD_FILE_EXTENSIONS.includes(ext as (typeof WORD_FILE_EXTENSIONS)[number])
+    WORD_FILE_EXTENSIONS.includes(ext as typeof WORD_FILE_EXTENSIONS[number])
   ) {
     return 'word';
   }
   if (
     SPREADSHEET_MIME_TYPES.includes(normalizedMimeType) ||
-    SPREADSHEET_FILE_EXTENSIONS.includes(ext as (typeof SPREADSHEET_FILE_EXTENSIONS)[number])
+    SPREADSHEET_FILE_EXTENSIONS.includes(ext as typeof SPREADSHEET_FILE_EXTENSIONS[number])
   ) {
     return 'spreadsheet';
   }
   if (
     PRESENTATION_MIME_TYPES.includes(normalizedMimeType) ||
-    PRESENTATION_FILE_EXTENSIONS.includes(ext as (typeof PRESENTATION_FILE_EXTENSIONS)[number])
+    PRESENTATION_FILE_EXTENSIONS.includes(ext as typeof PRESENTATION_FILE_EXTENSIONS[number])
   ) {
     return 'presentation';
   }

@@ -33,6 +33,7 @@ import {
   mxcUrlToHttp,
 } from '../../utils/matrix';
 import { saveDownloadedFile } from '../../utils/saveDownloadedFile';
+import { decryptOfficeDocument, isOfficeDocumentEncrypted } from '../../plugins/officecrypto';
 import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
 import {
   clearNativeOfficeBinaries,
@@ -42,7 +43,6 @@ import {
   emitNativeOfficePayload,
   listenNativeOfficeAction,
   NativeOfficeBinaryDescriptor,
-  NativeOfficeBridgeMessage,
   NativeOfficeWindowHandle,
   NativeOfficeWindowAction,
   NativeOfficeWindowPayload,
@@ -50,6 +50,7 @@ import {
   writeNativeOfficeBinary,
 } from '../../utils/nativeOfficeWindow';
 import * as css from './OfficeFileEditor.css';
+import { PasswordInput } from '../password-input';
 
 const DEFAULT_OFFICE_EDITOR_URL = 'https://124.222.193.241:6258/editor';
 const OFFICE_BRIDGE_READY = 'xinghuo-office-ready';
@@ -70,6 +71,15 @@ const DOCUMENT_OPENED_TIMEOUT_MS = 45_000;
 const OFFICE_SHELL_WARMUP_DELAY_MS = 600;
 const OFFICE_SHELL_WARMUP_LIFETIME_MS = 15_000;
 const MAX_MEMORY_CACHED_SOURCE_BYTES = 64 * 1024 * 1024;
+const COMPOUND_FILE_SIGNATURE = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1];
+const isPasswordPromptError = (message?: string): boolean =>
+  Boolean(message && /password|encrypted|decrypt|密钥|密码/i.test(message));
+
+const isCompoundOfficeContainer = (buffer: ArrayBuffer): boolean => {
+  if (buffer.byteLength < COMPOUND_FILE_SIGNATURE.length) return false;
+  const bytes = new Uint8Array(buffer, 0, COMPOUND_FILE_SIGNATURE.length);
+  return COMPOUND_FILE_SIGNATURE.every((value, index) => bytes[index] === value);
+};
 
 const officeShellWarmups = new Map<string, Promise<void>>();
 const officePreconnectedOrigins = new Set<string>();
@@ -78,7 +88,7 @@ const preconnectOfficeOrigin = (editorUrl: string): void => {
   if (typeof document === 'undefined') return;
 
   try {
-    const origin = new URL(editorUrl, window.location.href).origin;
+    const { origin } = new URL(editorUrl, window.location.href);
     if (officePreconnectedOrigins.has(origin)) return;
     officePreconnectedOrigins.add(origin);
 
@@ -167,6 +177,7 @@ type EditorSession = {
   requestId: string;
   nativeSessionId: string;
   src: string;
+  password?: string;
 };
 
 type OfficeBridgeMessage = {
@@ -178,6 +189,7 @@ type OfficeBridgeMessage = {
   fileName?: string;
   mimeType?: string;
   message?: string;
+  passwordRequired?: boolean;
 };
 
 type MatrixUploadPromise = ReturnType<ReturnType<typeof useMatrixClient>['uploadContent']>;
@@ -202,12 +214,15 @@ export type OfficeFileEditorProps = {
   room?: Room;
   eventId?: string;
   sourceSenderId?: string;
+  updatedBy?: string;
+  updatedAt?: number;
 };
 
 const OFFICE_ICON_META = {
   word: { label: 'W', color: '#2563eb' },
   spreadsheet: { label: 'X', color: '#168454' },
   presentation: { label: 'P', color: '#e05236' },
+  pdf: { label: 'PDF', color: '#e53935' },
 } as const;
 
 const makeRequestId = (): string =>
@@ -264,6 +279,8 @@ export function OfficeFileEditor({
   room,
   eventId,
   sourceSenderId,
+  updatedBy,
+  updatedAt,
 }: OfficeFileEditorProps) {
   const mx = useMatrixClient();
   const clientConfig = useClientConfig();
@@ -300,6 +317,9 @@ export function OfficeFileEditor({
   const [downloadError, setDownloadError] = useState(false);
   const [nativeWindowState, setNativeWindowState] = useState<NativeWindowState>('inactive');
   const [nativeSourceBinary, setNativeSourceBinary] = useState<NativeOfficeBinaryDescriptor>();
+  const [passwordRequired, setPasswordRequired] = useState(false);
+  const [passwordInput, setPasswordInput] = useState('');
+  const [passwordError, setPasswordError] = useState<string>();
 
   const officeKind = getOfficeDocumentKind(body, mimeType);
   const iconMeta = officeKind ? OFFICE_ICON_META[officeKind] : OFFICE_ICON_META.word;
@@ -317,7 +337,7 @@ export function OfficeFileEditor({
     clientConfig.officeEditor?.prepareTimeoutSeconds,
     DEFAULT_PREPARE_TIMEOUT_SECONDS
   );
-  const canEdit = Boolean(room && eventId?.startsWith('$'));
+  const canEdit = officeKind !== 'pdf' && Boolean(room && eventId?.startsWith('$'));
 
   const loadSourceFile = useCallback(async (): Promise<Blob> => {
     if (cachedSourceRef.current) return cachedSourceRef.current;
@@ -510,6 +530,9 @@ export function OfficeFileEditor({
     nativeWindowStateRef.current = 'inactive';
     setNativeWindowState('inactive');
     setNativeSourceBinary(undefined);
+    setPasswordRequired(false);
+    setPasswordInput('');
+    setPasswordError(undefined);
   }, [cancelSaveOperation, clearOpenTimeouts]);
 
   const failSaveOperation = useCallback(
@@ -611,6 +634,7 @@ export function OfficeFileEditor({
         fileName: body,
         fileType: getFileNameExt(body),
         mimeType,
+        ...(activeSession.password ? { password: activeSession.password } : {}),
         buffer,
       },
       new URL(activeSession.src).origin,
@@ -621,7 +645,7 @@ export function OfficeFileEditor({
   }, [armDocumentOpenedTimeout, body, mimeType]);
 
   const openEditor = useCallback(
-    (mode: EditorMode, forceInline = false) => {
+    (mode: EditorMode, password?: string, forceInline = false) => {
       if (!officeKind || (mode === 'edit' && !canEdit)) return;
       if (saveOperationRef.current?.stage === 'publishing') return;
 
@@ -634,6 +658,7 @@ export function OfficeFileEditor({
         requestId,
         nativeSessionId,
         src: getEditorUrl(officeEditorUrl, requestId, mode, body, mimeType),
+        password: password?.trim() || undefined,
       };
       cancelSaveOperation();
       clearOpenTimeouts();
@@ -652,12 +677,13 @@ export function OfficeFileEditor({
       setLegacyRetryBlocked(false);
       setBackgroundPublishing(false);
       setNativeSourceBinary(undefined);
+      setPasswordRequired(false);
+      setPasswordInput('');
+      setPasswordError(undefined);
       const shouldUseNativeWindow = desktopNativeOffice && !forceInline;
-      const nextNativeWindowState: NativeWindowState = shouldUseNativeWindow
-        ? 'opening'
-        : desktopNativeOffice
-        ? 'fallback'
-        : 'inactive';
+      let nextNativeWindowState: NativeWindowState = 'inactive';
+      if (shouldUseNativeWindow) nextNativeWindowState = 'opening';
+      else if (desktopNativeOffice) nextNativeWindowState = 'fallback';
       nativeWindowStateRef.current = nextNativeWindowState;
       setNativeWindowState(nextNativeWindowState);
       armBridgeReadyTimeout(requestId);
@@ -672,8 +698,33 @@ export function OfficeFileEditor({
 
       Promise.race([loadSourceFile(), sourceLoadTimedOut])
         .then((file) => file.arrayBuffer())
-        .then(async (buffer) => {
+        .then(async (source) => {
           if (sessionRef.current?.requestId !== requestId) return;
+          let buffer = source;
+          const encryptedOfficeFile =
+            isCompoundOfficeContainer(source) && (await isOfficeDocumentEncrypted(source));
+
+          if (encryptedOfficeFile) {
+            if (!password?.trim()) {
+              clearOpenTimeouts();
+              setPasswordRequired(true);
+              setPasswordInput('');
+              setPasswordError(undefined);
+              return;
+            }
+
+            try {
+              buffer = await decryptOfficeDocument(source, password);
+            } catch (error) {
+              if (sessionRef.current?.requestId !== requestId) return;
+              clearOpenTimeouts();
+              setPasswordRequired(true);
+              setPasswordInput('');
+              setPasswordError(error instanceof Error ? error.message : undefined);
+              return;
+            }
+          }
+
           sourceBufferRef.current = buffer;
 
           if (shouldUseNativeWindow) {
@@ -899,6 +950,14 @@ export function OfficeFileEditor({
         }
         if (data.saveId) return;
         if (legacyExportInvalidatedRef.current) return;
+        if (data.passwordRequired || isPasswordPromptError(data.message)) {
+          clearOpenTimeouts();
+          setPasswordRequired(true);
+          setPasswordInput('');
+          setPasswordError(data.message);
+          setPhase('loading');
+          return;
+        }
         clearOpenTimeouts();
         setErrorMessage('Office 无法打开文档。请检查网络后关闭窗口并重试。');
         setPhase('error');
@@ -1088,6 +1147,9 @@ export function OfficeFileEditor({
         showClosePrompt,
         legacyRetryBlocked,
         errorMessage,
+        password: session.password,
+        passwordRequired,
+        passwordError,
         sourceBinary: nativeSourceBinary,
       }
     : undefined;
@@ -1155,6 +1217,10 @@ export function OfficeFileEditor({
       openEditor(activeSession.mode);
       return;
     }
+    if (action.type === 'submit-password') {
+      openEditor(activeSession.mode, action.password);
+      return;
+    }
     if (action.type === 'source-consumed') {
       sourceBufferRef.current = undefined;
       armDocumentOpenedTimeout(activeSession.requestId);
@@ -1173,7 +1239,7 @@ export function OfficeFileEditor({
         armBridgeReadyTimeout(activeSession.requestId);
       } else {
         closeNativeOfficeWindow(activeSession.nativeSessionId).catch(() => undefined);
-        openEditor(activeSession.mode, true);
+        openEditor(activeSession.mode, undefined, true);
       }
     }
   };
@@ -1290,6 +1356,8 @@ export function OfficeFileEditor({
     errorMessage,
     legacyRetryBlocked,
     nativeSourceBinary,
+    passwordError,
+    passwordRequired,
     nativeWindowState,
     phase,
     session,
@@ -1317,10 +1385,32 @@ export function OfficeFileEditor({
     }
   }, [backgroundPublishing, body, downloading, loadSourceFile]);
 
+  const submitPassword = useCallback(
+    (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      const password = passwordInput.trim();
+      if (!password || !session) return;
+      openEditor(session.mode, password);
+    },
+    [openEditor, passwordInput, session]
+  );
+
   if (!officeKind) return null;
 
   const extLabel = (getFileNameExt(body) || mimeTypeToExt(mimeType)).toUpperCase();
   const sizeLabel = typeof infoSize === 'number' ? bytesToSize(infoSize) : undefined;
+  const updatedAtLabel =
+    typeof updatedAt === 'number'
+      ? new Intl.DateTimeFormat('zh-CN', {
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+        }).format(updatedAt)
+      : undefined;
+  let updateLabel: string | undefined;
+  if (updatedBy && updatedAtLabel) updateLabel = `由 ${updatedBy} 于 ${updatedAtLabel} 更新`;
+  else if (updatedBy) updateLabel = `由 ${updatedBy} 更新`;
   const publishing = phase === 'publishing';
   const busy = phase === 'saving' || phase === 'uploading' || publishing;
   let editActionTitle = '在线编辑并保存到原消息';
@@ -1336,19 +1426,36 @@ export function OfficeFileEditor({
     <>
       <div className={css.card} onPointerEnter={warmOfficeOpen}>
         <div className={css.fileSummary}>
-          <div className={css.fileIcon} style={{ backgroundColor: iconMeta.color }} aria-hidden>
+          <div
+            className={css.fileIcon}
+            style={{
+              backgroundColor: iconMeta.color,
+              fontSize: officeKind === 'pdf' ? '12px' : undefined,
+            }}
+            aria-hidden
+          >
             {iconMeta.label}
           </div>
           <div className={css.fileMeta}>
             <Text size="T300" truncate className={css.fileName} title={body}>
               {body}
             </Text>
-            <Text size="O400" priority="300">
-              {[sizeLabel, extLabel].filter(Boolean).join(' · ')}
+            <Text
+              size="O400"
+              priority="300"
+              truncate
+              title={[sizeLabel, extLabel, updateLabel].filter(Boolean).join(' · ')}
+            >
+              {[sizeLabel, extLabel, updateLabel].filter(Boolean).join(' · ')}
             </Text>
           </div>
         </div>
-        <div className={css.actions}>
+        <div
+          className={css.actions}
+          style={{
+            gridTemplateColumns: officeKind === 'pdf' ? 'repeat(2, minmax(0, 1fr))' : undefined,
+          }}
+        >
           <button
             className={css.actionButton}
             type="button"
@@ -1360,17 +1467,21 @@ export function OfficeFileEditor({
           >
             <span className={css.actionLabel}>在线预览</span>
           </button>
-          <button
-            className={css.actionButton}
-            type="button"
-            onClick={() => openEditor('edit')}
-            onFocus={warmOfficeOpen}
-            onPointerDown={warmOfficeOpen}
-            disabled={!canEdit || backgroundPublishing}
-            title={editActionTitle}
-          >
-            <span className={css.actionLabel}>{backgroundPublishing ? '发布中…' : '在线编辑'}</span>
-          </button>
+          {officeKind !== 'pdf' && (
+            <button
+              className={css.actionButton}
+              type="button"
+              onClick={() => openEditor('edit')}
+              onFocus={warmOfficeOpen}
+              onPointerDown={warmOfficeOpen}
+              disabled={!canEdit || backgroundPublishing}
+              title={editActionTitle}
+            >
+              <span className={css.actionLabel}>
+                {backgroundPublishing ? '发布中…' : '在线编辑'}
+              </span>
+            </button>
+          )}
           <button
             className={css.actionButton}
             type="button"
@@ -1459,6 +1570,63 @@ export function OfficeFileEditor({
                       title={`${session.mode === 'edit' ? '在线编辑' : '在线预览'} ${body}`}
                       allow="clipboard-read; clipboard-write"
                     />
+                    {passwordRequired && (
+                      <div className={css.promptBackdrop}>
+                        <Box
+                          as="form"
+                          className={css.promptCard}
+                          onSubmit={submitPassword}
+                          role="dialog"
+                          aria-modal="true"
+                          aria-label="输入 Office 文档密码"
+                        >
+                          <Text size="T300">此 Office 文档已加密</Text>
+                          <Text size="T200" priority="300">
+                            请输入文档密码后再打开。密码仅用于本次解密，不会保存到设备或上传到聊天服务器。
+                          </Text>
+                          {passwordError && (
+                            <Text size="T200" priority="300">
+                              {isPasswordPromptError(passwordError)
+                                ? '密码不正确或文档无法解密，请确认后重试。'
+                                : passwordError}
+                            </Text>
+                          )}
+                          <PasswordInput
+                            size="400"
+                            variant="Secondary"
+                            autoFocus
+                            name="officeDocumentPassword"
+                            placeholder="请输入文档密码"
+                            value={passwordInput}
+                            onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
+                              setPasswordInput(event.target.value)
+                            }
+                            required
+                          />
+                          <Box gap="200" justifyContent="End">
+                            <Button
+                              type="button"
+                              variant="Secondary"
+                              fill="Soft"
+                              size="300"
+                              radii="300"
+                              onClick={closeModal}
+                            >
+                              <Text size="B300">取消</Text>
+                            </Button>
+                            <Button
+                              type="submit"
+                              variant="Primary"
+                              fill="Solid"
+                              size="300"
+                              radii="300"
+                            >
+                              <Text size="B300">解密并打开</Text>
+                            </Button>
+                          </Box>
+                        </Box>
+                      </div>
+                    )}
                     {phase === 'loading' && (
                       <div className={css.loadingLayer}>
                         <Spinner size="400" />

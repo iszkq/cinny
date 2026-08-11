@@ -29,6 +29,9 @@ export type NativeOfficeWindowPayload = {
   showClosePrompt: boolean;
   legacyRetryBlocked: boolean;
   errorMessage?: string;
+  password?: string;
+  passwordRequired?: boolean;
+  passwordError?: string;
   sourceBinary?: NativeOfficeBinaryDescriptor;
 };
 
@@ -40,6 +43,7 @@ export type NativeOfficeBridgeMessage = {
   fileName?: string;
   mimeType?: string;
   message?: string;
+  passwordRequired?: boolean;
   binary?: NativeOfficeBinaryDescriptor;
 };
 
@@ -61,6 +65,12 @@ export type NativeOfficeWindowAction =
         | 'retry-open';
       sessionId: string;
       requestId: string;
+    }
+  | {
+      type: 'submit-password';
+      sessionId: string;
+      requestId: string;
+      password: string;
     }
   | {
       type: 'native-error';
@@ -361,7 +371,7 @@ export const listenNativeOfficePayload = async (
 ): Promise<() => void> => {
   const { listen } = await import('@tauri-apps/api/event');
   return listen(NATIVE_OFFICE_UPDATE_EVENT, (event: EventPayload<NativeOfficeWindowPayload>) => {
-    const payload = event.payload;
+    const { payload } = event;
     if (payload?.sessionId !== sessionId || payload.requestId !== requestId) return;
     onPayload(payload);
   });

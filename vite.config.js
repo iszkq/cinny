@@ -130,18 +130,23 @@ export default defineConfig({
     },
   },
   resolve: {
-    alias: androidAppBuild
-      ? [
-          {
-            find: './app/components/bible/NativeBibleWindow',
-            replacement: androidBibleDisabledModule,
-          },
-          {
-            find: './sidebar/BibleTab',
-            replacement: androidBibleDisabledModule,
-          },
-        ]
-      : [],
+    alias: [
+      { find: 'crypto', replacement: 'crypto-browserify' },
+      { find: 'stream', replacement: 'stream-browserify' },
+      { find: 'timers', replacement: 'timers-browserify' },
+      ...(androidAppBuild
+        ? [
+            {
+              find: './app/components/bible/NativeBibleWindow',
+              replacement: androidBibleDisabledModule,
+            },
+            {
+              find: './sidebar/BibleTab',
+              replacement: androidBibleDisabledModule,
+            },
+          ]
+        : []),
+    ],
   },
   plugins: [
     serverMatrixSdkCryptoWasm('/node_modules/.vite/deps/pkg/matrix_sdk_crypto_wasm_bg.wasm'),
@@ -178,7 +183,7 @@ export default defineConfig({
       plugins: [
         // Enable esbuild polyfill plugins
         NodeGlobalsPolyfillPlugin({
-          process: false,
+          process: true,
           buffer: true,
         }),
       ],
@@ -190,7 +195,7 @@ export default defineConfig({
     manifest: true,
     copyPublicDir: false,
     rollupOptions: {
-      plugins: [inject({ Buffer: ['buffer', 'Buffer'] })],
+      plugins: [inject({ Buffer: ['buffer', 'Buffer'], process: ['process', 'default'] })],
       output: {
         // Content-only hashes can reuse a URL that an edge cache previously poisoned with the
         // SPA HTML fallback. A deployment suffix guarantees that every release gets a fresh JS

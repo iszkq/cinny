@@ -192,7 +192,7 @@ export function RenderMessageContent({
       setFetchedOfficeEvents(Array.from(events.values()));
     };
 
-    void loadRelations();
+    loadRelations().catch(() => undefined);
     return () => {
       disposed = true;
     };
@@ -239,6 +239,8 @@ export function RenderMessageContent({
     let officeContent = currentContent;
     let officeSourceEventId = eventId;
     let officeSourceSenderId = eventSenderId;
+    let officeUpdatedBy: string | undefined;
+    let officeUpdatedAt: number | undefined;
 
     if (
       room &&
@@ -285,6 +287,14 @@ export function RenderMessageContent({
         officeContent = resolved.content as unknown as IFileContent;
         officeSourceEventId = resolved.sourceEventId;
         officeSourceSenderId = eventMap.get(resolved.sourceEventId)?.senderId;
+        if (resolved.updatedBy) {
+          officeUpdatedAt = resolved.revisionTimestamp;
+          officeUpdatedBy =
+            getMemberDisplayName(room, resolved.updatedBy) ??
+            mx.getUser(resolved.updatedBy)?.displayName ??
+            getMxIdLocalPart(resolved.updatedBy) ??
+            resolved.updatedBy;
+        }
       }
     }
 
@@ -304,6 +314,8 @@ export function RenderMessageContent({
                   room={room}
                   eventId={officeSourceEventId}
                   sourceSenderId={officeSourceSenderId}
+                  updatedBy={officeUpdatedBy}
+                  updatedAt={officeUpdatedAt}
                 />
               );
             }

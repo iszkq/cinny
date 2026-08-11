@@ -328,9 +328,51 @@ test('the newest valid standalone successor is used by the original and successo
 
   assert.equal(fromOriginal.sourceEventId, '$original');
   assert.equal(fromOriginal.revisionEventId, '$newest');
+  assert.equal(fromOriginal.updatedBy, '@bob:example.org');
   assert.equal(fromOriginal.content.url, 'mxc://example.org/newest');
   assert.equal(fromOlderCard.sourceEventId, '$original');
+  assert.equal(fromOlderCard.updatedBy, '@bob:example.org');
   assert.equal(fromOlderCard.content.url, 'mxc://example.org/newest');
+});
+
+test('same-sender Office replacements expose their updater and server timestamp', async () => {
+  const { OFFICE_UPDATE_PROPERTY, resolveLatestOfficeFileRevision } = await loadOfficeFileUtils();
+  const sourceContent = { ...latestFileContent, url: 'mxc://example.org/original' };
+  const newContent = {
+    ...latestFileContent,
+    url: 'mxc://example.org/self-update',
+    [OFFICE_UPDATE_PROPERTY]: { source_event_id: '$original', updated_at: 2000 },
+  };
+  const resolved = resolveLatestOfficeFileRevision({
+    currentEventId: '$original',
+    currentContent: sourceContent,
+    currentEventTimestamp: 1000,
+    timelineEvents: [
+      {
+        eventId: '$original',
+        senderId: '@alice:example.org',
+        eventType: 'm.room.message',
+        timestamp: 1000,
+        content: sourceContent,
+      },
+      {
+        eventId: '$replacement',
+        senderId: '@alice:example.org',
+        eventType: 'm.room.message',
+        timestamp: 2000,
+        content: {
+          ...newContent,
+          body: '* report.docx',
+          'm.new_content': newContent,
+          'm.relates_to': { rel_type: 'm.replace', event_id: '$original' },
+        },
+      },
+    ],
+  });
+
+  assert.equal(resolved.updatedBy, '@alice:example.org');
+  assert.equal(resolved.revisionTimestamp, 2000);
+  assert.equal(resolved.content.url, 'mxc://example.org/self-update');
 });
 
 test('an acknowledged collaborator revision immediately updates a search result before timeline sync', async () => {
@@ -369,6 +411,7 @@ test('an acknowledged collaborator revision immediately updates a search result 
   });
 
   assert.equal(resolved.revisionEventId, '$hidden-revision');
+  assert.equal(resolved.updatedBy, '@bob:example.org');
   assert.equal(resolved.content.url, 'mxc://example.org/hidden-revision');
 
   const newerContent = {

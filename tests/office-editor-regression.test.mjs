@@ -19,6 +19,27 @@ test('Office attachment actions use compact hover targets', async () => {
   assert.doesNotMatch(cssSource, /background: color\.Primary\.Container/);
 });
 
+test('encrypted Word, spreadsheet, and presentation files are unlocked locally', async () => {
+  const source = await readSource('src/app/components/file-viewer/OfficeFileEditor.tsx');
+  const cryptoSource = await readSource('src/app/plugins/officecrypto.ts');
+
+  assert.match(source, /isOfficeDocumentEncrypted\(source\)/);
+  assert.match(source, /setPasswordRequired\(true\)/);
+  assert.match(source, /decryptOfficeDocument\(source, password\)/);
+  assert.match(cryptoSource, /import\('officecrypto-tool'\)/);
+  assert.match(source, /密码仅用于本次解密，不会保存到设备或上传到聊天服务器/);
+});
+
+test('PDF uses the Office card in read-only mode without an edit action', async () => {
+  const source = await readSource('src/app/components/file-viewer/OfficeFileEditor.tsx');
+  const mimeSource = await readSource('src/app/utils/mimeTypes.ts');
+
+  assert.match(mimeSource, /normalizedMimeType === 'application\/pdf' \|\| ext === 'pdf'/);
+  assert.match(source, /pdf: \{ label: 'PDF', color: '#e53935' \}/);
+  assert.match(source, /officeKind !== 'pdf' && \(/);
+  assert.match(source, /officeKind === 'pdf' \? 'repeat\(2, minmax\(0, 1fr\)\)'/);
+});
+
 test('host-window Office shortcuts prevent browser downloads and use the bridge save path', async () => {
   const source = await readSource('src/app/components/file-viewer/OfficeFileEditor.tsx');
 

@@ -14,6 +14,7 @@ import {
   writeNativeOfficeBinary,
 } from '../../utils/nativeOfficeWindow';
 import * as css from './OfficeFileEditor.css';
+import { PasswordInput } from '../password-input';
 
 const OFFICE_BRIDGE_READY = 'xinghuo-office-ready';
 const OFFICE_BRIDGE_OPEN = 'xinghuo-office-open';
@@ -73,6 +74,7 @@ export function NativeOfficeWindow() {
   const closeAllowedRef = useRef(false);
   const [payload, setPayload] = useState<NativeOfficeWindowPayload>();
   const [maximized, setMaximized] = useState(false);
+  const [passwordInput, setPasswordInput] = useState('');
 
   const emitSessionAction = useCallback(
     (action: NativeOfficeWindowActionInput) => {
@@ -110,6 +112,7 @@ export function NativeOfficeWindow() {
         fileName: currentPayload.body,
         fileType: currentPayload.body.split('.').pop()?.toLowerCase() ?? '',
         mimeType: currentPayload.mimeType,
+        ...(currentPayload.password ? { password: currentPayload.password } : {}),
         buffer,
       },
       new URL(currentPayload.src).origin,
@@ -251,7 +254,8 @@ export function NativeOfficeWindow() {
         return;
       }
 
-      const { buffer: _buffer, ...message } = event.data;
+      const message: OfficeFrameMessage = { ...event.data };
+      delete message.buffer;
       emitSessionAction({ type: 'bridge', message });
     };
 
@@ -315,6 +319,14 @@ export function NativeOfficeWindow() {
     import('@tauri-apps/api/window')
       .then(({ getCurrentWindow }) => getCurrentWindow().startDragging())
       .catch(() => undefined);
+  };
+
+  const submitPassword = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const password = passwordInput.trim();
+    if (!password) return;
+    emitSessionAction({ type: 'submit-password', password });
+    setPasswordInput('');
   };
 
   if (!sessionId || !requestId) {
@@ -427,6 +439,55 @@ export function NativeOfficeWindow() {
           title={`${payload.mode === 'edit' ? '在线编辑' : '在线预览'} ${payload.body}`}
           allow="clipboard-read; clipboard-write"
         />
+        {payload.passwordRequired && (
+          <div className={css.promptBackdrop}>
+            <Box
+              as="form"
+              className={css.promptCard}
+              onSubmit={submitPassword}
+              role="dialog"
+              aria-modal="true"
+              aria-label="输入 Office 文档密码"
+            >
+              <Text size="T300">此 Office 文档已加密</Text>
+              <Text size="T200" priority="300">
+                请输入文档密码后再打开。密码仅用于本次解密，不会保存到设备或上传到聊天服务器。
+              </Text>
+              {payload.passwordError && (
+                <Text size="T200" priority="300">
+                  密码不正确或文档无法解密，请确认后重试。
+                </Text>
+              )}
+              <PasswordInput
+                size="400"
+                variant="Secondary"
+                autoFocus
+                name="officeDocumentPassword"
+                placeholder="请输入文档密码"
+                value={passwordInput}
+                onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
+                  setPasswordInput(event.target.value)
+                }
+                required
+              />
+              <Box gap="200" justifyContent="End">
+                <Button
+                  type="button"
+                  variant="Secondary"
+                  fill="Soft"
+                  size="300"
+                  radii="300"
+                  onClick={() => emitSessionAction({ type: 'close' })}
+                >
+                  <Text size="B300">取消</Text>
+                </Button>
+                <Button type="submit" variant="Primary" fill="Solid" size="300" radii="300">
+                  <Text size="B300">解密并打开</Text>
+                </Button>
+              </Box>
+            </Box>
+          </div>
+        )}
         {payload.phase === 'loading' && (
           <div className={css.loadingLayer}>
             <Spinner size="400" />

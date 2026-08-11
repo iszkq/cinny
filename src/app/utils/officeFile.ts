@@ -40,6 +40,7 @@ export type ResolvedOfficeFileRevision = {
   sourceEventId: string;
   revisionEventId: string;
   revisionTimestamp: number;
+  updatedBy?: string;
   content: OfficeFileMessageContent;
 };
 
@@ -80,7 +81,7 @@ export const rememberOfficeFileRevision = ({
   timestamp?: number;
 }): void => {
   const eventId =
-    revisionEventId && isServerEventId(revisionEventId)
+    revisionEventId && /^\$\S+$/.test(revisionEventId)
       ? revisionEventId
       : `$local-office-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   optimisticRevisions.set(sourceEventId, {
@@ -104,8 +105,9 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const isMxcUrl = (value: unknown): value is string =>
   typeof value === 'string' && /^mxc:\/\/[^/\s]+\/[^/?#\s]+$/.test(value);
 
-const isServerEventId = (value: unknown): value is string =>
-  typeof value === 'string' && /^\$\S+$/.test(value);
+function isServerEventId(value: unknown): value is string {
+  return typeof value === 'string' && /^\$\S+$/.test(value);
+}
 
 const isMatrixUserId = (value: unknown): value is string =>
   typeof value === 'string' && /^@[^:\s]+:[^\s]+$/.test(value);
@@ -198,6 +200,7 @@ type RevisionCandidate = {
   content: OfficeFileMessageContent;
   eventId: string;
   timestamp: number;
+  senderId?: string;
 };
 
 const parseSuccessor = (
@@ -218,7 +221,7 @@ const parseSuccessor = (
   ) {
     return undefined;
   }
-  return { content, eventId: event.eventId!, timestamp: event.timestamp };
+  return { content, eventId: event.eventId!, timestamp: event.timestamp, senderId: event.senderId };
 };
 
 const parseReplacement = (
@@ -256,7 +259,12 @@ const parseReplacement = (
       event.timestamp
     );
   if (!validSender) return undefined;
-  return { content: newContent, eventId: event.eventId!, timestamp: event.timestamp };
+  return {
+    content: newContent,
+    eventId: event.eventId!,
+    timestamp: event.timestamp,
+    senderId: event.senderId,
+  };
 };
 
 /**
@@ -299,7 +307,12 @@ export const resolveLatestOfficeFileRevision = ({
   if (!sourceContent) return undefined;
 
   const candidates: RevisionCandidate[] = [
-    { content: sourceContent, eventId: sourceEventId, timestamp: sourceEvent.timestamp },
+    {
+      content: sourceContent,
+      eventId: sourceEventId,
+      timestamp: sourceEvent.timestamp,
+      senderId: sourceEvent.senderId,
+    },
   ];
   timelineEvents.forEach((event) => {
     const successor = parseSuccessor(event, sourceEventId, sourceContent);
@@ -346,6 +359,7 @@ export const resolveLatestOfficeFileRevision = ({
           content: currentFileContent,
           eventId: currentEventId,
           timestamp: matchingCurrentTimestamp,
+          senderId: currentEvent.senderId,
         }
       : latest;
 
@@ -353,6 +367,7 @@ export const resolveLatestOfficeFileRevision = ({
     sourceEventId,
     revisionEventId: selected.eventId,
     revisionTimestamp: selected.timestamp,
+    updatedBy: selected.eventId === sourceEventId ? undefined : selected.senderId,
     content: selected.content,
   };
 };
