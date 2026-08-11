@@ -164,7 +164,7 @@ export const overlayCenter = style([
     overflow: 'hidden',
     pointerEvents: 'none',
     '@media': {
-      'screen and (max-width: 750px)': {
+      'screen and (max-width: 750px), screen and (max-height: 520px) and (pointer: coarse)': {
         padding: 0,
         alignItems: 'stretch',
         justifyContent: 'stretch',
@@ -190,7 +190,7 @@ export const editorModal = style([
     pointerEvents: 'all',
     boxShadow: '0 26px 80px rgba(15, 23, 42, 0.32)',
     '@media': {
-      'screen and (max-width: 750px)': {
+      'screen and (max-width: 750px), screen and (max-height: 520px) and (pointer: coarse)': {
         width: '100%',
         height: 'min(var(--app-height, 100dvh), var(--office-viewport-height, 100dvh))',
         minHeight: 0,
@@ -206,6 +206,8 @@ export const editorHeader = style([
   DefaultReset,
   {
     display: 'flex',
+    position: 'relative',
+    zIndex: 6,
     alignItems: 'center',
     gap: config.space.S300,
     flexShrink: 0,
@@ -214,7 +216,7 @@ export const editorHeader = style([
     borderBottom: `${config.borderWidth.B300} solid ${color.Surface.ContainerLine}`,
     background: color.Surface.Container,
     '@media': {
-      'screen and (max-width: 750px)': {
+      'screen and (max-width: 750px), screen and (max-height: 520px) and (pointer: coarse)': {
         minHeight: toRem(56),
         paddingTop: `max(${config.space.S200}, var(--safe-area-top, env(safe-area-inset-top, 0px)))`,
         paddingRight: `max(${config.space.S200}, var(--safe-area-right, env(safe-area-inset-right, 0px)))`,
@@ -264,7 +266,7 @@ export const editorBody = style([
     overflow: 'hidden',
     background: '#eef1f5',
     '@media': {
-      'screen and (max-width: 750px)': {
+      'screen and (max-width: 750px), screen and (max-height: 520px) and (pointer: coarse)': {
         paddingRight: 'var(--safe-area-right, env(safe-area-inset-right, 0px))',
         paddingBottom: 'var(--safe-area-bottom, env(safe-area-inset-bottom, 0px))',
         paddingLeft: 'var(--safe-area-left, env(safe-area-inset-left, 0px))',
@@ -283,6 +285,20 @@ export const editorFrame = style([
     minHeight: 0,
     border: 0,
     background: '#fff',
+    touchAction: 'manipulation',
+  },
+]);
+
+export const mobileCloseButton = style([
+  DefaultReset,
+  {
+    position: 'absolute',
+    zIndex: 20,
+    top: `calc(${config.space.S200} + var(--safe-area-top, env(safe-area-inset-top, 0px)))`,
+    right: `calc(${config.space.S200} + var(--safe-area-right, env(safe-area-inset-right, 0px)))`,
+    color: '#17211c',
+    background: 'rgba(255, 255, 255, 0.94)',
+    boxShadow: '0 4px 18px rgba(15, 23, 42, 0.28)',
     touchAction: 'manipulation',
   },
 ]);

@@ -52,11 +52,15 @@ import {
 import * as css from './OfficeFileEditor.css';
 import { PasswordInput } from '../password-input';
 import { lockOfficeLandscape, unlockOfficeOrientation } from '../../utils/officeOrientation';
-import { isAndroidApp } from '../../utils/nativePlatform';
+import { ANDROID_BACK_BUTTON_EVENT, isAndroidApp } from '../../utils/nativePlatform';
 
 const DEFAULT_OFFICE_EDITOR_URL = 'https://124.222.193.241:6258/editor';
 const OFFICE_BRIDGE_READY = 'xinghuo-office-ready';
 const OFFICE_BRIDGE_OPEN = 'xinghuo-office-open';
+const OFFICE_BRIDGE_SOURCE_BEGIN = 'xinghuo-office-source-begin';
+const OFFICE_BRIDGE_SOURCE_CHUNK = 'xinghuo-office-source-chunk';
+const OFFICE_BRIDGE_SOURCE_CHUNK_RECEIVED = 'xinghuo-office-source-chunk-received';
+const OFFICE_BRIDGE_SOURCE_END = 'xinghuo-office-source-end';
 const OFFICE_BRIDGE_SOURCE_RECEIVED = 'xinghuo-office-source-received';
 const OFFICE_BRIDGE_OPENED = 'xinghuo-office-opened';
 const OFFICE_BRIDGE_DIRTY = 'xinghuo-office-dirty';
@@ -75,6 +79,9 @@ const MOBILE_IFRAME_BRIDGE_READY_TIMEOUT_MS = 60_000;
 const MOBILE_DOCUMENT_OPENED_TIMEOUT_MS = 150_000;
 const OFFICE_SHELL_WARMUP_DELAY_MS = 600;
 const OFFICE_SHELL_WARMUP_LIFETIME_MS = 15_000;
+const ANDROID_SOURCE_CHUNK_BYTES = 192 * 1024;
+const ANDROID_SOURCE_CHUNK_ACK_TIMEOUT_MS = 2_500;
+const ANDROID_SOURCE_CHUNK_MAX_ATTEMPTS = 3;
 const MAX_MEMORY_CACHED_SOURCE_BYTES = 64 * 1024 * 1024;
 const COMPOUND_FILE_SIGNATURE = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1];
 const isPasswordPromptError = (message?: string): boolean =>
@@ -202,6 +209,15 @@ type OfficeBridgeMessage = {
   mimeType?: string;
   message?: string;
   passwordRequired?: boolean;
+  chunkIndex?: number;
+};
+
+type AndroidChunkAckWaiter = {
+  requestId: string;
+  chunkIndex: number;
+  timeoutId: number;
+  resolve: () => void;
+  reject: (error: Error) => void;
 };
 
 type MatrixUploadPromise = ReturnType<ReturnType<typeof useMatrixClient>['uploadContent']>;
@@ -245,6 +261,15 @@ const makeRequestId = (): string =>
 const getTimeoutMs = (seconds: number | undefined, fallbackSeconds: number): number => {
   if (typeof seconds !== 'number' || !Number.isFinite(seconds)) return fallbackSeconds * 1000;
   return Math.min(Math.max(seconds, 5), 600) * 1000;
+};
+
+const encodeBase64Chunk = (bytes: Uint8Array): string => {
+  let binary = '';
+  const stringChunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.byteLength; offset += stringChunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + stringChunkSize));
+  }
+  return window.btoa(binary);
 };
 
 const isSaveShortcut = (event: globalThis.KeyboardEvent): boolean =>
@@ -319,6 +344,8 @@ export function OfficeFileEditor({
   const nativeWindowStateRef = useRef<NativeWindowState>('inactive');
   const nativePayloadRef = useRef<NativeOfficeWindowPayload>();
   const nativeActionHandlerRef = useRef<(action: NativeOfficeWindowAction) => void>();
+  const androidSourceRequestRef = useRef<string>();
+  const androidChunkAckRef = useRef<AndroidChunkAckWaiter>();
 
   const [session, setSession] = useState<EditorSession>();
   const [phase, setPhase] = useState<EditorPhase>('loading');
@@ -338,6 +365,9 @@ export function OfficeFileEditor({
   const officeKind = getOfficeDocumentKind(body, mimeType);
   const iconMeta = officeKind ? OFFICE_ICON_META[officeKind] : OFFICE_ICON_META.word;
   const desktopNativeOffice = isDesktopUpdaterSupported();
+  const androidApp = isAndroidApp();
+  const compactOfficeViewport = isCompactOfficeViewport();
+  const mobileOfficeShell = androidApp || compactOfficeViewport;
   const officeEditorUrl = clientConfig.officeEditor?.url?.trim() || DEFAULT_OFFICE_EDITOR_URL;
   const exportTimeoutMs = getTimeoutMs(
     clientConfig.officeEditor?.exportTimeoutSeconds,
@@ -444,6 +474,72 @@ export function OfficeFileEditor({
       documentOpenedTimeoutRef.current = undefined;
     }
   }, []);
+
+  const cancelAndroidChunkAck = useCallback(() => {
+    const waiter = androidChunkAckRef.current;
+    if (!waiter) return;
+    androidChunkAckRef.current = undefined;
+    window.clearTimeout(waiter.timeoutId);
+    waiter.reject(new Error('Android Office source transfer cancelled.'));
+  }, []);
+
+  const sendAndroidChunkWithAck = useCallback(
+    async (
+      targetWindow: Window,
+      targetOrigin: string,
+      requestId: string,
+      chunkIndex: number,
+      chunkData: string
+    ): Promise<void> => {
+      const sendAttempt = async (attempt: number): Promise<void> => {
+        if (
+          sessionRef.current?.requestId !== requestId ||
+          androidSourceRequestRef.current !== requestId
+        ) {
+          throw new Error('Android Office source transfer superseded.');
+        }
+
+        try {
+          await new Promise<void>((resolve, reject) => {
+            const waiter: AndroidChunkAckWaiter = {
+              requestId,
+              chunkIndex,
+              timeoutId: 0,
+              resolve,
+              reject,
+            };
+            waiter.timeoutId = window.setTimeout(() => {
+              if (androidChunkAckRef.current === waiter) {
+                androidChunkAckRef.current = undefined;
+              }
+              reject(new Error('Android Office document chunk was not acknowledged.'));
+            }, ANDROID_SOURCE_CHUNK_ACK_TIMEOUT_MS);
+            androidChunkAckRef.current = waiter;
+            targetWindow.postMessage(
+              {
+                type: OFFICE_BRIDGE_SOURCE_CHUNK,
+                requestId,
+                chunkIndex,
+                chunkData,
+              },
+              targetOrigin
+            );
+          });
+        } catch (error) {
+          if (
+            sessionRef.current?.requestId !== requestId ||
+            androidSourceRequestRef.current !== requestId
+          ) {
+            throw error;
+          }
+          if (attempt + 1 >= ANDROID_SOURCE_CHUNK_MAX_ATTEMPTS) throw error;
+          await sendAttempt(attempt + 1);
+        }
+      };
+      await sendAttempt(0);
+    },
+    []
+  );
 
   const armBridgeReadyTimeout = useCallback((requestId: string) => {
     if (bridgeReadyTimeoutRef.current !== undefined) {
@@ -569,8 +665,10 @@ export function OfficeFileEditor({
     } else {
       cancelSaveOperation();
     }
+    cancelAndroidChunkAck();
     sessionRef.current = undefined;
     sourceBufferRef.current = undefined;
+    androidSourceRequestRef.current = undefined;
     iframeReadyRef.current = false;
     bridgeSaveProtocolRef.current = 'unknown';
     legacyExportInvalidatedRef.current = false;
@@ -589,7 +687,7 @@ export function OfficeFileEditor({
     setPasswordRequired(false);
     setPasswordInput('');
     setPasswordError(undefined);
-  }, [cancelSaveOperation, clearOpenTimeouts]);
+  }, [cancelAndroidChunkAck, cancelSaveOperation, clearOpenTimeouts]);
 
   const failSaveOperation = useCallback(
     (saveId: string, message: string) => {
@@ -672,7 +770,7 @@ export function OfficeFileEditor({
 
   const requestSave = useCallback(
     (closeAfterSave = false) => {
-      const activeElement = document.activeElement;
+      const { activeElement } = document;
       if (activeElement instanceof HTMLElement) activeElement.blur();
       iframeRef.current?.blur();
       beginSaveOperation(closeAfterSave, true);
@@ -696,25 +794,70 @@ export function OfficeFileEditor({
       buffer,
     };
     const targetOrigin = new URL(activeSession.src).origin;
-    if (isAndroidApp()) {
-      // Some Android System WebView releases silently drop cross-origin
-      // postMessage payloads when an ArrayBuffer is transferred. A structured
-      // clone costs one temporary copy but reliably delivers the local file.
-      targetWindow.postMessage(message, targetOrigin);
-      window.setTimeout(() => {
-        if (
-          sessionRef.current?.requestId === activeSession.requestId &&
-          sourceBufferRef.current === buffer
-        ) {
-          targetWindow.postMessage(message, targetOrigin);
-        }
-      }, 1_500);
-    } else {
-      targetWindow.postMessage(message, targetOrigin, [buffer]);
-      sourceBufferRef.current = undefined;
+    if (androidApp) {
+      if (androidSourceRequestRef.current === activeSession.requestId) return;
+      androidSourceRequestRef.current = activeSession.requestId;
+      const sourceBytes = new Uint8Array(buffer);
+      const chunkCount = Math.ceil(sourceBytes.byteLength / ANDROID_SOURCE_CHUNK_BYTES);
+      targetWindow.postMessage(
+        {
+          type: OFFICE_BRIDGE_SOURCE_BEGIN,
+          requestId: activeSession.requestId,
+          fileName: body,
+          fileType: getFileNameExt(body),
+          mimeType,
+          byteLength: sourceBytes.byteLength,
+          chunkCount,
+        },
+        targetOrigin
+      );
+
+      (async () => {
+        const sendChunk = async (chunkIndex: number): Promise<void> => {
+          if (chunkIndex >= chunkCount) return;
+          const offset = chunkIndex * ANDROID_SOURCE_CHUNK_BYTES;
+          const chunk = sourceBytes.subarray(offset, offset + ANDROID_SOURCE_CHUNK_BYTES);
+          await sendAndroidChunkWithAck(
+            targetWindow,
+            targetOrigin,
+            activeSession.requestId,
+            chunkIndex,
+            encodeBase64Chunk(chunk)
+          );
+          await sendChunk(chunkIndex + 1);
+        };
+        await sendChunk(0);
+        if (sessionRef.current?.requestId !== activeSession.requestId) return;
+        targetWindow.postMessage(
+          {
+            type: OFFICE_BRIDGE_SOURCE_END,
+            requestId: activeSession.requestId,
+          },
+          targetOrigin
+        );
+        armDocumentOpenedTimeout(activeSession.requestId);
+      })().catch(() => {
+        if (sessionRef.current?.requestId !== activeSession.requestId) return;
+        androidSourceRequestRef.current = undefined;
+        cancelAndroidChunkAck();
+        clearOpenTimeouts();
+        setErrorMessage('Android 文档传输失败。请重新打开，或直接关闭窗口。');
+        setPhase('error');
+      });
+      return;
     }
+    targetWindow.postMessage(message, targetOrigin, [buffer]);
+    sourceBufferRef.current = undefined;
     armDocumentOpenedTimeout(activeSession.requestId);
-  }, [armDocumentOpenedTimeout, body, mimeType]);
+  }, [
+    androidApp,
+    armDocumentOpenedTimeout,
+    body,
+    cancelAndroidChunkAck,
+    clearOpenTimeouts,
+    mimeType,
+    sendAndroidChunkWithAck,
+  ]);
 
   const openEditor = useCallback(
     (mode: EditorMode, password?: string, forceInline = false) => {
@@ -733,9 +876,11 @@ export function OfficeFileEditor({
         password: password?.trim() || undefined,
       };
       cancelSaveOperation();
+      cancelAndroidChunkAck();
       clearOpenTimeouts();
       sessionRef.current = nextSession;
       sourceBufferRef.current = undefined;
+      androidSourceRequestRef.current = undefined;
       iframeReadyRef.current = false;
       bridgeSaveProtocolRef.current = 'unknown';
       legacyExportInvalidatedRef.current = false;
@@ -846,6 +991,7 @@ export function OfficeFileEditor({
       body,
       canEdit,
       cancelSaveOperation,
+      cancelAndroidChunkAck,
       clearOpenTimeouts,
       desktopNativeOffice,
       loadSourceFile,
@@ -968,7 +1114,22 @@ export function OfficeFileEditor({
         transferSourceIfReady();
         return;
       }
+      if (data.type === OFFICE_BRIDGE_SOURCE_CHUNK_RECEIVED) {
+        const waiter = androidChunkAckRef.current;
+        if (
+          waiter &&
+          waiter.requestId === activeSession.requestId &&
+          waiter.chunkIndex === data.chunkIndex
+        ) {
+          androidChunkAckRef.current = undefined;
+          window.clearTimeout(waiter.timeoutId);
+          waiter.resolve();
+        }
+        return;
+      }
       if (data.type === OFFICE_BRIDGE_SOURCE_RECEIVED) {
+        cancelAndroidChunkAck();
+        androidSourceRequestRef.current = undefined;
         sourceBufferRef.current = undefined;
         armDocumentOpenedTimeout(activeSession.requestId);
         return;
@@ -1017,6 +1178,8 @@ export function OfficeFileEditor({
         return;
       }
       if (data.type === OFFICE_BRIDGE_ERROR) {
+        cancelAndroidChunkAck();
+        androidSourceRequestRef.current = undefined;
         const operation = saveOperationRef.current;
         if (operation) {
           if (!acceptBridgeSaveMessage(operation, data.saveId)) return;
@@ -1122,6 +1285,7 @@ export function OfficeFileEditor({
     armDocumentOpenedTimeout,
     armSaveTimeout,
     beginSaveOperation,
+    cancelAndroidChunkAck,
     clearOpenTimeouts,
     closeModal,
     failSaveOperation,
@@ -1143,10 +1307,12 @@ export function OfficeFileEditor({
       }
       sessionRef.current = undefined;
       sourceBufferRef.current = undefined;
+      androidSourceRequestRef.current = undefined;
+      cancelAndroidChunkAck();
       iframeReadyRef.current = false;
       clearOpenTimeouts();
     };
-  }, [cancelSaveOperation, clearOpenTimeouts]);
+  }, [cancelAndroidChunkAck, cancelSaveOperation, clearOpenTimeouts]);
 
   useEffect(() => {
     if (!backgroundPublishing && (!session || !dirty)) return undefined;
@@ -1210,6 +1376,26 @@ export function OfficeFileEditor({
     }
     closeModal();
   }, [closeModal, dirty, legacyRetryBlocked, phase, session]);
+
+  const handleMobileClosePointerDown = useCallback(
+    (event: React.PointerEvent<HTMLButtonElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      requestClose();
+    },
+    [requestClose]
+  );
+
+  useEffect(() => {
+    if (!androidApp || !session) return undefined;
+
+    const handleAndroidBackButton = (event: Event) => {
+      event.preventDefault();
+      requestClose();
+    };
+    window.addEventListener(ANDROID_BACK_BUTTON_EVENT, handleAndroidBackButton);
+    return () => window.removeEventListener(ANDROID_BACK_BUTTON_EVENT, handleAndroidBackButton);
+  }, [androidApp, requestClose, session]);
 
   const nativePayload: NativeOfficeWindowPayload | undefined = session
     ? {
@@ -1633,6 +1819,7 @@ export function OfficeFileEditor({
                         variant="Surface"
                         size="300"
                         radii="300"
+                        onPointerDown={mobileOfficeShell ? handleMobileClosePointerDown : undefined}
                         onClick={requestClose}
                         aria-label={closeButtonLabel}
                       >
@@ -1642,6 +1829,19 @@ export function OfficeFileEditor({
                   </header>
 
                   <div className={css.editorBody}>
+                    {mobileOfficeShell && (
+                      <IconButton
+                        className={css.mobileCloseButton}
+                        variant="Surface"
+                        size="300"
+                        radii="300"
+                        onPointerDown={handleMobileClosePointerDown}
+                        onClick={requestClose}
+                        aria-label={closeButtonLabel}
+                      >
+                        <Icon src={Icons.Cross} size="100" />
+                      </IconButton>
+                    )}
                     <iframe
                       ref={iframeRef}
                       className={css.editorFrame}

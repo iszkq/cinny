@@ -261,10 +261,12 @@ test('Office opening is bounded and mobile layout respects the viewport safe are
   assert.match(editorSource, /lockOfficeLandscape\(\)/);
   assert.match(editorSource, /unlockOfficeOrientation\(\)/);
   assert.match(editorSource, /OFFICE_BRIDGE_SOURCE_RECEIVED/);
-  assert.match(
-    editorSource,
-    /if \(isAndroidApp\(\)\) \{[\s\S]*postMessage\(message, targetOrigin\)/
-  );
+  assert.match(editorSource, /OFFICE_BRIDGE_SOURCE_BEGIN/);
+  assert.match(editorSource, /OFFICE_BRIDGE_SOURCE_CHUNK_RECEIVED/);
+  assert.match(editorSource, /ANDROID_SOURCE_CHUNK_BYTES = 192 \* 1024/);
+  assert.match(editorSource, /sendAndroidChunkWithAck/);
+  assert.match(editorSource, /encodeBase64Chunk/);
+  assert.match(editorSource, /Android 文档传输失败/);
   assert.match(editorSource, /postMessage\(message, targetOrigin, \[buffer\]\)/);
   assert.match(editorSource, /compactViewport && mode === 'preview' \? '1' : '0'/);
   assert.match(
@@ -286,6 +288,9 @@ test('Office opening is bounded and mobile layout respects the viewport safe are
   assert.match(styleSource, /var\(--safe-area-bottom/);
   assert.match(styleSource, /orientation: landscape/);
   assert.match(styleSource, /var\(--office-viewport-height/);
+  assert.match(styleSource, /mobileCloseButton/);
+  assert.match(editorSource, /handleMobileClosePointerDown/);
+  assert.match(styleSource, /max-height: 520px[\s\S]*pointer: coarse/);
   assert.match(capacitorSource, /allowNavigation: \['124\.222\.193\.241'\]/);
   assert.doesNotMatch(capacitorSource, /office\.221819\.best/);
   assert.match(androidManifest, /android:screenOrientation="unspecified"/);
@@ -295,5 +300,8 @@ test('Office opening is bounded and mobile layout respects the viewport safe are
   assert.match(orientationSource, /NativeOfficeOrientation\.unlock\(\)/);
   assert.match(mainActivitySource, /registerPlugin\(OfficeOrientationPlugin\.class\)/);
   assert.match(orientationPluginSource, /SCREEN_ORIENTATION_SENSOR_LANDSCAPE/);
+  assert.match(orientationPluginSource, /SCREEN_ORIENTATION_FULL_USER/);
+  assert.match(orientationPluginSource, /OrientationEventListener/);
   assert.match(orientationPluginSource, /SCREEN_ORIENTATION_UNSPECIFIED/);
+  assert.match(editorSource, /ANDROID_BACK_BUTTON_EVENT/);
 });

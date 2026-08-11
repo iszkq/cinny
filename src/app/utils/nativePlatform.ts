@@ -1,5 +1,7 @@
 import { Capacitor } from '@capacitor/core';
 
+export const ANDROID_BACK_BUTTON_EVENT = 'cinny-android-back-button';
+
 export const isNativeApp = (): boolean => Capacitor.isNativePlatform();
 
 export const isAndroidApp = (): boolean => isNativeApp() && Capacitor.getPlatform() === 'android';
@@ -32,6 +34,9 @@ export const initializeAndroidAppShell = async (): Promise<void> => {
 
   const { App } = await import('@capacitor/app');
   await App.addListener('backButton', ({ canGoBack }) => {
+    const backButtonEvent = new Event(ANDROID_BACK_BUTTON_EVENT, { cancelable: true });
+    if (!window.dispatchEvent(backButtonEvent)) return;
+
     if (canGoBack) {
       window.history.back();
       return;
