@@ -267,6 +267,14 @@ test('Office opening is bounded and mobile layout respects the viewport safe are
   assert.match(editorSource, /OFFICE_BRIDGE_SOURCE_RECEIVED/);
   assert.match(editorSource, /OFFICE_BRIDGE_SOURCE_BEGIN/);
   assert.match(editorSource, /OFFICE_BRIDGE_SOURCE_CHUNK_RECEIVED/);
+  assert.match(editorSource, /OFFICE_BRIDGE_DIAGNOSTIC/);
+  assert.match(editorSource, /recordDiagnostic\('timeout_document_opened'/);
+  assert.match(editorSource, /recordDiagnostic\('chunk_ack'/);
+  assert.match(editorSource, /recordDiagnostic\('iframe_load'/);
+  assert.match(editorSource, /window\.addEventListener\('unhandledrejection'/);
+  assert.match(editorSource, /diagnosticError\(data\.message\)/);
+  assert.match(editorSource, /copyDiagnosticReport/);
+  assert.match(editorSource, /复制诊断信息/);
   assert.match(editorSource, /ANDROID_SOURCE_CHUNK_BYTES = 64 \* 1024/);
   assert.match(editorSource, /ANDROID_SOURCE_CHUNK_ACK_TIMEOUT_MS = 8_000/);
   assert.match(editorSource, /ANDROID_SOURCE_CHUNK_MAX_ATTEMPTS = 4/);
@@ -274,10 +282,7 @@ test('Office opening is bounded and mobile layout respects the viewport safe are
   assert.match(editorSource, /encodeBase64Chunk/);
   assert.match(editorSource, /Android 文档传输失败/);
   assert.match(editorSource, /supportsChunkedSource !== true/);
-  assert.match(
-    editorSource,
-    /mode === 'edit' && \(!canEdit \|\| mobileOfficeShell\)/
-  );
+  assert.match(editorSource, /mode === 'edit' && \(!canEdit \|\| mobileOfficeShell\)/);
   assert.match(editorSource, /mobileOfficeShell \|\| officeKind === 'pdf'/);
   assert.doesNotMatch(editorSource, /className=\{css\.mobileCloseButton\}/);
   assert.match(editorSource, /postMessage\(message, targetOrigin, \[buffer\]\)/);
@@ -312,6 +317,8 @@ test('Office opening is bounded and mobile layout respects the viewport safe are
   assert.match(orientationSource, /NativeOfficeOrientation\.lockLandscape\(\)/);
   assert.match(orientationSource, /NativeOfficeOrientation\.unlock\(\)/);
   assert.match(mainActivitySource, /registerPlugin\(OfficeOrientationPlugin\.class\)/);
+  assert.match(mainActivitySource, /BuildConfig\.DEBUG/);
+  assert.match(mainActivitySource, /WebView\.setWebContentsDebuggingEnabled\(true\)/);
   assert.match(orientationPluginSource, /SCREEN_ORIENTATION_SENSOR_LANDSCAPE/);
   assert.match(orientationPluginSource, /SCREEN_ORIENTATION_FULL_USER/);
   assert.match(orientationPluginSource, /OrientationEventListener/);

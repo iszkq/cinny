@@ -1063,6 +1063,13 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             setTimeline((current) => ({ ...current }));
           };
           mEvt.on(MatrixEventEvent.Decrypted, handleDecrypted);
+
+          // The desktop renderer can receive a live encrypted event before the
+          // message component mounts. Ask the SDK to retry here as well, so a
+          // fast decryption/key update cannot be missed by the UI listener.
+          if (isDesktopUpdaterSupported()) {
+            mx.decryptEventIfNeeded(mEvt, { isRetry: true }).catch(() => undefined);
+          }
         }
 
         if (reactionOrEditEvent(mEvt)) {

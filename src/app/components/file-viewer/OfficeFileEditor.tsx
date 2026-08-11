@@ -69,6 +69,7 @@ const OFFICE_BRIDGE_SAVE = 'xinghuo-office-save';
 const OFFICE_BRIDGE_SAVING = 'xinghuo-office-saving';
 const OFFICE_BRIDGE_SAVED = 'xinghuo-office-saved';
 const OFFICE_BRIDGE_ERROR = 'xinghuo-office-error';
+const OFFICE_BRIDGE_DIAGNOSTIC = 'xinghuo-office-diagnostic';
 const OFFICE_BRIDGE_CANCEL_SAVE = 'xinghuo-office-cancel-save';
 const DEFAULT_EXPORT_TIMEOUT_SECONDS = 45;
 const DEFAULT_PREPARE_TIMEOUT_SECONDS = 60;
@@ -215,7 +216,33 @@ type OfficeBridgeMessage = {
   chunkIndex?: number;
   protocolVersion?: number;
   supportsChunkedSource?: boolean;
+  stage?: string;
+  level?: string;
 };
+
+type OfficeDiagnosticEntry = {
+  at: number;
+  event: string;
+  details?: Record<string, string | number | boolean | null | undefined>;
+};
+
+const diagnosticText = (value: unknown): string => {
+  if (value instanceof Error) return value.message.slice(0, 300);
+  if (typeof value === 'string') return value.slice(0, 300);
+  try {
+    return JSON.stringify(value).slice(0, 300);
+  } catch {
+    return String(value).slice(0, 300);
+  }
+};
+
+const diagnosticError = (value: unknown): string =>
+  diagnosticText(value)
+    .replace(
+      /(access[_-]?token|authorization|cookie|password|secret|key)=([^&\s]+)/gi,
+      '$1=[redacted]'
+    )
+    .replace(/Bearer\s+[^\s]+/gi, 'Bearer [redacted]');
 
 type AndroidChunkAckWaiter = {
   requestId: string;
@@ -352,6 +379,8 @@ export function OfficeFileEditor({
   const androidSourceRequestRef = useRef<string>();
   const androidChunkAckRef = useRef<AndroidChunkAckWaiter>();
   const androidChunkProgressRef = useRef<{ sent: number; total: number }>();
+  const diagnosticStartedAtRef = useRef<number>(Date.now());
+  const diagnosticsRef = useRef<OfficeDiagnosticEntry[]>([]);
 
   const [session, setSession] = useState<EditorSession>();
   const [phase, setPhase] = useState<EditorPhase>('loading');
@@ -367,6 +396,8 @@ export function OfficeFileEditor({
   const [passwordRequired, setPasswordRequired] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
   const [passwordError, setPasswordError] = useState<string>();
+  const [, setDiagnosticRevision] = useState(0);
+  const [diagnosticCopied, setDiagnosticCopied] = useState(false);
 
   const officeKind = getOfficeDocumentKind(body, mimeType);
   const iconMeta = officeKind ? OFFICE_ICON_META[officeKind] : OFFICE_ICON_META.word;
@@ -388,6 +419,68 @@ export function OfficeFileEditor({
     DEFAULT_PREPARE_TIMEOUT_SECONDS
   );
   const canEdit = officeKind !== 'pdf' && Boolean(room && eventId?.startsWith('$'));
+
+  const recordDiagnostic = useCallback(
+    (event: string, details?: Record<string, string | number | boolean | null | undefined>) => {
+      // Keep this bounded: it is intended for a single failed open, not long-term telemetry.
+      const entry: OfficeDiagnosticEntry = {
+        at: Math.max(0, Date.now() - diagnosticStartedAtRef.current),
+        event,
+        details,
+      };
+      diagnosticsRef.current = [...diagnosticsRef.current.slice(-399), entry];
+      setDiagnosticRevision((revision) => revision + 1);
+    },
+    []
+  );
+
+  const getDiagnosticReport = useCallback(() => {
+    const activeSession = sessionRef.current;
+    const origin = (() => {
+      try {
+        return activeSession ? new URL(activeSession.src).origin : 'unknown';
+      } catch {
+        return 'invalid';
+      }
+    })();
+    const report = {
+      version: 1,
+      generatedAt: new Date().toISOString(),
+      app: 'cinny-android-office',
+      userAgent: navigator.userAgent,
+      language: navigator.language,
+      online: navigator.onLine,
+      viewport: `${window.innerWidth}x${window.innerHeight}`,
+      officeOrigin: origin,
+      fileType: getFileNameExt(body),
+      fileSize: infoSize ?? null,
+      phase,
+      error: errorMessage ? diagnosticError(errorMessage) : null,
+      events: diagnosticsRef.current,
+    };
+    // The report deliberately contains metadata and bridge timing only; never include file bytes,
+    // Matrix access tokens, or the full media URL.
+    return JSON.stringify(report, null, 2);
+  }, [body, errorMessage, infoSize, phase]);
+
+  const copyDiagnosticReport = useCallback(async () => {
+    const report = getDiagnosticReport();
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard API unavailable');
+      await navigator.clipboard.writeText(report);
+    } catch {
+      const textarea = document.createElement('textarea');
+      textarea.value = report;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      textarea.remove();
+    }
+    setDiagnosticCopied(true);
+    window.setTimeout(() => setDiagnosticCopied(false), 2500);
+  }, [getDiagnosticReport]);
 
   const loadSourceFile = useCallback(async (): Promise<Blob> => {
     if (cachedSourceRef.current) return cachedSourceRef.current;
@@ -449,6 +542,40 @@ export function OfficeFileEditor({
   }, [desktopNativeOffice, session]);
 
   useEffect(() => {
+    if (!session || !mobileOfficeShell) return undefined;
+
+    const handleWindowError = (event: ErrorEvent | Event) => {
+      if (event instanceof ErrorEvent) {
+        recordDiagnostic('window_error', {
+          message: diagnosticError(event.message),
+          source: event.filename ? new URL(event.filename, window.location.href).origin : null,
+          line: event.lineno || null,
+          column: event.colno || null,
+        });
+      } else {
+        recordDiagnostic('resource_error', {
+          target: (event.target as HTMLElement)?.tagName || null,
+        });
+      }
+    };
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      recordDiagnostic('unhandled_rejection', { reason: diagnosticError(event.reason) });
+    };
+    const handleNetworkChange = () => recordDiagnostic(navigator.onLine ? 'online' : 'offline');
+
+    window.addEventListener('error', handleWindowError, true);
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+    window.addEventListener('online', handleNetworkChange);
+    window.addEventListener('offline', handleNetworkChange);
+    return () => {
+      window.removeEventListener('error', handleWindowError, true);
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+      window.removeEventListener('online', handleNetworkChange);
+      window.removeEventListener('offline', handleNetworkChange);
+    };
+  }, [mobileOfficeShell, recordDiagnostic, session]);
+
+  useEffect(() => {
     if (!session || session.mode !== 'edit' || desktopNativeOffice) return undefined;
 
     lockOfficeLandscape().catch(() => undefined);
@@ -506,6 +633,7 @@ export function OfficeFileEditor({
         }
 
         try {
+          recordDiagnostic('chunk_send', { chunkIndex, attempt: attempt + 1 });
           await new Promise<void>((resolve, reject) => {
             const waiter: AndroidChunkAckWaiter = {
               requestId,
@@ -531,7 +659,13 @@ export function OfficeFileEditor({
               targetOrigin
             );
           });
+          recordDiagnostic('chunk_ack', { chunkIndex, attempt: attempt + 1 });
         } catch (error) {
+          recordDiagnostic('chunk_retry', {
+            chunkIndex,
+            attempt: attempt + 1,
+            error: diagnosticError(error),
+          });
           if (
             sessionRef.current?.requestId !== requestId ||
             androidSourceRequestRef.current !== requestId
@@ -544,64 +678,85 @@ export function OfficeFileEditor({
       };
       await sendAttempt(0);
     },
-    []
+    [recordDiagnostic]
   );
 
-  const armBridgeReadyTimeout = useCallback((requestId: string) => {
-    if (bridgeReadyTimeoutRef.current !== undefined) {
-      window.clearTimeout(bridgeReadyTimeoutRef.current);
-    }
-    const timeoutMs = isCompactOfficeViewport()
-      ? MOBILE_IFRAME_BRIDGE_READY_TIMEOUT_MS
-      : IFRAME_BRIDGE_READY_TIMEOUT_MS;
-    bridgeReadyTimeoutRef.current = window.setTimeout(() => {
-      if (sessionRef.current?.requestId !== requestId) return;
-      setErrorMessage('Office 页面连接超时。请重新打开文档，或关闭窗口后再试。');
-      setPhase('error');
-    }, timeoutMs);
-  }, []);
+  const armBridgeReadyTimeout = useCallback(
+    (requestId: string) => {
+      if (bridgeReadyTimeoutRef.current !== undefined) {
+        window.clearTimeout(bridgeReadyTimeoutRef.current);
+      }
+      const timeoutMs = isCompactOfficeViewport()
+        ? MOBILE_IFRAME_BRIDGE_READY_TIMEOUT_MS
+        : IFRAME_BRIDGE_READY_TIMEOUT_MS;
+      bridgeReadyTimeoutRef.current = window.setTimeout(() => {
+        if (sessionRef.current?.requestId !== requestId) return;
+        recordDiagnostic('timeout_bridge_ready', { timeoutMs });
+        setErrorMessage('Office 页面连接超时。请重新打开文档，或关闭窗口后再试。');
+        setPhase('error');
+      }, timeoutMs);
+    },
+    [recordDiagnostic]
+  );
 
-  const armDocumentOpenedTimeout = useCallback((requestId: string) => {
-    if (documentOpenedTimeoutRef.current !== undefined) {
-      window.clearTimeout(documentOpenedTimeoutRef.current);
-    }
-    const timeoutMs = isCompactOfficeViewport()
-      ? MOBILE_DOCUMENT_OPENED_TIMEOUT_MS
-      : DOCUMENT_OPENED_TIMEOUT_MS;
-    documentOpenedTimeoutRef.current = window.setTimeout(() => {
-      if (sessionRef.current?.requestId !== requestId) return;
-      setErrorMessage('Office 打开文档超时。你可以重新打开，或直接关闭窗口。');
-      setPhase('error');
-    }, timeoutMs);
-  }, []);
+  const armDocumentOpenedTimeout = useCallback(
+    (requestId: string) => {
+      if (documentOpenedTimeoutRef.current !== undefined) {
+        window.clearTimeout(documentOpenedTimeoutRef.current);
+      }
+      const timeoutMs = isCompactOfficeViewport()
+        ? MOBILE_DOCUMENT_OPENED_TIMEOUT_MS
+        : DOCUMENT_OPENED_TIMEOUT_MS;
+      documentOpenedTimeoutRef.current = window.setTimeout(() => {
+        if (sessionRef.current?.requestId !== requestId) return;
+        recordDiagnostic('timeout_document_opened', {
+          timeoutMs,
+          iframeReady: iframeReadyRef.current,
+          chunks: androidChunkProgressRef.current?.sent ?? null,
+          totalChunks: androidChunkProgressRef.current?.total ?? null,
+        });
+        setErrorMessage('Office 打开文档超时。你可以重新打开，或直接关闭窗口。');
+        setPhase('error');
+      }, timeoutMs);
+    },
+    [recordDiagnostic]
+  );
 
-  const postToOffice = useCallback((message: Record<string, unknown>) => {
-    const activeSession = sessionRef.current;
-    const nativeWindow = nativeWindowRef.current;
-    if (
-      activeSession &&
-      nativeWindow?.sessionId === activeSession.nativeSessionId &&
-      typeof message.type === 'string'
-    ) {
-      emitNativeOfficeCommand(nativeWindow.label, {
-        type: 'bridge',
-        sessionId: activeSession.nativeSessionId,
-        requestId: activeSession.requestId,
-        message: {
-          type: message.type,
-          saveId: typeof message.saveId === 'string' ? message.saveId : undefined,
-        },
-      }).catch(() => undefined);
-      return;
-    }
-    const targetWindow = iframeRef.current?.contentWindow;
-    if (!activeSession || !targetWindow) return;
+  const postToOffice = useCallback(
+    (message: Record<string, unknown>) => {
+      const activeSession = sessionRef.current;
+      const nativeWindow = nativeWindowRef.current;
+      if (
+        activeSession &&
+        nativeWindow?.sessionId === activeSession.nativeSessionId &&
+        typeof message.type === 'string'
+      ) {
+        emitNativeOfficeCommand(nativeWindow.label, {
+          type: 'bridge',
+          sessionId: activeSession.nativeSessionId,
+          requestId: activeSession.requestId,
+          message: {
+            type: message.type,
+            saveId: typeof message.saveId === 'string' ? message.saveId : undefined,
+          },
+        }).catch(() => undefined);
+        return;
+      }
+      const targetWindow = iframeRef.current?.contentWindow;
+      if (!activeSession || !targetWindow) return;
 
-    targetWindow.postMessage(
-      { ...message, requestId: activeSession.requestId },
-      new URL(activeSession.src).origin
-    );
-  }, []);
+      recordDiagnostic('bridge_send', {
+        type: typeof message.type === 'string' ? message.type : null,
+        native: false,
+      });
+
+      targetWindow.postMessage(
+        { ...message, requestId: activeSession.requestId },
+        new URL(activeSession.src).origin
+      );
+    },
+    [recordDiagnostic]
+  );
 
   const acceptBridgeSaveMessage = useCallback(
     (operation: SaveOperation, messageSaveId?: string): boolean => {
@@ -807,6 +962,11 @@ export function OfficeFileEditor({
       const sourceBytes = new Uint8Array(buffer);
       const chunkCount = Math.ceil(sourceBytes.byteLength / ANDROID_SOURCE_CHUNK_BYTES);
       androidChunkProgressRef.current = { sent: 0, total: chunkCount };
+      recordDiagnostic('source_begin', {
+        byteLength: sourceBytes.byteLength,
+        chunkCount,
+        chunkBytes: ANDROID_SOURCE_CHUNK_BYTES,
+      });
       targetWindow.postMessage(
         {
           type: OFFICE_BRIDGE_SOURCE_BEGIN,
@@ -842,10 +1002,16 @@ export function OfficeFileEditor({
           },
           targetOrigin
         );
+        recordDiagnostic('source_end_sent', { chunkCount });
         armDocumentOpenedTimeout(activeSession.requestId);
-      })().catch(() => {
+      })().catch((error) => {
         if (sessionRef.current?.requestId !== activeSession.requestId) return;
         const progress = androidChunkProgressRef.current;
+        recordDiagnostic('source_transfer_error', {
+          sent: progress?.sent ?? null,
+          total: progress?.total ?? null,
+          error: diagnosticError(error),
+        });
         androidSourceRequestRef.current = undefined;
         androidChunkProgressRef.current = undefined;
         cancelAndroidChunkAck();
@@ -869,6 +1035,7 @@ export function OfficeFileEditor({
     cancelAndroidChunkAck,
     clearOpenTimeouts,
     mimeType,
+    recordDiagnostic,
     sendAndroidChunkWithAck,
   ]);
 
@@ -888,6 +1055,17 @@ export function OfficeFileEditor({
         src: getEditorUrl(officeEditorUrl, requestId, mode, body, mimeType),
         password: password?.trim() || undefined,
       };
+      diagnosticStartedAtRef.current = Date.now();
+      diagnosticsRef.current = [];
+      recordDiagnostic('open_start', {
+        platform: androidApp ? 'android' : mobileOfficeShell ? 'mobile-web' : 'desktop-web',
+        mode,
+        fileType: getFileNameExt(body),
+        fileSize: infoSize ?? null,
+        online: navigator.onLine,
+        userAgent: navigator.userAgent.slice(0, 220),
+        officeOrigin: new URL(nextSession.src).origin,
+      });
       cancelSaveOperation();
       cancelAndroidChunkAck();
       clearOpenTimeouts();
@@ -928,9 +1106,13 @@ export function OfficeFileEditor({
       });
 
       Promise.race([loadSourceFile(), sourceLoadTimedOut])
-        .then((file) => file.arrayBuffer())
+        .then((file) => {
+          recordDiagnostic('source_downloaded', { byteLength: file.size });
+          return file.arrayBuffer();
+        })
         .then(async (source) => {
           if (sessionRef.current?.requestId !== requestId) return;
+          recordDiagnostic('source_buffer_ready', { byteLength: source.byteLength });
           let buffer = source;
           const encryptedOfficeFile =
             isCompoundOfficeContainer(source) && (await isOfficeDocumentEncrypted(source));
@@ -989,8 +1171,9 @@ export function OfficeFileEditor({
 
           transferSourceIfReady();
         })
-        .catch(() => {
+        .catch((error) => {
           if (sessionRef.current?.requestId === requestId) {
+            recordDiagnostic('source_load_error', { error: diagnosticError(error) });
             clearOpenTimeouts();
             setErrorMessage('文档下载或解密超时。请检查网络后重新打开，或直接关闭窗口。');
             setPhase('error');
@@ -1002,17 +1185,20 @@ export function OfficeFileEditor({
     },
     [
       armBridgeReadyTimeout,
+      androidApp,
       body,
       canEdit,
       cancelSaveOperation,
       cancelAndroidChunkAck,
       clearOpenTimeouts,
       desktopNativeOffice,
+      infoSize,
       loadSourceFile,
       mimeType,
       mobileOfficeShell,
       officeEditorUrl,
       officeKind,
+      recordDiagnostic,
       transferSourceIfReady,
     ]
   );
@@ -1120,13 +1306,27 @@ export function OfficeFileEditor({
       const activeSession = sessionRef.current;
       if (!activeSession || data?.requestId !== activeSession.requestId) return;
 
+      recordDiagnostic('bridge_receive', {
+        type: data.type ?? null,
+        chunkIndex: data.chunkIndex ?? null,
+        protocolVersion: data.protocolVersion ?? null,
+        supportsChunkedSource: data.supportsChunkedSource ?? null,
+        stage: data.stage ?? null,
+        level: data.level ?? null,
+        message: data.message ? diagnosticError(data.message) : null,
+      });
+
+      if (data.type === OFFICE_BRIDGE_DIAGNOSTIC) return;
+
       if (data.type === OFFICE_BRIDGE_READY) {
         if (bridgeReadyTimeoutRef.current !== undefined) {
           window.clearTimeout(bridgeReadyTimeoutRef.current);
           bridgeReadyTimeoutRef.current = undefined;
         }
         if (androidApp && data.supportsChunkedSource !== true) {
-          setErrorMessage('Office 服务版本过旧，无法在 Android 中安全传输文档。请更新 Office 服务后重试。');
+          setErrorMessage(
+            'Office 服务版本过旧，无法在 Android 中安全传输文档。请更新 Office 服务后重试。'
+          );
           setPhase('error');
           return;
         }
@@ -1312,6 +1512,7 @@ export function OfficeFileEditor({
     failSaveOperation,
     prepareTimeoutMs,
     replaceOriginalFile,
+    recordDiagnostic,
     settleSaveOperation,
     transferSourceIfReady,
   ]);
@@ -1741,9 +1942,7 @@ export function OfficeFileEditor({
           className={css.actions}
           style={{
             gridTemplateColumns:
-              mobileOfficeShell || officeKind === 'pdf'
-                ? 'repeat(2, minmax(0, 1fr))'
-                : undefined,
+              mobileOfficeShell || officeKind === 'pdf' ? 'repeat(2, minmax(0, 1fr))' : undefined,
           }}
         >
           <button
@@ -1858,6 +2057,8 @@ export function OfficeFileEditor({
                       ref={iframeRef}
                       className={css.editorFrame}
                       src={session.src}
+                      onLoad={() => recordDiagnostic('iframe_load')}
+                      onError={() => recordDiagnostic('iframe_error')}
                       title={`${session.mode === 'edit' ? '在线编辑' : '在线预览'} ${body}`}
                       allow="clipboard-read; clipboard-write"
                       sandbox={
@@ -1936,6 +2137,19 @@ export function OfficeFileEditor({
                           {errorMessage || '文档打开或保存失败，请检查网络后重试。'}
                         </Text>
                         <Box gap="200" justifyContent="Center" wrap="Wrap">
+                          {mobileOfficeShell && (
+                            <Button
+                              variant="Secondary"
+                              fill="Soft"
+                              size="300"
+                              radii="300"
+                              onClick={copyDiagnosticReport}
+                            >
+                              <Text size="B300">
+                                {diagnosticCopied ? '诊断信息已复制' : '复制诊断信息'}
+                              </Text>
+                            </Button>
+                          )}
                           {!dirty && (
                             <Button
                               variant="Primary"
