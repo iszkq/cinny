@@ -274,6 +274,11 @@ test('Office opening is bounded and mobile layout respects the viewport safe are
   assert.match(editorSource, /window\.addEventListener\('unhandledrejection'/);
   assert.match(editorSource, /diagnosticError\(data\.message\)/);
   assert.match(editorSource, /copyDiagnosticReport/);
+  assert.match(editorSource, /sendDiagnosticReport/);
+  assert.match(editorSource, /mx\.sendMessage\(room\.roomId/);
+  assert.match(editorSource, /Starfire Office 诊断信息/);
+  assert.match(editorSource, /navigator\.share/);
+  assert.match(editorSource, /发送诊断信息/);
   assert.match(editorSource, /复制诊断信息/);
   assert.match(editorSource, /ANDROID_SOURCE_CHUNK_BYTES = 64 \* 1024/);
   assert.match(editorSource, /ANDROID_SOURCE_CHUNK_ACK_TIMEOUT_MS = 8_000/);

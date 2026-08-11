@@ -53,6 +53,7 @@ import * as css from './OfficeFileEditor.css';
 import { PasswordInput } from '../password-input';
 import { lockOfficeLandscape, unlockOfficeOrientation } from '../../utils/officeOrientation';
 import { ANDROID_BACK_BUTTON_EVENT, isAndroidApp } from '../../utils/nativePlatform';
+import { NativeClipboard } from '../../utils/nativeClipboard';
 import { mobileOrTablet } from '../../utils/user-agent';
 
 const DEFAULT_OFFICE_EDITOR_URL = 'https://124.222.193.241:6258/editor';
@@ -398,6 +399,9 @@ export function OfficeFileEditor({
   const [passwordError, setPasswordError] = useState<string>();
   const [, setDiagnosticRevision] = useState(0);
   const [diagnosticCopied, setDiagnosticCopied] = useState(false);
+  const [diagnosticCopyFailed, setDiagnosticCopyFailed] = useState(false);
+  const [diagnosticSent, setDiagnosticSent] = useState(false);
+  const [diagnosticSendFailed, setDiagnosticSendFailed] = useState(false);
 
   const officeKind = getOfficeDocumentKind(body, mimeType);
   const iconMeta = officeKind ? OFFICE_ICON_META[officeKind] : OFFICE_ICON_META.word;
@@ -465,22 +469,86 @@ export function OfficeFileEditor({
 
   const copyDiagnosticReport = useCallback(async () => {
     const report = getDiagnosticReport();
+    let copied = false;
+
+    if (androidApp) {
+      try {
+        const result = await NativeClipboard.writeText({ text: report });
+        copied = result?.verified === true;
+      } catch {
+        copied = false;
+      }
+    }
+
     try {
-      if (!navigator.clipboard?.writeText) throw new Error('Clipboard API unavailable');
-      await navigator.clipboard.writeText(report);
+      if (!copied && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(report);
+        copied = true;
+      }
     } catch {
+      copied = false;
+    }
+
+    if (!copied) {
       const textarea = document.createElement('textarea');
       textarea.value = report;
+      textarea.readOnly = true;
       textarea.style.position = 'fixed';
       textarea.style.opacity = '0';
       document.body.appendChild(textarea);
+      textarea.focus();
       textarea.select();
-      document.execCommand('copy');
+      textarea.setSelectionRange(0, report.length);
+      try {
+        copied = document.execCommand('copy');
+      } catch {
+        copied = false;
+      }
       textarea.remove();
     }
-    setDiagnosticCopied(true);
-    window.setTimeout(() => setDiagnosticCopied(false), 2500);
-  }, [getDiagnosticReport]);
+
+    setDiagnosticCopied(copied);
+    setDiagnosticCopyFailed(!copied);
+    window.setTimeout(() => {
+      setDiagnosticCopied(false);
+      setDiagnosticCopyFailed(false);
+    }, 2500);
+  }, [androidApp, getDiagnosticReport]);
+
+  const sendDiagnosticReport = useCallback(async () => {
+    const report = getDiagnosticReport();
+    if (room) {
+      const maxMessageLength = 60_000;
+      const messageReport =
+        report.length > maxMessageLength
+          ? `${report.slice(0, 10_000)}\n...[中间日志已截断]...\n${report.slice(-50_000)}`
+          : report;
+      try {
+        await mx.sendMessage(room.roomId, {
+          msgtype: MsgType.Text,
+          body: `Starfire Office 诊断信息\n${messageReport}`,
+        } as never);
+        setDiagnosticSent(true);
+        setDiagnosticSendFailed(false);
+        window.setTimeout(() => setDiagnosticSent(false), 2500);
+        return;
+      } catch {
+        setDiagnosticSendFailed(true);
+      }
+    }
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Starfire Office 诊断信息',
+          text: report,
+        });
+        return;
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') return;
+      }
+    }
+    await copyDiagnosticReport();
+  }, [copyDiagnosticReport, getDiagnosticReport, mx, room]);
 
   const loadSourceFile = useCallback(async (): Promise<Blob> => {
     if (cachedSourceRef.current) return cachedSourceRef.current;
@@ -2138,17 +2206,38 @@ export function OfficeFileEditor({
                         </Text>
                         <Box gap="200" justifyContent="Center" wrap="Wrap">
                           {mobileOfficeShell && (
-                            <Button
-                              variant="Secondary"
-                              fill="Soft"
-                              size="300"
-                              radii="300"
-                              onClick={copyDiagnosticReport}
-                            >
-                              <Text size="B300">
-                                {diagnosticCopied ? '诊断信息已复制' : '复制诊断信息'}
-                              </Text>
-                            </Button>
+                            <>
+                              <Button
+                                variant="Primary"
+                                fill="Solid"
+                                size="300"
+                                radii="300"
+                                onClick={sendDiagnosticReport}
+                              >
+                                <Text size="B300">
+                                  {diagnosticSent
+                                    ? '诊断信息已发送'
+                                    : diagnosticSendFailed
+                                    ? '发送失败，点此重试'
+                                    : '发送诊断信息'}
+                                </Text>
+                              </Button>
+                              <Button
+                                variant="Secondary"
+                                fill="Soft"
+                                size="300"
+                                radii="300"
+                                onClick={copyDiagnosticReport}
+                              >
+                                <Text size="B300">
+                                  {diagnosticCopied
+                                    ? '诊断信息已复制'
+                                    : diagnosticCopyFailed
+                                    ? '复制失败，请长按复制'
+                                    : '复制诊断信息'}
+                                </Text>
+                              </Button>
+                            </>
                           )}
                           {!dirty && (
                             <Button
