@@ -7,7 +7,7 @@ const config: CapacitorConfig = {
   server: {
     hostname: 'localhost',
     androidScheme: 'https',
-    allowNavigation: ['124.222.193.241', 'office.221819.best'],
+    allowNavigation: ['124.222.193.241'],
   },
   android: {
     allowMixedContent: false,

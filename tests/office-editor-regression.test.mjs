@@ -242,12 +242,36 @@ test('desktop Office uses an isolated native window and raw bounded binary excha
 test('Office opening is bounded and mobile layout respects the viewport safe area', async () => {
   const editorSource = await readSource('src/app/components/file-viewer/OfficeFileEditor.tsx');
   const styleSource = await readSource('src/app/components/file-viewer/OfficeFileEditor.css.ts');
+  const orientationSource = await readSource('src/app/utils/officeOrientation.ts');
+  const mainActivitySource = await readSource(
+    'android/app/src/main/java/com/iszkq/starfire/MainActivity.java'
+  );
+  const orientationPluginSource = await readSource(
+    'android/app/src/main/java/com/iszkq/starfire/OfficeOrientationPlugin.java'
+  );
   const capacitorSource = await readSource('capacitor.config.ts');
   const androidManifest = await readSource('android/app/src/main/AndroidManifest.xml');
+  const configSource = await readSource('config.json');
 
   assert.match(editorSource, /SOURCE_LOAD_TIMEOUT_MS = 60_000/);
   assert.match(editorSource, /IFRAME_BRIDGE_READY_TIMEOUT_MS = 30_000/);
   assert.match(editorSource, /DOCUMENT_OPENED_TIMEOUT_MS = 45_000/);
+  assert.match(editorSource, /MOBILE_IFRAME_BRIDGE_READY_TIMEOUT_MS = 60_000/);
+  assert.match(editorSource, /MOBILE_DOCUMENT_OPENED_TIMEOUT_MS = 150_000/);
+  assert.match(editorSource, /lockOfficeLandscape\(\)/);
+  assert.match(editorSource, /unlockOfficeOrientation\(\)/);
+  assert.match(editorSource, /OFFICE_BRIDGE_SOURCE_RECEIVED/);
+  assert.match(
+    editorSource,
+    /if \(isAndroidApp\(\)\) \{[\s\S]*postMessage\(message, targetOrigin\)/
+  );
+  assert.match(editorSource, /postMessage\(message, targetOrigin, \[buffer\]\)/);
+  assert.match(editorSource, /compactViewport && mode === 'preview' \? '1' : '0'/);
+  assert.match(
+    editorSource,
+    /DEFAULT_OFFICE_EDITOR_URL = 'https:\/\/124\.222\.193\.241:6258\/editor'/
+  );
+  assert.match(configSource, /"url": "https:\/\/124\.222\.193\.241:6258\/editor"/);
   assert.match(editorSource, /Office 页面连接超时/);
   assert.match(editorSource, /Office 打开文档超时/);
   assert.match(editorSource, />重新打开</);
@@ -262,10 +286,14 @@ test('Office opening is bounded and mobile layout respects the viewport safe are
   assert.match(styleSource, /var\(--safe-area-bottom/);
   assert.match(styleSource, /orientation: landscape/);
   assert.match(styleSource, /var\(--office-viewport-height/);
-  assert.match(
-    capacitorSource,
-    /allowNavigation: \['124\.222\.193\.241', 'office\.221819\.best'\]/
-  );
+  assert.match(capacitorSource, /allowNavigation: \['124\.222\.193\.241'\]/);
+  assert.doesNotMatch(capacitorSource, /office\.221819\.best/);
   assert.match(androidManifest, /android:screenOrientation="unspecified"/);
   assert.match(androidManifest, /android:windowSoftInputMode="adjustResize"/);
+  assert.match(orientationSource, /registerPlugin<OfficeOrientationPlugin>\('OfficeOrientation'\)/);
+  assert.match(orientationSource, /NativeOfficeOrientation\.lockLandscape\(\)/);
+  assert.match(orientationSource, /NativeOfficeOrientation\.unlock\(\)/);
+  assert.match(mainActivitySource, /registerPlugin\(OfficeOrientationPlugin\.class\)/);
+  assert.match(orientationPluginSource, /SCREEN_ORIENTATION_SENSOR_LANDSCAPE/);
+  assert.match(orientationPluginSource, /SCREEN_ORIENTATION_UNSPECIFIED/);
 });

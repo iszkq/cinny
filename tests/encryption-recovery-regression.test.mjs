@@ -352,10 +352,23 @@ test('manual recovery exposes real decrypt progress and a durable completion mar
 test('recent live encrypted messages retry while room keys arrive or the desktop regains focus', async () => {
   const source = await readSource('src/app/features/room/message/EncryptedContent.tsx');
 
-  assert.match(source, /RECENT_DECRYPTION_RETRY_WINDOW_MS = 15 \* 60 \* 1000/);
-  assert.match(source, /DECRYPTION_RETRY_DELAYS_MS = \[0, 500, 2_000, 5_000\]/);
+  assert.match(source, /RECENT_DECRYPTION_RETRY_WINDOW_MS = 60 \* 60 \* 1000/);
+  assert.match(
+    source,
+    /DECRYPTION_RETRY_DELAYS_MS = \[0, 500, 2_000, 5_000, 15_000, 30_000, 60_000\]/
+  );
+  assert.match(source, /DECRYPTION_IN_PROGRESS_POLL_MS = 250/);
   assert.match(source, /attemptDecryption\(crypto as CryptoBackend, \{ isRetry: true \}\)/);
+  assert.match(source, /if \(mEvent\.isBeingDecrypted\(\)/);
+  assert.match(source, /scheduleRetry\(DECRYPTION_IN_PROGRESS_POLL_MS\)/);
+  assert.match(source, /event\.isDecryptionFailure\(\) && !retryAttemptRunning/);
   assert.match(source, /document\.addEventListener\('visibilitychange'/);
   assert.match(source, /document\.removeEventListener\('visibilitychange'/);
+  assert.match(source, /window\.addEventListener\('focus'/);
+  assert.match(source, /window\.removeEventListener\('focus'/);
+  assert.match(source, /window\.addEventListener\('online'/);
+  assert.match(source, /window\.removeEventListener\('online'/);
+  assert.match(source, /mx\.on\(ClientEvent\.Sync/);
+  assert.match(source, /mx\.removeListener\(ClientEvent\.Sync/);
   assert.match(source, /window\.clearTimeout\(retryTimer\)/);
 });

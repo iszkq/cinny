@@ -51,10 +51,13 @@ import {
 } from '../../utils/nativeOfficeWindow';
 import * as css from './OfficeFileEditor.css';
 import { PasswordInput } from '../password-input';
+import { lockOfficeLandscape, unlockOfficeOrientation } from '../../utils/officeOrientation';
+import { isAndroidApp } from '../../utils/nativePlatform';
 
 const DEFAULT_OFFICE_EDITOR_URL = 'https://124.222.193.241:6258/editor';
 const OFFICE_BRIDGE_READY = 'xinghuo-office-ready';
 const OFFICE_BRIDGE_OPEN = 'xinghuo-office-open';
+const OFFICE_BRIDGE_SOURCE_RECEIVED = 'xinghuo-office-source-received';
 const OFFICE_BRIDGE_OPENED = 'xinghuo-office-opened';
 const OFFICE_BRIDGE_DIRTY = 'xinghuo-office-dirty';
 const OFFICE_BRIDGE_SAVE = 'xinghuo-office-save';
@@ -68,6 +71,8 @@ const DEFAULT_UPLOAD_TIMEOUT_SECONDS = 120;
 const SOURCE_LOAD_TIMEOUT_MS = 60_000;
 const IFRAME_BRIDGE_READY_TIMEOUT_MS = 30_000;
 const DOCUMENT_OPENED_TIMEOUT_MS = 45_000;
+const MOBILE_IFRAME_BRIDGE_READY_TIMEOUT_MS = 60_000;
+const MOBILE_DOCUMENT_OPENED_TIMEOUT_MS = 150_000;
 const OFFICE_SHELL_WARMUP_DELAY_MS = 600;
 const OFFICE_SHELL_WARMUP_LIFETIME_MS = 15_000;
 const MAX_MEMORY_CACHED_SOURCE_BYTES = 64 * 1024 * 1024;
@@ -262,7 +267,9 @@ const getEditorUrl = (
   target.searchParams.set('editing', mode === 'edit' ? '1' : '0');
   target.searchParams.set('lang', 'zh-CN');
   const compactViewport = isCompactOfficeViewport();
-  target.searchParams.set('mobile', compactViewport ? '1' : '0');
+  // Keep the responsive mobile reader for previews. Community Edition edit
+  // sessions must use the desktop engine or ONLYOFFICE blocks editing.
+  target.searchParams.set('mobile', compactViewport && mode === 'preview' ? '1' : '0');
   target.searchParams.set('compactToolbar', compactViewport ? '1' : '0');
   return target.toString();
 };
@@ -406,6 +413,15 @@ export function OfficeFileEditor({
   }, [desktopNativeOffice, session]);
 
   useEffect(() => {
+    if (!session || session.mode !== 'edit' || desktopNativeOffice) return undefined;
+
+    lockOfficeLandscape().catch(() => undefined);
+    return () => {
+      unlockOfficeOrientation().catch(() => undefined);
+    };
+  }, [desktopNativeOffice, session]);
+
+  useEffect(() => {
     preconnectOfficeOrigin(officeEditorUrl);
     const warmupTimeout = window.setTimeout(() => {
       warmOfficeEditorShell(officeEditorUrl).catch(() => undefined);
@@ -433,22 +449,28 @@ export function OfficeFileEditor({
     if (bridgeReadyTimeoutRef.current !== undefined) {
       window.clearTimeout(bridgeReadyTimeoutRef.current);
     }
+    const timeoutMs = isCompactOfficeViewport()
+      ? MOBILE_IFRAME_BRIDGE_READY_TIMEOUT_MS
+      : IFRAME_BRIDGE_READY_TIMEOUT_MS;
     bridgeReadyTimeoutRef.current = window.setTimeout(() => {
       if (sessionRef.current?.requestId !== requestId) return;
       setErrorMessage('Office 页面连接超时。请重新打开文档，或关闭窗口后再试。');
       setPhase('error');
-    }, IFRAME_BRIDGE_READY_TIMEOUT_MS);
+    }, timeoutMs);
   }, []);
 
   const armDocumentOpenedTimeout = useCallback((requestId: string) => {
     if (documentOpenedTimeoutRef.current !== undefined) {
       window.clearTimeout(documentOpenedTimeoutRef.current);
     }
+    const timeoutMs = isCompactOfficeViewport()
+      ? MOBILE_DOCUMENT_OPENED_TIMEOUT_MS
+      : DOCUMENT_OPENED_TIMEOUT_MS;
     documentOpenedTimeoutRef.current = window.setTimeout(() => {
       if (sessionRef.current?.requestId !== requestId) return;
       setErrorMessage('Office 打开文档超时。你可以重新打开，或直接关闭窗口。');
       setPhase('error');
-    }, DOCUMENT_OPENED_TIMEOUT_MS);
+    }, timeoutMs);
   }, []);
 
   const postToOffice = useCallback((message: Record<string, unknown>) => {
@@ -664,20 +686,33 @@ export function OfficeFileEditor({
     const buffer = sourceBufferRef.current;
     if (!activeSession || !targetWindow || !iframeReadyRef.current || !buffer) return;
 
-    targetWindow.postMessage(
-      {
-        type: OFFICE_BRIDGE_OPEN,
-        requestId: activeSession.requestId,
-        fileName: body,
-        fileType: getFileNameExt(body),
-        mimeType,
-        ...(activeSession.password ? { password: activeSession.password } : {}),
-        buffer,
-      },
-      new URL(activeSession.src).origin,
-      [buffer]
-    );
-    sourceBufferRef.current = undefined;
+    const message = {
+      type: OFFICE_BRIDGE_OPEN,
+      requestId: activeSession.requestId,
+      fileName: body,
+      fileType: getFileNameExt(body),
+      mimeType,
+      ...(activeSession.password ? { password: activeSession.password } : {}),
+      buffer,
+    };
+    const targetOrigin = new URL(activeSession.src).origin;
+    if (isAndroidApp()) {
+      // Some Android System WebView releases silently drop cross-origin
+      // postMessage payloads when an ArrayBuffer is transferred. A structured
+      // clone costs one temporary copy but reliably delivers the local file.
+      targetWindow.postMessage(message, targetOrigin);
+      window.setTimeout(() => {
+        if (
+          sessionRef.current?.requestId === activeSession.requestId &&
+          sourceBufferRef.current === buffer
+        ) {
+          targetWindow.postMessage(message, targetOrigin);
+        }
+      }, 1_500);
+    } else {
+      targetWindow.postMessage(message, targetOrigin, [buffer]);
+      sourceBufferRef.current = undefined;
+    }
     armDocumentOpenedTimeout(activeSession.requestId);
   }, [armDocumentOpenedTimeout, body, mimeType]);
 
@@ -933,12 +968,18 @@ export function OfficeFileEditor({
         transferSourceIfReady();
         return;
       }
+      if (data.type === OFFICE_BRIDGE_SOURCE_RECEIVED) {
+        sourceBufferRef.current = undefined;
+        armDocumentOpenedTimeout(activeSession.requestId);
+        return;
+      }
       if (data.type === OFFICE_BRIDGE_OPENED) {
         if (documentOpenedTimeoutRef.current !== undefined) {
           window.clearTimeout(documentOpenedTimeoutRef.current);
           documentOpenedTimeoutRef.current = undefined;
         }
         if (!saveOperationRef.current) {
+          sourceBufferRef.current = undefined;
           setErrorMessage(undefined);
           setPhase('ready');
         }
@@ -1078,6 +1119,7 @@ export function OfficeFileEditor({
     };
   }, [
     acceptBridgeSaveMessage,
+    armDocumentOpenedTimeout,
     armSaveTimeout,
     beginSaveOperation,
     clearOpenTimeouts,

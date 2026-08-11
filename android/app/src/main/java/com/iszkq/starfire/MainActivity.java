@@ -11,6 +11,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(AndroidUpdaterPlugin.class);
         registerPlugin(NativeNotificationsPlugin.class);
         registerPlugin(AndroidMediaCachePlugin.class);
+        registerPlugin(OfficeOrientationPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }
