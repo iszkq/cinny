@@ -53,6 +53,7 @@ import * as css from './OfficeFileEditor.css';
 import { PasswordInput } from '../password-input';
 import { lockOfficeLandscape, unlockOfficeOrientation } from '../../utils/officeOrientation';
 import { ANDROID_BACK_BUTTON_EVENT, isAndroidApp } from '../../utils/nativePlatform';
+import { mobileOrTablet } from '../../utils/user-agent';
 
 const DEFAULT_OFFICE_EDITOR_URL = 'https://124.222.193.241:6258/editor';
 const OFFICE_BRIDGE_READY = 'xinghuo-office-ready';
@@ -79,9 +80,11 @@ const MOBILE_IFRAME_BRIDGE_READY_TIMEOUT_MS = 60_000;
 const MOBILE_DOCUMENT_OPENED_TIMEOUT_MS = 150_000;
 const OFFICE_SHELL_WARMUP_DELAY_MS = 600;
 const OFFICE_SHELL_WARMUP_LIFETIME_MS = 15_000;
-const ANDROID_SOURCE_CHUNK_BYTES = 192 * 1024;
-const ANDROID_SOURCE_CHUNK_ACK_TIMEOUT_MS = 2_500;
-const ANDROID_SOURCE_CHUNK_MAX_ATTEMPTS = 3;
+// Keep each structured-clone payload comfortably below the limits of older
+// Android System WebViews. Base64 expands this to roughly 86 KiB per message.
+const ANDROID_SOURCE_CHUNK_BYTES = 64 * 1024;
+const ANDROID_SOURCE_CHUNK_ACK_TIMEOUT_MS = 8_000;
+const ANDROID_SOURCE_CHUNK_MAX_ATTEMPTS = 4;
 const MAX_MEMORY_CACHED_SOURCE_BYTES = 64 * 1024 * 1024;
 const COMPOUND_FILE_SIGNATURE = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1];
 const isPasswordPromptError = (message?: string): boolean =>
@@ -210,6 +213,8 @@ type OfficeBridgeMessage = {
   message?: string;
   passwordRequired?: boolean;
   chunkIndex?: number;
+  protocolVersion?: number;
+  supportsChunkedSource?: boolean;
 };
 
 type AndroidChunkAckWaiter = {
@@ -346,6 +351,7 @@ export function OfficeFileEditor({
   const nativeActionHandlerRef = useRef<(action: NativeOfficeWindowAction) => void>();
   const androidSourceRequestRef = useRef<string>();
   const androidChunkAckRef = useRef<AndroidChunkAckWaiter>();
+  const androidChunkProgressRef = useRef<{ sent: number; total: number }>();
 
   const [session, setSession] = useState<EditorSession>();
   const [phase, setPhase] = useState<EditorPhase>('loading');
@@ -367,7 +373,7 @@ export function OfficeFileEditor({
   const desktopNativeOffice = isDesktopUpdaterSupported();
   const androidApp = isAndroidApp();
   const compactOfficeViewport = isCompactOfficeViewport();
-  const mobileOfficeShell = androidApp || compactOfficeViewport;
+  const mobileOfficeShell = androidApp || mobileOrTablet() || compactOfficeViewport;
   const officeEditorUrl = clientConfig.officeEditor?.url?.trim() || DEFAULT_OFFICE_EDITOR_URL;
   const exportTimeoutMs = getTimeoutMs(
     clientConfig.officeEditor?.exportTimeoutSeconds,
@@ -669,6 +675,7 @@ export function OfficeFileEditor({
     sessionRef.current = undefined;
     sourceBufferRef.current = undefined;
     androidSourceRequestRef.current = undefined;
+    androidChunkProgressRef.current = undefined;
     iframeReadyRef.current = false;
     bridgeSaveProtocolRef.current = 'unknown';
     legacyExportInvalidatedRef.current = false;
@@ -799,6 +806,7 @@ export function OfficeFileEditor({
       androidSourceRequestRef.current = activeSession.requestId;
       const sourceBytes = new Uint8Array(buffer);
       const chunkCount = Math.ceil(sourceBytes.byteLength / ANDROID_SOURCE_CHUNK_BYTES);
+      androidChunkProgressRef.current = { sent: 0, total: chunkCount };
       targetWindow.postMessage(
         {
           type: OFFICE_BRIDGE_SOURCE_BEGIN,
@@ -808,13 +816,13 @@ export function OfficeFileEditor({
           mimeType,
           byteLength: sourceBytes.byteLength,
           chunkCount,
+          chunkSize: ANDROID_SOURCE_CHUNK_BYTES,
         },
         targetOrigin
       );
 
       (async () => {
-        const sendChunk = async (chunkIndex: number): Promise<void> => {
-          if (chunkIndex >= chunkCount) return;
+        for (let chunkIndex = 0; chunkIndex < chunkCount; chunkIndex += 1) {
           const offset = chunkIndex * ANDROID_SOURCE_CHUNK_BYTES;
           const chunk = sourceBytes.subarray(offset, offset + ANDROID_SOURCE_CHUNK_BYTES);
           await sendAndroidChunkWithAck(
@@ -824,9 +832,8 @@ export function OfficeFileEditor({
             chunkIndex,
             encodeBase64Chunk(chunk)
           );
-          await sendChunk(chunkIndex + 1);
-        };
-        await sendChunk(0);
+          androidChunkProgressRef.current = { sent: chunkIndex + 1, total: chunkCount };
+        }
         if (sessionRef.current?.requestId !== activeSession.requestId) return;
         targetWindow.postMessage(
           {
@@ -838,10 +845,16 @@ export function OfficeFileEditor({
         armDocumentOpenedTimeout(activeSession.requestId);
       })().catch(() => {
         if (sessionRef.current?.requestId !== activeSession.requestId) return;
+        const progress = androidChunkProgressRef.current;
         androidSourceRequestRef.current = undefined;
+        androidChunkProgressRef.current = undefined;
         cancelAndroidChunkAck();
         clearOpenTimeouts();
-        setErrorMessage('Android 文档传输失败。请重新打开，或直接关闭窗口。');
+        setErrorMessage(
+          progress
+            ? `Android 文档传输失败（已发送 ${progress.sent}/${progress.total} 块）。请确认 Office 服务已更新后重新打开。`
+            : 'Android 文档传输失败。请确认 Office 服务已更新后重新打开。'
+        );
         setPhase('error');
       });
       return;
@@ -861,7 +874,7 @@ export function OfficeFileEditor({
 
   const openEditor = useCallback(
     (mode: EditorMode, password?: string, forceInline = false) => {
-      if (!officeKind || (mode === 'edit' && !canEdit)) return;
+      if (!officeKind || (mode === 'edit' && (!canEdit || mobileOfficeShell))) return;
       if (saveOperationRef.current?.stage === 'publishing') return;
 
       warmOfficeEditorShell(officeEditorUrl).catch(() => undefined);
@@ -881,6 +894,7 @@ export function OfficeFileEditor({
       sessionRef.current = nextSession;
       sourceBufferRef.current = undefined;
       androidSourceRequestRef.current = undefined;
+      androidChunkProgressRef.current = undefined;
       iframeReadyRef.current = false;
       bridgeSaveProtocolRef.current = 'unknown';
       legacyExportInvalidatedRef.current = false;
@@ -996,6 +1010,7 @@ export function OfficeFileEditor({
       desktopNativeOffice,
       loadSourceFile,
       mimeType,
+      mobileOfficeShell,
       officeEditorUrl,
       officeKind,
       transferSourceIfReady,
@@ -1109,6 +1124,11 @@ export function OfficeFileEditor({
         if (bridgeReadyTimeoutRef.current !== undefined) {
           window.clearTimeout(bridgeReadyTimeoutRef.current);
           bridgeReadyTimeoutRef.current = undefined;
+        }
+        if (androidApp && data.supportsChunkedSource !== true) {
+          setErrorMessage('Office 服务版本过旧，无法在 Android 中安全传输文档。请更新 Office 服务后重试。');
+          setPhase('error');
+          return;
         }
         iframeReadyRef.current = true;
         transferSourceIfReady();
@@ -1282,6 +1302,7 @@ export function OfficeFileEditor({
     };
   }, [
     acceptBridgeSaveMessage,
+    androidApp,
     armDocumentOpenedTimeout,
     armSaveTimeout,
     beginSaveOperation,
@@ -1308,6 +1329,7 @@ export function OfficeFileEditor({
       sessionRef.current = undefined;
       sourceBufferRef.current = undefined;
       androidSourceRequestRef.current = undefined;
+      androidChunkProgressRef.current = undefined;
       cancelAndroidChunkAck();
       iframeReadyRef.current = false;
       clearOpenTimeouts();
@@ -1718,7 +1740,10 @@ export function OfficeFileEditor({
         <div
           className={css.actions}
           style={{
-            gridTemplateColumns: officeKind === 'pdf' ? 'repeat(2, minmax(0, 1fr))' : undefined,
+            gridTemplateColumns:
+              mobileOfficeShell || officeKind === 'pdf'
+                ? 'repeat(2, minmax(0, 1fr))'
+                : undefined,
           }}
         >
           <button
@@ -1732,7 +1757,7 @@ export function OfficeFileEditor({
           >
             <span className={css.actionLabel}>在线预览</span>
           </button>
-          {officeKind !== 'pdf' && (
+          {officeKind !== 'pdf' && !mobileOfficeShell && (
             <button
               className={css.actionButton}
               type="button"
@@ -1829,25 +1854,17 @@ export function OfficeFileEditor({
                   </header>
 
                   <div className={css.editorBody}>
-                    {mobileOfficeShell && (
-                      <IconButton
-                        className={css.mobileCloseButton}
-                        variant="Surface"
-                        size="300"
-                        radii="300"
-                        onPointerDown={handleMobileClosePointerDown}
-                        onClick={requestClose}
-                        aria-label={closeButtonLabel}
-                      >
-                        <Icon src={Icons.Cross} size="100" />
-                      </IconButton>
-                    )}
                     <iframe
                       ref={iframeRef}
                       className={css.editorFrame}
                       src={session.src}
                       title={`${session.mode === 'edit' ? '在线编辑' : '在线预览'} ${body}`}
                       allow="clipboard-read; clipboard-write"
+                      sandbox={
+                        mobileOfficeShell && session.mode === 'preview'
+                          ? 'allow-scripts allow-same-origin allow-forms allow-modals allow-downloads allow-popups'
+                          : undefined
+                      }
                     />
                     {passwordRequired && (
                       <div className={css.promptBackdrop}>

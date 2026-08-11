@@ -38,8 +38,11 @@ test('PDF uses the Office card in read-only mode without an edit action', async 
 
   assert.match(mimeSource, /normalizedMimeType === 'application\/pdf' \|\| ext === 'pdf'/);
   assert.match(source, /pdf: \{ label: 'PDF', color: '#e53935' \}/);
-  assert.match(source, /officeKind !== 'pdf' && \(/);
-  assert.match(source, /officeKind === 'pdf' \? 'repeat\(2, minmax\(0, 1fr\)\)'/);
+  assert.match(source, /const canEdit = officeKind !== 'pdf' && Boolean\(/);
+  assert.match(
+    source,
+    /mobileOfficeShell \|\| officeKind === 'pdf'[\s\S]*\? 'repeat\(2, minmax\(0, 1fr\)\)'/
+  );
 });
 
 test('host-window Office shortcuts prevent browser downloads and use the bridge save path', async () => {
@@ -249,6 +252,7 @@ test('Office opening is bounded and mobile layout respects the viewport safe are
   const orientationPluginSource = await readSource(
     'android/app/src/main/java/com/iszkq/starfire/OfficeOrientationPlugin.java'
   );
+  const nativePlatformSource = await readSource('src/app/utils/nativePlatform.ts');
   const capacitorSource = await readSource('capacitor.config.ts');
   const androidManifest = await readSource('android/app/src/main/AndroidManifest.xml');
   const configSource = await readSource('config.json');
@@ -263,10 +267,19 @@ test('Office opening is bounded and mobile layout respects the viewport safe are
   assert.match(editorSource, /OFFICE_BRIDGE_SOURCE_RECEIVED/);
   assert.match(editorSource, /OFFICE_BRIDGE_SOURCE_BEGIN/);
   assert.match(editorSource, /OFFICE_BRIDGE_SOURCE_CHUNK_RECEIVED/);
-  assert.match(editorSource, /ANDROID_SOURCE_CHUNK_BYTES = 192 \* 1024/);
+  assert.match(editorSource, /ANDROID_SOURCE_CHUNK_BYTES = 64 \* 1024/);
+  assert.match(editorSource, /ANDROID_SOURCE_CHUNK_ACK_TIMEOUT_MS = 8_000/);
+  assert.match(editorSource, /ANDROID_SOURCE_CHUNK_MAX_ATTEMPTS = 4/);
   assert.match(editorSource, /sendAndroidChunkWithAck/);
   assert.match(editorSource, /encodeBase64Chunk/);
   assert.match(editorSource, /Android 文档传输失败/);
+  assert.match(editorSource, /supportsChunkedSource !== true/);
+  assert.match(
+    editorSource,
+    /mode === 'edit' && \(!canEdit \|\| mobileOfficeShell\)/
+  );
+  assert.match(editorSource, /mobileOfficeShell \|\| officeKind === 'pdf'/);
+  assert.doesNotMatch(editorSource, /className=\{css\.mobileCloseButton\}/);
   assert.match(editorSource, /postMessage\(message, targetOrigin, \[buffer\]\)/);
   assert.match(editorSource, /compactViewport && mode === 'preview' \? '1' : '0'/);
   assert.match(
@@ -288,7 +301,7 @@ test('Office opening is bounded and mobile layout respects the viewport safe are
   assert.match(styleSource, /var\(--safe-area-bottom/);
   assert.match(styleSource, /orientation: landscape/);
   assert.match(styleSource, /var\(--office-viewport-height/);
-  assert.match(styleSource, /mobileCloseButton/);
+  assert.doesNotMatch(styleSource, /mobileCloseButton/);
   assert.match(editorSource, /handleMobileClosePointerDown/);
   assert.match(styleSource, /max-height: 520px[\s\S]*pointer: coarse/);
   assert.match(capacitorSource, /allowNavigation: \['124\.222\.193\.241'\]/);
@@ -304,4 +317,7 @@ test('Office opening is bounded and mobile layout respects the viewport safe are
   assert.match(orientationPluginSource, /OrientationEventListener/);
   assert.match(orientationPluginSource, /SCREEN_ORIENTATION_UNSPECIFIED/);
   assert.match(editorSource, /ANDROID_BACK_BUTTON_EVENT/);
+  assert.match(nativePlatformSource, /cinny-android-service-worker-cleanup-reload/);
+  assert.match(nativePlatformSource, /wasControlled/);
+  assert.match(nativePlatformSource, /window\.location\.reload\(\)/);
 });

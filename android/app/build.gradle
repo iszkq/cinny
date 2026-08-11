@@ -13,8 +13,8 @@ android {
         applicationId "com.iszkq.starfire"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1008020
-        versionName "1.8.20"
+        versionCode 1008021
+        versionName "1.8.21"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

@@ -289,20 +289,6 @@ export const editorFrame = style([
   },
 ]);
 
-export const mobileCloseButton = style([
-  DefaultReset,
-  {
-    position: 'absolute',
-    zIndex: 20,
-    top: `calc(${config.space.S200} + var(--safe-area-top, env(safe-area-inset-top, 0px)))`,
-    right: `calc(${config.space.S200} + var(--safe-area-right, env(safe-area-inset-right, 0px)))`,
-    color: '#17211c',
-    background: 'rgba(255, 255, 255, 0.94)',
-    boxShadow: '0 4px 18px rgba(15, 23, 42, 0.28)',
-    touchAction: 'manipulation',
-  },
-]);
-
 export const loadingLayer = style([
   DefaultReset,
   {

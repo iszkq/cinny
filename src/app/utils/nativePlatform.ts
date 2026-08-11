@@ -11,6 +11,8 @@ let androidShellInitialized = false;
 const disablePwaServiceWorkerInAndroidApp = async (): Promise<void> => {
   if (!('serviceWorker' in navigator)) return;
 
+  const cleanupReloadKey = 'cinny-android-service-worker-cleanup-reload';
+  const wasControlled = Boolean(navigator.serviceWorker.controller);
   const registrations = await navigator.serviceWorker.getRegistrations().catch(() => []);
   await Promise.all(
     registrations.map((registration) => registration.unregister().catch(() => false))
@@ -23,6 +25,22 @@ const disablePwaServiceWorkerInAndroidApp = async (): Promise<void> => {
       .filter((cacheName) => cacheName.startsWith('workbox-precache'))
       .map((cacheName) => window.caches.delete(cacheName))
   );
+
+  // An old PWA worker can continue controlling the current WebView until the
+  // next navigation. Without one guarded reload, it may serve stale chunks,
+  // produce a white screen, or boot the app without the persisted session.
+  try {
+    if (wasControlled && sessionStorage.getItem(cleanupReloadKey) !== '1') {
+      sessionStorage.setItem(cleanupReloadKey, '1');
+      window.location.reload();
+      return;
+    }
+    if (!navigator.serviceWorker.controller) {
+      sessionStorage.removeItem(cleanupReloadKey);
+    }
+  } catch {
+    // Some WebViews can temporarily deny sessionStorage during startup.
+  }
 };
 
 export const initializeAndroidAppShell = async (): Promise<void> => {
