@@ -317,7 +317,7 @@ test('Office opening is bounded and mobile layout respects the viewport safe are
   assert.match(orientationSource, /NativeOfficeOrientation\.lockLandscape\(\)/);
   assert.match(orientationSource, /NativeOfficeOrientation\.unlock\(\)/);
   assert.match(mainActivitySource, /registerPlugin\(OfficeOrientationPlugin\.class\)/);
-  assert.match(mainActivitySource, /BuildConfig\.DEBUG/);
+  assert.match(mainActivitySource, /ApplicationInfo\.FLAG_DEBUGGABLE/);
   assert.match(mainActivitySource, /WebView\.setWebContentsDebuggingEnabled\(true\)/);
   assert.match(orientationPluginSource, /SCREEN_ORIENTATION_SENSOR_LANDSCAPE/);
   assert.match(orientationPluginSource, /SCREEN_ORIENTATION_FULL_USER/);

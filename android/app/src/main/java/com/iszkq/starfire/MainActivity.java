@@ -1,5 +1,6 @@
 package com.iszkq.starfire;
 
+import android.content.pm.ApplicationInfo;
 import android.os.Bundle;
 import android.webkit.WebView;
 
@@ -10,7 +11,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         // Diagnostic APKs can be inspected live through chrome://inspect while a phone is
         // connected. Never expose remote WebView debugging in signed release builds.
-        if (BuildConfig.DEBUG) {
+        if ((getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
             WebView.setWebContentsDebuggingEnabled(true);
         }
         registerPlugin(NativeFileSaverPlugin.class);
