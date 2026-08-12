@@ -63,7 +63,6 @@ export type RemoteStickerIndexState = {
 let cachedRemoteStickers: PackImageReader[] | undefined;
 let pendingRemoteStickers: Promise<PackImageReader[]> | undefined;
 const REMOTE_STICKER_INDEX_CACHE_KEY = 'cinny.remoteStickerIndex.v1';
-const REMOTE_STICKER_INDEX_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
 
 type RemoteStickerIndexCache = {
   cachedAt: number;
@@ -81,7 +80,7 @@ const getFreshIndexUrl = (): string => {
 };
 
 const fetchRemoteStickerIndexWithBrowser = async (url: string): Promise<RemoteStickerIndex> => {
-  const response = await fetchMediaWithAuth(url, { cache: 'default' });
+  const response = await fetchMediaWithAuth(url, { cache: 'no-store' });
   if (!response.ok) {
     throw new Error(`Failed to load remote sticker index: ${response.status}`);
   }
@@ -95,7 +94,9 @@ const fetchRemoteStickerIndexWithDesktop = async (url: string): Promise<RemoteSt
 
 const fetchRemoteStickerIndex = async (): Promise<RemoteStickerIndex> => {
   const desktopSupported = isDesktopUpdaterSupported();
-  const url = desktopSupported ? getFreshIndexUrl() : REMOTE_STICKER_INDEX_URL;
+  // Every platform should revalidate when the cloud panel opens. The cached index is only an
+  // immediate/offline fallback; it must not hide newly published packs on web, iOS or Android.
+  const url = getFreshIndexUrl();
   let desktopError: unknown;
 
   if (desktopSupported) {
@@ -132,11 +133,7 @@ const getCachedRemoteStickerIndex = (): RemoteStickerIndex | undefined => {
     if (!rawCache) return undefined;
 
     const cache = JSON.parse(rawCache) as RemoteStickerIndexCache;
-    if (
-      !cache?.index ||
-      typeof cache.cachedAt !== 'number' ||
-      Date.now() - cache.cachedAt > REMOTE_STICKER_INDEX_CACHE_TTL_MS
-    ) {
+    if (!cache?.index || typeof cache.cachedAt !== 'number') {
       return undefined;
     }
 
@@ -293,18 +290,23 @@ const parseRemoteStickerIndex = (index: RemoteStickerIndex): PackImageReader[] =
     .filter((item): item is PackImageReader => item !== undefined);
 };
 
-const loadRemoteStickers = async (): Promise<PackImageReader[]> => {
+const loadCachedRemoteStickers = (): PackImageReader[] | undefined => {
   if (cachedRemoteStickers) {
     return cachedRemoteStickers;
-  }
-  if (pendingRemoteStickers) {
-    return pendingRemoteStickers;
   }
 
   const cachedIndex = getCachedRemoteStickerIndex();
   if (cachedIndex) {
     cachedRemoteStickers = parseRemoteStickerIndex(cachedIndex);
     return cachedRemoteStickers;
+  }
+
+  return undefined;
+};
+
+const refreshRemoteStickers = async (): Promise<PackImageReader[]> => {
+  if (pendingRemoteStickers) {
+    return pendingRemoteStickers;
   }
 
   pendingRemoteStickers = fetchRemoteStickerIndex()
@@ -347,8 +349,10 @@ export const getRemoteStickerPreviewUrl = (image: PackImageReader): string | und
 };
 
 export const useRemoteStickerIndex = (enabled: boolean): RemoteStickerIndexState => {
-  const [stickers, setStickers] = useState<PackImageReader[]>(() => cachedRemoteStickers ?? []);
-  const [loading, setLoading] = useState(() => enabled && !cachedRemoteStickers);
+  const [stickers, setStickers] = useState<PackImageReader[]>(
+    () => loadCachedRemoteStickers() ?? []
+  );
+  const [loading, setLoading] = useState(() => enabled && !loadCachedRemoteStickers());
   const [error, setError] = useState<string>();
   const [reloadId, setReloadId] = useState(0);
 
@@ -367,10 +371,14 @@ export const useRemoteStickerIndex = (enabled: boolean): RemoteStickerIndexState
     }
 
     let disposed = false;
-    setLoading(!cachedRemoteStickers);
+    const staleStickers = loadCachedRemoteStickers();
+    if (staleStickers) {
+      setStickers(staleStickers);
+    }
+    setLoading(!staleStickers);
     setError(undefined);
 
-    loadRemoteStickers()
+    refreshRemoteStickers()
       .then((items) => {
         if (!disposed) {
           setStickers(items);
@@ -380,8 +388,10 @@ export const useRemoteStickerIndex = (enabled: boolean): RemoteStickerIndexState
       .catch((loadError) => {
         if (!disposed) {
           console.warn(loadError);
-          setStickers([]);
-          setError(getRemoteStickerErrorMessage(loadError));
+          if (!staleStickers) {
+            setStickers([]);
+            setError(getRemoteStickerErrorMessage(loadError));
+          }
         }
       })
       .finally(() => {

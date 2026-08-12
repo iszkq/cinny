@@ -131,6 +131,11 @@ test('Android cloud emoji uses its visible source preview without serializing it
     remoteIndexSource,
     /\[item\.httpUrl, item\.sourceUrl, item\.url, item\.previewUrl, item\.thumbUrl, item\.thumbnailUrl\]/
   );
+  assert.match(remoteIndexSource, /const url = getFreshIndexUrl\(\)/);
+  assert.match(remoteIndexSource, /fetchMediaWithAuth\(url, \{ cache: 'no-store' \}\)/);
+  assert.match(remoteIndexSource, /const staleStickers = loadCachedRemoteStickers\(\)/);
+  assert.match(remoteIndexSource, /refreshRemoteStickers\(\)/);
+  assert.doesNotMatch(remoteIndexSource, /REMOTE_STICKER_INDEX_CACHE_TTL_MS/);
   assert.match(editorSource, /const androidPreviewUrl =/);
   assert.doesNotMatch(editorSource, /\{'\.\.\.'\}/);
   assert.doesNotMatch(
