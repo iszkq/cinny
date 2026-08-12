@@ -545,7 +545,7 @@ export function RenderMessageContent({
   }
 
   if (msgType === 'm.bad.encrypted') {
-    return <MBadEncrypted />;
+    return <MBadEncrypted mEvent={room && eventId ? room.findEventById(eventId) : undefined} />;
   }
 
   return <UnsupportedContent />;

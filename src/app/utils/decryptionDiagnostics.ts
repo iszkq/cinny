@@ -1,0 +1,283 @@
+import { MatrixClient, MatrixEvent } from 'matrix-js-sdk';
+import { APP_VERSION } from '../constants/branding';
+
+const DECRYPTION_DIAGNOSTIC_STORAGE_KEY = 'starfire_decryption_diagnostics_v1';
+const MAX_STORED_ENTRIES = 200;
+const MAX_REPORT_ENTRIES = 100;
+
+export type DecryptionDiagnosticStage =
+  | 'failure_observed'
+  | 'retry_started'
+  | 'retry_finished'
+  | 'key_received';
+
+type DecryptionDiagnosticEntry = {
+  at: string;
+  stage: DecryptionDiagnosticStage;
+  eventId: string | null;
+  roomId: string | null;
+  senderId: string | null;
+  eventTimestamp: number;
+  failureReason: string | null;
+  sessionId: string | null;
+  senderKey: string | null;
+  senderDeviceId: string | null;
+  algorithm: string | null;
+  retryAttempt?: number;
+  retryDelayMs?: number;
+  error?: string | null;
+  online: boolean;
+  visibility: DocumentVisibilityState;
+  syncState: string | null;
+};
+
+const safeString = (value: unknown): string | null =>
+  typeof value === 'string' && value.length > 0 ? value.slice(0, 500) : null;
+
+const safeError = (value: unknown): string | null => {
+  if (value === undefined || value === null) return null;
+  const message = value instanceof Error ? `${value.name}: ${value.message}` : String(value);
+  return message
+    .slice(0, 500)
+    .replace(
+      /(access[_-]?token|authorization|cookie|password|secret|recovery[_-]?key)=([^&\s]+)/gi,
+      '$1=[redacted]'
+    )
+    .replace(/Bearer\s+[^\s]+/gi, 'Bearer [redacted]');
+};
+
+const readEntries = (): DecryptionDiagnosticEntry[] => {
+  try {
+    const value = localStorage.getItem(DECRYPTION_DIAGNOSTIC_STORAGE_KEY);
+    if (!value) return [];
+    const entries = JSON.parse(value);
+    return Array.isArray(entries) ? entries : [];
+  } catch {
+    return [];
+  }
+};
+
+const writeEntries = (entries: DecryptionDiagnosticEntry[]): void => {
+  try {
+    localStorage.setItem(
+      DECRYPTION_DIAGNOSTIC_STORAGE_KEY,
+      JSON.stringify(entries.slice(-MAX_STORED_ENTRIES))
+    );
+  } catch {
+    // Diagnostics must never interfere with message rendering or decryption.
+  }
+};
+
+const getEncryptedMetadata = (mEvent: MatrixEvent) => {
+  const wireContent = mEvent.getWireContent() as Record<string, unknown>;
+  return {
+    algorithm: safeString(wireContent.algorithm),
+    sessionId: safeString(wireContent.session_id),
+    senderKey: safeString(wireContent.sender_key) ?? mEvent.getSenderKey(),
+    senderDeviceId: safeString(wireContent.device_id),
+  };
+};
+
+export const getDecryptionFailureLabel = (failureReason: string | null): string => {
+  switch (failureReason) {
+    case 'MEGOLM_UNKNOWN_INBOUND_SESSION_ID':
+      return '缺少此加密会话的密钥';
+    case 'MEGOLM_KEY_WITHHELD_FOR_UNVERIFIED_DEVICE':
+      return '发送方因本设备未受信任而未分享密钥';
+    case 'MEGOLM_KEY_WITHHELD':
+      return '发送方未向本设备分享密钥';
+    case 'OLM_UNKNOWN_MESSAGE_INDEX':
+      return '收到的会话密钥版本无法解密此消息';
+    case 'HISTORICAL_MESSAGE_NO_KEY_BACKUP':
+      return '历史消息没有可用的密钥备份';
+    case 'HISTORICAL_MESSAGE_BACKUP_UNCONFIGURED':
+      return '尚未取得历史消息备份的解密密钥';
+    case 'HISTORICAL_MESSAGE_WORKING_BACKUP':
+      return '正在从备份查找此消息密钥';
+    case 'HISTORICAL_MESSAGE_USER_NOT_JOINED':
+      return '消息发送时本账号尚未加入房间';
+    case 'UNSIGNED_SENDER_DEVICE':
+      return '发送设备未签名';
+    case 'UNKNOWN_SENDER_DEVICE':
+      return '无法识别发送设备';
+    case 'SENDER_IDENTITY_PREVIOUSLY_VERIFIED':
+      return '发送方身份验证状态已发生变化';
+    default:
+      return '原因尚未确定';
+  }
+};
+
+export const recordDecryptionDiagnostic = (
+  mx: MatrixClient,
+  mEvent: MatrixEvent,
+  stage: DecryptionDiagnosticStage,
+  details: {
+    retryAttempt?: number;
+    retryDelayMs?: number;
+    error?: unknown;
+  } = {}
+): void => {
+  const metadata = getEncryptedMetadata(mEvent);
+  const entry: DecryptionDiagnosticEntry = {
+    at: new Date().toISOString(),
+    stage,
+    eventId: mEvent.getId() ?? null,
+    roomId: mEvent.getRoomId() ?? null,
+    senderId: mEvent.getSender() ?? null,
+    eventTimestamp: mEvent.getTs(),
+    failureReason: mEvent.decryptionFailureReason,
+    sessionId: metadata.sessionId,
+    senderKey: metadata.senderKey,
+    senderDeviceId: metadata.senderDeviceId,
+    algorithm: metadata.algorithm,
+    retryAttempt: details.retryAttempt,
+    retryDelayMs: details.retryDelayMs,
+    error: safeError(details.error),
+    online: navigator.onLine,
+    visibility: document.visibilityState,
+    syncState: mx.getSyncState(),
+  };
+
+  const entries = readEntries();
+  const previous = entries.at(-1);
+  if (
+    previous?.eventId === entry.eventId &&
+    previous.stage === entry.stage &&
+    previous.retryAttempt === entry.retryAttempt &&
+    previous.failureReason === entry.failureReason
+  ) {
+    return;
+  }
+  writeEntries([...entries, entry]);
+};
+
+const getCryptoDatabaseSelection = (): string[] => {
+  const selections = new Set<string>();
+  try {
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = localStorage.key(index);
+      if (!key?.startsWith('cinny_rust_crypto_database:')) continue;
+      const value = localStorage.getItem(key);
+      if (value) selections.add(value);
+    }
+  } catch {
+    return [];
+  }
+  return Array.from(selections);
+};
+
+export const createDecryptionDiagnosticReport = async (
+  mx: MatrixClient,
+  mEvent: MatrixEvent
+): Promise<string> => {
+  const crypto = mx.getCrypto();
+  const metadata = getEncryptedMetadata(mEvent);
+  const failureReason = mEvent.decryptionFailureReason;
+  const backup = {
+    activeVersion: null as string | null,
+    serverVersion: null as string | null,
+    serverSessionCount: null as number | null,
+    trusted: null as boolean | null,
+    matchesDecryptionKey: null as boolean | null,
+    error: null as string | null,
+  };
+  const currentDevice = {
+    userId: mx.getUserId(),
+    deviceId: mx.getDeviceId(),
+    crossSigningVerified: null as boolean | null,
+    localVerified: null as boolean | null,
+    verificationError: null as string | null,
+  };
+
+  if (crypto) {
+    const [activeBackupResult, backupInfoResult, verificationResult] = await Promise.allSettled([
+      crypto.getActiveSessionBackupVersion(),
+      crypto.getKeyBackupInfo(),
+      mx.getUserId() && mx.getDeviceId()
+        ? crypto.getDeviceVerificationStatus(mx.getUserId()!, mx.getDeviceId()!)
+        : Promise.resolve(null),
+    ]);
+
+    if (activeBackupResult.status === 'fulfilled') {
+      backup.activeVersion = activeBackupResult.value;
+    } else {
+      backup.error = safeError(activeBackupResult.reason);
+    }
+    if (backupInfoResult.status === 'fulfilled' && backupInfoResult.value) {
+      backup.serverVersion = backupInfoResult.value.version ?? null;
+      backup.serverSessionCount = backupInfoResult.value.count ?? null;
+      try {
+        const trust = await crypto.isKeyBackupTrusted(backupInfoResult.value);
+        backup.trusted = trust.trusted;
+        backup.matchesDecryptionKey = trust.matchesDecryptionKey;
+      } catch (error) {
+        backup.error = safeError(error);
+      }
+    } else if (backupInfoResult.status === 'rejected') {
+      backup.error = safeError(backupInfoResult.reason);
+    }
+    if (verificationResult.status === 'fulfilled' && verificationResult.value) {
+      currentDevice.crossSigningVerified = verificationResult.value.crossSigningVerified;
+      currentDevice.localVerified = verificationResult.value.localVerified;
+    } else if (verificationResult.status === 'rejected') {
+      currentDevice.verificationError = safeError(verificationResult.reason);
+    }
+  }
+
+  const eventId = mEvent.getId() ?? null;
+  const sessionEntries = readEntries()
+    .filter(
+      (entry) =>
+        entry.eventId === eventId ||
+        (metadata.sessionId && entry.sessionId === metadata.sessionId) ||
+        entry.roomId === mEvent.getRoomId()
+    )
+    .slice(-MAX_REPORT_ENTRIES);
+  const homeserver = (() => {
+    try {
+      return new URL(mx.getHomeserverUrl()).origin;
+    } catch {
+      return 'invalid';
+    }
+  })();
+
+  return JSON.stringify(
+    {
+      report: 'Starfire decryption diagnostic',
+      schemaVersion: 1,
+      generatedAt: new Date().toISOString(),
+      appVersion: APP_VERSION,
+      platform: navigator.userAgent,
+      language: navigator.language,
+      online: navigator.onLine,
+      visibility: document.visibilityState,
+      homeserver,
+      sync: {
+        state: mx.getSyncState(),
+        catchingUp: mx.getSyncStateData()?.catchingUp ?? null,
+      },
+      currentDevice,
+      cryptoDatabaseSelections: getCryptoDatabaseSelection(),
+      backup,
+      failedEvent: {
+        eventId,
+        roomId: mEvent.getRoomId() ?? null,
+        senderId: mEvent.getSender() ?? null,
+        timestamp: mEvent.getTs(),
+        ageMs: Math.max(0, Date.now() - mEvent.getTs()),
+        failureReason,
+        failureLabel: getDecryptionFailureLabel(failureReason),
+        wireType: mEvent.getWireType(),
+        algorithm: metadata.algorithm,
+        sessionId: metadata.sessionId,
+        senderKey: metadata.senderKey,
+        senderDeviceId: metadata.senderDeviceId,
+      },
+      attempts: sessionEntries,
+      privacy:
+        'No message body, ciphertext, access token, recovery key, backup private key, password or attachment content is included.',
+    },
+    null,
+    2
+  );
+};

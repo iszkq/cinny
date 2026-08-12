@@ -10,6 +10,7 @@ import { CryptoBackend } from 'matrix-js-sdk/lib/common-crypto/CryptoBackend';
 import React, { ReactNode, useEffect, useState } from 'react';
 import { MessageEvent } from '../../../../types/matrix/room';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { recordDecryptionDiagnostic } from '../../../utils/decryptionDiagnostics';
 
 const RECENT_DECRYPTION_RETRY_WINDOW_MS = 60 * 60 * 1000;
 const DECRYPTION_RETRY_DELAYS_MS = [0, 500, 2_000, 5_000, 15_000, 30_000, 60_000] as const;
@@ -38,6 +39,10 @@ export function EncryptedContent({ mEvent, children }: EncryptedContentProps) {
 
     toggleEncrypted(mEvent.getType() === MessageEvent.RoomMessageEncrypted);
 
+    if (mEvent.isDecryptionFailure()) {
+      recordDecryptionDiagnostic(mx, mEvent, 'failure_observed');
+    }
+
     const needsDecryption = () =>
       mEvent.getType() === MessageEvent.RoomMessageEncrypted || mEvent.isDecryptionFailure();
 
@@ -58,6 +63,11 @@ export function EncryptedContent({ mEvent, children }: EncryptedContentProps) {
 
     const handleDecrypted: MatrixEventHandlerMap[MatrixEventEvent.Decrypted] = (event) => {
       toggleEncrypted(event.getType() === MessageEvent.RoomMessageEncrypted);
+      if (event.isDecryptionFailure()) {
+        recordDecryptionDiagnostic(mx, event, 'failure_observed');
+      } else {
+        recordDecryptionDiagnostic(mx, event, 'key_received');
+      }
       // The SDK emits this event for failed attempts too. If its initial
       // decryption raced our first timer, make sure the recovery sequence is
       // still started instead of leaving the event permanently failed.
@@ -83,9 +93,20 @@ export function EncryptedContent({ mEvent, children }: EncryptedContentProps) {
       }
 
       retryAttemptRunning = true;
-      await mEvent
-        .attemptDecryption(crypto as CryptoBackend, { isRetry: true })
-        .catch(() => undefined);
+      const retryAttempt = retryIndex + 1;
+      recordDecryptionDiagnostic(mx, mEvent, 'retry_started', {
+        retryAttempt,
+        retryDelayMs: DECRYPTION_RETRY_DELAYS_MS[retryIndex],
+      });
+      let retryError: unknown;
+      await mEvent.attemptDecryption(crypto as CryptoBackend, { isRetry: true }).catch((error) => {
+        retryError = error;
+      });
+      recordDecryptionDiagnostic(mx, mEvent, 'retry_finished', {
+        retryAttempt,
+        retryDelayMs: DECRYPTION_RETRY_DELAYS_MS[retryIndex],
+        error: retryError,
+      });
       retryAttemptRunning = false;
 
       if (disposed || !needsDecryption()) return;

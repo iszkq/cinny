@@ -1,6 +1,6 @@
 import React, { CSSProperties, ReactNode, useCallback, useState } from 'react';
-import { Box, Chip, Icon, Icons, Text, toRem } from 'folds';
-import { IContent } from 'matrix-js-sdk';
+import { Box, Button, Chip, Icon, Icons, Text, toRem } from 'folds';
+import { IContent, MatrixEvent } from 'matrix-js-sdk';
 import { JUMBO_EMOJI_REG, URL_REG } from '../../utils/regex';
 import { isAndroidApp } from '../../utils/nativePlatform';
 import { trimReplyFromBody } from '../../utils/room';
@@ -34,6 +34,13 @@ import {
 import { parseGeoUri, scaleYDimension } from '../../utils/common';
 import { Attachment, AttachmentBox, AttachmentContent, AttachmentHeader } from './attachment';
 import { FileHeader, FileDownloadButton } from './FileHeader';
+import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { copyToClipboard } from '../../utils/dom';
+import {
+  createDecryptionDiagnosticReport,
+  getDecryptionFailureLabel,
+  recordDecryptionDiagnostic,
+} from '../../utils/decryptionDiagnostics';
 const IMAGE_TIMELINE_WIDTH = 230;
 const ANDROID_PORTRAIT_IMAGE_TIMELINE_WIDTH = 144;
 const IMAGE_TIMELINE_MAX_HEIGHT = 460;
@@ -47,11 +54,59 @@ const VIDEO_FALLBACK_HEIGHT = 9;
 const getPositiveDimension = (value?: number): number | undefined =>
   typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined;
 
-export function MBadEncrypted() {
+type MBadEncryptedProps = {
+  mEvent?: MatrixEvent;
+};
+
+export function MBadEncrypted({ mEvent }: MBadEncryptedProps) {
+  const mx = useMatrixClient();
+  const [copyState, setCopyState] = useState<'idle' | 'loading' | 'copied' | 'error'>('idle');
+  const failureReason = mEvent?.decryptionFailureReason ?? null;
+
+  const copyDiagnostic = async () => {
+    if (!mEvent || copyState === 'loading') return;
+    setCopyState('loading');
+    recordDecryptionDiagnostic(mx, mEvent, 'failure_observed');
+    try {
+      const report = await createDecryptionDiagnosticReport(mx, mEvent);
+      const copied = await copyToClipboard(report);
+      setCopyState(copied ? 'copied' : 'error');
+    } catch {
+      setCopyState('error');
+    }
+    window.setTimeout(() => setCopyState('idle'), 3000);
+  };
+
   return (
-    <Text>
-      <MessageBadEncryptedContent />
-    </Text>
+    <Box direction="Column" gap="100" alignItems="Start">
+      <Text>
+        <MessageBadEncryptedContent />
+      </Text>
+      {mEvent && (
+        <Box alignItems="Center" gap="100" wrap="Wrap">
+          <Text size="T200" priority="300">
+            {getDecryptionFailureLabel(failureReason)}
+          </Text>
+          <Button
+            size="300"
+            variant="Secondary"
+            radii="300"
+            disabled={copyState === 'loading'}
+            onClick={copyDiagnostic}
+          >
+            <Text size="B300">
+              {copyState === 'loading'
+                ? '正在生成…'
+                : copyState === 'copied'
+                ? '诊断已复制'
+                : copyState === 'error'
+                ? '复制失败，请重试'
+                : '复制解密诊断'}
+            </Text>
+          </Button>
+        </Box>
+      )}
+    </Box>
   );
 }
 

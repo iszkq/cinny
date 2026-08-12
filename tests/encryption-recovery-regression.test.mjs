@@ -351,6 +351,9 @@ test('manual recovery exposes real decrypt progress and a durable completion mar
 
 test('recent live encrypted messages retry while room keys arrive or the desktop regains focus', async () => {
   const source = await readSource('src/app/features/room/message/EncryptedContent.tsx');
+  const diagnosticSource = await readSource('src/app/utils/decryptionDiagnostics.ts');
+  const rendererSource = await readSource('src/app/components/message/MsgTypeRenderers.tsx');
+  const contentSource = await readSource('src/app/components/RenderMessageContent.tsx');
 
   assert.match(source, /RECENT_DECRYPTION_RETRY_WINDOW_MS = 60 \* 60 \* 1000/);
   assert.match(
@@ -371,4 +374,15 @@ test('recent live encrypted messages retry while room keys arrive or the desktop
   assert.match(source, /mx\.on\(ClientEvent\.Sync/);
   assert.match(source, /mx\.removeListener\(ClientEvent\.Sync/);
   assert.match(source, /window\.clearTimeout\(retryTimer\)/);
+  assert.match(source, /recordDecryptionDiagnostic\(mx, mEvent, 'retry_started'/);
+  assert.match(source, /recordDecryptionDiagnostic\(mx, mEvent, 'retry_finished'/);
+  assert.match(diagnosticSource, /mEvent\.decryptionFailureReason/);
+  assert.match(diagnosticSource, /wireContent\.session_id/);
+  assert.match(diagnosticSource, /crypto\.getActiveSessionBackupVersion\(\)/);
+  assert.match(diagnosticSource, /crypto\.getDeviceVerificationStatus/);
+  assert.match(diagnosticSource, /No message body, ciphertext, access token/);
+  assert.doesNotMatch(diagnosticSource, /wireContent\.ciphertext/);
+  assert.match(rendererSource, /复制解密诊断/);
+  assert.match(rendererSource, /createDecryptionDiagnosticReport\(mx, mEvent\)/);
+  assert.match(contentSource, /room\.findEventById\(eventId\)/);
 });
