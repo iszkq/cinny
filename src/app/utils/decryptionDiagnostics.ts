@@ -7,9 +7,13 @@ const MAX_REPORT_ENTRIES = 100;
 
 export type DecryptionDiagnosticStage =
   | 'failure_observed'
+  | 'session_queued'
+  | 'session_retry_scheduled'
   | 'retry_started'
   | 'retry_finished'
-  | 'key_received';
+  | 'key_received'
+  | 'session_recovered'
+  | 'session_expired';
 
 type DecryptionDiagnosticEntry = {
   at: string;

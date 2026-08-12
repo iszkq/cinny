@@ -62,12 +62,13 @@ test('Matrix logger warning wrapper preserves its receiver during push-rule star
   assert.match(source, /Reflect\.apply\(originalWarn, matrixLogger, messages\)/);
 });
 
-test('desktop retries a live encrypted event before its message component mounts', async () => {
-  const source = await readSource('src/app/features/room/RoomTimeline.tsx');
+test('live encrypted event recovery is platform-neutral and client-scoped', async () => {
+  const timelineSource = await readSource('src/app/features/room/RoomTimeline.tsx');
+  const recoverySource = await readSource('src/app/utils/decryptionRecovery.ts');
 
-  assert.match(source, /mx\.decryptEventIfNeeded\(mEvt, \{ isRetry: true \}\)/);
-  assert.match(source, /fast decryption\/key update cannot be missed/);
-  assert.match(source, /if \(isDesktopUpdaterSupported\(\)\)/);
+  assert.doesNotMatch(timelineSource, /mx\.decryptEventIfNeeded\(mEvt, \{ isRetry: true \}\)/);
+  assert.match(recoverySource, /mx\.on\(RoomEvent\.Timeline, this\.handleTimelineEvent\)/);
+  assert.doesNotMatch(recoverySource, /isDesktopUpdaterSupported|isAndroidApp|mobileOrTablet/);
 });
 
 test('the first room list is revealed in cancellable activity-sorted batches', async () => {

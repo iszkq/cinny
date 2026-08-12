@@ -349,8 +349,10 @@ test('manual recovery exposes real decrypt progress and a durable completion mar
   assert.doesNotMatch(stateSource.slice(loadKeysIndex), /BackupProgressStatus\.Done/);
 });
 
-test('recent live encrypted messages retry while room keys arrive or the desktop regains focus', async () => {
-  const source = await readSource('src/app/features/room/message/EncryptedContent.tsx');
+test('missing Megolm sessions recover in a client-level queue across every platform', async () => {
+  const source = await readSource('src/app/utils/decryptionRecovery.ts');
+  const componentSource = await readSource('src/app/features/room/message/EncryptedContent.tsx');
+  const featuresSource = await readSource('src/app/pages/client/ClientNonUIFeatures.tsx');
   const diagnosticSource = await readSource('src/app/utils/decryptionDiagnostics.ts');
   const rendererSource = await readSource('src/app/components/message/MsgTypeRenderers.tsx');
   const contentSource = await readSource('src/app/components/RenderMessageContent.tsx');
@@ -361,10 +363,14 @@ test('recent live encrypted messages retry while room keys arrive or the desktop
     /DECRYPTION_RETRY_DELAYS_MS = \[0, 500, 2_000, 5_000, 15_000, 30_000, 60_000\]/
   );
   assert.match(source, /DECRYPTION_IN_PROGRESS_POLL_MS = 250/);
+  assert.match(source, /return `\$\{roomId\}\\0\$\{sessionId\}`/);
+  assert.match(source, /private readonly tasks = new Map<string, RecoveryTask>/);
+  assert.match(source, /events: Set<MatrixEvent>/);
+  assert.match(source, /MEGOLM_UNKNOWN_INBOUND_SESSION_ID/);
   assert.match(source, /attemptDecryption\(crypto as CryptoBackend, \{ isRetry: true \}\)/);
-  assert.match(source, /if \(mEvent\.isBeingDecrypted\(\)/);
-  assert.match(source, /scheduleRetry\(DECRYPTION_IN_PROGRESS_POLL_MS\)/);
-  assert.match(source, /event\.isDecryptionFailure\(\) && !retryAttemptRunning/);
+  assert.match(source, /failedEvents\.some\(\(mEvent\) => mEvent\.isBeingDecrypted\(\)\)/);
+  assert.match(source, /this\.schedule\(sessionKey, task, DECRYPTION_IN_PROGRESS_POLL_MS\)/);
+  assert.match(source, /Promise\.allSettled\(/);
   assert.match(source, /document\.addEventListener\('visibilitychange'/);
   assert.match(source, /document\.removeEventListener\('visibilitychange'/);
   assert.match(source, /window\.addEventListener\('focus'/);
@@ -373,9 +379,16 @@ test('recent live encrypted messages retry while room keys arrive or the desktop
   assert.match(source, /window\.removeEventListener\('online'/);
   assert.match(source, /mx\.on\(ClientEvent\.Sync/);
   assert.match(source, /mx\.removeListener\(ClientEvent\.Sync/);
-  assert.match(source, /window\.clearTimeout\(retryTimer\)/);
-  assert.match(source, /recordDecryptionDiagnostic\(mx, mEvent, 'retry_started'/);
-  assert.match(source, /recordDecryptionDiagnostic\(mx, mEvent, 'retry_finished'/);
+  assert.match(source, /window\.clearTimeout\(task\.timer\)/);
+  assert.match(source, /'session_queued'/);
+  assert.match(source, /'session_retry_scheduled'/);
+  assert.match(source, /'session_recovered'/);
+  assert.match(source, /'session_expired'/);
+  assert.match(source, /'retry_started'/);
+  assert.match(source, /'retry_finished'/);
+  assert.match(featuresSource, /useEffect\(\(\) => startDecryptionRecovery\(mx\), \[mx\]\)/);
+  assert.match(componentSource, /observeEncryptedEvent\(mx, mEvent\)/);
+  assert.doesNotMatch(componentSource, /setTimeout|DECRYPTION_RETRY_DELAYS_MS/);
   assert.match(diagnosticSource, /mEvent\.decryptionFailureReason/);
   assert.match(diagnosticSource, /wireContent\.session_id/);
   assert.match(diagnosticSource, /crypto\.getActiveSessionBackupVersion\(\)/);
