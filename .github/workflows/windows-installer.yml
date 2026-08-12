@@ -89,6 +89,16 @@ jobs:
           tauriScript: npm run tauri
           args: --bundles nsis
 
+      - name: Upload Windows test installer
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: starfire-windows-debug-${{ github.run_number }}
+          path: |
+            src-tauri/target/release/bundle/nsis/*-setup.exe
+            src-tauri/target/release/bundle/nsis/*-setup.exe.sig
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Generate updater latest.json
         if: startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
