@@ -1,22 +1,9 @@
 import { Box, Button, Spinner, config, Icon, Icons, Text, color } from 'folds';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  EventType,
-  IContent,
-  ICreateRoomStateEvent,
-  MsgType,
-  Preset,
-  Visibility,
-} from 'matrix-js-sdk';
+import { EventType, IContent, MsgType } from 'matrix-js-sdk';
 import { UserHero, UserHeroName } from './UserHero';
-import {
-  addRoomIdToMDirect,
-  getDMRoomFor,
-  getMxIdLocalPart,
-  getMxIdServer,
-  mxcUrlToHttp,
-} from '../../utils/matrix';
+import { getMxIdLocalPart, getMxIdServer, mxcUrlToHttp } from '../../utils/matrix';
 import { sanitizeText } from '../../utils/sanitize';
 import { getMemberAvatarMxc, getMemberDisplayName, getMentionContent } from '../../utils/room';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
@@ -35,10 +22,9 @@ import { useRoomCreators } from '../../hooks/useRoomCreators';
 import { useRoomPermissions } from '../../hooks/useRoomPermissions';
 import { useMemberPowerCompare } from '../../hooks/useMemberPowerCompare';
 import { CreatorChip } from './CreatorChip';
-import { getDirectRoomPath } from '../../pages/pathUtils';
+import { getDirectCreatePath, withSearchParam } from '../../pages/pathUtils';
+import { DirectCreateSearchParams } from '../../pages/paths';
 import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
-import { createRoomEncryptionState } from '../create-room';
-import { useDirectRooms } from '../../pages/client/direct/useDirectRooms';
 
 type UserRoomProfileProps = {
   userId: string;
@@ -81,40 +67,14 @@ export function UserRoomProfile({ userId }: UserRoomProfileProps) {
 
   const presence = useUserPresence(userId);
 
-  const directs = useDirectRooms();
-  const [messageState, openMessage] = useAsyncCallback<string, Error, []>(
-    React.useCallback(async () => {
-      const existingRoom = getDMRoomFor(mx, userId);
-      if (existingRoom) {
-        if (!directs.includes(existingRoom.roomId)) {
-          await addRoomIdToMDirect(mx, existingRoom.roomId, userId);
-        }
-        return existingRoom.roomId;
-      }
-
-      const initialState: ICreateRoomStateEvent[] = [createRoomEncryptionState()];
-      const result = await mx.createRoom({
-        is_direct: true,
-        invite: [userId],
-        visibility: Visibility.Private,
-        preset: Preset.TrustedPrivateChat,
-        initial_state: initialState,
-      });
-      await addRoomIdToMDirect(mx, result.room_id, userId);
-      return result.room_id;
-    }, [directs, mx, userId])
-  );
-
   const handleMessage = () => {
-    openMessage()
-      .then((roomId) => {
-        // Keep the router context mounted until navigation is committed. On
-        // mobile WebViews, closing the profile FocusTrap first can swallow the
-        // route update that originated from this tap.
-        navigate(getDirectRoomPath(roomId));
-        closeUserRoomProfile();
-      })
-      .catch(() => undefined);
+    const directSearchParam: DirectCreateSearchParams = {
+      userId,
+    };
+    // Commit the route while the profile's router context is still mounted.
+    // Closing the FocusTrap first can swallow this tap in mobile WebViews.
+    navigate(withSearchParam(getDirectCreatePath(), directSearchParam));
+    closeUserRoomProfile();
   };
 
   const [mentionState, sendMention] = useAsyncCallback<undefined, Error, []>(async () => {
@@ -142,8 +102,6 @@ export function UserRoomProfile({ userId }: UserRoomProfileProps) {
 
   const mentionSending = mentionState.status === AsyncStatus.Loading;
   const mentionError = mentionState.status === AsyncStatus.Error ? mentionState.error : undefined;
-  const messageOpening = messageState.status === AsyncStatus.Loading;
-  const messageError = messageState.status === AsyncStatus.Error ? messageState.error : undefined;
 
   return (
     <Box direction="Column">
@@ -184,15 +142,8 @@ export function UserRoomProfile({ userId }: UserRoomProfileProps) {
                   variant="Primary"
                   fill="Solid"
                   radii="300"
-                  before={
-                    messageOpening ? (
-                      <Spinner size="50" />
-                    ) : (
-                      <Icon size="50" src={Icons.Message} filled />
-                    )
-                  }
+                  before={<Icon size="50" src={Icons.Message} filled />}
                   onClick={handleMessage}
-                  disabled={messageOpening}
                 >
                   <Text size="B300">消息</Text>
                 </Button>
@@ -209,13 +160,6 @@ export function UserRoomProfile({ userId }: UserRoomProfileProps) {
           {mentionError && (
             <Text size="T200" style={{ color: color.Critical.Main }}>
               {mentionError instanceof Error ? mentionError.message : '发送失败，请重试。'}
-            </Text>
-          )}
-          {messageError && (
-            <Text size="T200" style={{ color: color.Critical.Main }}>
-              {messageError instanceof Error
-                ? messageError.message
-                : '\u65e0\u6cd5\u6253\u5f00\u79c1\u804a\uff0c\u8bf7\u91cd\u8bd5\u3002'}
             </Text>
           )}
         </Box>
