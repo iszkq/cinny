@@ -11,8 +11,10 @@ test('profile message action opens the prefilled chat creation route without inv
   assert.match(source, /const directSearchParam: DirectCreateSearchParams = \{\s*userId,\s*\}/);
   assert.match(
     source,
-    /navigate\(withSearchParam\(getDirectCreatePath\(\), directSearchParam\)\);\s*closeUserRoomProfile\(\)/
+    /navigate\(withSearchParam\(getDirectCreatePath\(\), directSearchParam\)\);[\s\S]*closeUserRoomProfile\(\);[\s\S]*closeRoomSettings\(\);[\s\S]*closeSpaceSettings\(\)/
   );
+  assert.match(source, /const closeRoomSettings = useCloseRoomSettings\(\)/);
+  assert.match(source, /const closeSpaceSettings = useCloseSpaceSettings\(\)/);
   assert.doesNotMatch(source, /mx\.createRoom\(/);
   assert.doesNotMatch(source, /invite: \[userId\]/);
 });

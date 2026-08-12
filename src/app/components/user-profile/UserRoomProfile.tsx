@@ -13,6 +13,8 @@ import { useRoom } from '../../hooks/useRoom';
 import { useUserPresence } from '../../hooks/useUserPresence';
 import { IgnoredUserAlert, MutualRoomsChip, OptionsChip, ServerChip, ShareChip } from './UserChips';
 import { useCloseUserRoomProfile } from '../../state/hooks/userRoomProfile';
+import { useCloseRoomSettings } from '../../state/hooks/roomSettings';
+import { useCloseSpaceSettings } from '../../state/hooks/spaceSettings';
 import { PowerChip } from './PowerChip';
 import { UserInviteAlert, UserBanAlert, UserModeration, UserKickAlert } from './UserModeration';
 import { useIgnoredUsers } from '../../hooks/useIgnoredUsers';
@@ -34,6 +36,8 @@ export function UserRoomProfile({ userId }: UserRoomProfileProps) {
   const useAuthentication = useMediaAuthentication();
   const navigate = useNavigate();
   const closeUserRoomProfile = useCloseUserRoomProfile();
+  const closeRoomSettings = useCloseRoomSettings();
+  const closeSpaceSettings = useCloseSpaceSettings();
   const ignoredUsers = useIgnoredUsers();
   const ignored = ignoredUsers.includes(userId);
 
@@ -75,6 +79,10 @@ export function UserRoomProfile({ userId }: UserRoomProfileProps) {
     // Closing the FocusTrap first can swallow this tap in mobile WebViews.
     navigate(withSearchParam(getDirectCreatePath(), directSearchParam));
     closeUserRoomProfile();
+    // A profile opened from room/space settings is rendered above a Modal500.
+    // Dismiss the parent settings modal too, otherwise it covers the new route.
+    closeRoomSettings();
+    closeSpaceSettings();
   };
 
   const [mentionState, sendMention] = useAsyncCallback<undefined, Error, []>(async () => {
