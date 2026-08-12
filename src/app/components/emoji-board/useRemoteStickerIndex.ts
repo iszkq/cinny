@@ -61,47 +61,63 @@ export type RemoteStickerIndexState = {
 };
 
 let cachedRemoteStickers: PackImageReader[] | undefined;
+let cachedRemoteStickerIndex: RemoteStickerIndex | undefined;
+let cachedRemoteStickerEtag: string | undefined;
 let pendingRemoteStickers: Promise<PackImageReader[]> | undefined;
 const REMOTE_STICKER_INDEX_CACHE_KEY = 'cinny.remoteStickerIndex.v1';
 
 type RemoteStickerIndexCache = {
   cachedAt: number;
   index: RemoteStickerIndex;
+  etag?: string;
 };
 
-const getFreshIndexUrl = (): string => {
-  try {
-    const url = new URL(REMOTE_STICKER_INDEX_URL);
-    url.searchParams.set('_', Date.now().toString());
-    return url.toString();
-  } catch {
-    return `${REMOTE_STICKER_INDEX_URL}?_=${Date.now()}`;
+type RemoteStickerIndexResponse = {
+  index?: RemoteStickerIndex;
+  etag?: string;
+  notModified: boolean;
+};
+
+const fetchRemoteStickerIndexWithBrowser = async (
+  etag?: string
+): Promise<RemoteStickerIndexResponse> => {
+  const headers = new Headers();
+  if (etag) headers.set('If-None-Match', etag);
+
+  const response = await fetchMediaWithAuth(REMOTE_STICKER_INDEX_URL, {
+    cache: 'no-store',
+    headers,
+  });
+  if (response.status === 304) {
+    return { etag: response.headers.get('ETag') ?? etag, notModified: true };
   }
-};
-
-const fetchRemoteStickerIndexWithBrowser = async (url: string): Promise<RemoteStickerIndex> => {
-  const response = await fetchMediaWithAuth(url, { cache: 'no-store' });
   if (!response.ok) {
     throw new Error(`Failed to load remote sticker index: ${response.status}`);
   }
-  return response.json() as Promise<RemoteStickerIndex>;
+  return {
+    index: (await response.json()) as RemoteStickerIndex,
+    etag: response.headers.get('ETag') ?? undefined,
+    notModified: false,
+  };
 };
 
-const fetchRemoteStickerIndexWithDesktop = async (url: string): Promise<RemoteStickerIndex> => {
+const fetchRemoteStickerIndexWithDesktop = async (
+  etag?: string
+): Promise<RemoteStickerIndexResponse> => {
   const { invoke } = await import('@tauri-apps/api/core');
-  return invoke<RemoteStickerIndex>('fetch_remote_sticker_index', { url });
+  return invoke<RemoteStickerIndexResponse>('fetch_remote_sticker_index', {
+    url: REMOTE_STICKER_INDEX_URL,
+    etag,
+  });
 };
 
-const fetchRemoteStickerIndex = async (): Promise<RemoteStickerIndex> => {
+const fetchRemoteStickerIndex = async (etag?: string): Promise<RemoteStickerIndexResponse> => {
   const desktopSupported = isDesktopUpdaterSupported();
-  // Every platform should revalidate when the cloud panel opens. The cached index is only an
-  // immediate/offline fallback; it must not hide newly published packs on web, iOS or Android.
-  const url = getFreshIndexUrl();
   let desktopError: unknown;
 
   if (desktopSupported) {
     try {
-      return await fetchRemoteStickerIndexWithDesktop(url);
+      return await fetchRemoteStickerIndexWithDesktop(etag);
     } catch (error) {
       desktopError = error;
       console.warn(error);
@@ -109,7 +125,7 @@ const fetchRemoteStickerIndex = async (): Promise<RemoteStickerIndex> => {
   }
 
   try {
-    return await fetchRemoteStickerIndexWithBrowser(url);
+    return await fetchRemoteStickerIndexWithBrowser(etag);
   } catch (browserError) {
     if (desktopError) {
       console.warn(browserError);
@@ -119,12 +135,8 @@ const fetchRemoteStickerIndex = async (): Promise<RemoteStickerIndex> => {
   }
 };
 
-const getCachedRemoteStickerIndex = (): RemoteStickerIndex | undefined => {
-  if (
-    isDesktopUpdaterSupported() ||
-    typeof window === 'undefined' ||
-    typeof window.localStorage === 'undefined'
-  ) {
+const getCachedRemoteStickerIndex = (): RemoteStickerIndexCache | undefined => {
+  if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
     return undefined;
   }
 
@@ -137,18 +149,14 @@ const getCachedRemoteStickerIndex = (): RemoteStickerIndex | undefined => {
       return undefined;
     }
 
-    return cache.index;
+    return cache;
   } catch {
     return undefined;
   }
 };
 
-const setCachedRemoteStickerIndex = (index: RemoteStickerIndex): void => {
-  if (
-    isDesktopUpdaterSupported() ||
-    typeof window === 'undefined' ||
-    typeof window.localStorage === 'undefined'
-  ) {
+const setCachedRemoteStickerIndex = (index: RemoteStickerIndex, etag?: string): void => {
+  if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
     return;
   }
 
@@ -156,6 +164,7 @@ const setCachedRemoteStickerIndex = (index: RemoteStickerIndex): void => {
     const cache: RemoteStickerIndexCache = {
       cachedAt: Date.now(),
       index,
+      etag,
     };
     window.localStorage.setItem(REMOTE_STICKER_INDEX_CACHE_KEY, JSON.stringify(cache));
   } catch {
@@ -164,11 +173,7 @@ const setCachedRemoteStickerIndex = (index: RemoteStickerIndex): void => {
 };
 
 const clearCachedRemoteStickerIndex = (): void => {
-  if (
-    isDesktopUpdaterSupported() ||
-    typeof window === 'undefined' ||
-    typeof window.localStorage === 'undefined'
-  ) {
+  if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
     return;
   }
 
@@ -297,7 +302,9 @@ const loadCachedRemoteStickers = (): PackImageReader[] | undefined => {
 
   const cachedIndex = getCachedRemoteStickerIndex();
   if (cachedIndex) {
-    cachedRemoteStickers = parseRemoteStickerIndex(cachedIndex);
+    cachedRemoteStickerIndex = cachedIndex.index;
+    cachedRemoteStickerEtag = cachedIndex.etag;
+    cachedRemoteStickers = parseRemoteStickerIndex(cachedIndex.index);
     return cachedRemoteStickers;
   }
 
@@ -309,10 +316,21 @@ const refreshRemoteStickers = async (): Promise<PackImageReader[]> => {
     return pendingRemoteStickers;
   }
 
-  pendingRemoteStickers = fetchRemoteStickerIndex()
-    .then((index) => {
-      setCachedRemoteStickerIndex(index);
-      cachedRemoteStickers = parseRemoteStickerIndex(index);
+  pendingRemoteStickers = fetchRemoteStickerIndex(cachedRemoteStickerEtag)
+    .then((response) => {
+      if (response.notModified && cachedRemoteStickerIndex) {
+        cachedRemoteStickerEtag = response.etag ?? cachedRemoteStickerEtag;
+        setCachedRemoteStickerIndex(cachedRemoteStickerIndex, cachedRemoteStickerEtag);
+        return cachedRemoteStickers ?? parseRemoteStickerIndex(cachedRemoteStickerIndex);
+      }
+      if (!response.index) {
+        throw new Error('Remote sticker index response did not include an index.');
+      }
+
+      cachedRemoteStickerIndex = response.index;
+      cachedRemoteStickerEtag = response.etag;
+      setCachedRemoteStickerIndex(response.index, response.etag);
+      cachedRemoteStickers = parseRemoteStickerIndex(response.index);
       return cachedRemoteStickers;
     })
     .finally(() => {
@@ -324,6 +342,8 @@ const refreshRemoteStickers = async (): Promise<PackImageReader[]> => {
 
 const clearRemoteStickerCache = (): void => {
   cachedRemoteStickers = undefined;
+  cachedRemoteStickerIndex = undefined;
+  cachedRemoteStickerEtag = undefined;
   pendingRemoteStickers = undefined;
   clearCachedRemoteStickerIndex();
 };

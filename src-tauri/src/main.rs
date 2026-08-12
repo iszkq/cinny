@@ -5,8 +5,8 @@ mod office_binary_exchange;
 
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine};
 use reqwest::{
-    header::{ACCEPT, CONTENT_TYPE},
-    Client, Proxy, Url,
+    header::{ACCEPT, CONTENT_TYPE, ETAG, IF_NONE_MATCH},
+    Client, Proxy, StatusCode, Url,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -191,6 +191,14 @@ struct SaveDownloadedFileRequest {
 struct RemoteStickerMediaResponse {
     data_base64: String,
     mime_type: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RemoteStickerIndexResponse {
+    index: Option<Value>,
+    etag: Option<String>,
+    not_modified: bool,
 }
 
 fn map_notification_permission(state: PermissionState) -> &'static str {
@@ -997,16 +1005,35 @@ fn get_desktop_updater_proxy() -> Option<String> {
 }
 
 #[tauri::command]
-async fn fetch_remote_sticker_index(url: String) -> Result<Value, String> {
+async fn fetch_remote_sticker_index(
+    url: String,
+    etag: Option<String>,
+) -> Result<RemoteStickerIndexResponse, String> {
     let parsed = parse_remote_sticker_index_url(&url)?;
-    let response = get_remote_sticker_http_client()
+    let mut request = get_remote_sticker_http_client()
         .get(parsed)
-        .header(ACCEPT, "application/json")
+        .header(ACCEPT, "application/json");
+    if let Some(etag) = etag.as_deref().filter(|value| !value.trim().is_empty()) {
+        request = request.header(IF_NONE_MATCH, etag);
+    }
+    let response = request
         .send()
         .await
         .map_err(|error| format!("failed to fetch remote sticker index: {error}"))?;
 
     let status = response.status();
+    let response_etag = response
+        .headers()
+        .get(ETAG)
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned);
+    if status == StatusCode::NOT_MODIFIED {
+        return Ok(RemoteStickerIndexResponse {
+            index: None,
+            etag: response_etag.or(etag),
+            not_modified: true,
+        });
+    }
     if !status.is_success() {
         return Err(format!(
             "failed to fetch remote sticker index: HTTP {status}"
@@ -1029,8 +1056,13 @@ async fn fetch_remote_sticker_index(url: String) -> Result<Value, String> {
         return Err("remote sticker index is too large.".into());
     }
 
-    serde_json::from_slice::<Value>(&bytes)
-        .map_err(|error| format!("failed to parse remote sticker index JSON: {error}"))
+    let index = serde_json::from_slice::<Value>(&bytes)
+        .map_err(|error| format!("failed to parse remote sticker index JSON: {error}"))?;
+    Ok(RemoteStickerIndexResponse {
+        index: Some(index),
+        etag: response_etag,
+        not_modified: false,
+    })
 }
 
 #[tauri::command]

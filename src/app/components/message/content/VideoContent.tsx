@@ -98,7 +98,9 @@ export const VideoContent = as<'div', VideoContentProps>(
               decryptFile(encBuf, mimeType, encInfo)
             )
           : await downloadMedia(mediaUrl);
-        return URL.createObjectURL(fileContent);
+        const playableContent =
+          fileContent.type === mimeType ? fileContent : new Blob([fileContent], { type: mimeType });
+        return URL.createObjectURL(playableContent);
       }, [mx, url, useAuthentication, mimeType, encInfo])
     );
 

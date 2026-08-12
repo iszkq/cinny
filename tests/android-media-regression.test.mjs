@@ -131,8 +131,11 @@ test('Android cloud emoji uses its visible source preview without serializing it
     remoteIndexSource,
     /\[item\.httpUrl, item\.sourceUrl, item\.url, item\.previewUrl, item\.thumbUrl, item\.thumbnailUrl\]/
   );
-  assert.match(remoteIndexSource, /const url = getFreshIndexUrl\(\)/);
-  assert.match(remoteIndexSource, /fetchMediaWithAuth\(url, \{ cache: 'no-store' \}\)/);
+  assert.match(remoteIndexSource, /headers\.set\('If-None-Match', etag\)/);
+  assert.match(remoteIndexSource, /response\.status === 304/);
+  assert.match(remoteIndexSource, /fetchMediaWithAuth\(REMOTE_STICKER_INDEX_URL/);
+  assert.match(remoteIndexSource, /fetchRemoteStickerIndex\(cachedRemoteStickerEtag\)/);
+  assert.match(remoteIndexSource, /response\.notModified && cachedRemoteStickerIndex/);
   assert.match(remoteIndexSource, /const staleStickers = loadCachedRemoteStickers\(\)/);
   assert.match(remoteIndexSource, /refreshRemoteStickers\(\)/);
   assert.doesNotMatch(remoteIndexSource, /REMOTE_STICKER_INDEX_CACHE_TTL_MS/);
@@ -143,6 +146,21 @@ test('Android cloud emoji uses its visible source preview without serializing it
     /<span aria-label=\{element\.shortcode\}>:\{element\.shortcode\}:<\/span>/
   );
   assert.doesNotMatch(outputSource, /previewUrl/);
+});
+
+test('Video messages infer safe inline playback types from filenames', async () => {
+  const rendererSource = await readSource('src/app/components/message/MsgTypeRenderers.tsx');
+  const mimeSource = await readSource('src/app/utils/mimeTypes.ts');
+  const videoContentSource = await readSource(
+    'src/app/components/message/content/VideoContent.tsx'
+  );
+
+  assert.match(rendererSource, /content\?\.info \?\? \{\}/);
+  assert.match(rendererSource, /getVideoMimeType\(videoInfo\?\.mimetype \?\? '', filename\)/);
+  assert.match(mimeSource, /mp4: 'video\/mp4'/);
+  assert.match(mimeSource, /webm: 'video\/webm'/);
+  assert.match(mimeSource, /VIDEO_EXTENSION_MIME_TYPE\[getFileNameExt\(fileName\)\]/);
+  assert.match(videoContentSource, /new Blob\(\[fileContent\], \{ type: mimeType \}\)/);
 });
 
 test('Android emoji board and software keyboard are mutually exclusive', async () => {

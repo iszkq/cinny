@@ -247,6 +247,22 @@ export const getBlobSafeMimeType = (mimeType: string) => {
   return type;
 };
 
+const VIDEO_EXTENSION_MIME_TYPE: Record<string, string> = {
+  mp4: 'video/mp4',
+  m4v: 'video/mp4',
+  mov: 'video/mp4',
+  webm: 'video/webm',
+  ogv: 'video/ogg',
+  ogg: 'video/ogg',
+};
+
+export const getVideoMimeType = (mimeType: string, fileName: string): string | undefined => {
+  const safeMimeType = getBlobSafeMimeType(mimeType);
+  if (safeMimeType.startsWith('video/')) return safeMimeType;
+
+  return VIDEO_EXTENSION_MIME_TYPE[getFileNameExt(fileName)];
+};
+
 export const safeFile = (f: File) => {
   const safeType = getBlobSafeMimeType(f.type);
   if (safeType !== f.type) {

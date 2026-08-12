@@ -30,6 +30,7 @@ import {
   FALLBACK_MIMETYPE,
   getBlobSafeMimeType,
   getOfficeDocumentKind,
+  getVideoMimeType,
 } from '../../utils/mimeTypes';
 import { parseGeoUri, scaleYDimension } from '../../utils/common';
 import { Attachment, AttachmentBox, AttachmentContent, AttachmentHeader } from './attachment';
@@ -326,9 +327,10 @@ type MVideoProps = {
   outlined?: boolean;
 };
 export function MVideo({ content, renderAsFile, renderVideoContent, outlined }: MVideoProps) {
-  const videoInfo = content?.info;
+  const videoInfo: IVideoInfo & IThumbnailContent = content?.info ?? {};
   const mxcUrl = content.file?.url ?? content.url;
-  const safeMimeType = getBlobSafeMimeType(videoInfo?.mimetype ?? '');
+  const filename = content.filename ?? content.body ?? 'Video';
+  const safeMimeType = getVideoMimeType(videoInfo?.mimetype ?? '', filename);
   const [loadedDimensions, setLoadedDimensions] = useState<{
     url?: string;
     width: number;
@@ -356,7 +358,7 @@ export function MVideo({ content, renderAsFile, renderVideoContent, outlined }: 
     [mxcUrl]
   );
 
-  if (!videoInfo || !safeMimeType.startsWith('video') || typeof mxcUrl !== 'string') {
+  if (!safeMimeType || typeof mxcUrl !== 'string') {
     if (mxcUrl) {
       return renderAsFile();
     }
@@ -381,8 +383,6 @@ export function MVideo({ content, renderAsFile, renderVideoContent, outlined }: 
     VIDEO_TIMELINE_MAX_HEIGHT * aspectRatio
   )}, ${VIDEO_TIMELINE_VIEWPORT_MAX_HEIGHT * aspectRatio}vh)`;
   const videoAttachmentStyle: CSSProperties = { width: attachmentWidth };
-
-  const filename = content.filename ?? content.body ?? 'Video';
 
   return (
     <Attachment outlined={outlined} mediaContent style={videoAttachmentStyle}>
