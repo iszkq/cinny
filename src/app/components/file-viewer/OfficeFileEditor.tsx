@@ -65,6 +65,7 @@ const OFFICE_BRIDGE_SOURCE_CHUNK_RECEIVED = 'xinghuo-office-source-chunk-receive
 const OFFICE_BRIDGE_SOURCE_END = 'xinghuo-office-source-end';
 const OFFICE_BRIDGE_SOURCE_RECEIVED = 'xinghuo-office-source-received';
 const OFFICE_BRIDGE_OPENED = 'xinghuo-office-opened';
+const OFFICE_BRIDGE_PASSWORD_REQUIRED = 'xinghuo-office-password-required';
 const OFFICE_BRIDGE_DIRTY = 'xinghuo-office-dirty';
 const OFFICE_BRIDGE_SAVE = 'xinghuo-office-save';
 const OFFICE_BRIDGE_SAVING = 'xinghuo-office-saving';
@@ -1429,6 +1430,17 @@ export function OfficeFileEditor({
         }
         if (!saveOperationRef.current) {
           sourceBufferRef.current = undefined;
+          setErrorMessage(undefined);
+          setPhase('ready');
+        }
+        return;
+      }
+      if (data.type === OFFICE_BRIDGE_PASSWORD_REQUIRED) {
+        if (documentOpenedTimeoutRef.current !== undefined) {
+          window.clearTimeout(documentOpenedTimeoutRef.current);
+          documentOpenedTimeoutRef.current = undefined;
+        }
+        if (!saveOperationRef.current) {
           setErrorMessage(undefined);
           setPhase('ready');
         }

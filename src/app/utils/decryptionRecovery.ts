@@ -5,11 +5,14 @@ import {
   MatrixEvent,
   MatrixEventEvent,
   MatrixEventHandlerMap,
+  MatrixError,
+  Method,
   RoomEvent,
   RoomEventHandlerMap,
   SyncState,
 } from 'matrix-js-sdk';
 import { CryptoBackend } from 'matrix-js-sdk/lib/common-crypto/CryptoBackend';
+import { KeyBackupSession } from 'matrix-js-sdk/lib/crypto-api/keybackup';
 import { recordDecryptionDiagnostic } from './decryptionDiagnostics';
 
 const RECENT_DECRYPTION_RETRY_WINDOW_MS = 60 * 60 * 1000;
@@ -30,7 +33,11 @@ type RecoveryTask = {
   lastDelayMs: number;
   timer?: number;
   running: boolean;
+  backupLookupComplete: boolean;
+  nextBackupLookupAt: number;
 };
+
+type BackupLookupResult = 'imported' | 'not_found' | 'retry';
 
 const getSessionKey = (mEvent: MatrixEvent): string | undefined => {
   const roomId = mEvent.getRoomId();
@@ -52,6 +59,79 @@ const processPendingCryptoRequests = (crypto: object): void => {
   const syncHook = (crypto as { onSyncCompleted?: (data: unknown) => void })
     .onSyncCompleted;
   if (typeof syncHook === 'function') syncHook.call(crypto, {});
+};
+
+/**
+ * Fetch exactly one missing session from the active server-side backup.
+ *
+ * matrix-js-sdk normally does this internally after a decryption failure. A
+ * direct, single-session fallback closes the race where the internal backup
+ * downloader observed the failure before backup trust/the private key became
+ * ready. It deliberately avoids a full backup restore and never exposes key
+ * material to diagnostics.
+ */
+const restoreSessionFromBackup = async (
+  mx: MatrixClient,
+  crypto: CryptoBackend,
+  mEvent: MatrixEvent
+): Promise<BackupLookupResult> => {
+  const roomId = mEvent.getRoomId();
+  const sessionId = mEvent.getWireContent().session_id;
+  if (!roomId || typeof sessionId !== 'string' || sessionId.length === 0) return 'retry';
+
+  recordDecryptionDiagnostic(mx, mEvent, 'backup_lookup_started');
+  try {
+    const cryptoApi = mx.getCrypto();
+    if (!cryptoApi) return 'retry';
+
+    const [activeVersion, backupInfo, privateKey] = await Promise.all([
+      cryptoApi.getActiveSessionBackupVersion(),
+      cryptoApi.getKeyBackupInfo(),
+      cryptoApi.getSessionBackupPrivateKey(),
+    ]);
+    if (!activeVersion || !backupInfo || backupInfo.version !== activeVersion || !privateKey) {
+      recordDecryptionDiagnostic(mx, mEvent, 'backup_lookup_unavailable');
+      return 'retry';
+    }
+
+    const trust = await cryptoApi.isKeyBackupTrusted(backupInfo);
+    if (!trust.trusted || !trust.matchesDecryptionKey) {
+      recordDecryptionDiagnostic(mx, mEvent, 'backup_lookup_unavailable');
+      return 'retry';
+    }
+
+    const path = `/room_keys/keys/${encodeURIComponent(roomId)}/${encodeURIComponent(sessionId)}`;
+    const backedUpSession = await mx.http.authedRequest<KeyBackupSession>(
+      Method.Get,
+      path,
+      { version: activeVersion }
+    );
+    const decryptor = await crypto.getBackupDecryptor(backupInfo, privateKey);
+    let keys;
+    try {
+      keys = await decryptor.decryptSessions({ [sessionId]: backedUpSession });
+    } finally {
+      decryptor.free();
+    }
+    keys.forEach((key) => {
+      key.room_id = roomId;
+    });
+    if (keys.length === 0) {
+      recordDecryptionDiagnostic(mx, mEvent, 'backup_key_not_found');
+      return 'not_found';
+    }
+
+    await crypto.importBackedUpRoomKeys(keys, activeVersion);
+    recordDecryptionDiagnostic(mx, mEvent, 'backup_key_imported');
+    return 'imported';
+  } catch (error) {
+    if (error instanceof MatrixError && error.errcode === 'M_NOT_FOUND') {
+      recordDecryptionDiagnostic(mx, mEvent, 'backup_key_not_found');
+      return 'not_found';
+    }
+    recordDecryptionDiagnostic(mx, mEvent, 'backup_lookup_failed', { error });
+    return 'retry';
+  }
 };
 
 class DecryptionRecoveryCoordinator {
@@ -165,6 +245,8 @@ class DecryptionRecoveryCoordinator {
         retryIndex: 0,
         lastDelayMs: 0,
         running: false,
+        backupLookupComplete: false,
+        nextBackupLookupAt: 0,
       };
       this.tasks.set(sessionKey, task);
       recordDecryptionDiagnostic(this.mx, mEvent, 'session_queued');
@@ -229,6 +311,21 @@ class DecryptionRecoveryCoordinator {
       retryAttempt,
       retryDelayMs: task.lastDelayMs,
     });
+    if (!task.backupLookupComplete && Date.now() >= task.nextBackupLookupAt) {
+      const backupResult = await restoreSessionFromBackup(
+        this.mx,
+        crypto as CryptoBackend,
+        representative
+      );
+      task.backupLookupComplete = backupResult !== 'retry';
+      task.nextBackupLookupAt = Date.now() + 5_000;
+    }
+    if (!needsSessionRecovery(representative)) {
+      recordDecryptionDiagnostic(this.mx, representative, 'session_recovered');
+      task.running = false;
+      this.removeTask(sessionKey);
+      return;
+    }
     processPendingCryptoRequests(crypto);
     const results = await Promise.allSettled(
       failedEvents.map((mEvent) =>

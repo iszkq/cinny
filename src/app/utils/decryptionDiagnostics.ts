@@ -9,6 +9,11 @@ export type DecryptionDiagnosticStage =
   | 'failure_observed'
   | 'session_queued'
   | 'session_retry_scheduled'
+  | 'backup_lookup_started'
+  | 'backup_key_imported'
+  | 'backup_key_not_found'
+  | 'backup_lookup_unavailable'
+  | 'backup_lookup_failed'
   | 'retry_started'
   | 'retry_finished'
   | 'key_received'
@@ -192,13 +197,23 @@ export const createDecryptionDiagnosticReport = async (
     localVerified: null as boolean | null,
     verificationError: null as string | null,
     roomKeyRequestsEnabled: null as boolean | null,
+    roomKeyForwardingEnabled: null as boolean | null,
   };
 
   if (crypto) {
-    const olmMachine = (crypto as object as { olmMachine?: { roomKeyRequestsEnabled?: unknown } })
-      .olmMachine;
+    const olmMachine = (
+      crypto as object as {
+        olmMachine?: {
+          roomKeyRequestsEnabled?: unknown;
+          roomKeyForwardingEnabled?: unknown;
+        };
+      }
+    ).olmMachine;
     if (typeof olmMachine?.roomKeyRequestsEnabled === 'boolean') {
       currentDevice.roomKeyRequestsEnabled = olmMachine.roomKeyRequestsEnabled;
+    }
+    if (typeof olmMachine?.roomKeyForwardingEnabled === 'boolean') {
+      currentDevice.roomKeyForwardingEnabled = olmMachine.roomKeyForwardingEnabled;
     }
     const [activeBackupResult, backupInfoResult, verificationResult] = await Promise.allSettled([
       crypto.getActiveSessionBackupVersion(),

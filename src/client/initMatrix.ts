@@ -186,12 +186,22 @@ const initRustCryptoForSession = async (mx: MatrixClient, session: Session): Pro
 // cannot provide it. The SDK disables this by default for Element's policy.
 const enableMissingRoomKeyRequests = (mx: MatrixClient): void => {
   const crypto = mx.getCrypto() as
-    | (object & { olmMachine?: { roomKeyRequestsEnabled?: boolean } })
+    | (object & {
+        olmMachine?: {
+          roomKeyRequestsEnabled?: boolean;
+          roomKeyForwardingEnabled?: boolean;
+        };
+      })
     | undefined;
   const olmMachine = crypto?.olmMachine;
   if (olmMachine && 'roomKeyRequestsEnabled' in olmMachine) {
     try {
       olmMachine.roomKeyRequestsEnabled = true;
+      // Only verified devices are eligible. Let another verified Starfire
+      // installation recover a key held by this device when backup missed it.
+      if ('roomKeyForwardingEnabled' in olmMachine) {
+        olmMachine.roomKeyForwardingEnabled = true;
+      }
       if (olmMachine.roomKeyRequestsEnabled !== true) {
         matrixLogger.warn('Rust Crypto did not enable automatic room key requests.');
       } else {

@@ -45,6 +45,18 @@ test('PDF uses the Office card in read-only mode without an edit action', async 
   );
 });
 
+test('the protected PDF prompt remains interactive while the document awaits a password', async () => {
+  const source = await readSource('src/app/components/file-viewer/OfficeFileEditor.tsx');
+
+  assert.match(source, /OFFICE_BRIDGE_PASSWORD_REQUIRED = 'xinghuo-office-password-required'/);
+  assert.match(source, /data\.type === OFFICE_BRIDGE_PASSWORD_REQUIRED/);
+  assert.match(
+    source,
+    /OFFICE_BRIDGE_PASSWORD_REQUIRED[\s\S]*window\.clearTimeout\(documentOpenedTimeoutRef\.current\)/
+  );
+  assert.match(source, /OFFICE_BRIDGE_PASSWORD_REQUIRED[\s\S]*setPhase\('ready'\)/);
+});
+
 test('host-window Office shortcuts prevent browser downloads and use the bridge save path', async () => {
   const source = await readSource('src/app/components/file-viewer/OfficeFileEditor.tsx');
 

@@ -369,6 +369,18 @@ test('missing Megolm sessions recover in a client-level queue across every platf
   assert.match(source, /MEGOLM_UNKNOWN_INBOUND_SESSION_ID/);
   assert.match(source, /attemptDecryption\(crypto as CryptoBackend, \{ isRetry: true \}\)/);
   assert.match(source, /processPendingCryptoRequests\(crypto\)/);
+  assert.match(source, /restoreSessionFromBackup/);
+  assert.match(source, /getSessionBackupPrivateKey\(\)/);
+  assert.match(source, /isKeyBackupTrusted\(backupInfo\)/);
+  assert.match(source, /mx\.http\.authedRequest<KeyBackupSession>/);
+  assert.match(source, /crypto\.importBackedUpRoomKeys\(keys, activeVersion\)/);
+  assert.match(source, /'backup_key_imported'/);
+  assert.match(source, /'backup_key_not_found'/);
+  assert.match(source, /nextBackupLookupAt = Date\.now\(\) \+ 5_000/);
+  assert.match(
+    source,
+    /if \(!needsSessionRecovery\(representative\)\)[\s\S]*this\.removeTask\(sessionKey\)/
+  );
   assert.match(source, /failedEvents\.some\(\(mEvent\) => mEvent\.isBeingDecrypted\(\)\)/);
   assert.match(source, /this\.schedule\(sessionKey, task, DECRYPTION_IN_PROGRESS_POLL_MS\)/);
   assert.match(source, /Promise\.allSettled\(/);
@@ -392,6 +404,7 @@ test('missing Megolm sessions recover in a client-level queue across every platf
   const initSource = await readSource('src/client/initMatrix.ts');
   assert.match(initSource, /enableMissingRoomKeyRequests/);
   assert.match(initSource, /roomKeyRequestsEnabled = true/);
+  assert.match(initSource, /roomKeyForwardingEnabled = true/);
   assert.match(initSource, /automatic room key requests enabled/);
   assert.match(featuresSource, /useEffect\(\(\) => startDecryptionRecovery\(mx\), \[mx\]\)/);
   assert.match(componentSource, /observeEncryptedEvent\(mx, mEvent\)/);
@@ -401,6 +414,7 @@ test('missing Megolm sessions recover in a client-level queue across every platf
   assert.match(diagnosticSource, /crypto\.getActiveSessionBackupVersion\(\)/);
   assert.match(diagnosticSource, /crypto\.getDeviceVerificationStatus/);
   assert.match(diagnosticSource, /roomKeyRequestsEnabled/);
+  assert.match(diagnosticSource, /roomKeyForwardingEnabled/);
   assert.match(diagnosticSource, /No message body, ciphertext, access token/);
   assert.doesNotMatch(diagnosticSource, /wireContent\.ciphertext/);
   assert.match(rendererSource, /复制解密诊断/);
