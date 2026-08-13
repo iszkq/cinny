@@ -293,14 +293,18 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
     verificationMethods: ['m.sas.v1'],
   });
 
-  if (isAndroidApp()) await requestPersistentAndroidStorage();
+  // Do not put the Android Storage Manager prompt on the critical startup
+  // path. It runs in parallel with IndexedDB opening and remains best effort.
+  if (isAndroidApp()) void requestPersistentAndroidStorage();
   await indexedDBStore.startup();
   const cryptoDatabasePrefix = await initRustCryptoForSession(mx, session);
   rustCryptoDatabasePrefixes.set(mx, cryptoDatabasePrefix);
   if (isAndroidApp()) {
     const crypto = mx.getCrypto();
     if (crypto) {
-      await restoreAndroidBackupKey(crypto);
+      // Restoring the backup key must not delay the cached room shell. Rust
+      // Crypto will use it as soon as the asynchronous restore completes.
+      void restoreAndroidBackupKey(crypto);
       mx.on(CryptoEvent.KeyBackupDecryptionKeyCached, () => {
         void persistAndroidBackupKey(crypto);
       });
