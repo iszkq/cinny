@@ -44,6 +44,14 @@ const normalizeBaseUrl = (baseUrl: string): string => {
 const normalizeSourceUrl = (sourceUrl: string): string => {
   try {
     const url = new URL(sourceUrl);
+    // Matrix media has equivalent authenticated client-v1 and legacy v3/r0
+    // routes. Android may receive either route after a WebView process restart;
+    // use one native-file identity for both without changing Web/Desktop URLs.
+    url.pathname = url.pathname
+      .replace('/_matrix/client/v1/media/download/', '/_matrix/media/v3/download/')
+      .replace('/_matrix/client/v1/media/thumbnail/', '/_matrix/media/v3/thumbnail/')
+      .replace('/_matrix/media/r0/download/', '/_matrix/media/v3/download/')
+      .replace('/_matrix/media/r0/thumbnail/', '/_matrix/media/v3/thumbnail/');
     url.searchParams.delete('access_token');
     url.searchParams.delete('allow_redirect');
     const entries = Array.from(url.searchParams.entries()).sort(

@@ -132,7 +132,10 @@ const getMediaPreloadConcurrency = () => {
 
   if (isAndroidApp()) {
     return {
-      persistent: 1,
+      // Several custom-emoji thumbnails can be queued at startup. A single
+      // downloader made a complete personal pack take minutes to reach disk,
+      // while three workers still keeps Android network/decoder pressure low.
+      persistent: 3,
       objectUrl: typeof deviceMemory === 'number' && deviceMemory <= 4 ? 3 : 4,
     };
   }

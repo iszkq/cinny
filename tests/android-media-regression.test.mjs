@@ -59,6 +59,8 @@ test('Android persistent media validates native files and preserves older cache 
   assert.match(javaSource, /Uri\.fromFile\(file\)\.toString\(\)/);
   assert.match(javaSource, /if \(isInvalidMediaType\(mimeType\)\) return true/);
   assert.match(javaSource, /MAX_CACHE_FILES = 10_000/);
+  assert.match(javaSource, /canonicalizeMatrixMediaUri/);
+  assert.match(javaSource, /client\/v1\/media\/thumbnail/);
   assert.match(javaSource, /!looksLikeHtmlOrJson\(cachedFile, cachedMimeType\)/);
   assert.match(javaSource, /REQUEST_DEADLINE_MS = 15_000L/);
   assert.match(javaSource, /Executors\.newFixedThreadPool\(4\)/);
@@ -253,6 +255,17 @@ test('Android avatar cache survives component remounts without a fallback flash'
   );
   assert.match(warmSource, /primePersistentMediaUrl\(avatarUrl, 'background'\)/);
   assert.match(warmSource, /ANDROID_AVATAR_OBJECT_WARM_LIMIT = 64/);
+});
+
+test('Android avatar and emoji media share Matrix endpoint aliases', async () => {
+  const nativeSource = await readSource('src/app/utils/androidMediaAssetCache.ts');
+  const warmSource = await readSource('src/app/pages/client/ClientNonUIFeatures.tsx');
+  const mediaSource = await readSource('src/app/utils/mediaUrlCache.ts');
+
+  assert.match(nativeSource, /client\/v1\/media\/download/);
+  assert.match(nativeSource, /media\/r0\/thumbnail/);
+  assert.match(warmSource, /96,\s*96,\s*'crop'/);
+  assert.match(mediaSource, /persistent:\s*3/);
 });
 
 test('Android image preview exposes every action without horizontal scrolling', async () => {

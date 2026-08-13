@@ -908,7 +908,18 @@ function AndroidAvatarMediaWarmFeature() {
           room.getAvatarFallbackMember()?.getMxcAvatarUrl() ?? room.getMxcAvatarUrl();
         if (!avatarMxc) return;
 
-        const avatarUrl = mxcUrlToHttp(mx, avatarMxc, useAuthentication);
+        // Keep the native warm-up URL identical to the 96px crop used by
+        // RoomNavItem/Space. The previous original-size warm-up created a
+        // different Android cache entry, so avatars in less frequently opened
+        // Spaces still had to download again after the WebView was restarted.
+        const avatarUrl = mxcUrlToHttp(
+          mx,
+          avatarMxc,
+          useAuthentication,
+          96,
+          96,
+          'crop'
+        );
         if (avatarUrl) avatarUrls.add(avatarUrl);
       });
 

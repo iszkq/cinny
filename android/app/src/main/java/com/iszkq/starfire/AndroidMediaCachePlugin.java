@@ -339,7 +339,7 @@ public class AndroidMediaCachePlugin extends Plugin {
     }
 
     private static String normalizeSourceUrl(String sourceUrl) {
-        Uri uri = Uri.parse(sourceUrl);
+        Uri uri = canonicalizeMatrixMediaUri(Uri.parse(sourceUrl));
         TreeMap<String, List<String>> query = new TreeMap<>();
         for (String name : uri.getQueryParameterNames()) {
             if ("access_token".equalsIgnoreCase(name) || "allow_redirect".equalsIgnoreCase(name)) {
@@ -353,6 +353,26 @@ public class AndroidMediaCachePlugin extends Plugin {
             for (String value : entry.getValue()) builder.appendQueryParameter(entry.getKey(), value);
         }
         return builder.build().toString();
+    }
+
+    /**
+     * Matrix homeservers expose the same media through both the authenticated
+     * client v1 endpoint and the older unauthenticated v3/r0 endpoints.  The
+     * WebView can choose either form after a process restart (in particular for
+     * rooms rendered inside a Space).  Keep those aliases under one Android
+     * disk-cache identity so an already downloaded avatar is still available.
+     */
+    private static Uri canonicalizeMatrixMediaUri(Uri uri) {
+        String path = uri.getPath();
+        if (path == null) return uri;
+
+        String canonicalPath = path
+            .replace("/_matrix/client/v1/media/download/", "/_matrix/media/v3/download/")
+            .replace("/_matrix/client/v1/media/thumbnail/", "/_matrix/media/v3/thumbnail/")
+            .replace("/_matrix/media/r0/download/", "/_matrix/media/v3/download/")
+            .replace("/_matrix/media/r0/thumbnail/", "/_matrix/media/v3/thumbnail/");
+        if (canonicalPath.equals(path)) return uri;
+        return uri.buildUpon().path(canonicalPath).build();
     }
 
     private static String normalizeMimeType(String mimeType) {
