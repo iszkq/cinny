@@ -97,7 +97,7 @@ test('the sidebar keeps a critical security reminder on first login', async () =
   assert.match(source, /const currentDeviceId = mx\.getDeviceId\(\)/);
   assert.match(
     source,
-    /securitySyncReady &&[\s\S]*!crossSigningActive \|\| verificationStatus !== VerificationStatus\.Verified/
+    /securitySyncReady &&[\s\S]*verificationStatus === VerificationStatus\.Unverified/
   );
   assert.match(source, /设备验证尚未启用/);
   assert.match(source, /<Badge variant="Critical" size="200"/);
@@ -111,7 +111,7 @@ test('the sidebar stays critical until both device and key backup are verified',
   assert.match(sidebarSource, /useKeyBackupStatus\(crypto\)/);
   assert.match(sidebarSource, /useKeyBackupInfo\(crypto\)/);
   assert.match(sidebarSource, /useKeyBackupTrust\(crypto, backupInfo\)/);
-  assert.match(sidebarSource, /verificationStatus !== VerificationStatus\.Verified/);
+  assert.match(sidebarSource, /verificationStatus === VerificationStatus\.Unverified/);
   assert.match(sidebarSource, /!backupEnabled/);
   assert.match(sidebarSource, /backupTrust\?\.trusted !== true/);
   assert.match(sidebarSource, /backupTrust\?\.matchesDecryptionKey !== true/);

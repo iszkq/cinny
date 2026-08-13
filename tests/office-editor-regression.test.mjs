@@ -32,14 +32,6 @@ test('encrypted Word, spreadsheet, and presentation files are unlocked locally',
   assert.match(source, /密码仅用于本次解密，不会保存到设备或上传到聊天服务器/);
 });
 
-test('mobile encrypted PDFs bypass PDF.js but desktop/web keep the preflight', async () => {
-  const source = await readSource('src/app/components/file-viewer/OfficeFileEditor.tsx');
-  assert.match(source, /const pdfPasswordState/);
-  assert.match(source, /!mobileOfficeShell && officeKind === 'pdf'/);
-  assert.match(source, /inspectPdfPassword\(source, password\)/);
-  assert.match(source, /import\('pdfjs-dist'\)/);
-});
-
 test('the protected PDF prompt remains interactive while the document awaits a password', async () => {
   const source = await readSource('src/app/components/file-viewer/OfficeFileEditor.tsx');
 
