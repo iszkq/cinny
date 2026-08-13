@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { CryptoApi } from 'matrix-js-sdk/lib/crypto-api';
+import { CryptoApi, CryptoEvent } from 'matrix-js-sdk/lib/crypto-api';
 import { verifiedDevice } from '../utils/matrix-crypto';
 import { useAlive } from './useAlive';
 import { fulfilledPromiseSettledResult } from '../utils/common';
@@ -149,6 +149,19 @@ export const useDeviceVerificationDetect = (
       [userId, updateStatus]
     )
   );
+
+  // Recovery-key and SAS completion persist trust in Rust Crypto and publish
+  // DevicesUpdated before the device-list/user-trust sync events arrive.
+  // Refresh immediately so Android does not keep showing a stale red badge.
+  useEffect(() => {
+    const handleDevicesUpdated = (userIds: string[]) => {
+      if (userIds.includes(userId)) updateStatus(true);
+    };
+    mx.on(CryptoEvent.DevicesUpdated, handleDevicesUpdated);
+    return () => {
+      mx.removeListener(CryptoEvent.DevicesUpdated, handleDevicesUpdated);
+    };
+  }, [mx, updateStatus, userId]);
 };
 
 export const useDeviceVerificationStatus = (
@@ -175,6 +188,7 @@ export const useUnverifiedDeviceCount = (
   userId: string,
   devices: string[]
 ): number | undefined => {
+  const mx = useMatrixClient();
   const [unverifiedCount, setUnverifiedCount] = useState<number>();
   const alive = useAlive();
   const latestRequestRef = useRef(0);
@@ -235,6 +249,16 @@ export const useUnverifiedDeviceCount = (
       [userId, updateCount]
     )
   );
+
+  useEffect(() => {
+    const handleDevicesUpdated = (userIds: string[]) => {
+      if (userIds.includes(userId)) updateCount();
+    };
+    mx.on(CryptoEvent.DevicesUpdated, handleDevicesUpdated);
+    return () => {
+      mx.removeListener(CryptoEvent.DevicesUpdated, handleDevicesUpdated);
+    };
+  }, [mx, updateCount, userId]);
 
   useEffect(() => {
     updateCount();

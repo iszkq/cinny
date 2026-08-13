@@ -68,6 +68,7 @@ test('live encrypted event recovery is platform-neutral and client-scoped', asyn
 
   assert.doesNotMatch(timelineSource, /mx\.decryptEventIfNeeded\(mEvt, \{ isRetry: true \}\)/);
   assert.match(recoverySource, /mx\.on\(RoomEvent\.Timeline, this\.handleTimelineEvent\)/);
+  assert.match(recoverySource, /isDecryptionRecoveryPending/);
   assert.doesNotMatch(recoverySource, /isDesktopUpdaterSupported|isAndroidApp|mobileOrTablet/);
 });
 

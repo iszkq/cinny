@@ -32,17 +32,26 @@ test('encrypted Word, spreadsheet, and presentation files are unlocked locally',
   assert.match(source, /密码仅用于本次解密，不会保存到设备或上传到聊天服务器/);
 });
 
-test('PDF uses the Office card in read-only mode without an edit action', async () => {
+test('mobile encrypted PDFs are password-probed before opening in Office', async () => {
   const source = await readSource('src/app/components/file-viewer/OfficeFileEditor.tsx');
   const mimeSource = await readSource('src/app/utils/mimeTypes.ts');
+  const rendererSource = await readSource('src/app/components/RenderMessageContent.tsx');
 
   assert.match(mimeSource, /normalizedMimeType === 'application\/pdf' \|\| ext === 'pdf'/);
   assert.match(source, /pdf: \{ label: 'PDF', color: '#e53935' \}/);
   assert.match(source, /const canEdit = officeKind !== 'pdf' && Boolean\(/);
-  assert.match(
-    source,
-    /mobileOfficeShell \|\| officeKind === 'pdf'[\s\S]*\? 'repeat\(2, minmax\(0, 1fr\)\)'/
-  );
+  assert.match(source, /inspectPdfPassword/);
+  assert.match(source, /if \(!marker\) return 'not-encrypted'/);
+  assert.match(source, /const marker = new TextDecoder\('latin1'\)\.decode\(buffer\)\.includes\('\/Encrypt'\)/);
+  assert.match(source, /mobileOfficeShell && officeKind === 'pdf'/);
+  assert.match(source, /const pdfPasswordState/);
+  assert.match(source, /pdfPasswordState === 'password-required'/);
+  assert.match(source, /pdfPasswordState === 'password-invalid'/);
+  assert.match(source, /pdfPasswordState === 'password-invalid' \? 'PDF 密码不正确，请重试。'/);
+  assert.doesNotMatch(source, /encryptedOfficeFile \|\| encryptedPdfFile/);
+  assert.match(source, /password: activeSession\.password/);
+  assert.match(rendererSource, /getOfficeDocumentKind\(body, mimeType\)/);
+  assert.match(rendererSource, /<OfficeFileEditor/);
 });
 
 test('the protected PDF prompt remains interactive while the document awaits a password', async () => {

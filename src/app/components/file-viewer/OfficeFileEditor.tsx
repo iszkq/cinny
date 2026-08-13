@@ -99,6 +99,63 @@ const isCompoundOfficeContainer = (buffer: ArrayBuffer): boolean => {
   return COMPOUND_FILE_SIGNATURE.every((value, index) => bytes[index] === value);
 };
 
+/**
+ * PDF passwords are not represented by the Compound File signature used by
+ * encrypted Office documents. On mobile, preflight the PDF with PDF.js only
+ * to discover whether a password is required; the actual document is still
+ * opened and rendered by the configured Office service.
+ */
+type PdfPasswordState = 'not-encrypted' | 'password-required' | 'password-invalid' | 'ready';
+
+const inspectPdfPassword = async (
+  buffer: ArrayBuffer,
+  password?: string
+): Promise<PdfPasswordState> => {
+  // Keep ordinary PDFs on the exact pre-existing Office path. The marker is
+  // part of the PDF trailer and lets us avoid importing/running PDF.js for
+  // the overwhelmingly common unencrypted case.
+  const marker = new TextDecoder('latin1').decode(buffer).includes('/Encrypt');
+  if (!marker) return 'not-encrypted';
+
+  try {
+    const pdf = await import('pdfjs-dist');
+    pdf.GlobalWorkerOptions.workerSrc = `${String(import.meta.env.BASE_URL).replace(/\/$/, '')}/pdf.worker.min.js`;
+    const candidate = password?.trim();
+    const loadingTask = pdf.getDocument({ data: buffer, ...(candidate ? { password: candidate } : {}) });
+    const passwordChallenge = new Promise<PdfPasswordState>((resolve) => {
+      loadingTask.onPassword = (_setPassword: (nextPassword: string) => void, reason: number) => {
+        resolve(
+          reason === pdf.PasswordResponses.INCORRECT_PASSWORD
+            ? 'password-invalid'
+            : 'password-required'
+        );
+      };
+    });
+    try {
+      const result = await Promise.race([
+        loadingTask.promise.then(async (document) => {
+          await document.destroy();
+          return 'ready' as const;
+        }),
+        passwordChallenge,
+      ]);
+      return result;
+    } catch {
+      // A malformed PDF can contain the marker too. Leave non-password errors
+      // for Office so this preflight never changes its existing error path.
+      return 'not-encrypted';
+    } finally {
+      try {
+        await loadingTask.destroy();
+      } catch {
+        // The task may already have been destroyed with its document.
+      }
+    }
+  } catch {
+    return 'not-encrypted';
+  }
+};
+
 const officeShellWarmups = new Map<string, Promise<void>>();
 const officePreconnectedOrigins = new Set<string>();
 
@@ -1046,6 +1103,7 @@ export function OfficeFileEditor({
           byteLength: sourceBytes.byteLength,
           chunkCount,
           chunkSize: ANDROID_SOURCE_CHUNK_BYTES,
+          ...(activeSession.password ? { password: activeSession.password } : {}),
         },
         targetOrigin
       );
@@ -1186,6 +1244,15 @@ export function OfficeFileEditor({
           const encryptedOfficeFile =
             isCompoundOfficeContainer(source) && (await isOfficeDocumentEncrypted(source));
 
+          // PDF encryption does not use the Compound File signature. Mobile
+          // WebViews otherwise hand the protected PDF to Office without a
+          // password and wait forever for the opened callback. Probe only for
+          // the password requirement; Office remains the renderer.
+          const pdfPasswordState =
+            mobileOfficeShell && officeKind === 'pdf'
+              ? await inspectPdfPassword(source, password)
+              : 'not-encrypted';
+
           if (encryptedOfficeFile) {
             if (!password?.trim()) {
               clearOpenTimeouts();
@@ -1205,6 +1272,19 @@ export function OfficeFileEditor({
               setPasswordError(error instanceof Error ? error.message : undefined);
               return;
             }
+          }
+
+          if (
+            pdfPasswordState === 'password-required' ||
+            pdfPasswordState === 'password-invalid'
+          ) {
+            clearOpenTimeouts();
+            setPasswordRequired(true);
+            setPasswordInput('');
+            setPasswordError(
+              pdfPasswordState === 'password-invalid' ? 'PDF 密码不正确，请重试。' : undefined
+            );
+            return;
           }
 
           sourceBufferRef.current = buffer;

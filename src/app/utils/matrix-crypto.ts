@@ -78,11 +78,14 @@ export const verifiedDevice = async (
 
   if (!status) return null;
 
-  // Rust Crypto can trust the current device locally before the user has
-  // proved possession of the account recovery key. Current-device UI must
-  // therefore require cross-signing trust so a fresh login is not presented
-  // as verified before recovery/device verification has completed.
-  if (requireCrossSigning) return status.crossSigningVerified;
+  // A recovery key or completed SAS flow first records trust in this
+  // installation's Rust Crypto store. Uploading the matching cross-signing
+  // signature is asynchronous and can be delayed by Android backgrounding or
+  // an interrupted sync. Local trust is still cryptographic trust, not a UI
+  // hint; treating it as unverified made a successfully recovered device
+  // repeatedly show the red security token until a later /keys/query won the
+  // race. A fresh login has neither form of trust, so it remains unverified.
+  if (requireCrossSigning) return status.crossSigningVerified || status.localVerified;
 
   // Rust Crypto can record a successful verification either through cross
   // signing or as local device trust. Treat both SDK trust paths as verified.

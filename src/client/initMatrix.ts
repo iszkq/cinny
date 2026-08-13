@@ -87,6 +87,22 @@ const indexedDbDatabaseExists = (databaseName: string): Promise<boolean> =>
     request.onblocked = () => finish(false);
   });
 
+// Android WebView is allowed to evict best-effort IndexedDB data under storage
+// pressure. Rust Crypto keeps the device identity, verification trust and
+// Megolm keys there, so ask for durable storage before opening the database.
+// This is best effort: browsers that do not implement the Storage Manager API
+// still follow the normal SDK path.
+const requestPersistentCryptoStorage = async (): Promise<void> => {
+  try {
+    const storage = typeof navigator === 'undefined' ? undefined : navigator.storage;
+    if (!storage?.persist) return;
+    if ((await storage.persisted?.()) === true) return;
+    await storage.persist();
+  } catch {
+    // A denied persistence request must never prevent login or crypto startup.
+  }
+};
+
 const findExistingRustCryptoDatabasePrefixes = async (prefixes: string[]): Promise<Set<string>> => {
   try {
     if (typeof global.indexedDB?.databases === 'function') {
@@ -260,6 +276,7 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
   });
 
   await indexedDBStore.startup();
+  await requestPersistentCryptoStorage();
   const cryptoDatabasePrefix = await initRustCryptoForSession(mx, session);
   rustCryptoDatabasePrefixes.set(mx, cryptoDatabasePrefix);
   enableMissingRoomKeyRequests(mx);

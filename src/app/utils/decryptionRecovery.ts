@@ -18,6 +18,7 @@ import { recordDecryptionDiagnostic } from './decryptionDiagnostics';
 const RECENT_DECRYPTION_RETRY_WINDOW_MS = 60 * 60 * 1000;
 const DECRYPTION_RETRY_DELAYS_MS = [0, 500, 2_000, 5_000, 15_000, 30_000, 60_000] as const;
 const DECRYPTION_IN_PROGRESS_POLL_MS = 250;
+const BACKUP_LOOKUP_RETRY_DELAY_MS = 30_000;
 const UNKNOWN_MEGOLM_SESSION = 'MEGOLM_UNKNOWN_INBOUND_SESSION_ID';
 
 const DECRYPTION_RECOVERY_SYNC_STATES = new Set<SyncState>([
@@ -33,11 +34,19 @@ type RecoveryTask = {
   lastDelayMs: number;
   timer?: number;
   running: boolean;
-  backupLookupComplete: boolean;
   nextBackupLookupAt: number;
 };
 
 type BackupLookupResult = 'imported' | 'not_found' | 'retry';
+
+type RustCryptoWithOutgoingRequests = {
+  outgoingRequestsManager?: {
+    doProcessOutgoingRequests?: () => Promise<void>;
+  };
+  onSyncCompleted?: (data: unknown) => void;
+};
+
+const outgoingRequestFlushes = new WeakMap<object, Promise<void>>();
 
 const getSessionKey = (mEvent: MatrixEvent): string | undefined => {
   const roomId = mEvent.getRoomId();
@@ -55,10 +64,34 @@ const needsSessionRecovery = (mEvent: MatrixEvent): boolean =>
  * happen between sync responses. Nudge the public sync hook so a missing key
  * request is sent immediately instead of waiting for an unrelated sync.
  */
-const processPendingCryptoRequests = (crypto: object): void => {
-  const syncHook = (crypto as { onSyncCompleted?: (data: unknown) => void })
-    .onSyncCompleted;
-  if (typeof syncHook === 'function') syncHook.call(crypto, {});
+const processPendingCryptoRequests = (crypto: object): Promise<void> => {
+  const pendingFlush = outgoingRequestFlushes.get(crypto);
+  if (pendingFlush) return pendingFlush;
+
+  const rustCrypto = crypto as RustCryptoWithOutgoingRequests;
+  const outgoingRequestsManager = rustCrypto.outgoingRequestsManager;
+  const processOutgoingRequests = outgoingRequestsManager?.doProcessOutgoingRequests;
+  const flush = (async () => {
+    if (typeof processOutgoingRequests === 'function') {
+      // Rust Crypto's manager serialises concurrent passes and returns only
+      // after the pass which observes this call has completed. Waiting here
+      // closes the race where our retry finished before its room-key request
+      // had even reached the homeserver.
+      await processOutgoingRequests.call(outgoingRequestsManager);
+      return;
+    }
+
+    // Compatibility fallback for another CryptoBackend or a future SDK which
+    // no longer exposes the manager as a runtime property.
+    const syncHook = rustCrypto.onSyncCompleted;
+    if (typeof syncHook === 'function') syncHook.call(crypto, {});
+  })();
+  outgoingRequestFlushes.set(crypto, flush);
+  const clearFlush = () => {
+    if (outgoingRequestFlushes.get(crypto) === flush) outgoingRequestFlushes.delete(crypto);
+  };
+  void flush.then(clearFlush, clearFlush);
+  return flush;
 };
 
 /**
@@ -145,6 +178,11 @@ class DecryptionRecoveryCoordinator {
   private started = false;
 
   constructor(private readonly mx: MatrixClient) {}
+
+  hasPendingEvent(mEvent: MatrixEvent): boolean {
+    const sessionKey = getSessionKey(mEvent);
+    return !!sessionKey && this.tasks.get(sessionKey)?.events.has(mEvent) === true;
+  }
 
   start(): void {
     if (this.started) return;
@@ -245,7 +283,6 @@ class DecryptionRecoveryCoordinator {
         retryIndex: 0,
         lastDelayMs: 0,
         running: false,
-        backupLookupComplete: false,
         nextBackupLookupAt: 0,
       };
       this.tasks.set(sessionKey, task);
@@ -311,14 +348,19 @@ class DecryptionRecoveryCoordinator {
       retryAttempt,
       retryDelayMs: task.lastDelayMs,
     });
-    if (!task.backupLookupComplete && Date.now() >= task.nextBackupLookupAt) {
+    if (Date.now() >= task.nextBackupLookupAt) {
       const backupResult = await restoreSessionFromBackup(
         this.mx,
         crypto as CryptoBackend,
         representative
       );
-      task.backupLookupComplete = backupResult !== 'retry';
-      task.nextBackupLookupAt = Date.now() + 5_000;
+      // A session can be uploaded by another verified device after this
+      // event first arrives. Do not turn one M_NOT_FOUND response into a
+      // permanent negative cache: that left the desktop unable to recover a
+      // message even though the active backup later contained its session.
+      task.nextBackupLookupAt =
+        Date.now() +
+        (backupResult === 'retry' ? DECRYPTION_RETRY_DELAYS_MS[1] : BACKUP_LOOKUP_RETRY_DELAY_MS);
     }
     if (!needsSessionRecovery(representative)) {
       recordDecryptionDiagnostic(this.mx, representative, 'session_recovered');
@@ -326,7 +368,19 @@ class DecryptionRecoveryCoordinator {
       this.removeTask(sessionKey);
       return;
     }
-    processPendingCryptoRequests(crypto);
+    try {
+      await processPendingCryptoRequests(crypto);
+      recordDecryptionDiagnostic(this.mx, representative, 'outgoing_requests_flushed', {
+        retryAttempt,
+        retryDelayMs: task.lastDelayMs,
+      });
+    } catch (error) {
+      recordDecryptionDiagnostic(this.mx, representative, 'outgoing_requests_failed', {
+        retryAttempt,
+        retryDelayMs: task.lastDelayMs,
+        error,
+      });
+    }
     const results = await Promise.allSettled(
       failedEvents.map((mEvent) =>
         mEvent.attemptDecryption(crypto as CryptoBackend, { isRetry: true })
@@ -335,7 +389,19 @@ class DecryptionRecoveryCoordinator {
     // attemptDecryption queues backup/key-request work after it observes the
     // missing session. Drain the Rust Crypto queue again so the request is not
     // delayed until the next unrelated /sync response.
-    processPendingCryptoRequests(crypto);
+    try {
+      await processPendingCryptoRequests(crypto);
+      recordDecryptionDiagnostic(this.mx, representative, 'outgoing_requests_flushed', {
+        retryAttempt,
+        retryDelayMs: task.lastDelayMs,
+      });
+    } catch (error) {
+      recordDecryptionDiagnostic(this.mx, representative, 'outgoing_requests_failed', {
+        retryAttempt,
+        retryDelayMs: task.lastDelayMs,
+        error,
+      });
+    }
     const retryError = results.find((result) => result.status === 'rejected');
     recordDecryptionDiagnostic(this.mx, representative, 'retry_finished', {
       retryAttempt,
@@ -355,8 +421,14 @@ class DecryptionRecoveryCoordinator {
     }
 
     task.retryIndex += 1;
-    const nextDelay = DECRYPTION_RETRY_DELAYS_MS[task.retryIndex];
-    if (nextDelay !== undefined) this.schedule(sessionKey, task, nextDelay);
+    // Keep the task alive through its recovery window. The old bounded list
+    // stopped scheduling after its last entry and relied on an unrelated
+    // focus/sync event to try again, which is especially unreliable on a
+    // backgrounded desktop client.
+    const nextDelay =
+      DECRYPTION_RETRY_DELAYS_MS[task.retryIndex] ??
+      DECRYPTION_RETRY_DELAYS_MS[DECRYPTION_RETRY_DELAYS_MS.length - 1];
+    this.schedule(sessionKey, task, nextDelay);
   }
 
   private restartPendingTasks(): void {
@@ -402,6 +474,10 @@ const getRecovery = (mx: MatrixClient): DecryptionRecoveryCoordinator => {
 export const observeEncryptedEvent = (mx: MatrixClient, mEvent: MatrixEvent): void => {
   getRecovery(mx).observe(mEvent);
 };
+
+/** True while the client is still attempting to recover this event's session. */
+export const isDecryptionRecoveryPending = (mx: MatrixClient, mEvent: MatrixEvent): boolean =>
+  getRecovery(mx).hasPendingEvent(mEvent);
 
 export const startDecryptionRecovery = (mx: MatrixClient): (() => void) => {
   const recovery = getRecovery(mx);

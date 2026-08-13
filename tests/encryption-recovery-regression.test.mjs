@@ -176,12 +176,15 @@ test('setup and manual recovery share one destructive crypto initialization gate
   );
 });
 
-test('current-device verification requires cross-signing while other devices accept SDK trust', async () => {
+test('current-device verification accepts the durable local trust written by recovery or SAS', async () => {
   const cryptoSource = await readSource('src/app/utils/matrix-crypto.ts');
   const sidebarSource = await readSource('src/app/pages/client/sidebar/UnverifiedTab.tsx');
   const devicesSource = await readSource('src/app/features/settings/devices/Devices.tsx');
 
-  assert.match(cryptoSource, /if \(requireCrossSigning\) return status\.crossSigningVerified/);
+  assert.match(
+    cryptoSource,
+    /if \(requireCrossSigning\) return status\.crossSigningVerified \|\| status\.localVerified/
+  );
   assert.match(cryptoSource, /status\.crossSigningVerified \|\| status\.localVerified/);
   assert.match(sidebarSource, /currentDeviceId,\s*true/);
   assert.match(devicesSource, /currentDeviceId,\s*true/);
@@ -219,6 +222,7 @@ test('completed device verification persists trust before reporting success', as
   assert.match(statusHookSource, /latestRequestRef/);
   assert.match(statusHookSource, /readVerifiedDevice/);
   assert.match(statusHookSource, /DEVICE_TRUST_QUERY_TIMEOUT_MS/);
+  assert.match(statusHookSource, /CryptoEvent\.DevicesUpdated/);
   assert.match(statusHookSource, /VerificationStatus\.Unavailable/);
   assert.match(statusHookSource, /Do not report "all verified"/);
   assert.match(statusHookSource, /trustResult\.value === null/);
@@ -368,7 +372,11 @@ test('missing Megolm sessions recover in a client-level queue across every platf
   assert.match(source, /events: Set<MatrixEvent>/);
   assert.match(source, /MEGOLM_UNKNOWN_INBOUND_SESSION_ID/);
   assert.match(source, /attemptDecryption\(crypto as CryptoBackend, \{ isRetry: true \}\)/);
-  assert.match(source, /processPendingCryptoRequests\(crypto\)/);
+  assert.match(source, /await processPendingCryptoRequests\(crypto\)/);
+  assert.match(source, /outgoingRequestsManager\?\.doProcessOutgoingRequests/);
+  assert.match(source, /const outgoingRequestFlushes = new WeakMap/);
+  assert.match(source, /'outgoing_requests_flushed'/);
+  assert.match(source, /'outgoing_requests_failed'/);
   assert.match(source, /restoreSessionFromBackup/);
   assert.match(source, /getSessionBackupPrivateKey\(\)/);
   assert.match(source, /isKeyBackupTrusted\(backupInfo\)/);
@@ -376,7 +384,11 @@ test('missing Megolm sessions recover in a client-level queue across every platf
   assert.match(source, /crypto\.importBackedUpRoomKeys\(keys, activeVersion\)/);
   assert.match(source, /'backup_key_imported'/);
   assert.match(source, /'backup_key_not_found'/);
-  assert.match(source, /nextBackupLookupAt = Date\.now\(\) \+ 5_000/);
+  assert.match(source, /BACKUP_LOOKUP_RETRY_DELAY_MS = 30_000/);
+  assert.match(
+    source,
+    /backupResult === 'retry' \? DECRYPTION_RETRY_DELAYS_MS\[1\] : BACKUP_LOOKUP_RETRY_DELAY_MS/
+  );
   assert.match(
     source,
     /if \(!needsSessionRecovery\(representative\)\)[\s\S]*this\.removeTask\(sessionKey\)/
@@ -400,12 +412,15 @@ test('missing Megolm sessions recover in a client-level queue across every platf
   assert.match(source, /'retry_started'/);
   assert.match(source, /'retry_finished'/);
   assert.doesNotMatch(source, /task\.retryIndex = 0/);
+  assert.match(source, /DECRYPTION_RETRY_DELAYS_MS\[task\.retryIndex\] \?\?/);
   assert.doesNotMatch(source, /restartRequested/);
   const initSource = await readSource('src/client/initMatrix.ts');
   assert.match(initSource, /enableMissingRoomKeyRequests/);
   assert.match(initSource, /roomKeyRequestsEnabled = true/);
   assert.match(initSource, /roomKeyForwardingEnabled = true/);
   assert.match(initSource, /automatic room key requests enabled/);
+  assert.match(initSource, /requestPersistentCryptoStorage/);
+  assert.match(initSource, /storage\.persist\(\)/);
   assert.match(featuresSource, /useEffect\(\(\) => startDecryptionRecovery\(mx\), \[mx\]\)/);
   assert.match(componentSource, /observeEncryptedEvent\(mx, mEvent\)/);
   assert.doesNotMatch(componentSource, /setTimeout|DECRYPTION_RETRY_DELAYS_MS/);

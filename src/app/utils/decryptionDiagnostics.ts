@@ -14,6 +14,8 @@ export type DecryptionDiagnosticStage =
   | 'backup_key_not_found'
   | 'backup_lookup_unavailable'
   | 'backup_lookup_failed'
+  | 'outgoing_requests_flushed'
+  | 'outgoing_requests_failed'
   | 'retry_started'
   | 'retry_finished'
   | 'key_received'
