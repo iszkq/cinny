@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Box,
   Button,
@@ -91,7 +91,7 @@ const ANDROID_SOURCE_CHUNK_MAX_ATTEMPTS = 4;
 const MAX_MEMORY_CACHED_SOURCE_BYTES = 64 * 1024 * 1024;
 const COMPOUND_FILE_SIGNATURE = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1];
 const isPasswordPromptError = (message?: string): boolean =>
-  Boolean(message && /password|encrypted|decrypt|瀵嗛挜|瀵嗙爜/i.test(message));
+  Boolean(message && /password|encrypted|decrypt|密钥|密码/i.test(message));
 
 const isCompoundOfficeContainer = (buffer: ArrayBuffer): boolean => {
   if (buffer.byteLength < COMPOUND_FILE_SIGNATURE.length) return false;
@@ -429,13 +429,13 @@ const getEditorUrl = (
 };
 
 const getPhaseLabel = (phase: EditorPhase, mode: EditorMode): string => {
-  if (phase === 'loading') return '姝ｅ湪鍑嗗鏂囨。鈥?;
-  if (phase === 'saving') return '姝ｅ湪鐢熸垚鏈€鏂版枃浠垛€?;
-  if (phase === 'uploading') return '姝ｅ湪鏇存柊鍘熸枃浠垛€?;
-  if (phase === 'publishing') return '姝ｅ湪鍙戝竷鏂囦欢鏇存柊鈥?;
-  if (phase === 'saved') return '鏈€鏂版枃浠跺凡鍙戝竷';
-  if (phase === 'error') return '鎿嶄綔澶辫触锛岃閲嶈瘯';
-  return mode === 'preview' ? '鍙棰勮' : '缂栬緫灏辩华';
+  if (phase === 'loading') return '正在准备文档…';
+  if (phase === 'saving') return '正在生成最新文件…';
+  if (phase === 'uploading') return '正在更新原文件…';
+  if (phase === 'publishing') return '正在发布文件更新…';
+  if (phase === 'saved') return '最新文件已发布';
+  if (phase === 'error') return '操作失败，请重试';
+  return mode === 'preview' ? '只读预览' : '编辑就绪';
 };
 
 export function OfficeFileEditor({
@@ -618,12 +618,12 @@ export function OfficeFileEditor({
       const maxMessageLength = 60_000;
       const messageReport =
         report.length > maxMessageLength
-          ? `${report.slice(0, 10_000)}\n...[涓棿鏃ュ織宸叉埅鏂璢...\n${report.slice(-50_000)}`
+          ? `${report.slice(0, 10_000)}\n...[中间日志已截断]...\n${report.slice(-50_000)}`
           : report;
       try {
         await mx.sendMessage(room.roomId, {
           msgtype: MsgType.Text,
-          body: `Starfire Office 璇婃柇淇℃伅\n${messageReport}`,
+          body: `Starfire Office 诊断信息\n${messageReport}`,
         } as never);
         setDiagnosticSent(true);
         setDiagnosticSendFailed(false);
@@ -636,7 +636,7 @@ export function OfficeFileEditor({
     if (navigator.share) {
       try {
         await navigator.share({
-          title: 'Starfire Office 璇婃柇淇℃伅',
+          title: 'Starfire Office 诊断信息',
           text: report,
         });
         return;
@@ -869,7 +869,7 @@ export function OfficeFileEditor({
       bridgeReadyTimeoutRef.current = window.setTimeout(() => {
         if (sessionRef.current?.requestId !== requestId) return;
         recordDiagnostic('timeout_bridge_ready', { timeoutMs });
-        setErrorMessage('Office 椤甸潰杩炴帴瓒呮椂銆傝閲嶆柊鎵撳紑鏂囨。锛屾垨鍏抽棴绐楀彛鍚庡啀璇曘€?);
+        setErrorMessage('Office 页面连接超时。请重新打开文档，或关闭窗口后再试。');
         setPhase('error');
       }, timeoutMs);
     },
@@ -892,7 +892,7 @@ export function OfficeFileEditor({
           chunks: androidChunkProgressRef.current?.sent ?? null,
           totalChunks: androidChunkProgressRef.current?.total ?? null,
         });
-        setErrorMessage('Office 鎵撳紑鏂囨。瓒呮椂銆備綘鍙互閲嶆柊鎵撳紑锛屾垨鐩存帴鍏抽棴绐楀彛銆?);
+        setErrorMessage('Office 打开文档超时。你可以重新打开，或直接关闭窗口。');
         setPhase('error');
       }, timeoutMs);
     },
@@ -1037,7 +1037,7 @@ export function OfficeFileEditor({
       if (operation.stage === 'exporting' && bridgeSaveProtocolRef.current !== 'save-id') {
         legacyExportInvalidatedRef.current = true;
         setLegacyRetryBlocked(true);
-        failureMessage = '鏈瀵煎嚭缁撴灉鏃犳硶瀹夊叏纭锛屽凡鍋滄淇濆瓨銆傝鍏抽棴 Office 绐楀彛鍚庨噸鏂版墦寮€鍐嶈瘯銆?;
+        failureMessage = '本次导出结果无法安全确认，已停止保存。请关闭 Office 窗口后重新打开再试。';
       }
       cancelSaveOperation();
       if (!mountedRef.current || operation.detached) return;
@@ -1075,7 +1075,7 @@ export function OfficeFileEditor({
       if (requestedSaveId && requestedSaveId === lastSettledSaveIdRef.current) return undefined;
       if (legacyExportInvalidatedRef.current) {
         setLegacyRetryBlocked(true);
-        setErrorMessage('璇峰叧闂?Office 绐楀彛鍚庨噸鏂版墦寮€锛屽啀閲嶆柊淇濆瓨銆?);
+        setErrorMessage('请关闭 Office 窗口后重新打开，再重新保存。');
         setPhase('error');
         return undefined;
       }
@@ -1097,7 +1097,7 @@ export function OfficeFileEditor({
       armSaveTimeout(
         operation,
         exportTimeoutMs,
-        '淇濆瓨瓒呮椂锛歄ffice 鏈兘鐢熸垚鏈€鏂版枃浠躲€備綘鍙互閲嶈瘯鎴栧叧闂獥鍙ｃ€?
+        '保存超时：Office 未能生成最新文件。你可以重试或关闭窗口。'
       );
       if (notifyOffice) {
         postToOffice({ type: OFFICE_BRIDGE_SAVE, saveId: operation.id });
@@ -1196,8 +1196,8 @@ export function OfficeFileEditor({
         clearOpenTimeouts();
         setErrorMessage(
           progress
-            ? `Android 鏂囨。浼犺緭澶辫触锛堝凡鍙戦€?${progress.sent}/${progress.total} 鍧楋級銆傝纭 Office 鏈嶅姟宸叉洿鏂板悗閲嶆柊鎵撳紑銆俙
-            : 'Android 鏂囨。浼犺緭澶辫触銆傝纭 Office 鏈嶅姟宸叉洿鏂板悗閲嶆柊鎵撳紑銆?
+            ? `Android 文档传输失败（已发送 ${progress.sent}/${progress.total} 块）。请确认 Office 服务已更新后重新打开。`
+            : 'Android 文档传输失败。请确认 Office 服务已更新后重新打开。'
         );
         setPhase('error');
       });
@@ -1302,8 +1302,14 @@ export function OfficeFileEditor({
           const encryptedOfficeFile =
             isCompoundOfficeContainer(source) && (await isOfficeDocumentEncrypted(source));
 
-          // PDF encryption is intentionally handled by the embedded Office viewer on mobile.
-          // The host must not preflight it with PDF.js, otherwise users see two password dialogs.
+          // PDF encryption does not use the Compound File signature. Mobile
+          // WebViews otherwise hand the protected PDF to Office without a
+          // password and wait forever for the opened callback. Probe only for
+          // the password requirement; Office remains the renderer.
+          // Let Office own the protected-PDF prompt on mobile. Preflighting with PDF.js
+          // would display a duplicate host password dialog.
+          const pdfPasswordState: PdfPasswordState = 'ready';
+
           if (encryptedOfficeFile) {
             if (!password?.trim()) {
               clearOpenTimeouts();
@@ -1362,7 +1368,7 @@ export function OfficeFileEditor({
           if (sessionRef.current?.requestId === requestId) {
             recordDiagnostic('source_load_error', { error: diagnosticError(error) });
             clearOpenTimeouts();
-            setErrorMessage('鏂囨。涓嬭浇鎴栬В瀵嗚秴鏃躲€傝妫€鏌ョ綉缁滃悗閲嶆柊鎵撳紑锛屾垨鐩存帴鍏抽棴绐楀彛銆?);
+            setErrorMessage('文档下载或解密超时。请检查网络后重新打开，或直接关闭窗口。');
             setPhase('error');
           }
         })
@@ -1430,7 +1436,7 @@ export function OfficeFileEditor({
       armSaveTimeout(
         activeOperation,
         uploadTimeoutMs,
-        '涓婁紶瓒呮椂锛氳亰澶╂湇鍔″櫒鏈畬鎴愬獟浣撲笂浼犮€備綘鍙互閲嶈瘯鎴栧叧闂獥鍙ｃ€?
+        '上传超时：聊天服务器未完成媒体上传。你可以重试或关闭窗口。'
       );
       const upload = await uploadPromise;
       const publishingOperation = saveOperationRef.current;
@@ -1512,7 +1518,7 @@ export function OfficeFileEditor({
         }
         if (androidApp && data.supportsChunkedSource !== true) {
           setErrorMessage(
-            'Office 鏈嶅姟鐗堟湰杩囨棫锛屾棤娉曞湪 Android 涓畨鍏ㄤ紶杈撴枃妗ｃ€傝鏇存柊 Office 鏈嶅姟鍚庨噸璇曘€?
+            'Office 服务版本过旧，无法在 Android 中安全传输文档。请更新 Office 服务后重试。'
           );
           setPhase('error');
           return;
@@ -1603,7 +1609,7 @@ export function OfficeFileEditor({
           if (!acceptBridgeSaveMessage(operation, data.saveId)) return;
           failSaveOperation(
             operation.id,
-            'Office 鏃犳硶鐢熸垚鏈€鏂版枃浠躲€傝閲嶈瘯锛涘鏋滈棶棰樻寔缁紝鍙互鐩存帴鍏抽棴绐楀彛銆?
+            'Office 无法生成最新文件。请重试；如果问题持续，可以直接关闭窗口。'
           );
           return;
         }
@@ -1618,7 +1624,7 @@ export function OfficeFileEditor({
           return;
         }
         clearOpenTimeouts();
-        setErrorMessage('Office 鏃犳硶鎵撳紑鏂囨。銆傝妫€鏌ョ綉缁滃悗鍏抽棴绐楀彛骞堕噸璇曘€?);
+        setErrorMessage('Office 无法打开文档。请检查网络后关闭窗口并重试。');
         setPhase('error');
         return;
       }
@@ -1627,7 +1633,7 @@ export function OfficeFileEditor({
         if (!operation || operation.stage !== 'exporting') return;
         if (!acceptBridgeSaveMessage(operation, data.saveId)) return;
         if (!(data.buffer instanceof ArrayBuffer) || data.buffer.byteLength === 0) {
-          failSaveOperation(operation.id, 'Office 杩斿洖鐨勬枃浠朵负绌烘垨鏃犳晥锛岃閲嶈瘯銆?);
+          failSaveOperation(operation.id, 'Office 返回的文件为空或无效，请重试。');
           return;
         }
 
@@ -1640,7 +1646,7 @@ export function OfficeFileEditor({
         armSaveTimeout(
           operation,
           prepareTimeoutMs,
-          '鏂囦欢鍑嗗瓒呮椂锛氭湭鑳藉畬鎴愬姞瀵嗘垨鏂囦欢澶勭悊銆備綘鍙互閲嶈瘯鎴栧叧闂獥鍙ｃ€?
+          '文件准备超时：未能完成加密或文件处理。你可以重试或关闭窗口。'
         );
         replaceOriginalFile(data.buffer, data.mimeType, operation.id)
           .then(() => {
@@ -1670,13 +1676,13 @@ export function OfficeFileEditor({
               dirtyRef.current = true;
               setDirty(true);
               setShowClosePrompt(false);
-              setErrorMessage('鏂囦欢宸蹭笂浼狅紝浣嗗彂甯冩洿鏂板け璐ャ€傝妫€鏌ョ綉缁滃悗閲嶈瘯銆?);
+              setErrorMessage('文件已上传，但发布更新失败。请检查网络后重试。');
               setPhase('error');
               return;
             }
             failSaveOperation(
               operation.id,
-              '淇濆瓨澶辫触锛氭渶鏂版枃浠舵湭鑳戒笂浼犲埌鑱婂ぉ鏈嶅姟鍣ㄣ€傝妫€鏌ョ綉缁滃悗閲嶈瘯銆?
+              '保存失败：最新文件未能上传到聊天服务器。请检查网络后重试。'
             );
           });
       }
@@ -1874,7 +1880,7 @@ export function OfficeFileEditor({
             type: OFFICE_BRIDGE_ERROR,
             requestId: activeSession.requestId,
             saveId: message.saveId,
-            message: '淇濆瓨缁撴灉鏃犳硶浠庣嫭绔嬬獥鍙ｈ鍙栥€?,
+            message: '保存结果无法从独立窗口读取。',
           });
         });
       return;
@@ -2034,7 +2040,7 @@ export function OfficeFileEditor({
         type: 'native-error',
         sessionId: latestPayload.sessionId,
         requestId: latestPayload.requestId,
-        message: 'Office 鐙珛绐楀彛閫氫俊涓柇銆?,
+        message: 'Office 独立窗口通信中断。',
       });
     });
   }, [
@@ -2095,18 +2101,18 @@ export function OfficeFileEditor({
         }).format(updatedAt)
       : undefined;
   let updateLabel: string | undefined;
-  if (updatedBy && updatedAtLabel) updateLabel = `鐢?${updatedBy} 浜?${updatedAtLabel} 鏇存柊`;
-  else if (updatedBy) updateLabel = `鐢?${updatedBy} 鏇存柊`;
+  if (updatedBy && updatedAtLabel) updateLabel = `由 ${updatedBy} 于 ${updatedAtLabel} 更新`;
+  else if (updatedBy) updateLabel = `由 ${updatedBy} 更新`;
   const publishing = phase === 'publishing';
   const busy = phase === 'saving' || phase === 'uploading' || publishing;
-  let editActionTitle = '鍦ㄧ嚎缂栬緫骞朵繚瀛樺埌鍘熸秷鎭?;
-  if (backgroundPublishing) editActionTitle = '鏈€鏂扮増鏈鍦ㄥ彂甯冿紝璇风◢鍊?;
-  else if (!canEdit) editActionTitle = '褰撳墠娑堟伅鏃犳硶缂栬緫';
-  let downloadActionTitle = downloadError ? '涓嬭浇澶辫触锛岀偣鍑婚噸璇? : '涓嬭浇鏂囦欢';
-  if (backgroundPublishing) downloadActionTitle = '鏈€鏂扮増鏈鍦ㄥ彂甯冿紝璇风◢鍊?;
-  let closeButtonLabel = '鍏抽棴 Office 鏂囨。';
-  if (publishing) closeButtonLabel = '鍏抽棴 Office 鏂囨。锛屾枃浠跺皢鍦ㄥ悗鍙扮户缁彂甯?;
-  else if (busy) closeButtonLabel = '鍙栨秷淇濆瓨骞跺叧闂?Office 鏂囨。';
+  let editActionTitle = '在线编辑并保存到原消息';
+  if (backgroundPublishing) editActionTitle = '最新版本正在发布，请稍候';
+  else if (!canEdit) editActionTitle = '当前消息无法编辑';
+  let downloadActionTitle = downloadError ? '下载失败，点击重试' : '下载文件';
+  if (backgroundPublishing) downloadActionTitle = '最新版本正在发布，请稍候';
+  let closeButtonLabel = '关闭 Office 文档';
+  if (publishing) closeButtonLabel = '关闭 Office 文档，文件将在后台继续发布';
+  else if (busy) closeButtonLabel = '取消保存并关闭 Office 文档';
 
   return (
     <>
@@ -2130,9 +2136,9 @@ export function OfficeFileEditor({
               size="O400"
               priority="300"
               truncate
-              title={[sizeLabel, extLabel, updateLabel].filter(Boolean).join(' 路 ')}
+              title={[sizeLabel, extLabel, updateLabel].filter(Boolean).join(' · ')}
             >
-              {[sizeLabel, extLabel, updateLabel].filter(Boolean).join(' 路 ')}
+              {[sizeLabel, extLabel, updateLabel].filter(Boolean).join(' · ')}
             </Text>
           </div>
         </div>
@@ -2150,9 +2156,9 @@ export function OfficeFileEditor({
             onFocus={warmOfficeOpen}
             onPointerDown={warmOfficeOpen}
             disabled={backgroundPublishing}
-            title={backgroundPublishing ? '鏈€鏂扮増鏈鍦ㄥ彂甯冿紝璇风◢鍊? : '鍦ㄧ嚎棰勮'}
+            title={backgroundPublishing ? '最新版本正在发布，请稍候' : '在线预览'}
           >
-            <span className={css.actionLabel}>鍦ㄧ嚎棰勮</span>
+            <span className={css.actionLabel}>在线预览</span>
           </button>
           {officeKind !== 'pdf' && !mobileOfficeShell && (
             <button
@@ -2165,7 +2171,7 @@ export function OfficeFileEditor({
               title={editActionTitle}
             >
               <span className={css.actionLabel}>
-                {backgroundPublishing ? '鍙戝竷涓€? : '鍦ㄧ嚎缂栬緫'}
+                {backgroundPublishing ? '发布中…' : '在线编辑'}
               </span>
             </button>
           )}
@@ -2178,7 +2184,7 @@ export function OfficeFileEditor({
             disabled={downloading || backgroundPublishing}
             title={downloadActionTitle}
           >
-            <span className={css.actionLabel}>{downloading ? <Spinner size="100" /> : '涓嬭浇'}</span>
+            <span className={css.actionLabel}>{downloading ? <Spinner size="100" /> : '下载'}</span>
           </button>
         </div>
       </div>
@@ -2201,7 +2207,7 @@ export function OfficeFileEditor({
                   variant="Background"
                   role="dialog"
                   aria-modal="true"
-                  aria-label={`${session.mode === 'edit' ? '鍦ㄧ嚎缂栬緫' : '鍦ㄧ嚎棰勮'} ${body}`}
+                  aria-label={`${session.mode === 'edit' ? '在线编辑' : '在线预览'} ${body}`}
                   onKeyDown={handleModalKeyDown}
                   onContextMenu={(event: React.MouseEvent<HTMLElement>) => event.stopPropagation()}
                 >
@@ -2234,7 +2240,7 @@ export function OfficeFileEditor({
                           onClick={() => requestSave(false)}
                           before={busy ? <Spinner size="100" fill="Solid" /> : undefined}
                         >
-                          <Text size="B300">淇濆瓨</Text>
+                          <Text size="B300">保存</Text>
                         </Button>
                       )}
                       <IconButton
@@ -2257,7 +2263,7 @@ export function OfficeFileEditor({
                       src={session.src}
                       onLoad={() => recordDiagnostic('iframe_load')}
                       onError={() => recordDiagnostic('iframe_error')}
-                      title={`${session.mode === 'edit' ? '鍦ㄧ嚎缂栬緫' : '鍦ㄧ嚎棰勮'} ${body}`}
+                      title={`${session.mode === 'edit' ? '在线编辑' : '在线预览'} ${body}`}
                       allow="clipboard-read; clipboard-write"
                       sandbox={
                         mobileOfficeShell && session.mode === 'preview'
@@ -2277,16 +2283,16 @@ export function OfficeFileEditor({
                           onSubmit={submitPassword}
                           role="dialog"
                           aria-modal="true"
-                          aria-label="杈撳叆 Office 鏂囨。瀵嗙爜"
+                          aria-label="输入 Office 文档密码"
                         >
-                          <Text size="T300">姝?Office 鏂囨。宸插姞瀵?/Text>
+                          <Text size="T300">此 Office 文档已加密</Text>
                           <Text size="T200" priority="300">
-                            璇疯緭鍏ユ枃妗ｅ瘑鐮佸悗鍐嶆墦寮€銆傚瘑鐮佷粎鐢ㄤ簬鏈瑙ｅ瘑锛屼笉浼氫繚瀛樺埌璁惧鎴栦笂浼犲埌鑱婂ぉ鏈嶅姟鍣ㄣ€?
+                            请输入文档密码后再打开。密码仅用于本次解密，不会保存到设备或上传到聊天服务器。
                           </Text>
                           {passwordError && (
                             <Text size="T200" priority="300">
                               {isPasswordPromptError(passwordError)
-                                ? '瀵嗙爜涓嶆纭紝鏂囨。鏈彂閫佸埌 Office 鏈嶅姟锛岃纭鍚庨噸璇曘€?
+                                ? '密码不正确，文档未发送到 Office 服务，请确认后重试。'
                                 : passwordError}
                             </Text>
                           )}
@@ -2295,7 +2301,7 @@ export function OfficeFileEditor({
                             variant="Secondary"
                             autoFocus
                             name="officeDocumentPassword"
-                            placeholder="璇疯緭鍏ユ枃妗ｅ瘑鐮?
+                            placeholder="请输入文档密码"
                             value={passwordInput}
                             onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
                               setPasswordInput(event.target.value)
@@ -2311,7 +2317,7 @@ export function OfficeFileEditor({
                               radii="300"
                               onClick={closeModal}
                             >
-                              <Text size="B300">鍙栨秷</Text>
+                              <Text size="B300">取消</Text>
                             </Button>
                             <Button
                               type="submit"
@@ -2320,7 +2326,7 @@ export function OfficeFileEditor({
                               size="300"
                               radii="300"
                             >
-                              <Text size="B300">瑙ｅ瘑骞舵墦寮€</Text>
+                              <Text size="B300">解密并打开</Text>
                             </Button>
                           </Box>
                         </Box>
@@ -2329,14 +2335,14 @@ export function OfficeFileEditor({
                     {phase === 'loading' && !passwordRequired && (
                       <div className={css.loadingLayer}>
                         <Spinner size="400" />
-                        <Text size="T300">姝ｅ湪鎵撳紑 Office 鏂囨。鈥?/Text>
+                        <Text size="T300">正在打开 Office 文档…</Text>
                       </div>
                     )}
                     {phase === 'error' && (
                       <div className={css.errorLayer} role="alert">
                         <Icon src={Icons.Warning} size="300" />
                         <Text size="T300" align="Center">
-                          {errorMessage || '鏂囨。鎵撳紑鎴栦繚瀛樺け璐ワ紝璇锋鏌ョ綉缁滃悗閲嶈瘯銆?}
+                          {errorMessage || '文档打开或保存失败，请检查网络后重试。'}
                         </Text>
                         <Box gap="200" justifyContent="Center" wrap="Wrap">
                           {mobileOfficeShell && (
@@ -2350,10 +2356,10 @@ export function OfficeFileEditor({
                               >
                                 <Text size="B300">
                                   {diagnosticSent
-                                    ? '璇婃柇淇℃伅宸插彂閫?
+                                    ? '诊断信息已发送'
                                     : diagnosticSendFailed
-                                    ? '鍙戦€佸け璐ワ紝鐐规閲嶈瘯'
-                                    : '鍙戦€佽瘖鏂俊鎭?}
+                                    ? '发送失败，点此重试'
+                                    : '发送诊断信息'}
                                 </Text>
                               </Button>
                               <Button
@@ -2365,10 +2371,10 @@ export function OfficeFileEditor({
                               >
                                 <Text size="B300">
                                   {diagnosticCopied
-                                    ? '璇婃柇淇℃伅宸插鍒?
+                                    ? '诊断信息已复制'
                                     : diagnosticCopyFailed
-                                    ? '澶嶅埗澶辫触锛岃闀挎寜澶嶅埗'
-                                    : '澶嶅埗璇婃柇淇℃伅'}
+                                    ? '复制失败，请长按复制'
+                                    : '复制诊断信息'}
                                 </Text>
                               </Button>
                             </>
@@ -2381,7 +2387,7 @@ export function OfficeFileEditor({
                               radii="300"
                               onClick={() => openEditor(session.mode)}
                             >
-                              <Text size="B300">閲嶆柊鎵撳紑</Text>
+                              <Text size="B300">重新打开</Text>
                             </Button>
                           )}
                           {session.mode === 'edit' && dirty && !legacyRetryBlocked && (
@@ -2392,7 +2398,7 @@ export function OfficeFileEditor({
                               radii="300"
                               onClick={() => requestSave(false)}
                             >
-                              <Text size="B300">閲嶈瘯淇濆瓨</Text>
+                              <Text size="B300">重试保存</Text>
                             </Button>
                           )}
                           <Button
@@ -2402,7 +2408,7 @@ export function OfficeFileEditor({
                             radii="300"
                             onClick={closeModal}
                           >
-                            <Text size="B300">鍏抽棴</Text>
+                            <Text size="B300">关闭</Text>
                           </Button>
                         </Box>
                       </div>
@@ -2421,7 +2427,7 @@ export function OfficeFileEditor({
                           onClick={closeModal}
                         >
                           <Text size="B300">
-                            {publishing ? '鍏抽棴绐楀彛锛堢户缁彂甯冿級' : '鍙栨秷骞跺叧闂?}
+                            {publishing ? '关闭窗口（继续发布）' : '取消并关闭'}
                           </Text>
                         </Button>
                       </div>
@@ -2434,9 +2440,9 @@ export function OfficeFileEditor({
                       >
                         <div className={css.promptCard} role="alertdialog" aria-modal="true">
                           <Box direction="Column" gap="100">
-                            <Text size="H4">淇濆瓨瀵规枃妗ｇ殑淇敼锛?/Text>
+                            <Text size="H4">保存对文档的修改？</Text>
                             <Text size="T300" priority="300">
-                              淇濆瓨鍚庝細鐩存帴鏇存柊鑱婂ぉ涓師浣嶇疆鐨勬枃浠讹紱涓嶄繚瀛樺垯涓嶄細浜х敓浠讳綍鏇存柊銆?
+                              保存后会直接更新聊天中原位置的文件；不保存则不会产生任何更新。
                             </Text>
                           </Box>
                           <Box gap="100" justifyContent="End" wrap="Wrap">
@@ -2447,7 +2453,7 @@ export function OfficeFileEditor({
                               radii="300"
                               onClick={() => setShowClosePrompt(false)}
                             >
-                              <Text size="B300">缁х画缂栬緫</Text>
+                              <Text size="B300">继续编辑</Text>
                             </Button>
                             <Button
                               variant="Critical"
@@ -2456,7 +2462,7 @@ export function OfficeFileEditor({
                               radii="300"
                               onClick={closeModal}
                             >
-                              <Text size="B300">涓嶄繚瀛?/Text>
+                              <Text size="B300">不保存</Text>
                             </Button>
                             <Button
                               variant="Primary"
@@ -2465,7 +2471,7 @@ export function OfficeFileEditor({
                               radii="300"
                               onClick={() => requestSave(true)}
                             >
-                              <Text size="B300">淇濆瓨骞跺叧闂?/Text>
+                              <Text size="B300">保存并关闭</Text>
                             </Button>
                           </Box>
                         </div>
