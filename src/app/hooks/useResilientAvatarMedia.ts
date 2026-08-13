@@ -7,6 +7,7 @@ import {
   primeCachedMediaObjectUrl,
 } from '../utils/mediaUrlCache';
 import { isAndroidApp } from '../utils/nativePlatform';
+import { prepareAndroidMediaAssetUrl } from '../utils/androidMediaAssetCache';
 
 const AVATAR_RETRY_DELAY_MS = 250;
 const LOADED_AVATAR_MEDIA_LIMIT = 2048;
@@ -42,6 +43,7 @@ export const useResilientAvatarMedia = (src?: string, preferOriginal = false) =>
     [androidApp, preferOriginal, src]
   );
   const { desktopUrl, objectUrl } = useCachedMediaUrls(mediaSrc);
+  const [androidAssetUrl, setAndroidAssetUrl] = useState<string>();
   const directUrl = shouldUseObjectUrlForMediaDisplay(mediaSrc) ? undefined : mediaSrc;
   const rememberedAvatarUrl =
     androidApp && mediaSrc ? androidLoadedAvatarBySource.get(mediaSrc) : undefined;
@@ -49,6 +51,21 @@ export const useResilientAvatarMedia = (src?: string, preferOriginal = false) =>
     rememberedAvatarUrl && isCachedMediaObjectUrl(rememberedAvatarUrl)
       ? rememberedAvatarUrl
       : undefined;
+
+  useEffect(() => {
+    let disposed = false;
+    setAndroidAssetUrl(undefined);
+    if (!androidApp || !mediaSrc) return undefined;
+
+    // A native cache hit is a local file URL and can be painted immediately
+    // after process restart. Do not wait for the Blob/ObjectURL queue.
+    void prepareAndroidMediaAssetUrl(mediaSrc, undefined, false, true)?.then((url) => {
+      if (!disposed && url) setAndroidAssetUrl(url);
+    });
+    return () => {
+      disposed = true;
+    };
+  }, [androidApp, mediaSrc]);
   if (rememberedAvatarUrl && !rememberedAndroidUrl && mediaSrc) {
     androidLoadedAvatarBySource.delete(mediaSrc);
   }
@@ -58,14 +75,15 @@ export const useResilientAvatarMedia = (src?: string, preferOriginal = false) =>
           // Show the Matrix thumbnail immediately. Once the original has been fetched into a
           // safe object/desktop URL, it moves ahead of this thumbnail and animation starts.
           desktopUrl,
+          androidAssetUrl,
           objectUrl,
           rememberedAndroidUrl,
           directUrl,
         ]
-      : [desktopUrl, objectUrl, rememberedAndroidUrl, directUrl];
+      : [desktopUrl, androidAssetUrl, objectUrl, rememberedAndroidUrl, directUrl];
 
     return Array.from(new Set(orderedCandidates.filter(Boolean) as string[]));
-  }, [desktopUrl, directUrl, objectUrl, preferOriginal, rememberedAndroidUrl]);
+  }, [androidAssetUrl, desktopUrl, directUrl, objectUrl, preferOriginal, rememberedAndroidUrl]);
   const candidateKey = useMemo(() => candidates.join('\n'), [candidates]);
   const [candidateIndex, setCandidateIndex] = useState(0);
   const [retryNonce, setRetryNonce] = useState(0);

@@ -47,10 +47,11 @@ import { SyncStatus } from './SyncStatus';
 import { AuthMetadataProvider } from '../../hooks/useAuthMetadata';
 import { getFallbackSession } from '../../state/sessions';
 import { AutoDiscovery } from './AutoDiscovery';
-import { isNativeApp } from '../../utils/nativePlatform';
+import { isAndroidApp, isNativeApp } from '../../utils/nativePlatform';
 import { MobileSettingsProvider } from './MobileSettings';
 
 const CLIENT_STORE_PERSIST_INTERVAL_MS = 30_000;
+const ANDROID_CLIENT_STORE_PERSIST_INTERVAL_MS = 10_000;
 const INITIAL_SYNC_ENTRY_FALLBACK_MS = 3_000;
 
 function ClientRootLoading() {
@@ -297,7 +298,10 @@ export function ClientRoot({ children }: ClientRootProps) {
           state === SyncState.Catchup
         ) {
           const now = Date.now();
-          if (mx && now - lastStorePersistedAtRef.current >= CLIENT_STORE_PERSIST_INTERVAL_MS) {
+          const persistInterval = isAndroidApp()
+            ? ANDROID_CLIENT_STORE_PERSIST_INTERVAL_MS
+            : CLIENT_STORE_PERSIST_INTERVAL_MS;
+          if (mx && now - lastStorePersistedAtRef.current >= persistInterval) {
             lastStorePersistedAtRef.current = now;
             persistClientStore(mx);
           }

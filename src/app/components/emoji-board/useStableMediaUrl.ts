@@ -11,6 +11,7 @@ import { releaseObjectUrl, retainObjectUrl } from '../../utils/objectUrlRetainer
 import { shouldUseObjectUrlForMediaDisplay } from '../../utils/matrix';
 import { mobileOrTablet } from '../../utils/user-agent';
 import { isAndroidApp } from '../../utils/nativePlatform';
+import { prepareAndroidMediaAssetUrl } from '../../utils/androidMediaAssetCache';
 
 type MediaCandidate = {
   source: string;
@@ -90,6 +91,8 @@ export const useStableMediaUrl = (
   const [cacheVersion, setCacheVersion] = useState(0);
   const [desktopSrc, setDesktopSrc] = useState<string | undefined>();
   const [desktopFallbackSrc, setDesktopFallbackSrc] = useState<string | undefined>();
+  const [androidSrc, setAndroidSrc] = useState<string | undefined>();
+  const [androidFallbackSrc, setAndroidFallbackSrc] = useState<string | undefined>();
   const [loadedDisplayUrl, setLoadedDisplayUrl] = useState<string | undefined>();
   const [preparedMediaReady, setPreparedMediaReady] = useState(!shouldWaitForPreparedMedia);
   const fallbackAttemptedRef = useRef(false);
@@ -99,9 +102,8 @@ export const useStableMediaUrl = (
     autoRetryAttemptRef.current = 0;
   }, [fallbackSrc, src]);
 
-  const candidates = useMemo(
-    () =>
-      buildMediaCandidates(
+  const candidates = useMemo(() => {
+    const nextCandidates = buildMediaCandidates(
         {
           allowBrowserObjectUrlCache: objectUrlCacheEnabled,
           allowDirectSource: !requireObjectUrl,
@@ -110,7 +112,13 @@ export const useStableMediaUrl = (
         src,
         desktopFallbackSrc,
         fallbackSrc
-      ),
+      );
+    if (androidSrc && src) nextCandidates.unshift({ source: src, displayUrl: androidSrc });
+    if (androidFallbackSrc && fallbackSrc && fallbackSrc !== src) {
+      nextCandidates.push({ source: fallbackSrc, displayUrl: androidFallbackSrc });
+    }
+    return nextCandidates;
+  },
     // The media cache mutates outside React. cacheVersion is the explicit invalidation signal.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
@@ -135,10 +143,28 @@ export const useStableMediaUrl = (
     setCandidateIndex(0);
     setDesktopSrc(undefined);
     setDesktopFallbackSrc(undefined);
+    setAndroidSrc(undefined);
+    setAndroidFallbackSrc(undefined);
     setLoadedDisplayUrl(undefined);
     setPreparedMediaReady(!shouldWaitForPreparedMedia);
     fallbackAttemptedRef.current = false;
   }, [fallbackSrc, shouldWaitForPreparedMedia, src]);
+
+  useEffect(() => {
+    if (!isAndroidApp()) return undefined;
+    let disposed = false;
+    const prepare = (source: string | undefined, setter: (url: string) => void) => {
+      if (!source) return;
+      void prepareAndroidMediaAssetUrl(source, options.mimeType, false, true)?.then((url) => {
+        if (!disposed && url) setter(url);
+      });
+    };
+    prepare(src, setAndroidSrc);
+    prepare(fallbackSrc, setAndroidFallbackSrc);
+    return () => {
+      disposed = true;
+    };
+  }, [fallbackSrc, options.mimeType, src]);
 
   useEffect(() => {
     if (!desktopSupported) {

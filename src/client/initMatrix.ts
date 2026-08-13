@@ -28,6 +28,7 @@ const MALFORMED_ENCRYPTED_EVENT_WARNING = 'missing field `algorithm`';
 const LEGACY_RUST_CRYPTO_DATABASE_PREFIX = 'matrix-js-sdk';
 const RUST_CRYPTO_DATABASE_SELECTION_KEY_PREFIX = 'cinny_rust_crypto_database';
 const rustCryptoDatabasePrefixes = new WeakMap<MatrixClient, string>();
+const androidCryptoRestorePromises = new WeakMap<MatrixClient, Promise<void>>();
 
 const getRustCryptoDatabaseNames = (prefix: string): string[] => [
   `${prefix}::matrix-sdk-crypto`,
@@ -293,18 +294,18 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
     verificationMethods: ['m.sas.v1'],
   });
 
-  // Do not put the Android Storage Manager prompt on the critical startup
-  // path. It runs in parallel with IndexedDB opening and remains best effort.
-  if (isAndroidApp()) void requestPersistentAndroidStorage();
+  // Open the Matrix stores only after Android has requested durable storage.
+  // The persisted() fast path is effectively immediate after the first launch;
+  // this prevents a newly-created WebView database from being evicted before
+  // the first sync snapshot is written.
+  if (isAndroidApp()) await requestPersistentAndroidStorage();
   await indexedDBStore.startup();
   const cryptoDatabasePrefix = await initRustCryptoForSession(mx, session);
   rustCryptoDatabasePrefixes.set(mx, cryptoDatabasePrefix);
   if (isAndroidApp()) {
     const crypto = mx.getCrypto();
     if (crypto) {
-      // Restoring the backup key must not delay the cached room shell. Rust
-      // Crypto will use it as soon as the asynchronous restore completes.
-      void restoreAndroidBackupKey(crypto);
+      androidCryptoRestorePromises.set(mx, restoreAndroidBackupKey(crypto));
       mx.on(CryptoEvent.KeyBackupDecryptionKeyCached, () => {
         void persistAndroidBackupKey(crypto);
       });
@@ -324,6 +325,17 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
 const INITIAL_SYNC_LIMIT = 8;
 
 export const startClient = async (mx: MatrixClient) => {
+  if (isAndroidApp()) {
+    await androidCryptoRestorePromises.get(mx);
+    const crypto = mx.getCrypto();
+    if (crypto) {
+      // Rust Crypto starts its backup check during construction, before the
+      // Android Keystore key can be restored. Re-run the check after restore so
+      // a previously trusted backup is enabled again instead of being disabled
+      // for the remainder of this process.
+      void crypto.checkKeyBackupAndEnable().catch(() => undefined);
+    }
+  }
   await mx.startClient({
     lazyLoadMembers: true,
     disablePresence: true,

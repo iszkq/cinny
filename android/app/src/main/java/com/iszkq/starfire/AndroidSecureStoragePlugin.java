@@ -76,7 +76,14 @@ public class AndroidSecureStoragePlugin extends Plugin {
         String value = call.getString("value");
         if (key == null || value == null) { call.reject("key and value are required"); return; }
         try {
-            getContext().getSharedPreferences(PREFS, 0).edit().putString(key, encrypt(value)).apply();
+            boolean committed = getContext().getSharedPreferences(PREFS, 0)
+                .edit()
+                .putString(key, encrypt(value))
+                .commit();
+            if (!committed) {
+                call.reject("Unable to commit secure storage.");
+                return;
+            }
             call.resolve();
         } catch (Exception error) { call.reject("Unable to write secure storage.", error); }
     }
@@ -85,7 +92,8 @@ public class AndroidSecureStoragePlugin extends Plugin {
     public void remove(PluginCall call) {
         String key = call.getString("key");
         if (key == null) { call.reject("key is required"); return; }
-        getContext().getSharedPreferences(PREFS, 0).edit().remove(key).apply();
+        boolean committed = getContext().getSharedPreferences(PREFS, 0).edit().remove(key).commit();
+        if (!committed) { call.reject("Unable to commit secure storage removal."); return; }
         call.resolve();
     }
 }
