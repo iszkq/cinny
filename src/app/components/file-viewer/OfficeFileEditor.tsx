@@ -407,7 +407,8 @@ const getEditorUrl = (
   requestId: string,
   mode: EditorMode,
   fileName: string,
-  mimeType: string
+  mimeType: string,
+  protectedPdf = false
 ): string => {
   const target = new URL(editorUrl);
   target.searchParams.set('embed', '1');
@@ -416,6 +417,7 @@ const getEditorUrl = (
   target.searchParams.set('fileName', fileName);
   target.searchParams.set('fileType', getFileNameExt(fileName));
   target.searchParams.set('mimeType', mimeType);
+  if (protectedPdf) target.searchParams.set('protectedPdf', '1');
   target.searchParams.set('editing', mode === 'edit' ? '1' : '0');
   target.searchParams.set('lang', 'zh-CN');
   const compactViewport = isCompactOfficeViewport();
@@ -1228,7 +1230,14 @@ export function OfficeFileEditor({
         mode,
         requestId,
         nativeSessionId,
-        src: getEditorUrl(officeEditorUrl, requestId, mode, body, mimeType),
+        src: getEditorUrl(
+          officeEditorUrl,
+          requestId,
+          mode,
+          body,
+          mimeType,
+          officeKind === 'pdf' && Boolean(password?.trim())
+        ),
         password: password?.trim() || undefined,
       };
       diagnosticStartedAtRef.current = Date.now();
