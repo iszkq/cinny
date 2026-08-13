@@ -252,6 +252,16 @@ const installWebMatrixLoggerFilter = () => {
   };
 };
 
+const requestPersistentAndroidStorage = async (): Promise<void> => {
+  try {
+    const storage = typeof navigator === 'undefined' ? undefined : navigator.storage;
+    if (!storage?.persist) return;
+    if ((await storage.persisted?.()) !== true) await storage.persist();
+  } catch {
+    // Durable storage is best effort and must never block login.
+  }
+};
+
 export const initClient = async (session: Session): Promise<MatrixClient> => {
   installWebMatrixLoggerFilter();
 
@@ -276,7 +286,7 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
   });
 
   await indexedDBStore.startup();
-  await requestPersistentCryptoStorage();
+  await requestPersistentAndroidStorage();
   const cryptoDatabasePrefix = await initRustCryptoForSession(mx, session);
   rustCryptoDatabasePrefixes.set(mx, cryptoDatabasePrefix);
   enableMissingRoomKeyRequests(mx);
