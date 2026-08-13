@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { CryptoApi, CryptoEvent } from 'matrix-js-sdk/lib/crypto-api';
+import { getAndroidSecureValue } from '../../client/secretStorageKeys';
 import { verifiedDevice } from '../utils/matrix-crypto';
+import { isAndroidApp } from '../utils/nativePlatform';
 import { useAlive } from './useAlive';
 import { fulfilledPromiseSettledResult } from '../utils/common';
 import { useMatrixClient } from './useMatrixClient';
@@ -170,13 +172,33 @@ export const useDeviceVerificationStatus = (
   deviceId: string | undefined,
   requireCrossSigning = false
 ): VerificationStatus => {
-  const [verificationStatus, setVerificationStatus] = useState(VerificationStatus.Unknown);
+  const durableAndroidTrust =
+    isAndroidApp() && deviceId && getAndroidSecureValue('verified-device') === '1';
+  const durableTrustRef = useRef(Boolean(durableAndroidTrust));
+  const [verificationStatus, setVerificationStatus] = useState(
+    durableAndroidTrust ? VerificationStatus.Verified : VerificationStatus.Unknown
+  );
+
+  const setStatus = useCallback((status: VerificationStatus) => {
+    // A durable Android marker is only a startup hint. Keep it while Rust
+    // Crypto is restoring, then allow a settled query to revoke it if the
+    // trust was genuinely removed.
+    if (
+      durableTrustRef.current &&
+      (status === VerificationStatus.Unknown ||
+        status === VerificationStatus.Unavailable ||
+        status === VerificationStatus.Unverified)
+    ) {
+      return;
+    }
+    setVerificationStatus(status);
+  }, []);
 
   useDeviceVerificationDetect(
     crypto,
     userId,
     deviceId,
-    setVerificationStatus,
+    setStatus,
     requireCrossSigning
   );
 

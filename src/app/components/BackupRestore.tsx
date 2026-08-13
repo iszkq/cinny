@@ -43,9 +43,10 @@ const RESTORE_PROGRESS_STALL_MESSAGE =
   '备份密钥已连接，正在优先解密当前房间；完整恢复仍在后台继续。';
 
 type BackupStatusProps = {
-  enabled: boolean;
+  enabled: boolean | undefined;
 };
 function BackupStatus({ enabled }: BackupStatusProps) {
+  if (enabled === undefined) return <Spinner size="50" variant="Secondary" fill="Soft" />;
   return (
     <Box as="span" gap="100" alignItems="Center">
       <Badge variant={enabled ? 'Success' : 'Critical'} fill="Solid" size="200" radii="Pill" />

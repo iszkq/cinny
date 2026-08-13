@@ -175,8 +175,10 @@ export function VerifyCurrentDeviceTile({
   const handleCancelVerification = () => setManualVerification(false);
 
   const backupNeedsRecovery =
+    backupEnabled !== undefined &&
     backupInfo !== undefined &&
     backupInfo !== null &&
+    backupTrust !== undefined &&
     (!backupEnabled ||
       backupTrust?.trusted !== true ||
       backupTrust?.matchesDecryptionKey !== true);

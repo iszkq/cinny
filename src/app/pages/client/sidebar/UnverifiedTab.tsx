@@ -50,6 +50,7 @@ function UnverifiedIndicator({ requestOpenSettings }: UnverifiedIndicatorProps) 
   const backupTrust = useKeyBackupTrust(crypto, backupInfo);
   const backupUnverified =
     securitySyncReady &&
+    backupEnabled !== undefined &&
     backupInfo !== undefined &&
     backupTrust !== undefined &&
     (!backupEnabled ||

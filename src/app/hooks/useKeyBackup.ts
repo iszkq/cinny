@@ -5,6 +5,7 @@ import type { BackupTrustInfo, KeyBackupInfo } from 'matrix-js-sdk/lib/crypto-ap
 import { useCallback, useEffect, useState } from 'react';
 import { useMatrixClient } from './useMatrixClient';
 import { useAlive } from './useAlive';
+import { isAndroidApp } from '../utils/nativePlatform';
 
 export const useKeyBackupStatusChange = (
   onChange: CryptoEventHandlerMap[CryptoEvent.KeyBackupStatus]
@@ -19,13 +20,15 @@ export const useKeyBackupStatusChange = (
   }, [mx, onChange]);
 };
 
-export const useKeyBackupStatus = (crypto: CryptoApi | undefined): boolean => {
+export const useKeyBackupStatus = (crypto: CryptoApi | undefined): boolean | undefined => {
   const alive = useAlive();
-  const [status, setStatus] = useState(false);
+  const [status, setStatus] = useState<boolean | undefined>(
+    isAndroidApp() ? undefined : false
+  );
 
   useEffect(() => {
     if (!crypto) {
-      setStatus(false);
+      setStatus(isAndroidApp() ? undefined : false);
       return undefined;
     }
     crypto.getActiveSessionBackupVersion().then((v) => {

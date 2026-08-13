@@ -93,6 +93,39 @@ export const getAndroidSecureValue = (name) => {
   return key ? secureValues.get(key) : undefined;
 };
 
+export const persistAndroidBackupKey = async (crypto) => {
+  if (!isAndroid() || !crypto) return;
+  try {
+    const [key, version] = await Promise.all([
+      crypto.getSessionBackupPrivateKey(),
+      crypto.getActiveSessionBackupVersion(),
+    ]);
+    if (!(key instanceof Uint8Array) || typeof version !== 'string' || !version) return;
+    await setAndroidSecureValue(
+      'session-backup-private-key',
+      JSON.stringify({ key: encodeKey(key), version })
+    );
+  } catch {
+    // Secure storage is best effort and must never block startup.
+  }
+};
+
+export const restoreAndroidBackupKey = async (crypto) => {
+  if (!isAndroid() || !crypto) return;
+  const encoded = getAndroidSecureValue('session-backup-private-key');
+  if (!encoded) return;
+  try {
+    const parsed = JSON.parse(encoded);
+    const key = decodeKey(parsed?.key);
+    if (!(key instanceof Uint8Array) || typeof parsed?.version !== 'string') return;
+    const activeVersion = await crypto.getActiveSessionBackupVersion();
+    if (activeVersion && activeVersion !== parsed.version) return;
+    await crypto.storeSessionBackupPrivateKey(key, parsed.version);
+  } catch {
+    // Ignore corrupt/stale values and let the normal recovery UI handle it.
+  }
+};
+
 const persistKeysSecurely = async () => {
   if (!isAndroid()) return;
   const key = secureStorageKey();
@@ -135,7 +168,11 @@ export function clearSecretStorageKeys() {
   const key = storageKey();
   if (key && isAndroid()) {
     try { localStorage.removeItem(key); } catch { /* ignore */ }
-    void AndroidSecureStorage.remove({ key }).catch(() => undefined);
+    void Promise.all([
+      AndroidSecureStorage.remove({ key }),
+      AndroidSecureStorage.remove({ key: secureValueKey('verified-device') }),
+      AndroidSecureStorage.remove({ key: secureValueKey('session-backup-private-key') }),
+    ]).catch(() => undefined);
   }
 }
 

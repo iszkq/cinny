@@ -227,13 +227,18 @@ export function ClientRoot({ children }: ClientRootProps) {
     if (isNativeApp()) {
       import('@capacitor/app')
         .then(async ({ App }) => {
-          const listener = await App.addListener('pause', persist);
+          const pauseListener = await App.addListener('pause', persist);
+          const stateListener = await App.addListener('appStateChange', ({ isActive }) => {
+            if (!isActive) persist();
+          });
           if (disposed) {
-            listener.remove().catch(() => undefined);
+            pauseListener.remove().catch(() => undefined);
+            stateListener.remove().catch(() => undefined);
             return;
           }
           removeNativePauseListener = () => {
-            listener.remove().catch(() => undefined);
+            pauseListener.remove().catch(() => undefined);
+            stateListener.remove().catch(() => undefined);
           };
         })
         .catch(() => undefined);

@@ -1,7 +1,12 @@
 import { createClient, MatrixClient, IndexedDBStore, IndexedDBCryptoStore } from 'matrix-js-sdk';
 import { logger as matrixLogger } from 'matrix-js-sdk/lib/logger';
 
-import { cryptoCallbacks, hydrateSecretStorageKeys } from './secretStorageKeys';
+import {
+  cryptoCallbacks,
+  hydrateSecretStorageKeys,
+  persistAndroidBackupKey,
+  restoreAndroidBackupKey,
+} from './secretStorageKeys';
 import { clearNavToActivePathStore } from '../app/state/navToActivePath';
 import { SETTINGS_STORAGE_KEY } from '../app/state/settingsStorage';
 import { restorePinLockStorage, snapshotPinLockStorage } from '../app/utils/pinLock';
@@ -9,6 +14,8 @@ import { clearDesktopMediaCache } from '../app/utils/desktopMediaAssetCache';
 import { isDesktopUpdaterSupported } from '../app/utils/desktopUpdater';
 import { pushSessionToSW } from '../sw-session';
 import { removeFallbackAccessToken } from '../app/state/sessions';
+import { isAndroidApp } from '../app/utils/nativePlatform';
+import { CryptoEvent } from 'matrix-js-sdk/lib/crypto-api/CryptoEvent';
 
 type Session = {
   baseUrl: string;
@@ -286,10 +293,20 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
     verificationMethods: ['m.sas.v1'],
   });
 
+  if (isAndroidApp()) await requestPersistentAndroidStorage();
   await indexedDBStore.startup();
-  await requestPersistentAndroidStorage();
   const cryptoDatabasePrefix = await initRustCryptoForSession(mx, session);
   rustCryptoDatabasePrefixes.set(mx, cryptoDatabasePrefix);
+  if (isAndroidApp()) {
+    const crypto = mx.getCrypto();
+    if (crypto) {
+      await restoreAndroidBackupKey(crypto);
+      mx.on(CryptoEvent.KeyBackupDecryptionKeyCached, () => {
+        void persistAndroidBackupKey(crypto);
+      });
+      void persistAndroidBackupKey(crypto);
+    }
+  }
   enableMissingRoomKeyRequests(mx);
 
   mx.setMaxListeners(200);
