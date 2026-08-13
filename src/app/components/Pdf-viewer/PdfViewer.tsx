@@ -37,8 +37,6 @@ import { createPage, usePdfDocumentLoader, usePdfJSLoader } from '../../plugins/
 import { stopPropagation } from '../../utils/keyboard';
 import { saveDownloadedFile } from '../../utils/saveDownloadedFile';
 
-const PASSWORD_INCORRECT = 2;
-
 export type PdfViewerProps = {
   name: string;
   src: string;
@@ -66,25 +64,10 @@ export const PdfViewer = as<'div', PdfViewerProps>(
     }>();
     const { zoom, zoomIn, zoomOut, setZoom } = useZoom(ZOOM_STEP, MIN_ZOOM, MAX_ZOOM);
 
-    const [passwordInput, setPasswordInput] = useState('');
-    const [passwordRequired, setPasswordRequired] = useState(false);
-    const [passwordError, setPasswordError] = useState(false);
-    const passwordCallbackRef = useRef<((password: string) => void)>();
-
-    const handlePasswordRequest = useCallback(
-      (callback: (nextPassword: string) => void, reason: number) => {
-        passwordCallbackRef.current = callback;
-        setPasswordError(reason === PASSWORD_INCORRECT);
-        setPasswordRequired(true);
-      },
-      []
-    );
-
     const [pdfJSState, loadPdfJS] = usePdfJSLoader();
     const [docState, loadPdfDocument] = usePdfDocumentLoader(
       pdfJSState.status === AsyncStatus.Success ? pdfJSState.data : undefined,
-      src,
-      handlePasswordRequest
+      src
     );
     const isLoading =
       pdfJSState.status === AsyncStatus.Loading || docState.status === AsyncStatus.Loading;
@@ -129,21 +112,7 @@ export const PdfViewer = as<'div', PdfViewerProps>(
       setPageNo(1);
       setPanAvailable(false);
       gestureRef.current = undefined;
-      setPasswordInput('');
-      setPasswordRequired(false);
-      setPasswordError(false);
-      passwordCallbackRef.current = undefined;
     }, [setZoom, src]);
-
-    const submitPassword: FormEventHandler<HTMLFormElement> = (event) => {
-      event.preventDefault();
-      const nextPassword = passwordInput;
-      if (!nextPassword || !passwordCallbackRef.current) return;
-      setPasswordInput('');
-      setPasswordError(false);
-      setPasswordRequired(false);
-      passwordCallbackRef.current(nextPassword);
-    };
 
     useEffect(() => {
       window.addEventListener('resize', updatePanAvailability);
@@ -449,7 +418,7 @@ export const PdfViewer = as<'div', PdfViewerProps>(
           grow="Yes"
           style={{ minHeight: 0 }}
         >
-          {isLoading && !passwordRequired && (
+          {isLoading && (
             <Box
               className={css.PdfViewerState}
               grow="Yes"
@@ -460,42 +429,6 @@ export const PdfViewer = as<'div', PdfViewerProps>(
             >
               <Spinner variant="Secondary" size="600" />
               <Text size="T300">{'\u6b63\u5728\u52a0\u8f7d\u6587\u6863\u9884\u89c8...'}</Text>
-            </Box>
-          )}
-
-          {passwordRequired && (
-            <Box className={css.PdfViewerPasswordBackdrop} alignItems="Center" justifyContent="Center">
-              <Box
-                as="form"
-                className={css.PdfViewerPasswordCard}
-                direction="Column"
-                gap="300"
-                onSubmit={submitPassword}
-                role="dialog"
-                aria-modal="true"
-                aria-label="输入 PDF 密码"
-              >
-                <Text size="T300">受保护的 PDF</Text>
-                <Text size="T200" priority="300">
-                  {passwordError ? '密码不正确，请重新输入。' : '请输入密码来打开文件。'}
-                </Text>
-                <Input
-                  type="password"
-                  name="pdfPassword"
-                  autoFocus
-                  required
-                  outlined
-                  size="400"
-                  value={passwordInput}
-                  onChange={(event) => setPasswordInput(event.currentTarget.value)}
-                  placeholder="请输入 PDF 密码"
-                />
-                <Box justifyContent="End">
-                  <Button type="submit" variant="Primary" fill="Solid" size="300" radii="300">
-                    <Text size="B300">确定</Text>
-                  </Button>
-                </Box>
-              </Box>
             </Box>
           )}
 

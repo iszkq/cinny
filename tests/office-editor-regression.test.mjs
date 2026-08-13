@@ -34,9 +34,6 @@ test('encrypted Word, spreadsheet, and presentation files are unlocked locally',
 
 test('PDF uses the Office card in read-only mode without an edit action', async () => {
   const source = await readSource('src/app/components/file-viewer/OfficeFileEditor.tsx');
-  const rendererSource = await readSource('src/app/components/RenderMessageContent.tsx');
-  const pdfSource = await readSource('src/app/components/Pdf-viewer/PdfViewer.tsx');
-  const pdfLoaderSource = await readSource('src/app/plugins/pdfjs-dist.ts');
   const mimeSource = await readSource('src/app/utils/mimeTypes.ts');
 
   assert.match(mimeSource, /normalizedMimeType === 'application\/pdf' \|\| ext === 'pdf'/);
@@ -46,11 +43,6 @@ test('PDF uses the Office card in read-only mode without an edit action', async 
     source,
     /mobileOfficeShell \|\| officeKind === 'pdf'[\s\S]*\? 'repeat\(2, minmax\(0, 1fr\)\)'/
   );
-  assert.match(rendererSource, /officeKind && officeKind !== 'pdf'/);
-  assert.match(pdfLoaderSource, /onPassword/);
-  assert.match(pdfSource, /passwordCallbackRef/);
-  assert.match(pdfSource, /PDF 密码/);
-  assert.match(pdfSource, /passwordRequired/);
 });
 
 test('host-window Office shortcuts prevent browser downloads and use the bridge save path', async () => {

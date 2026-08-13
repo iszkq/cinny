@@ -15,22 +15,15 @@ export const usePdfJSLoader = () =>
     }, [])
   );
 
-export const usePdfDocumentLoader = (
-  pdfJS: typeof PdfJsDist | undefined,
-  src: string,
-  onPassword?: (callback: (password: string) => void, reason: number) => void
-) =>
+export const usePdfDocumentLoader = (pdfJS: typeof PdfJsDist | undefined, src: string) =>
   useAsyncCallback(
     useCallback(async () => {
       if (!pdfJS) {
         throw new Error('PdfJS is not loaded');
       }
-      const doc = await pdfJS.getDocument({
-        url: src,
-        ...(onPassword ? { onPassword } : {}),
-      }).promise;
+      const doc = await pdfJS.getDocument(src).promise;
       return doc;
-    }, [onPassword, pdfJS, src])
+    }, [pdfJS, src])
   );
 
 export const createPage = async (

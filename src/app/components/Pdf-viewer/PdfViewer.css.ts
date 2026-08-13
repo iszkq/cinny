@@ -4,7 +4,6 @@ import { DefaultReset, color, config } from 'folds';
 export const PdfViewer = style([
   DefaultReset,
   {
-    position: 'relative',
     height: '100%',
   },
 ]);
@@ -110,27 +109,3 @@ export const NavButtonLeft = style({
 export const NavButtonRight = style({
   right: config.space.S400,
 });
-
-export const PdfViewerPasswordBackdrop = style([
-  DefaultReset,
-  {
-    position: 'absolute',
-    inset: 0,
-    zIndex: 4,
-    display: 'flex',
-    padding: config.space.S400,
-    background: 'rgba(15, 23, 42, 0.48)',
-  },
-]);
-
-export const PdfViewerPasswordCard = style([
-  DefaultReset,
-  {
-    width: 'min(460px, 100%)',
-    padding: config.space.S500,
-    borderRadius: config.radii.R500,
-    background: color.Surface.Container,
-    color: color.Surface.OnContainer,
-    boxShadow: '0 18px 54px rgba(15, 23, 42, 0.28)',
-  },
-]);
