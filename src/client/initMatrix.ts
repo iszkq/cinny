@@ -1,4 +1,11 @@
-import { createClient, MatrixClient, IndexedDBStore, IndexedDBCryptoStore } from 'matrix-js-sdk';
+import {
+  createClient,
+  MatrixClient,
+  IndexedDBStore,
+  IndexedDBCryptoStore,
+  ClientEvent,
+  SyncState,
+} from 'matrix-js-sdk';
 import { logger as matrixLogger } from 'matrix-js-sdk/lib/logger';
 
 import {
@@ -6,6 +13,7 @@ import {
   hydrateSecretStorageKeys,
   persistAndroidBackupKey,
   restoreAndroidBackupKey,
+  getAndroidSecureValue,
 } from './secretStorageKeys';
 import { clearNavToActivePathStore } from '../app/state/navToActivePath';
 import { SETTINGS_STORAGE_KEY } from '../app/state/settingsStorage';
@@ -16,6 +24,12 @@ import { pushSessionToSW } from '../sw-session';
 import { removeFallbackAccessToken } from '../app/state/sessions';
 import { isAndroidApp } from '../app/utils/nativePlatform';
 import { CryptoEvent } from 'matrix-js-sdk/lib/crypto-api/CryptoEvent';
+import {
+  getAndroidClientStoreAccountKey,
+  loadAndroidClientSnapshot,
+  removeAndroidClientSnapshot,
+  saveAndroidClientSnapshot,
+} from './androidClientStore';
 
 type Session = {
   baseUrl: string;
@@ -29,6 +43,14 @@ const LEGACY_RUST_CRYPTO_DATABASE_PREFIX = 'matrix-js-sdk';
 const RUST_CRYPTO_DATABASE_SELECTION_KEY_PREFIX = 'cinny_rust_crypto_database';
 const rustCryptoDatabasePrefixes = new WeakMap<MatrixClient, string>();
 const androidCryptoRestorePromises = new WeakMap<MatrixClient, Promise<void>>();
+const androidCryptoTrustRestoreTasks = new WeakMap<MatrixClient, Promise<void>>();
+const androidCryptoTrustRestored = new WeakSet<MatrixClient>();
+const androidStoreSaveTasks = new WeakMap<MatrixClient, Promise<void>>();
+const androidStoreLastPersistedAt = new WeakMap<MatrixClient, number>();
+const androidStoreAccountKeys = new WeakMap<MatrixClient, string>();
+const androidNativeSnapshotLastPersistedAt = new WeakMap<MatrixClient, number>();
+const ANDROID_NATIVE_SNAPSHOT_INTERVAL_MS = 10_000;
+const androidNativeSnapshotDirty = new WeakSet<MatrixClient>();
 
 const getRustCryptoDatabaseNames = (prefix: string): string[] => [
   `${prefix}::matrix-sdk-crypto`,
@@ -300,8 +322,100 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
   // the first sync snapshot is written.
   if (isAndroidApp()) await requestPersistentAndroidStorage();
   await indexedDBStore.startup();
+  if (isAndroidApp()) {
+    const accountKey = getAndroidClientStoreAccountKey(
+      session.baseUrl,
+      session.userId,
+      session.deviceId
+    );
+    androidStoreAccountKeys.set(mx, accountKey);
+
+    // IndexedDBStore intentionally degrades to MemoryStore after a backend
+    // error. That fallback is normally invisible, but on Android it means a
+    // process restart will look like a first login again. Keep a small,
+    // Android-only breadcrumb so a device test can prove whether this path
+    // was taken without changing SDK behaviour on desktop/web.
+    indexedDBStore.on('degraded', (error: unknown) => {
+      try {
+        global.localStorage.setItem(
+          'cinny_android_sync_store_status',
+          JSON.stringify({ status: 'degraded', at: Date.now(), error: String(error) })
+        );
+      } catch {
+        // Diagnostics must never affect startup.
+      }
+      matrixLogger.error('Android IndexedDB sync store degraded to memory.', error);
+    });
+    indexedDBStore.on('closed', () => {
+      try {
+        global.localStorage.setItem(
+          'cinny_android_sync_store_status',
+          JSON.stringify({ status: 'closed', at: Date.now() })
+        );
+      } catch {
+        // Diagnostics must never affect startup.
+      }
+    });
+    try {
+      let [savedToken, savedSync] = await Promise.all([
+        indexedDBStore.getSavedSyncToken(),
+        (indexedDBStore as IndexedDBStore & {
+          getSavedSync(copy?: boolean): Promise<{ roomsData?: { join?: Record<string, unknown> } } | null>;
+        }).getSavedSync(false),
+      ]);
+      if (!savedToken || !savedSync) {
+        const nativeSnapshot = await loadAndroidClientSnapshot(accountKey);
+        if (nativeSnapshot) {
+          const restoredSync = nativeSnapshot.savedSync;
+          await indexedDBStore.setSyncData({
+            next_batch: restoredSync.nextBatch,
+            rooms: restoredSync.roomsData,
+            account_data: { events: restoredSync.accountData },
+          });
+          await indexedDBStore.save(true);
+          savedToken = restoredSync.nextBatch;
+          savedSync = restoredSync;
+          androidNativeSnapshotLastPersistedAt.set(mx, nativeSnapshot.savedAt);
+          matrixLogger.info('Restored Android Matrix sync data from native storage.');
+        }
+      }
+      global.localStorage.setItem(
+        'cinny_android_sync_store_status',
+        JSON.stringify({
+          status: 'ready',
+          at: Date.now(),
+          hasSavedToken: !!savedToken,
+          savedRoomCount: savedSync?.roomsData
+            ? Object.keys(savedSync.roomsData.join || {}).length
+            : 0,
+        })
+      );
+    } catch (error) {
+      matrixLogger.error('Unable to inspect Android IndexedDB sync store.', error);
+    }
+  }
   const cryptoDatabasePrefix = await initRustCryptoForSession(mx, session);
   rustCryptoDatabasePrefixes.set(mx, cryptoDatabasePrefix);
+  if (isAndroidApp()) {
+    // Attach before startClient so a cache-prepared sync is checkpointed even
+    // when React has not mounted its later UI listeners yet.
+    mx.on(ClientEvent.Sync, (state: SyncState) => {
+      if (
+        state !== SyncState.Prepared &&
+        state !== SyncState.Syncing &&
+        state !== SyncState.Catchup
+      ) {
+        return;
+      }
+      const now = Date.now();
+      const previous = androidStoreLastPersistedAt.get(mx) ?? 0;
+      if (state === SyncState.Prepared || now - previous >= 10_000) {
+        androidStoreLastPersistedAt.set(mx, now);
+        androidNativeSnapshotDirty.add(mx);
+        void persistClientStore(mx);
+      }
+    });
+  }
   if (isAndroidApp()) {
     const crypto = mx.getCrypto();
     if (crypto) {
@@ -333,7 +447,54 @@ export const startClient = async (mx: MatrixClient) => {
       // Android Keystore key can be restored. Re-run the check after restore so
       // a previously trusted backup is enabled again instead of being disabled
       // for the remainder of this process.
-      void crypto.checkKeyBackupAndEnable().catch(() => undefined);
+      const restoreTrustAfterSync = async (
+        state: SyncState,
+        _previousState: SyncState | null,
+        syncData?: { fromCache?: boolean }
+      ) => {
+        if (
+          state !== SyncState.Prepared &&
+          state !== SyncState.Syncing &&
+          state !== SyncState.Catchup
+        ) {
+          return;
+        }
+
+        // PREPARED is also emitted while the SDK is hydrating a cached sync.
+        // Do not force a backup check from that cache event: the network
+        // request is still in flight and a transient response failure would
+        // make Rust Crypto disable an otherwise valid local backup.
+        if (syncData?.fromCache) return;
+
+        if (androidCryptoTrustRestored.has(mx)) return;
+        const runningTask = androidCryptoTrustRestoreTasks.get(mx);
+        if (runningTask) {
+          await runningTask;
+          return;
+        }
+
+        const task = (async () => {
+          const userId = mx.getUserId();
+          const deviceId = mx.getDeviceId();
+          if (getAndroidSecureValue('verified-device') === '1' && userId && deviceId) {
+            await crypto.setDeviceVerified(userId, deviceId, true);
+          }
+          await crypto.checkKeyBackupAndEnable();
+          androidCryptoTrustRestored.add(mx);
+        })();
+        androidCryptoTrustRestoreTasks.set(mx, task);
+        try {
+          await task;
+        } catch {
+          // A transient server/crypto startup error is retried on the next
+          // healthy sync state; it must not block the room shell.
+        } finally {
+          if (androidCryptoTrustRestoreTasks.get(mx) === task) {
+            androidCryptoTrustRestoreTasks.delete(mx);
+          }
+        }
+      };
+      mx.on(ClientEvent.Sync, restoreTrustAfterSync);
     }
   }
   await mx.startClient({
@@ -343,12 +504,53 @@ export const startClient = async (mx: MatrixClient) => {
   });
 };
 
-export const persistClientStore = (mx: MatrixClient): Promise<void> =>
-  mx.store.save(true).catch(() => undefined);
+export const persistClientStore = (mx: MatrixClient, forceNativeSnapshot = false): Promise<void> => {
+  if (!isAndroidApp()) return mx.store.save(true).catch(() => undefined);
 
-const clearClientStores = (mx?: MatrixClient): Promise<void> => {
+  // Android can deliver pause/pagehide and Sync events together. Serialising
+  // forced saves prevents overlapping IndexedDB transactions from being
+  // interrupted halfway through, which otherwise makes the SDK degrade to an
+  // in-memory store and loses the next launch snapshot.
+  const previous = androidStoreSaveTasks.get(mx) ?? Promise.resolve();
+  const task = previous
+    .catch(() => undefined)
+    .then(async () => {
+      try {
+        await mx.store.save(true);
+        const accountKey = androidStoreAccountKeys.get(mx);
+        const now = Date.now();
+        const lastNativeSave = androidNativeSnapshotLastPersistedAt.get(mx) ?? 0;
+        if (
+          accountKey &&
+          androidNativeSnapshotDirty.has(mx) &&
+          (forceNativeSnapshot || now - lastNativeSave >= ANDROID_NATIVE_SNAPSHOT_INTERVAL_MS)
+        ) {
+          const savedSync = await mx.store.getSavedSync();
+          if (savedSync) {
+            await saveAndroidClientSnapshot(accountKey, savedSync);
+            androidNativeSnapshotLastPersistedAt.set(mx, now);
+            androidNativeSnapshotDirty.delete(mx);
+          }
+        }
+      } catch (error) {
+        matrixLogger.error('Android Matrix store save failed.', error);
+      }
+    });
+  androidStoreSaveTasks.set(mx, task);
+  return task;
+};
+
+const clearAndroidClientSnapshot = async (mx?: MatrixClient): Promise<void> => {
+  if (!mx || !isAndroidApp()) return;
+  const accountKey = androidStoreAccountKeys.get(mx);
+  if (!accountKey) return;
+  await removeAndroidClientSnapshot(accountKey).catch(() => undefined);
+};
+
+const clearClientStores = async (mx?: MatrixClient): Promise<void> => {
   if (!mx) return Promise.resolve();
-  return mx.clearStores({
+  await clearAndroidClientSnapshot(mx);
+  await mx.clearStores({
     cryptoDatabasePrefix: rustCryptoDatabasePrefixes.get(mx),
   });
 };
@@ -435,6 +637,7 @@ export const clearAllLocalData = async (mx?: MatrixClient) => {
 export const clearCacheAndReload = async (mx: MatrixClient) => {
   mx.stopClient();
   clearNavToActivePathStore(mx.getSafeUserId());
+  await clearAndroidClientSnapshot(mx);
   await mx.store.deleteAllData();
   await clearResourceCaches();
   window.location.reload();
@@ -470,6 +673,7 @@ export const clearExpiredSessionAfterLogout = async (mx?: MatrixClient) => {
   pushSessionToSW();
   mx?.stopClient();
   try {
+    await clearAndroidClientSnapshot(mx);
     await mx?.store.deleteAllData();
   } catch {
     // A failed sync-store cleanup must not prevent returning to sign-in.

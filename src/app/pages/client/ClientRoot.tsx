@@ -214,7 +214,7 @@ export function ClientRoot({ children }: ClientRootProps) {
 
     const persist = () => {
       lastStorePersistedAtRef.current = Date.now();
-      persistClientStore(mx);
+      persistClientStore(mx, isAndroidApp());
     };
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') persist();
