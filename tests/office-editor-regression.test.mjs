@@ -301,6 +301,11 @@ test('Office opening is bounded and mobile layout respects the viewport safe are
   assert.match(editorSource, /Office 打开文档超时/);
   assert.match(editorSource, />重新打开</);
   assert.match(editorSource, /compactToolbar/);
+  assert.match(editorSource, /phase === 'loading' && !passwordRequired/);
+  const nativeViewSource = await readSource(
+    'src/app/components/file-viewer/NativeOfficeWindow.tsx'
+  );
+  assert.match(nativeViewSource, /payload\.phase === 'loading' && !payload\.passwordRequired/);
   assert.match(editorSource, /isCompactOfficeViewport/);
   assert.match(editorSource, /if \(isCompactOfficeViewport\(\)\) return Promise\.resolve\(\)/);
   assert.match(editorSource, /window\.visualViewport\?\.height/);

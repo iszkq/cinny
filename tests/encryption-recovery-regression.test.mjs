@@ -386,6 +386,11 @@ test('missing Megolm sessions recover in a client-level queue across every platf
   assert.match(source, /'session_expired'/);
   assert.match(source, /'retry_started'/);
   assert.match(source, /'retry_finished'/);
+  assert.doesNotMatch(source, /task\.retryIndex = 0/);
+  assert.doesNotMatch(source, /restartRequested/);
+  const initSource = await readSource('src/client/initMatrix.ts');
+  assert.match(initSource, /enableMissingRoomKeyRequests/);
+  assert.match(initSource, /roomKeyRequestsEnabled = true/);
   assert.match(featuresSource, /useEffect\(\(\) => startDecryptionRecovery\(mx\), \[mx\]\)/);
   assert.match(componentSource, /observeEncryptedEvent\(mx, mEvent\)/);
   assert.doesNotMatch(componentSource, /setTimeout|DECRYPTION_RETRY_DELAYS_MS/);

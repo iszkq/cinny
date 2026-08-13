@@ -488,7 +488,7 @@ export function NativeOfficeWindow() {
             </Box>
           </div>
         )}
-        {payload.phase === 'loading' && (
+        {payload.phase === 'loading' && !payload.passwordRequired && (
           <div className={css.loadingLayer}>
             <Spinner size="400" />
             <Text size="T300">正在打开 Office 文档…</Text>

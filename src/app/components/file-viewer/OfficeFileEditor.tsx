@@ -2192,7 +2192,7 @@ export function OfficeFileEditor({
                         </Box>
                       </div>
                     )}
-                    {phase === 'loading' && (
+                    {phase === 'loading' && !passwordRequired && (
                       <div className={css.loadingLayer}>
                         <Spinner size="400" />
                         <Text size="T300">正在打开 Office 文档…</Text>

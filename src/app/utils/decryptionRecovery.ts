@@ -30,7 +30,6 @@ type RecoveryTask = {
   lastDelayMs: number;
   timer?: number;
   running: boolean;
-  restartRequested: boolean;
 };
 
 const getSessionKey = (mEvent: MatrixEvent): string | undefined => {
@@ -154,7 +153,6 @@ class DecryptionRecoveryCoordinator {
         retryIndex: 0,
         lastDelayMs: 0,
         running: false,
-        restartRequested: false,
       };
       this.tasks.set(sessionKey, task);
       recordDecryptionDiagnostic(this.mx, mEvent, 'session_queued');
@@ -242,25 +240,15 @@ class DecryptionRecoveryCoordinator {
       return;
     }
 
-    if (task.restartRequested) {
-      task.restartRequested = false;
-      task.retryIndex = 0;
-    } else {
-      task.retryIndex += 1;
-    }
+    task.retryIndex += 1;
     const nextDelay = DECRYPTION_RETRY_DELAYS_MS[task.retryIndex];
     if (nextDelay !== undefined) this.schedule(sessionKey, task, nextDelay);
   }
 
   private restartPendingTasks(): void {
     this.tasks.forEach((task, sessionKey) => {
-      if (task.running) {
-        task.restartRequested = true;
-        return;
-      }
-      if (task.timer !== undefined) window.clearTimeout(task.timer);
-      task.timer = undefined;
-      task.retryIndex = 0;
+      if (task.running) return;
+      if (task.timer !== undefined) return;
       this.schedule(sessionKey, task, 0);
     });
   }

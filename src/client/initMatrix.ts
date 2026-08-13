@@ -181,6 +181,19 @@ const initRustCryptoForSession = async (mx: MatrixClient, session: Session): Pro
   throw new Error('Unable to initialize the Rust Crypto database.');
 };
 
+// Starfire supports verified-device recovery. Allow Rust Crypto to request a
+// missing Megolm session from the sender's other devices when backup lookup
+// cannot provide it. The SDK disables this by default for Element's policy.
+const enableMissingRoomKeyRequests = (mx: MatrixClient): void => {
+  const crypto = mx.getCrypto() as
+    | (object & { olmMachine?: { roomKeyRequestsEnabled?: boolean } })
+    | undefined;
+  const olmMachine = crypto?.olmMachine;
+  if (olmMachine && 'roomKeyRequestsEnabled' in olmMachine) {
+    olmMachine.roomKeyRequestsEnabled = true;
+  }
+};
+
 let webMatrixLoggerFilterInstalled = false;
 
 const isIgnorableWebMatrixWarning = (messages: unknown[]): boolean => {
@@ -230,6 +243,7 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
   await indexedDBStore.startup();
   const cryptoDatabasePrefix = await initRustCryptoForSession(mx, session);
   rustCryptoDatabasePrefixes.set(mx, cryptoDatabasePrefix);
+  enableMissingRoomKeyRequests(mx);
 
   mx.setMaxListeners(200);
 
