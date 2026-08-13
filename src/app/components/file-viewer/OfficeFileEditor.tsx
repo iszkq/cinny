@@ -1302,13 +1302,8 @@ export function OfficeFileEditor({
           const encryptedOfficeFile =
             isCompoundOfficeContainer(source) && (await isOfficeDocumentEncrypted(source));
 
-          // PDF encryption does not use the Compound File signature. Mobile
-          // WebViews otherwise hand the protected PDF to Office without a
-          // password and wait forever for the opened callback. Probe only for
-          // the password requirement; Office remains the renderer.
           // Let Office own the protected-PDF prompt on mobile. Preflighting with PDF.js
           // would display a duplicate host password dialog.
-          const pdfPasswordState: PdfPasswordState = 'ready';
 
           if (encryptedOfficeFile) {
             if (!password?.trim()) {
