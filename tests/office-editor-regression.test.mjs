@@ -58,6 +58,16 @@ test('mobile encrypted PDFs prompt immediately before opening in Office', async 
   assert.match(rendererSource, /<OfficeFileEditor/);
 });
 
+test('Office source downloads retry transient mobile media failures', async () => {
+  const source = await readSource('src/app/components/file-viewer/OfficeFileEditor.tsx');
+
+  assert.match(source, /const OFFICE_SOURCE_RETRY_COUNT = 2/);
+  assert.match(source, /source_download_attempt/);
+  assert.match(source, /download media\|fetch media\|network\|timeout\|abort/);
+  assert.match(source, /OFFICE_SOURCE_RETRY_DELAY_MS = 1_500/);
+  assert.match(source, /OFFICE_SOURCE_RETRY_DELAY_MS \* \(attempt \+ 1\)/);
+});
+
 test('the protected PDF prompt remains interactive while the document awaits a password', async () => {
   const source = await readSource('src/app/components/file-viewer/OfficeFileEditor.tsx');
 

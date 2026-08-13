@@ -77,6 +77,8 @@ const DEFAULT_EXPORT_TIMEOUT_SECONDS = 45;
 const DEFAULT_PREPARE_TIMEOUT_SECONDS = 60;
 const DEFAULT_UPLOAD_TIMEOUT_SECONDS = 120;
 const SOURCE_LOAD_TIMEOUT_MS = 60_000;
+const OFFICE_SOURCE_RETRY_COUNT = 2;
+const OFFICE_SOURCE_RETRY_DELAY_MS = 1_500;
 const IFRAME_BRIDGE_READY_TIMEOUT_MS = 30_000;
 const DOCUMENT_OPENED_TIMEOUT_MS = 45_000;
 const MOBILE_IFRAME_BRIDGE_READY_TIMEOUT_MS = 60_000;
@@ -653,9 +655,30 @@ export function OfficeFileEditor({
       const mediaUrl = mxcUrlToHttp(mx, url, useAuthentication);
       if (!mediaUrl) throw new Error('Invalid media URL');
 
-      const source = encInfo
-        ? await downloadEncryptedMedia(mediaUrl, (buffer) => decryptFile(buffer, mimeType, encInfo))
-        : await downloadMedia(mediaUrl);
+      let source: Blob | undefined;
+      let lastError: unknown;
+      for (let attempt = 0; attempt <= OFFICE_SOURCE_RETRY_COUNT; attempt += 1) {
+        try {
+          recordDiagnostic('source_download_attempt', { attempt: attempt + 1 });
+          source = encInfo
+            ? await downloadEncryptedMedia(mediaUrl, (buffer) =>
+                decryptFile(buffer, mimeType, encInfo)
+              )
+            : await downloadMedia(mediaUrl);
+          break;
+        } catch (error) {
+          lastError = error;
+          const message = diagnosticText(error);
+          const retryable = /download media|fetch media|network|timeout|abort|failed to fetch/i.test(
+            message
+          );
+          if (!retryable || attempt >= OFFICE_SOURCE_RETRY_COUNT) break;
+          await new Promise<void>((resolve) =>
+            window.setTimeout(resolve, OFFICE_SOURCE_RETRY_DELAY_MS * (attempt + 1))
+          );
+        }
+      }
+      if (!source) throw lastError ?? new Error('Failed to download media');
       if (source.size <= MAX_MEMORY_CACHED_SOURCE_BYTES) {
         cachedSourceRef.current = source;
       }
@@ -670,7 +693,7 @@ export function OfficeFileEditor({
         pendingSourceRef.current = undefined;
       }
     }
-  }, [encInfo, mimeType, mx, url, useAuthentication]);
+  }, [encInfo, mimeType, mx, recordDiagnostic, url, useAuthentication]);
 
   useEffect(() => {
     cachedSourceRef.current = undefined;
