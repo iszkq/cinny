@@ -303,7 +303,8 @@ export function RenderMessageContent({
         <MFile
           content={officeContent}
           renderFileContent={({ body, mimeType, info, encInfo, url }) => {
-            if (getOfficeDocumentKind(body, mimeType)) {
+            const officeKind = getOfficeDocumentKind(body, mimeType);
+            if (officeKind && officeKind !== 'pdf') {
               return (
                 <OfficeFileEditor
                   body={body}

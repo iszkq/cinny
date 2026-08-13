@@ -190,7 +190,16 @@ const enableMissingRoomKeyRequests = (mx: MatrixClient): void => {
     | undefined;
   const olmMachine = crypto?.olmMachine;
   if (olmMachine && 'roomKeyRequestsEnabled' in olmMachine) {
-    olmMachine.roomKeyRequestsEnabled = true;
+    try {
+      olmMachine.roomKeyRequestsEnabled = true;
+      if (olmMachine.roomKeyRequestsEnabled !== true) {
+        matrixLogger.warn('Rust Crypto did not enable automatic room key requests.');
+      } else {
+        matrixLogger.info('Rust Crypto automatic room key requests enabled.');
+      }
+    } catch (error) {
+      matrixLogger.warn('Failed to enable Rust Crypto automatic room key requests.', error);
+    }
   }
 };
 

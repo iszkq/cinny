@@ -42,6 +42,18 @@ const getSessionKey = (mEvent: MatrixEvent): string | undefined => {
 const needsSessionRecovery = (mEvent: MatrixEvent): boolean =>
   mEvent.isDecryptionFailure() && mEvent.decryptionFailureReason === UNKNOWN_MEGOLM_SESSION;
 
+/**
+ * Rust Crypto queues m.room_key_request and /keys/claim work internally. The
+ * SDK normally drains that queue at the end of /sync, but a recovery retry can
+ * happen between sync responses. Nudge the public sync hook so a missing key
+ * request is sent immediately instead of waiting for an unrelated sync.
+ */
+const processPendingCryptoRequests = (crypto: object): void => {
+  const syncHook = (crypto as { onSyncCompleted?: (data: unknown) => void })
+    .onSyncCompleted;
+  if (typeof syncHook === 'function') syncHook.call(crypto, {});
+};
+
 class DecryptionRecoveryCoordinator {
   private readonly tasks = new Map<string, RecoveryTask>();
 
@@ -217,11 +229,16 @@ class DecryptionRecoveryCoordinator {
       retryAttempt,
       retryDelayMs: task.lastDelayMs,
     });
+    processPendingCryptoRequests(crypto);
     const results = await Promise.allSettled(
       failedEvents.map((mEvent) =>
         mEvent.attemptDecryption(crypto as CryptoBackend, { isRetry: true })
       )
     );
+    // attemptDecryption queues backup/key-request work after it observes the
+    // missing session. Drain the Rust Crypto queue again so the request is not
+    // delayed until the next unrelated /sync response.
+    processPendingCryptoRequests(crypto);
     const retryError = results.find((result) => result.status === 'rejected');
     recordDecryptionDiagnostic(this.mx, representative, 'retry_finished', {
       retryAttempt,

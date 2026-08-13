@@ -368,6 +368,7 @@ test('missing Megolm sessions recover in a client-level queue across every platf
   assert.match(source, /events: Set<MatrixEvent>/);
   assert.match(source, /MEGOLM_UNKNOWN_INBOUND_SESSION_ID/);
   assert.match(source, /attemptDecryption\(crypto as CryptoBackend, \{ isRetry: true \}\)/);
+  assert.match(source, /processPendingCryptoRequests\(crypto\)/);
   assert.match(source, /failedEvents\.some\(\(mEvent\) => mEvent\.isBeingDecrypted\(\)\)/);
   assert.match(source, /this\.schedule\(sessionKey, task, DECRYPTION_IN_PROGRESS_POLL_MS\)/);
   assert.match(source, /Promise\.allSettled\(/);
@@ -391,6 +392,7 @@ test('missing Megolm sessions recover in a client-level queue across every platf
   const initSource = await readSource('src/client/initMatrix.ts');
   assert.match(initSource, /enableMissingRoomKeyRequests/);
   assert.match(initSource, /roomKeyRequestsEnabled = true/);
+  assert.match(initSource, /automatic room key requests enabled/);
   assert.match(featuresSource, /useEffect\(\(\) => startDecryptionRecovery\(mx\), \[mx\]\)/);
   assert.match(componentSource, /observeEncryptedEvent\(mx, mEvent\)/);
   assert.doesNotMatch(componentSource, /setTimeout|DECRYPTION_RETRY_DELAYS_MS/);
@@ -398,6 +400,7 @@ test('missing Megolm sessions recover in a client-level queue across every platf
   assert.match(diagnosticSource, /wireContent\.session_id/);
   assert.match(diagnosticSource, /crypto\.getActiveSessionBackupVersion\(\)/);
   assert.match(diagnosticSource, /crypto\.getDeviceVerificationStatus/);
+  assert.match(diagnosticSource, /roomKeyRequestsEnabled/);
   assert.match(diagnosticSource, /No message body, ciphertext, access token/);
   assert.doesNotMatch(diagnosticSource, /wireContent\.ciphertext/);
   assert.match(rendererSource, /复制解密诊断/);

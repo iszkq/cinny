@@ -191,9 +191,15 @@ export const createDecryptionDiagnosticReport = async (
     crossSigningVerified: null as boolean | null,
     localVerified: null as boolean | null,
     verificationError: null as string | null,
+    roomKeyRequestsEnabled: null as boolean | null,
   };
 
   if (crypto) {
+    const olmMachine = (crypto as object as { olmMachine?: { roomKeyRequestsEnabled?: unknown } })
+      .olmMachine;
+    if (typeof olmMachine?.roomKeyRequestsEnabled === 'boolean') {
+      currentDevice.roomKeyRequestsEnabled = olmMachine.roomKeyRequestsEnabled;
+    }
     const [activeBackupResult, backupInfoResult, verificationResult] = await Promise.allSettled([
       crypto.getActiveSessionBackupVersion(),
       crypto.getKeyBackupInfo(),
