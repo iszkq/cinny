@@ -51,13 +51,18 @@ function UnverifiedIndicator({ requestOpenSettings }: UnverifiedIndicatorProps) 
   const backupUnverified =
     securitySyncReady &&
     backupInfo !== undefined &&
+    backupTrust !== undefined &&
     (!backupEnabled ||
       backupInfo === null ||
       backupTrust?.trusted !== true ||
       backupTrust?.matchesDecryptionKey !== true);
   const deviceUnverified =
     securitySyncReady &&
-    (!crossSigningActive || verificationStatus !== VerificationStatus.Verified);
+    // Do not flash the red warning while Rust Crypto is still restoring the
+    // durable device trust from Android storage. Unknown/unavailable is not
+    // proof that a verified device became unverified.
+    ((!crossSigningActive && verificationStatus === VerificationStatus.Unverified) ||
+      verificationStatus === VerificationStatus.Unverified);
   const unverified =
     deviceUnverified || backupUnverified;
 

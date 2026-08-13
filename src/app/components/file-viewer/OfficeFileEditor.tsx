@@ -99,42 +99,6 @@ const isCompoundOfficeContainer = (buffer: ArrayBuffer): boolean => {
   return COMPOUND_FILE_SIGNATURE.every((value, index) => bytes[index] === value);
 };
 
-// Desktop/web keeps the PDF.js password preflight used by the existing PDF
-// viewer. Mobile skips this function so Office owns the single password prompt.
-type PdfPasswordState = 'not-encrypted' | 'password-required' | 'password-invalid' | 'validation-timeout' | 'ready';
-const PDF_PASSWORD_VALIDATION_TIMEOUT_MS = 15_000;
-const inspectPdfPassword = async (buffer: ArrayBuffer, password?: string): Promise<PdfPasswordState> => {
-  if (!new TextDecoder('latin1').decode(buffer).includes('/Encrypt')) return 'not-encrypted';
-  const candidate = password?.trim();
-  if (!candidate) return 'password-required';
-  try {
-    const pdf = await import('pdfjs-dist');
-    pdf.GlobalWorkerOptions.workerSrc = `${String(import.meta.env.BASE_URL).replace(/\/$/, '')}/pdf.worker.min.js`;
-    const loadingTask = pdf.getDocument({ data: buffer.slice(0), password: candidate });
-    const timeout = new Promise<'validation-timeout'>((resolve) =>
-      window.setTimeout(() => resolve('validation-timeout'), PDF_PASSWORD_VALIDATION_TIMEOUT_MS)
-    );
-    const result = await Promise.race([
-      loadingTask.promise.then(async (document) => {
-        await document.destroy();
-        return 'ready' as const;
-      }).catch((error: unknown) => {
-        if (error instanceof Error && error.name === 'PasswordException') return 'password-invalid' as const;
-        throw error;
-      }),
-      new Promise<PdfPasswordState>((resolve) => {
-        loadingTask.onPassword = (_setPassword: (nextPassword: string) => void, reason: number) =>
-          resolve(reason === pdf.PasswordResponses.INCORRECT_PASSWORD ? 'password-invalid' : 'password-required');
-      }),
-      timeout,
-    ]);
-    try { await loadingTask.destroy(); } catch { /* already settled */ }
-    return result;
-  } catch (error) {
-    return error instanceof Error && error.name === 'PasswordException' ? 'password-invalid' : 'not-encrypted';
-  }
-};
-
 const officeShellWarmups = new Map<string, Promise<void>>();
 const officePreconnectedOrigins = new Set<string>();
 
@@ -1244,31 +1208,6 @@ export function OfficeFileEditor({
           let buffer = source;
           const encryptedOfficeFile =
             isCompoundOfficeContainer(source) && (await isOfficeDocumentEncrypted(source));
-
-          // Mobile hands protected PDFs directly to Office to avoid a duplicate
-          // host prompt. Desktop/web retain the existing PDF.js preflight.
-          const pdfPasswordState =
-            !mobileOfficeShell && officeKind === 'pdf'
-              ? await inspectPdfPassword(source, password)
-              : 'ready';
-
-          if (
-            pdfPasswordState === 'password-required' ||
-            pdfPasswordState === 'password-invalid' ||
-            pdfPasswordState === 'validation-timeout'
-          ) {
-            clearOpenTimeouts();
-            setPasswordRequired(true);
-            setPasswordInput('');
-            setPasswordError(
-              pdfPasswordState === 'password-invalid'
-                ? 'PDF 密码不正确，请重试。'
-                : pdfPasswordState === 'validation-timeout'
-                ? 'PDF 密码验证超时，请重试。'
-                : undefined
-            );
-            return;
-          }
 
           if (encryptedOfficeFile) {
             if (!password?.trim()) {

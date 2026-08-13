@@ -1,5 +1,6 @@
 import { MatrixClient } from 'matrix-js-sdk';
 import { CryptoApi, VerificationPhase, VerificationRequest } from 'matrix-js-sdk/lib/crypto-api';
+import { setAndroidSecureValue } from '../../client/secretStorageKeys';
 
 const CROSS_SIGN_RETRY_DELAYS_MS = [0, 250, 1000] as const;
 const CRYPTO_WRITE_TIMEOUT_MS = 10_000;
@@ -145,6 +146,10 @@ export const persistCompletedDeviceVerification = async (
     throw new Error('设备可信状态未能保存，请保持两台设备在线后重试。');
   }
 
+  if (otherUserId === request.otherUserId && currentDeviceId === otherDeviceId) {
+    await setAndroidSecureValue('verified-device', '1').catch(() => undefined);
+  }
+
   return {
     crossSigningSynced: pendingDeviceIds.length === 0,
   };
@@ -186,6 +191,8 @@ export const persistCurrentDeviceVerification = async (
   ) {
     throw new Error('当前设备可信状态未能保存，请重试。');
   }
+
+  await setAndroidSecureValue('verified-device', '1').catch(() => undefined);
 
   return {
     crossSigningSynced: pendingDeviceIds.length === 0,

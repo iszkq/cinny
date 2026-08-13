@@ -1,7 +1,7 @@
 import { createClient, MatrixClient, IndexedDBStore, IndexedDBCryptoStore } from 'matrix-js-sdk';
 import { logger as matrixLogger } from 'matrix-js-sdk/lib/logger';
 
-import { cryptoCallbacks } from './secretStorageKeys';
+import { cryptoCallbacks, hydrateSecretStorageKeys } from './secretStorageKeys';
 import { clearNavToActivePathStore } from '../app/state/navToActivePath';
 import { SETTINGS_STORAGE_KEY } from '../app/state/settingsStorage';
 import { restorePinLockStorage, snapshotPinLockStorage } from '../app/utils/pinLock';
@@ -264,6 +264,7 @@ const requestPersistentAndroidStorage = async (): Promise<void> => {
 
 export const initClient = async (session: Session): Promise<MatrixClient> => {
   installWebMatrixLoggerFilter();
+  await hydrateSecretStorageKeys();
 
   const indexedDBStore = new IndexedDBStore({
     indexedDB: global.indexedDB,

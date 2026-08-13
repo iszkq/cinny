@@ -1,6 +1,9 @@
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, registerPlugin } from '@capacitor/core';
+
+const AndroidSecureStorage = registerPlugin('AndroidSecureStorage');
 
 const secretStorageKeys = new Map();
+const secureValues = new Map();
 const STORAGE_PREFIX = 'cinny_android_secret_storage_keys:';
 const isAndroid = () => Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android';
 const storageKey = () => {
@@ -46,12 +49,68 @@ const persistKey = (keyId, privateKey) => {
   }
 };
 
+const secureStorageKey = () => {
+  const userId = localStorage.getItem('cinny_user_id');
+  const deviceId = localStorage.getItem('cinny_device_id');
+  return userId && deviceId
+    ? `${STORAGE_PREFIX}${encodeURIComponent(userId)}:${encodeURIComponent(deviceId)}`
+    : undefined;
+};
+
+const loadSecureKeys = async () => {
+  if (!isAndroid() || !secureStorageKey()) return;
+  try {
+    const values = await AndroidSecureStorage.getAll();
+    Object.entries(values || {}).forEach(([key, value]) => {
+      if (typeof value === 'string') secureValues.set(key, value);
+    });
+    const encoded = values?.[secureStorageKey()];
+    if (!encoded) return;
+    const parsed = JSON.parse(encoded);
+    Object.entries(parsed).forEach(([keyId, value]) => {
+      const decoded = decodeKey(value);
+      if (decoded) secretStorageKeys.set(keyId, decoded);
+    });
+  } catch { /* WebView fallback remains available. */ }
+};
+
+const secureValueKey = (name) => {
+  const key = secureStorageKey();
+  return key ? `${key}:${name}` : undefined;
+};
+
+export const setAndroidSecureValue = async (name, value) => {
+  if (!isAndroid()) return;
+  const key = secureValueKey(name);
+  if (!key) return;
+  secureValues.set(key, value);
+  await AndroidSecureStorage.set({ key, value });
+};
+
+export const getAndroidSecureValue = (name) => {
+  if (!isAndroid()) return undefined;
+  const key = secureValueKey(name);
+  return key ? secureValues.get(key) : undefined;
+};
+
+const persistKeysSecurely = async () => {
+  if (!isAndroid()) return;
+  const key = secureStorageKey();
+  if (!key) return;
+  try {
+    const encoded = {};
+    secretStorageKeys.forEach((value, keyId) => { encoded[keyId] = encodeKey(value); });
+    await AndroidSecureStorage.set({ key, value: JSON.stringify(encoded) });
+  } catch { /* localStorage fallback remains available. */ }
+};
+
 export function storePrivateKey(keyId, privateKey) {
   if (privateKey instanceof Uint8Array === false) {
     throw new Error('Unable to store, privateKey is invalid.');
   }
   secretStorageKeys.set(keyId, privateKey);
   persistKey(keyId, privateKey);
+  void persistKeysSecurely();
 }
 
 function hasPrivateKey(keyId) {
@@ -76,6 +135,7 @@ export function clearSecretStorageKeys() {
   const key = storageKey();
   if (key && isAndroid()) {
     try { localStorage.removeItem(key); } catch { /* ignore */ }
+    void AndroidSecureStorage.remove({ key }).catch(() => undefined);
   }
 }
 
@@ -90,7 +150,10 @@ async function getSecretStorageKey({ keys }) {
 function cacheSecretStorageKey(keyId, keyInfo, privateKey) {
   secretStorageKeys.set(keyId, privateKey);
   persistKey(keyId, privateKey);
+  void persistKeysSecurely();
 }
+
+export const hydrateSecretStorageKeys = loadSecureKeys;
 
 export const cryptoCallbacks = {
   getSecretStorageKey,
