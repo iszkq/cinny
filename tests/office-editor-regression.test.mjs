@@ -46,9 +46,12 @@ test('mobile encrypted PDFs prompt immediately before opening in Office', async 
   assert.match(source, /mobileOfficeShell && officeKind === 'pdf'/);
   assert.match(source, /const pdfPasswordState/);
   assert.match(source, /pdfPasswordState === 'password-required'/);
-  assert.doesNotMatch(source, /pdfPasswordState === 'password-invalid'/);
-  assert.match(source, /return password\?\.trim\(\) \? 'ready' : 'password-required'/);
-  assert.doesNotMatch(source, /import\('pdfjs-dist'\)/);
+  assert.match(source, /pdfPasswordState === 'password-invalid'/);
+  assert.match(source, /pdfPasswordState === 'validation-timeout'/);
+  assert.match(source, /PDF 密码验证超时，请重试。/);
+  assert.match(source, /import\('pdfjs-dist'\)/);
+  assert.match(source, /const validationBuffer = buffer\.slice\(0\)/);
+  assert.match(source, /getDocument\(\{ data: validationBuffer, password: candidate \}\)/);
   assert.doesNotMatch(source, /encryptedOfficeFile \|\| encryptedPdfFile/);
   assert.match(source, /password: activeSession\.password/);
   assert.match(rendererSource, /getOfficeDocumentKind\(body, mimeType\)/);
