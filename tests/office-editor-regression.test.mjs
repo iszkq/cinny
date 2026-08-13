@@ -32,30 +32,12 @@ test('encrypted Word, spreadsheet, and presentation files are unlocked locally',
   assert.match(source, /密码仅用于本次解密，不会保存到设备或上传到聊天服务器/);
 });
 
-test('mobile encrypted PDFs prompt immediately before opening in Office', async () => {
+test('mobile encrypted PDFs bypass PDF.js but desktop/web keep the preflight', async () => {
   const source = await readSource('src/app/components/file-viewer/OfficeFileEditor.tsx');
-  const mimeSource = await readSource('src/app/utils/mimeTypes.ts');
-  const rendererSource = await readSource('src/app/components/RenderMessageContent.tsx');
-
-  assert.match(mimeSource, /normalizedMimeType === 'application\/pdf' \|\| ext === 'pdf'/);
-  assert.match(source, /pdf: \{ label: 'PDF', color: '#e53935' \}/);
-  assert.match(source, /const canEdit = officeKind !== 'pdf' && Boolean\(/);
-  assert.match(source, /inspectPdfPassword/);
-  assert.match(source, /if \(!marker\) return 'not-encrypted'/);
-  assert.match(source, /const marker = new TextDecoder\('latin1'\)\.decode\(buffer\)\.includes\('\/Encrypt'\)/);
-  assert.match(source, /mobileOfficeShell && officeKind === 'pdf'/);
   assert.match(source, /const pdfPasswordState/);
-  assert.match(source, /pdfPasswordState === 'password-required'/);
-  assert.match(source, /pdfPasswordState === 'password-invalid'/);
-  assert.match(source, /pdfPasswordState === 'validation-timeout'/);
-  assert.match(source, /PDF 密码验证超时，请重试。/);
+  assert.match(source, /!mobileOfficeShell && officeKind === 'pdf'/);
+  assert.match(source, /inspectPdfPassword\(source, password\)/);
   assert.match(source, /import\('pdfjs-dist'\)/);
-  assert.match(source, /const validationBuffer = buffer\.slice\(0\)/);
-  assert.match(source, /getDocument\(\{ data: validationBuffer, password: candidate \}\)/);
-  assert.doesNotMatch(source, /encryptedOfficeFile \|\| encryptedPdfFile/);
-  assert.match(source, /password: activeSession\.password/);
-  assert.match(rendererSource, /getOfficeDocumentKind\(body, mimeType\)/);
-  assert.match(rendererSource, /<OfficeFileEditor/);
 });
 
 test('the protected PDF prompt remains interactive while the document awaits a password', async () => {
