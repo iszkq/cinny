@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useMatrixClient } from './useMatrixClient';
 import { useAlive } from './useAlive';
 import { isAndroidApp } from '../utils/nativePlatform';
+import { getAndroidSecureValue } from '../../client/secretStorageKeys';
 
 export const useKeyBackupStatusChange = (
   onChange: CryptoEventHandlerMap[CryptoEvent.KeyBackupStatus]
@@ -22,8 +23,10 @@ export const useKeyBackupStatusChange = (
 
 export const useKeyBackupStatus = (crypto: CryptoApi | undefined): boolean | undefined => {
   const alive = useAlive();
+  const hasDurableAndroidBackupKey =
+    isAndroidApp() && Boolean(getAndroidSecureValue('session-backup-private-key'));
   const [status, setStatus] = useState<boolean | undefined>(
-    isAndroidApp() ? undefined : false
+    hasDurableAndroidBackupKey ? true : isAndroidApp() ? undefined : false
   );
 
   useEffect(() => {
@@ -33,13 +36,26 @@ export const useKeyBackupStatus = (crypto: CryptoApi | undefined): boolean | und
     }
     crypto.getActiveSessionBackupVersion().then((v) => {
       if (alive()) {
-        setStatus(typeof v === 'string');
+        // Rust Crypto reports null while the secure Android key is being
+        // re-attached. Do not replace a durable connected state with a false
+        // startup frame; a later SDK status event confirms the live state.
+        if (typeof v === 'string' || !hasDurableAndroidBackupKey) {
+          setStatus(typeof v === 'string');
+        }
       }
     });
     return undefined;
-  }, [crypto, alive]);
+  }, [crypto, alive, hasDurableAndroidBackupKey]);
 
-  useKeyBackupStatusChange(setStatus);
+  useKeyBackupStatusChange(
+    useCallback(
+      (nextStatus) => {
+        if (!nextStatus && hasDurableAndroidBackupKey) return;
+        setStatus(nextStatus);
+      },
+      [hasDurableAndroidBackupKey]
+    )
+  );
 
   return status;
 };

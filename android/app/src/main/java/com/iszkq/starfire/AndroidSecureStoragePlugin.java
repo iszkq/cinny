@@ -60,10 +60,22 @@ public class AndroidSecureStoragePlugin extends Plugin {
     public void getAll(PluginCall call) {
         try {
             JSObject result = new JSObject();
-            Map<String, ?> values = getContext().getSharedPreferences(PREFS, 0).getAll();
+            SharedPreferences preferences = getContext().getSharedPreferences(PREFS, 0);
+            Map<String, ?> values = preferences.getAll();
+            SharedPreferences.Editor cleanup = null;
             for (Map.Entry<String, ?> entry : values.entrySet()) {
-                if (entry.getValue() instanceof String) result.put(entry.getKey(), decrypt((String) entry.getValue()));
+                if (!(entry.getValue() instanceof String)) continue;
+                try {
+                    result.put(entry.getKey(), decrypt((String) entry.getValue()));
+                } catch (Exception corruptEntry) {
+                    // One stale/corrupt value must never hide every other
+                    // account's verification marker and backup key. Remove
+                    // only the unreadable entry and return all healthy values.
+                    if (cleanup == null) cleanup = preferences.edit();
+                    cleanup.remove(entry.getKey());
+                }
             }
+            if (cleanup != null) cleanup.commit();
             call.resolve(result);
         } catch (Exception error) {
             call.reject("Unable to read secure storage.", error);

@@ -156,7 +156,14 @@ export const useStableMediaUrl = (
     const prepare = (source: string | undefined, setter: (url: string) => void) => {
       if (!source) return;
       void prepareAndroidMediaAssetUrl(source, options.mimeType, false, true)?.then((url) => {
-        if (!disposed && url) setter(url);
+        if (disposed) return;
+        if (url) {
+          setter(url);
+          return;
+        }
+        void prepareAndroidMediaAssetUrl(source, options.mimeType)?.then((nativeUrl) => {
+          if (!disposed && nativeUrl) setter(nativeUrl);
+        });
       });
     };
     prepare(src, setAndroidSrc);

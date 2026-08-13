@@ -23,7 +23,9 @@ import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -337,8 +339,20 @@ public class AndroidMediaCachePlugin extends Plugin {
     }
 
     private static String normalizeSourceUrl(String sourceUrl) {
-        String normalized = removeQueryParameter(sourceUrl, "access_token");
-        return removeQueryParameter(normalized, "allow_redirect");
+        Uri uri = Uri.parse(sourceUrl);
+        TreeMap<String, List<String>> query = new TreeMap<>();
+        for (String name : uri.getQueryParameterNames()) {
+            if ("access_token".equalsIgnoreCase(name) || "allow_redirect".equalsIgnoreCase(name)) {
+                continue;
+            }
+            List<String> values = query.computeIfAbsent(name, ignored -> new ArrayList<>());
+            values.addAll(uri.getQueryParameters(name));
+        }
+        Uri.Builder builder = uri.buildUpon().clearQuery();
+        for (Map.Entry<String, List<String>> entry : query.entrySet()) {
+            for (String value : entry.getValue()) builder.appendQueryParameter(entry.getKey(), value);
+        }
+        return builder.build().toString();
     }
 
     private static String normalizeMimeType(String mimeType) {

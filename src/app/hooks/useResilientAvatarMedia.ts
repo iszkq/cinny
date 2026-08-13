@@ -60,7 +60,18 @@ export const useResilientAvatarMedia = (src?: string, preferOriginal = false) =>
     // A native cache hit is a local file URL and can be painted immediately
     // after process restart. Do not wait for the Blob/ObjectURL queue.
     void prepareAndroidMediaAssetUrl(mediaSrc, undefined, false, true)?.then((url) => {
-      if (!disposed && url) setAndroidAssetUrl(url);
+      if (disposed) return;
+      if (url) {
+        setAndroidAssetUrl(url);
+        return;
+      }
+
+      // Browser fetches often paint first, but that cache belongs to WebView
+      // and can disappear with its renderer. Always finish one native-file
+      // write so the next process starts from Android private storage.
+      void prepareAndroidMediaAssetUrl(mediaSrc)?.then((nativeUrl) => {
+        if (!disposed && nativeUrl) setAndroidAssetUrl(nativeUrl);
+      });
     });
     return () => {
       disposed = true;

@@ -23,6 +23,8 @@ import {
   useKeyBackupStatus,
   useKeyBackupTrust,
 } from '../../../hooks/useKeyBackup';
+import { getAndroidSecureValue } from '../../../../client/secretStorageKeys';
+import { isAndroidApp } from '../../../utils/nativePlatform';
 
 type UnverifiedIndicatorProps = {
   requestOpenSettings?: () => void;
@@ -48,8 +50,11 @@ function UnverifiedIndicator({ requestOpenSettings }: UnverifiedIndicatorProps) 
   const backupEnabled = useKeyBackupStatus(crypto);
   const backupInfo = useKeyBackupInfo(crypto);
   const backupTrust = useKeyBackupTrust(crypto, backupInfo);
+  const durableAndroidBackup =
+    isAndroidApp() && Boolean(getAndroidSecureValue('session-backup-private-key'));
   const backupUnverified =
     securitySyncReady &&
+    !durableAndroidBackup &&
     backupEnabled !== undefined &&
     backupInfo !== undefined &&
     backupTrust !== undefined &&

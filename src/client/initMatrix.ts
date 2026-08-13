@@ -420,8 +420,8 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
     const crypto = mx.getCrypto();
     if (crypto) {
       androidCryptoRestorePromises.set(mx, restoreAndroidBackupKey(crypto));
-      mx.on(CryptoEvent.KeyBackupDecryptionKeyCached, () => {
-        void persistAndroidBackupKey(crypto);
+      mx.on(CryptoEvent.KeyBackupDecryptionKeyCached, (version: string) => {
+        void persistAndroidBackupKey(crypto, version);
       });
       void persistAndroidBackupKey(crypto);
     }
@@ -479,7 +479,16 @@ export const startClient = async (mx: MatrixClient) => {
           if (getAndroidSecureValue('verified-device') === '1' && userId && deviceId) {
             await crypto.setDeviceVerified(userId, deviceId, true);
           }
+          if (!getAndroidSecureValue('session-backup-private-key')) {
+            // Older Android builds could keep the Secret Storage private key
+            // but miss the separate backup-key snapshot. Re-derive the backup
+            // key from that already-persisted secret without asking the user
+            // for the recovery key again, then immediately migrate it to the
+            // dedicated native secure-storage entry.
+            await crypto.loadSessionBackupPrivateKeyFromSecretStorage().catch(() => undefined);
+          }
           await crypto.checkKeyBackupAndEnable();
+          await persistAndroidBackupKey(crypto);
           androidCryptoTrustRestored.add(mx);
         })();
         androidCryptoTrustRestoreTasks.set(mx, task);

@@ -93,13 +93,16 @@ export const getAndroidSecureValue = (name) => {
   return key ? secureValues.get(key) : undefined;
 };
 
-export const persistAndroidBackupKey = async (crypto) => {
+export const persistAndroidBackupKey = async (crypto, versionHint) => {
   if (!isAndroid() || !crypto) return;
   try {
-    const [key, version] = await Promise.all([
+    const [key, activeVersion] = await Promise.all([
       crypto.getSessionBackupPrivateKey(),
-      crypto.getActiveSessionBackupVersion(),
+      typeof versionHint === 'string'
+        ? Promise.resolve(versionHint)
+        : crypto.getActiveSessionBackupVersion(),
     ]);
+    const version = typeof versionHint === 'string' && versionHint ? versionHint : activeVersion;
     if (!(key instanceof Uint8Array) || typeof version !== 'string' || !version) return;
     await setAndroidSecureValue(
       'session-backup-private-key',
