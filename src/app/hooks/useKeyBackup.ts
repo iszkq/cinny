@@ -132,12 +132,16 @@ export const useKeyBackupInfo = (crypto: CryptoApi): KeyBackupInfo | undefined |
 
 export const useKeyBackupTrust = (
   crypto: CryptoApi,
-  backupInfo: KeyBackupInfo
+  backupInfo: KeyBackupInfo | null | undefined
 ): BackupTrustInfo | undefined => {
   const alive = useAlive();
   const [trust, setTrust] = useState<BackupTrustInfo>();
 
   const fetchTrust = useCallback(() => {
+    if (!backupInfo) {
+      setTrust(undefined);
+      return;
+    }
     crypto.isKeyBackupTrusted(backupInfo).then((t) => {
       if (alive()) {
         setTrust(t);

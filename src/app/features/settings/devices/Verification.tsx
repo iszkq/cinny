@@ -37,6 +37,7 @@ import { withSearchParam } from '../../../pages/pathUtils';
 import { useAccountManagementActions } from '../../../hooks/useAccountManagement';
 import { openExternalUrl } from '../../../utils/desktop';
 import { isDesktopUpdaterSupported } from '../../../utils/desktopUpdater';
+import { useKeyBackupInfo, useKeyBackupStatus, useKeyBackupTrust } from '../../../hooks/useKeyBackup';
 
 type VerificationStatusBadgeProps = {
   verificationStatus: VerificationStatus;
@@ -153,31 +154,53 @@ function LearnStartVerificationFromOtherDevice() {
 }
 
 type VerifyCurrentDeviceTileProps = {
+  verificationStatus: VerificationStatus;
+  crypto: CryptoApi;
   secretStorageKeyId: string;
   secretStorageKeyContent: SecretStorageKeyContent;
 };
 export function VerifyCurrentDeviceTile({
+  verificationStatus,
+  crypto,
   secretStorageKeyId,
   secretStorageKeyContent,
 }: VerifyCurrentDeviceTileProps) {
+  const mx = useMatrixClient();
+  const backupEnabled = useKeyBackupStatus(crypto);
+  const backupInfo = useKeyBackupInfo(crypto);
+  const backupTrust = useKeyBackupTrust(crypto, backupInfo);
   const [learnMore, setLearnMore] = useState(false);
 
   const [manualVerification, setManualVerification] = useState(false);
   const handleCancelVerification = () => setManualVerification(false);
 
+  const backupNeedsRecovery =
+    backupInfo !== undefined &&
+    backupInfo !== null &&
+    (!backupEnabled ||
+      backupTrust?.trusted !== true ||
+      backupTrust?.matchesDecryptionKey !== true);
+  const currentDeviceNeedsVerification = verificationStatus === VerificationStatus.Unverified;
+  if (!currentDeviceNeedsVerification && !backupNeedsRecovery) return null;
+  const backupOnly = !currentDeviceNeedsVerification && backupNeedsRecovery;
+
   return (
     <>
       <InfoCard
         variant="Critical"
-        title={'\u672a\u9a8c\u8bc1'}
+        title={backupOnly ? '加密备份未连接' : '\u672a\u9a8c\u8bc1'}
         description={
           <>
             {
-              '\u53ef\u4ee5\u4ece\u5176\u4ed6\u8bbe\u5907\u53d1\u8d77\u9a8c\u8bc1\uff0c\u6216\u8005\u76f4\u63a5\u624b\u52a8\u9a8c\u8bc1\u3002'
+              backupOnly
+                ? '当前设备已经验证，但本机尚未连接可信的消息备份解密密钥。请输入恢复密钥以连接加密备份。'
+                : '\u53ef\u4ee5\u4ece\u5176\u4ed6\u8bbe\u5907\u53d1\u8d77\u9a8c\u8bc1\uff0c\u6216\u8005\u76f4\u63a5\u624b\u52a8\u9a8c\u8bc1\u3002'
             }{' '}
-            <Text as="a" size="T200" onClick={() => setLearnMore(!learnMore)}>
-              <b>{learnMore ? '\u6536\u8d77' : '\u4e86\u89e3\u66f4\u591a'}</b>
-            </Text>
+            {!backupOnly && (
+              <Text as="a" size="T200" onClick={() => setLearnMore(!learnMore)}>
+                <b>{learnMore ? '\u6536\u8d77' : '\u4e86\u89e3\u66f4\u591a'}</b>
+              </Text>
+            )}
           </>
         }
         after={
@@ -191,7 +214,7 @@ export function VerifyCurrentDeviceTile({
               onClick={() => setManualVerification(true)}
             >
               <Text as="span" size="B300">
-                {'\u624b\u52a8\u9a8c\u8bc1'}
+                {backupOnly ? '输入恢复密钥' : '\u624b\u52a8\u9a8c\u8bc1'}
               </Text>
             </Button>
           )

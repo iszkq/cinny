@@ -55,6 +55,10 @@ test('verified devices restore the upstream encrypted-backup status and progress
 
   assert.match(devicesSource, /verificationStatus === VerificationStatus\.Verified/);
   assert.match(devicesSource, /<BackupRestoreTile/);
+  assert.match(devicesSource, /verificationStatus=\{verificationStatus\}/);
+  assert.match(devicesSource, /crypto=\{crypto\}/);
+  assert.match(verificationSource, /backupNeedsRecovery/);
+  assert.match(verificationSource, /输入恢复密钥/);
   assert.match(backupSource, /<ProgressBar/);
   assert.match(backupSource, /解密密钥已恢复/);
   assert.match(verificationSource, /VerifyCurrentDeviceTile/);

@@ -148,14 +148,14 @@ export function Devices({ requestClose }: DevicesProps) {
                     >
                       {crypto && <DeviceKeyDetails crypto={crypto} />}
                     </DeviceTile>
-                    {verificationStatus === VerificationStatus.Unverified &&
-                      defaultSecretStorageKeyId &&
-                      defaultSecretStorageKeyContent && (
+                    {crypto && defaultSecretStorageKeyId && defaultSecretStorageKeyContent && (
                         <VerifyCurrentDeviceTile
+                          verificationStatus={verificationStatus}
+                          crypto={crypto}
                           secretStorageKeyId={defaultSecretStorageKeyId}
                           secretStorageKeyContent={defaultSecretStorageKeyContent}
                         />
-                      )}
+                    )}
                     {crypto && verificationStatus === VerificationStatus.Verified && (
                       <BackupRestoreTile crypto={crypto} />
                     )}
