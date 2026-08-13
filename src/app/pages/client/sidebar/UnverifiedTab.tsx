@@ -18,6 +18,11 @@ import { useCrossSigningActive } from '../../../hooks/useCrossSigning';
 import { Modal500 } from '../../../components/Modal500';
 import { Settings, SettingsPages } from '../../../features/settings';
 import { useClientSyncReady } from '../../../hooks/useClientSyncReady';
+import {
+  useKeyBackupInfo,
+  useKeyBackupStatus,
+  useKeyBackupTrust,
+} from '../../../hooks/useKeyBackup';
 
 type UnverifiedIndicatorProps = {
   requestOpenSettings?: () => void;
@@ -40,9 +45,21 @@ function UnverifiedIndicator({ requestOpenSettings }: UnverifiedIndicatorProps) 
     currentDeviceId,
     true
   );
-  const unverified =
+  const backupEnabled = useKeyBackupStatus(crypto);
+  const backupInfo = useKeyBackupInfo(crypto);
+  const backupTrust = useKeyBackupTrust(crypto, backupInfo);
+  const backupUnverified =
     securitySyncReady &&
-    (!crossSigningActive || verificationStatus === VerificationStatus.Unverified);
+    backupInfo !== undefined &&
+    (!backupEnabled ||
+      backupInfo === null ||
+      backupTrust?.trusted !== true ||
+      backupTrust?.matchesDecryptionKey !== true);
+  const deviceUnverified =
+    securitySyncReady &&
+    (!crossSigningActive || verificationStatus !== VerificationStatus.Verified);
+  const unverified =
+    deviceUnverified || backupUnverified;
 
   const otherDevicesId = useDeviceIds(otherDevices);
   const unverifiedDeviceCount = useUnverifiedDeviceCount(
@@ -63,8 +80,10 @@ function UnverifiedIndicator({ requestOpenSettings }: UnverifiedIndicatorProps) 
   let tooltip = `${unverifiedDeviceCount ?? 0} 台其他设备未验证`;
   if (!crossSigningActive) {
     tooltip = '设备验证尚未启用';
-  } else if (unverified) {
+  } else if (deviceUnverified) {
     tooltip = '本机尚未验证';
+  } else if (backupUnverified) {
+    tooltip = '加密备份尚未验证';
   }
   return (
     <>

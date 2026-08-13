@@ -54,7 +54,7 @@ import { PasswordInput } from '../password-input';
 import { lockOfficeLandscape, unlockOfficeOrientation } from '../../utils/officeOrientation';
 import { ANDROID_BACK_BUTTON_EVENT, isAndroidApp } from '../../utils/nativePlatform';
 import { NativeClipboard } from '../../utils/nativeClipboard';
-import { mobileOrTablet } from '../../utils/user-agent';
+import { isIOS, mobileOrTablet } from '../../utils/user-agent';
 
 const DEFAULT_OFFICE_EDITOR_URL = 'https://124.222.193.241:6258/editor';
 const OFFICE_BRIDGE_READY = 'xinghuo-office-ready';
@@ -105,7 +105,7 @@ const isCompoundOfficeContainer = (buffer: ArrayBuffer): boolean => {
  * to discover whether a password is required; the actual document is still
  * opened and rendered by the configured Office service.
  */
-type PdfPasswordState = 'not-encrypted' | 'password-required' | 'password-invalid' | 'ready';
+type PdfPasswordState = 'not-encrypted' | 'password-required' | 'ready';
 
 const inspectPdfPassword = async (
   buffer: ArrayBuffer,
@@ -117,43 +117,11 @@ const inspectPdfPassword = async (
   const marker = new TextDecoder('latin1').decode(buffer).includes('/Encrypt');
   if (!marker) return 'not-encrypted';
 
-  try {
-    const pdf = await import('pdfjs-dist');
-    pdf.GlobalWorkerOptions.workerSrc = `${String(import.meta.env.BASE_URL).replace(/\/$/, '')}/pdf.worker.min.js`;
-    const candidate = password?.trim();
-    const loadingTask = pdf.getDocument({ data: buffer, ...(candidate ? { password: candidate } : {}) });
-    const passwordChallenge = new Promise<PdfPasswordState>((resolve) => {
-      loadingTask.onPassword = (_setPassword: (nextPassword: string) => void, reason: number) => {
-        resolve(
-          reason === pdf.PasswordResponses.INCORRECT_PASSWORD
-            ? 'password-invalid'
-            : 'password-required'
-        );
-      };
-    });
-    try {
-      const result = await Promise.race([
-        loadingTask.promise.then(async (document) => {
-          await document.destroy();
-          return 'ready' as const;
-        }),
-        passwordChallenge,
-      ]);
-      return result;
-    } catch {
-      // A malformed PDF can contain the marker too. Leave non-password errors
-      // for Office so this preflight never changes its existing error path.
-      return 'not-encrypted';
-    } finally {
-      try {
-        await loadingTask.destroy();
-      } catch {
-        // The task may already have been destroyed with its document.
-      }
-    }
-  } catch {
-    return 'not-encrypted';
-  }
+  // Do not run PDF.js here. On iOS/Android WebViews its worker/password
+  // callback can remain pending while the Office iframe is warming up, which
+  // leaves the user on an endless loading screen. The Office service remains
+  // the renderer and is responsible for validating the supplied password.
+  return password?.trim() ? 'ready' : 'password-required';
 };
 
 const officeShellWarmups = new Map<string, Promise<void>>();
@@ -465,6 +433,7 @@ export function OfficeFileEditor({
   const iconMeta = officeKind ? OFFICE_ICON_META[officeKind] : OFFICE_ICON_META.word;
   const desktopNativeOffice = isDesktopUpdaterSupported();
   const androidApp = isAndroidApp();
+  const iosOfficeLayout = !desktopNativeOffice && isIOS();
   const compactOfficeViewport = isCompactOfficeViewport();
   const mobileOfficeShell = androidApp || mobileOrTablet() || compactOfficeViewport;
   const officeEditorUrl = clientConfig.officeEditor?.url?.trim() || DEFAULT_OFFICE_EDITOR_URL;
@@ -643,29 +612,41 @@ export function OfficeFileEditor({
   useEffect(() => {
     if (!session || desktopNativeOffice) return undefined;
 
+    let stableViewportHeight = Math.round(window.innerHeight);
     const updateOfficeViewportHeight = () => {
-      const height = Math.round(window.visualViewport?.height ?? window.innerHeight);
-      document.documentElement.style.setProperty('--office-viewport-height', `${height}px`);
+      const height = iosOfficeLayout
+        ? stableViewportHeight
+        : Math.round(window.visualViewport?.height ?? window.innerHeight);
+      document.documentElement.style.setProperty(
+        '--office-viewport-height',
+        `${height}px`
+      );
     };
 
     updateOfficeViewportHeight();
-    window.addEventListener('resize', updateOfficeViewportHeight, { passive: true });
-    window.addEventListener('orientationchange', updateOfficeViewportHeight, { passive: true });
-    window.visualViewport?.addEventListener('resize', updateOfficeViewportHeight, {
-      passive: true,
-    });
-    window.visualViewport?.addEventListener('scroll', updateOfficeViewportHeight, {
-      passive: true,
-    });
+    const handleOrientationChange = () => {
+      stableViewportHeight = Math.round(window.innerHeight);
+      updateOfficeViewportHeight();
+    };
+    if (!iosOfficeLayout) {
+      window.addEventListener('resize', updateOfficeViewportHeight, { passive: true });
+      window.visualViewport?.addEventListener('resize', updateOfficeViewportHeight, {
+        passive: true,
+      });
+      window.visualViewport?.addEventListener('scroll', updateOfficeViewportHeight, {
+        passive: true,
+      });
+    }
+    window.addEventListener('orientationchange', handleOrientationChange, { passive: true });
 
     return () => {
       window.removeEventListener('resize', updateOfficeViewportHeight);
-      window.removeEventListener('orientationchange', updateOfficeViewportHeight);
+      window.removeEventListener('orientationchange', handleOrientationChange);
       window.visualViewport?.removeEventListener('resize', updateOfficeViewportHeight);
       window.visualViewport?.removeEventListener('scroll', updateOfficeViewportHeight);
       document.documentElement.style.removeProperty('--office-viewport-height');
     };
-  }, [desktopNativeOffice, session]);
+  }, [desktopNativeOffice, iosOfficeLayout, session]);
 
   useEffect(() => {
     if (!session || !mobileOfficeShell) return undefined;
@@ -1275,15 +1256,12 @@ export function OfficeFileEditor({
           }
 
           if (
-            pdfPasswordState === 'password-required' ||
-            pdfPasswordState === 'password-invalid'
+            pdfPasswordState === 'password-required'
           ) {
             clearOpenTimeouts();
             setPasswordRequired(true);
             setPasswordInput('');
-            setPasswordError(
-              pdfPasswordState === 'password-invalid' ? 'PDF 密码不正确，请重试。' : undefined
-            );
+            setPasswordError(undefined);
             return;
           }
 
@@ -2159,7 +2137,7 @@ export function OfficeFileEditor({
                 }}
               >
                 <Modal
-                  className={css.editorModal}
+                  className={`${css.editorModal} ${iosOfficeLayout ? css.iosEditorModal : ''}`}
                   variant="Background"
                   role="dialog"
                   aria-modal="true"
@@ -2228,7 +2206,11 @@ export function OfficeFileEditor({
                       }
                     />
                     {passwordRequired && (
-                      <div className={css.promptBackdrop}>
+                      <div
+                        className={`${css.promptBackdrop} ${
+                          iosOfficeLayout ? css.iosPromptBackdrop : ''
+                        }`}
+                      >
                         <Box
                           as="form"
                           className={css.promptCard}
@@ -2385,7 +2367,11 @@ export function OfficeFileEditor({
                       </div>
                     )}
                     {showClosePrompt && (
-                      <div className={css.promptBackdrop}>
+                      <div
+                        className={`${css.promptBackdrop} ${
+                          iosOfficeLayout ? css.iosPromptBackdrop : ''
+                        }`}
+                      >
                         <div className={css.promptCard} role="alertdialog" aria-modal="true">
                           <Box direction="Column" gap="100">
                             <Text size="H4">保存对文档的修改？</Text>

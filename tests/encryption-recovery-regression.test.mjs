@@ -97,11 +97,28 @@ test('the sidebar keeps a critical security reminder on first login', async () =
   assert.match(source, /const currentDeviceId = mx\.getDeviceId\(\)/);
   assert.match(
     source,
-    /securitySyncReady &&[\s\S]*!crossSigningActive \|\|[\s\S]*VerificationStatus\.Unverified/
+    /securitySyncReady &&[\s\S]*!crossSigningActive \|\| verificationStatus !== VerificationStatus\.Verified/
   );
   assert.match(source, /设备验证尚未启用/);
   assert.match(source, /<Badge variant="Critical" size="200"/);
   assert.doesNotMatch(source, /if \(!crossSigningActive\) return null/);
+});
+
+test('the sidebar stays critical until both device and key backup are verified', async () => {
+  const sidebarSource = await readSource('src/app/pages/client/sidebar/UnverifiedTab.tsx');
+  const backupHookSource = await readSource('src/app/hooks/useKeyBackup.ts');
+
+  assert.match(sidebarSource, /useKeyBackupStatus\(crypto\)/);
+  assert.match(sidebarSource, /useKeyBackupInfo\(crypto\)/);
+  assert.match(sidebarSource, /useKeyBackupTrust\(crypto, backupInfo\)/);
+  assert.match(sidebarSource, /verificationStatus !== VerificationStatus\.Verified/);
+  assert.match(sidebarSource, /!backupEnabled/);
+  assert.match(sidebarSource, /backupTrust\?\.trusted !== true/);
+  assert.match(sidebarSource, /backupTrust\?\.matchesDecryptionKey !== true/);
+  assert.match(sidebarSource, /deviceUnverified \|\| backupUnverified/);
+  assert.match(sidebarSource, /加密备份尚未验证/);
+  assert.match(backupHookSource, /CryptoEvent\.KeyBackupStatus/);
+  assert.match(backupHookSource, /useKeyBackupDecryptionKeyCached\(fetchTrust\)/);
 });
 
 test('new security stores cannot be initialized before the first Matrix sync is ready', async () => {

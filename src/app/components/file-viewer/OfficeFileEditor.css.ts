@@ -202,6 +202,15 @@ export const editorModal = style([
   },
 ]);
 
+export const iosEditorModal = style({
+  '@media': {
+    'screen and (max-width: 750px), screen and (max-height: 520px) and (pointer: coarse)': {
+      height: 'var(--office-viewport-height, 100dvh)',
+      maxHeight: 'var(--office-viewport-height, 100dvh)',
+    },
+  },
+});
+
 export const editorHeader = style([
   DefaultReset,
   {
@@ -354,6 +363,10 @@ export const promptBackdrop = style([
     background: 'rgba(15, 23, 42, 0.48)',
   },
 ]);
+
+export const iosPromptBackdrop = style({
+  position: 'fixed',
+});
 
 export const promptCard = style([
   DefaultReset,

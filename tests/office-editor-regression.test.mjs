@@ -32,7 +32,7 @@ test('encrypted Word, spreadsheet, and presentation files are unlocked locally',
   assert.match(source, /密码仅用于本次解密，不会保存到设备或上传到聊天服务器/);
 });
 
-test('mobile encrypted PDFs are password-probed before opening in Office', async () => {
+test('mobile encrypted PDFs prompt immediately before opening in Office', async () => {
   const source = await readSource('src/app/components/file-viewer/OfficeFileEditor.tsx');
   const mimeSource = await readSource('src/app/utils/mimeTypes.ts');
   const rendererSource = await readSource('src/app/components/RenderMessageContent.tsx');
@@ -46,8 +46,9 @@ test('mobile encrypted PDFs are password-probed before opening in Office', async
   assert.match(source, /mobileOfficeShell && officeKind === 'pdf'/);
   assert.match(source, /const pdfPasswordState/);
   assert.match(source, /pdfPasswordState === 'password-required'/);
-  assert.match(source, /pdfPasswordState === 'password-invalid'/);
-  assert.match(source, /pdfPasswordState === 'password-invalid' \? 'PDF 密码不正确，请重试。'/);
+  assert.doesNotMatch(source, /pdfPasswordState === 'password-invalid'/);
+  assert.match(source, /return password\?\.trim\(\) \? 'ready' : 'password-required'/);
+  assert.doesNotMatch(source, /import\('pdfjs-dist'\)/);
   assert.doesNotMatch(source, /encryptedOfficeFile \|\| encryptedPdfFile/);
   assert.match(source, /password: activeSession\.password/);
   assert.match(rendererSource, /getOfficeDocumentKind\(body, mimeType\)/);
@@ -329,7 +330,13 @@ test('Office opening is bounded and mobile layout respects the viewport safe are
   assert.match(nativeViewSource, /payload\.phase === 'loading' && !payload\.passwordRequired/);
   assert.match(editorSource, /isCompactOfficeViewport/);
   assert.match(editorSource, /if \(isCompactOfficeViewport\(\)\) return Promise\.resolve\(\)/);
-  assert.match(editorSource, /window\.visualViewport\?\.height/);
+  assert.match(editorSource, /stableViewportHeight = Math\.round\(window\.innerHeight\)/);
+  assert.match(editorSource, /const iosOfficeLayout = !desktopNativeOffice && isIOS\(\)/);
+  assert.match(editorSource, /iosOfficeLayout\s*\? stableViewportHeight/);
+  assert.match(editorSource, /if \(!iosOfficeLayout\)/);
+  assert.match(editorSource, /visualViewport\?\.addEventListener\('scroll'/);
+  assert.match(editorSource, /iosOfficeLayout \? css\.iosEditorModal/);
+  assert.match(editorSource, /iosOfficeLayout \? css\.iosPromptBackdrop/);
   assert.match(editorSource, /activeElement instanceof HTMLElement/);
   assert.match(editorSource, /密码不正确，文档未发送到 Office 服务/);
   assert.match(styleSource, /var\(--safe-area-top/);
