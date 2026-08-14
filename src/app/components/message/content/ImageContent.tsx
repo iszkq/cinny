@@ -42,6 +42,7 @@ import {
 import { primeDesktopMediaAssetUrl } from '../../../utils/desktopMediaAssetCache';
 import { isAndroidApp } from '../../../utils/nativePlatform';
 import { isAnimatedEmojiBoardMedia } from '../../emoji-board/media';
+import { prepareAndroidMediaAssetUrl } from '../../../utils/androidMediaAssetCache';
 
 const IMAGE_PREVIEW_WIDTH = 230;
 const IMAGE_PREVIEW_HEIGHT = 460;
@@ -159,9 +160,11 @@ export const ImageContent = as<'div', ImageContentProps>(
         : undefined;
     const preferAndroidThumbnail = androidApp && !preferOriginalPreview;
     const preferAndroidStickerThumbnail = androidApp && preferOriginalPreview;
+    const useAndroidThumbnailFirst =
+      preferAndroidStickerThumbnail ||
+      (preferAndroidThumbnail && !isAnimatedEmojiBoardMedia(info));
     const stablePrimaryUrl =
-      (preferAndroidThumbnail || preferAndroidStickerThumbnail) &&
-      !isAnimatedEmojiBoardMedia(info)
+      useAndroidThumbnailFirst
       ? stableThumbnailUrl ?? stableOriginalUrl
       : stableOriginalUrl;
     const stableFallbackUrl =
@@ -203,6 +206,19 @@ export const ImageContent = as<'div', ImageContentProps>(
           return prepareEncryptedMediaObjectUrl(mediaUrl, mediaMimeType, mediaEncInfo);
         }
 
+        // Android has a private native media cache. Use the cached file directly for
+        // unencrypted timeline media instead of routing it through Cache Storage and a
+        // second file-to-Blob read. This avoids two WebView bridge hops for every visible
+        // sticker or small image.
+        if (androidApp) {
+          const androidAssetUrl = await prepareAndroidMediaAssetUrl(
+            mediaUrl,
+            mediaMimeType,
+            retryFailed
+          );
+          if (androidAssetUrl) return androidAssetUrl;
+        }
+
         if (isHttpUrl(mediaMxcUrl) && !shouldUseObjectUrlForMediaDisplay(mediaUrl)) {
           return mediaUrl;
         }
@@ -223,7 +239,7 @@ export const ImageContent = as<'div', ImageContentProps>(
 
         return mediaUrl;
       },
-      [mx, useAuthentication]
+      [androidApp, mx, useAuthentication]
     );
 
     const [srcState, loadSrc] = useAsyncCallback<
@@ -236,8 +252,15 @@ export const ImageContent = as<'div', ImageContentProps>(
           const thumbMxcUrl = info?.thumbnail_file?.url ?? info?.thumbnail_url;
           const thumbMimeType = info?.thumbnail_info?.mimetype ?? mimeType ?? FALLBACK_MIMETYPE;
           const thumbEncInfo = info?.thumbnail_file;
+          // A sticker's original may be an animated WebP/GIF and can require a
+          // relatively expensive encrypted-media/decode path. On Android show the
+          // homeserver thumbnail first so the message is visible immediately.
+          const allowAndroidStickerThumbnail = androidApp && preferOriginalPreview;
 
-          if (!preferOriginalPreview && typeof thumbMxcUrl === 'string') {
+          if (
+            (!preferOriginalPreview || allowAndroidStickerThumbnail) &&
+            typeof thumbMxcUrl === 'string'
+          ) {
             try {
               const thumbSrc = await prepareMediaSrc(
                 thumbMxcUrl,
@@ -257,7 +280,7 @@ export const ImageContent = as<'div', ImageContentProps>(
             }
           }
 
-          if (!preferOriginalPreview && !encInfo) {
+          if ((!preferOriginalPreview || allowAndroidStickerThumbnail) && !encInfo) {
             try {
               const thumbnailSrc = await prepareMediaSrc(
                 url,
@@ -291,7 +314,15 @@ export const ImageContent = as<'div', ImageContentProps>(
             kind: 'original',
           };
         },
-        [encInfo, info, mimeType, preferOriginalPreview, prepareMediaSrc, url]
+        [
+          androidApp,
+          encInfo,
+          info,
+          mimeType,
+          preferOriginalPreview,
+          prepareMediaSrc,
+          url,
+        ]
       )
     );
 

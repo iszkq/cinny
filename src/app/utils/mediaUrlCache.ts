@@ -224,7 +224,10 @@ let persistentWritesSinceTrim = 0;
 let persistentTrimPromise: Promise<void> | undefined;
 
 const PERSISTENT_MEDIA_TRIM_INTERVAL = 64;
-const ANDROID_MEDIA_FALLBACK_DELAY_MS = 800;
+// The native cache uses the same authenticated session as the app and avoids the
+// WebView/service-worker path. Start it immediately; only start a browser request
+// as a short-latency fallback when the native request has not produced a result.
+const ANDROID_MEDIA_FALLBACK_DELAY_MS = 180;
 const ANDROID_MEDIA_RESOLVE_DEADLINE_MS = 20_000;
 
 const emitObjectUrlMediaChange = (src: string, objectUrl: string | undefined) => {
@@ -385,9 +388,10 @@ const loadAndroidMediaBlob = (
       let settled = false;
       let mediaAccepted = false;
       let browserDone = false;
+      let browserStarted = false;
       let nativeDone = false;
       let nativeStarted = false;
-      let nativeFallbackTimer: number | undefined;
+      let browserFallbackTimer: number | undefined;
       let deadlineTimer: number | undefined;
 
       const finish = (blob?: Blob) => {
@@ -399,7 +403,7 @@ const loadAndroidMediaBlob = (
             return;
           }
           settled = true;
-          if (nativeFallbackTimer !== undefined) window.clearTimeout(nativeFallbackTimer);
+          if (browserFallbackTimer !== undefined) window.clearTimeout(browserFallbackTimer);
           if (deadlineTimer !== undefined) window.clearTimeout(deadlineTimer);
           resolve(blob);
           return;
@@ -412,6 +416,19 @@ const loadAndroidMediaBlob = (
         }
       };
 
+      const startBrowser = () => {
+        if (browserStarted || settled) return;
+        browserStarted = true;
+        fetchAndPersistMedia(src)
+          .then(responseToMediaBlob)
+          .catch(() => undefined)
+          .then((blob) => {
+            browserDone = true;
+            if (!blob) startNative();
+            finish(blob);
+          });
+      };
+
       const startNative = () => {
         if (nativeStarted || settled) return;
         nativeStarted = true;
@@ -419,25 +436,21 @@ const loadAndroidMediaBlob = (
           .catch(() => undefined)
           .then((blob) => {
             nativeDone = true;
+            if (!blob) startBrowser();
             finish(blob);
           });
       };
 
-      nativeFallbackTimer = window.setTimeout(startNative, ANDROID_MEDIA_FALLBACK_DELAY_MS);
+      // Native-first is materially faster on Android cold starts and also works
+      // when the PWA service worker was removed. Keep the browser path as a
+      // bounded fallback for homeservers where the native HTTP stack is blocked.
+      startNative();
+      browserFallbackTimer = window.setTimeout(startBrowser, ANDROID_MEDIA_FALLBACK_DELAY_MS);
       deadlineTimer = window.setTimeout(() => {
         if (settled) return;
         settled = true;
         resolve(undefined);
       }, ANDROID_MEDIA_RESOLVE_DEADLINE_MS);
-
-      fetchAndPersistMedia(src)
-        .then(responseToMediaBlob)
-        .catch(() => undefined)
-        .then((blob) => {
-          browserDone = true;
-          if (!blob) startNative();
-          finish(blob);
-        });
     });
   });
 
