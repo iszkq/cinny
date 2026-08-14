@@ -41,8 +41,8 @@ import {
 } from '../../../state/imageViewer';
 import { primeDesktopMediaAssetUrl } from '../../../utils/desktopMediaAssetCache';
 import { isAndroidApp } from '../../../utils/nativePlatform';
-import { isAnimatedEmojiBoardMedia } from '../../emoji-board/media';
 import { prepareAndroidMediaAssetUrl } from '../../../utils/androidMediaAssetCache';
+import { isAnimatedEmojiBoardMedia } from '../../emoji-board/media';
 
 const IMAGE_PREVIEW_WIDTH = 230;
 const IMAGE_PREVIEW_HEIGHT = 460;
@@ -208,6 +208,16 @@ export const ImageContent = as<'div', ImageContentProps>(
           return mediaUrl;
         }
 
+        if (androidApp) {
+          const nativeAssetUrl = await prepareAndroidMediaAssetUrl(
+            mediaUrl,
+            mediaMimeType,
+            retryFailed
+          );
+          if (nativeAssetUrl) return nativeAssetUrl;
+          throw new Error('Failed to prepare Android image media');
+        }
+
         const desktopAssetUrl = await primeDesktopMediaAssetUrl(mediaUrl, priority, mediaMimeType);
         if (desktopAssetUrl) {
           return desktopAssetUrl;
@@ -224,7 +234,7 @@ export const ImageContent = as<'div', ImageContentProps>(
 
         return mediaUrl;
       },
-      [mx, useAuthentication]
+      [androidApp, mx, useAuthentication]
     );
 
     const [srcState, loadSrc] = useAsyncCallback<

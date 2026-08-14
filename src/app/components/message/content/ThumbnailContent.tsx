@@ -7,6 +7,8 @@ import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { FALLBACK_MIMETYPE } from '../../../utils/mimeTypes';
 import { primeCachedMediaObjectUrl } from '../../../utils/mediaUrlCache';
 import { prepareEncryptedMediaObjectUrl } from '../../../utils/encryptedMediaCache';
+import { isAndroidApp } from '../../../utils/nativePlatform';
+import { prepareAndroidMediaAssetUrl } from '../../../utils/androidMediaAssetCache';
 
 export type ThumbnailContentProps = {
   info: IThumbnailContent;
@@ -33,6 +35,12 @@ export function ThumbnailContent({ info, renderImage }: ThumbnailContentProps) {
           thumbInfo.mimetype ?? FALLBACK_MIMETYPE,
           encInfo
         );
+      }
+
+      if (isAndroidApp()) {
+        const nativeAssetUrl = await prepareAndroidMediaAssetUrl(mediaUrl, thumbInfo.mimetype);
+        if (nativeAssetUrl) return nativeAssetUrl;
+        throw new Error('Failed to prepare Android thumbnail media');
       }
 
       const preparedMediaUrl = await primeCachedMediaObjectUrl(mediaUrl, 'visible');

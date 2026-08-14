@@ -16,7 +16,9 @@ const storageKey = () => {
 };
 const encodeKey = (key) => {
   let binary = '';
-  key.forEach((value) => { binary += String.fromCharCode(value); });
+  key.forEach((value) => {
+    binary += String.fromCharCode(value);
+  });
   return btoa(binary);
 };
 const decodeKey = (value) => {
@@ -71,7 +73,9 @@ const loadSecureKeys = async () => {
       const decoded = decodeKey(value);
       if (decoded) secretStorageKeys.set(keyId, decoded);
     });
-  } catch { /* WebView fallback remains available. */ }
+  } catch {
+    /* WebView fallback remains available. */
+  }
 };
 
 const secureValueKey = (name) => {
@@ -121,8 +125,11 @@ export const restoreAndroidBackupKey = async (crypto) => {
     const parsed = JSON.parse(encoded);
     const key = decodeKey(parsed?.key);
     if (!(key instanceof Uint8Array) || typeof parsed?.version !== 'string') return;
-    const activeVersion = await crypto.getActiveSessionBackupVersion();
-    if (activeVersion && activeVersion !== parsed.version) return;
+    // The Rust store can expose a stale active version during cold startup.
+    // The secure value is version-scoped already; cache it first and let
+    // checkKeyBackupAndEnable compare it with the server's current version.
+    // Refusing it here caused the verified device to restart without its
+    // otherwise valid decryption key attached.
     await crypto.storeSessionBackupPrivateKey(key, parsed.version);
   } catch {
     // Ignore corrupt/stale values and let the normal recovery UI handle it.
@@ -135,9 +142,13 @@ const persistKeysSecurely = async () => {
   if (!key) return;
   try {
     const encoded = {};
-    secretStorageKeys.forEach((value, keyId) => { encoded[keyId] = encodeKey(value); });
+    secretStorageKeys.forEach((value, keyId) => {
+      encoded[keyId] = encodeKey(value);
+    });
     await AndroidSecureStorage.set({ key, value: JSON.stringify(encoded) });
-  } catch { /* localStorage fallback remains available. */ }
+  } catch {
+    /* localStorage fallback remains available. */
+  }
 };
 
 export function storePrivateKey(keyId, privateKey) {
@@ -170,7 +181,11 @@ export function clearSecretStorageKeys() {
   secretStorageKeys.clear();
   const key = storageKey();
   if (key && isAndroid()) {
-    try { localStorage.removeItem(key); } catch { /* ignore */ }
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      /* ignore */
+    }
     void Promise.all([
       AndroidSecureStorage.remove({ key }),
       AndroidSecureStorage.remove({ key: secureValueKey('verified-device') }),

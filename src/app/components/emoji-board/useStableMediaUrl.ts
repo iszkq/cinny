@@ -73,6 +73,7 @@ export const useStableMediaUrl = (
   const autoRetry = options.autoRetry ?? false;
   const disableObjectUrlCache = options.disableObjectUrlCache ?? false;
   const mobileDevice = mobileOrTablet();
+  const androidApp = isAndroidApp();
   const preferObjectUrl =
     options.preferObjectUrl ??
     (mobileDevice ||
@@ -80,11 +81,14 @@ export const useStableMediaUrl = (
       shouldUseObjectUrlForMediaDisplay(fallbackSrc));
   const requireObjectUrl =
     options.requireObjectUrl ??
-    (isAndroidApp() &&
+    (androidApp &&
       (shouldUseObjectUrlForMediaDisplay(src) || shouldUseObjectUrlForMediaDisplay(fallbackSrc)));
-  const deferFallbackPreparation = requireObjectUrl && isAndroidApp();
+  const deferFallbackPreparation = requireObjectUrl && androidApp;
   const desktopSupported = isDesktopUpdaterSupported();
-  const objectUrlCacheEnabled = preferObjectUrl && !disableObjectUrlCache;
+  // Android media is already persisted by the native cache. Creating a second
+  // CacheStorage/blob URL for the same image caused competing requests and a
+  // fresh spinner every time a room component was remounted.
+  const objectUrlCacheEnabled = preferObjectUrl && !disableObjectUrlCache && !androidApp;
   const shouldWaitForPreparedMedia =
     preferObjectUrl && Boolean(src || fallbackSrc) && (desktopSupported || mobileDevice);
   const [candidateIndex, setCandidateIndex] = useState(0);
@@ -154,27 +158,47 @@ export const useStableMediaUrl = (
   }, [fallbackSrc, shouldWaitForPreparedMedia, src]);
 
   useEffect(() => {
-    if (!isAndroidApp()) return undefined;
+    if (!androidApp) return undefined;
     let disposed = false;
-    const prepare = (source: string | undefined, setter: (url: string) => void) => {
-      if (!source) return;
-      void prepareAndroidMediaAssetUrl(source, options.mimeType, false, true)?.then((url) => {
-        if (disposed) return;
-        if (url) {
-          setter(url);
-          return;
-        }
-        void prepareAndroidMediaAssetUrl(source, options.mimeType)?.then((nativeUrl) => {
-          if (!disposed && nativeUrl) setter(nativeUrl);
-        });
-      });
+    const prepare = async (
+      source: string | undefined,
+      setter: (url: string) => void,
+      cacheOnly: boolean
+    ): Promise<boolean> => {
+      if (!source) return false;
+      const url = await prepareAndroidMediaAssetUrl(
+        source,
+        options.mimeType,
+        false,
+        cacheOnly
+      )?.catch(() => undefined);
+      if (!disposed && url) setter(url);
+      return Boolean(url);
     };
-    prepare(src, setAndroidSrc);
-    prepare(fallbackSrc, setAndroidFallbackSrc);
+
+    const resolveNativeMedia = async () => {
+      // Disk first. Only one network request is started when neither local
+      // candidate exists, so visible media cannot be stuck behind duplicate
+      // WebView/native jobs.
+      const primaryCached = await prepare(src, setAndroidSrc, true);
+      const fallbackCached =
+        fallbackSrc && fallbackSrc !== src
+          ? await prepare(fallbackSrc, setAndroidFallbackSrc, true)
+          : false;
+      if (!primaryCached && !fallbackCached) {
+        const primaryLoaded = await prepare(src, setAndroidSrc, false);
+        if (!primaryLoaded && fallbackSrc && fallbackSrc !== src) {
+          await prepare(fallbackSrc, setAndroidFallbackSrc, false);
+        }
+      }
+      if (!disposed) setPreparedMediaReady(true);
+    };
+
+    void resolveNativeMedia();
     return () => {
       disposed = true;
     };
-  }, [fallbackSrc, options.mimeType, src]);
+  }, [androidApp, fallbackSrc, options.mimeType, src]);
 
   useEffect(() => {
     if (!desktopSupported) {
@@ -256,6 +280,9 @@ export const useStableMediaUrl = (
   }, [deferFallbackPreparation, desktopSupported, fallbackSrc, objectUrlCacheEnabled, src]);
 
   useEffect(() => {
+    if (androidApp) {
+      return undefined;
+    }
     if (!shouldWaitForPreparedMedia) {
       return undefined;
     }
@@ -310,6 +337,7 @@ export const useStableMediaUrl = (
       if (timeoutId !== undefined) clearTimeout(timeoutId);
     };
   }, [
+    androidApp,
     desktopSupported,
     deferFallbackPreparation,
     fallbackSrc,
@@ -347,6 +375,27 @@ export const useStableMediaUrl = (
       return;
     }
 
+    if (androidApp && activeCandidate?.source) {
+      const failedSource = activeCandidate.source;
+      invalidateCachedMediaUrl(failedSource)
+        .then(() => prepareAndroidMediaAssetUrl(failedSource, options.mimeType, true))
+        .then((url) => {
+          if (!url) {
+            setCandidateIndex((currentIndex) =>
+              Math.min(currentIndex + 1, activeCandidates.length)
+            );
+            return;
+          }
+          if (failedSource === src) setAndroidSrc(url);
+          if (failedSource === fallbackSrc) setAndroidFallbackSrc(url);
+          setCandidateIndex(0);
+        })
+        .catch(() => {
+          setCandidateIndex((currentIndex) => Math.min(currentIndex + 1, activeCandidates.length));
+        });
+      return;
+    }
+
     if (
       requireObjectUrl &&
       activeCandidate?.source === src &&
@@ -371,8 +420,10 @@ export const useStableMediaUrl = (
   }, [
     activeCandidate,
     activeCandidates.length,
+    androidApp,
     fallbackSrc,
     loadedDisplayUrl,
+    options.mimeType,
     requireObjectUrl,
     src,
   ]);
@@ -382,6 +433,24 @@ export const useStableMediaUrl = (
     setCandidateIndex(0);
     setPreparedMediaReady(!shouldWaitForPreparedMedia);
     fallbackAttemptedRef.current = false;
+
+    if (androidApp) {
+      const source = src ?? fallbackSrc;
+      if (!source) return;
+      void invalidateCachedMediaUrl(source)
+        .then(() => prepareAndroidMediaAssetUrl(source, options.mimeType, true))
+        .then((url) => {
+          if (url) {
+            if (source === src) setAndroidSrc(url);
+            else setAndroidFallbackSrc(url);
+          }
+        })
+        .finally(() => {
+          setPreparedMediaReady(true);
+          setCacheVersion((prev) => prev + 1);
+        });
+      return;
+    }
 
     if (!objectUrlCacheEnabled) {
       setCacheVersion((prev) => prev + 1);
@@ -402,7 +471,14 @@ export const useStableMediaUrl = (
         setPreparedMediaReady(true);
         setCacheVersion((prev) => prev + 1);
       });
-  }, [fallbackSrc, objectUrlCacheEnabled, shouldWaitForPreparedMedia, src]);
+  }, [
+    androidApp,
+    fallbackSrc,
+    objectUrlCacheEnabled,
+    options.mimeType,
+    shouldWaitForPreparedMedia,
+    src,
+  ]);
 
   useEffect(() => {
     if (!isAndroidApp() || !hasFailed) return undefined;

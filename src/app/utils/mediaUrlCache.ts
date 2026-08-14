@@ -813,7 +813,10 @@ const fetchAndPersistMedia = async (src: string): Promise<Response | undefined> 
   return response;
 };
 
-const ensurePersistentMediaAvailable = async (src: string): Promise<void> => {
+const ensurePersistentMediaAvailable = async (
+  src: string,
+  priority: MediaCachePriority
+): Promise<void> => {
   const cachedResponse = await matchPersistentMedia(src);
   if (cachedResponse) {
     persistedMediaUrls.add(src);
@@ -821,7 +824,14 @@ const ensurePersistentMediaAvailable = async (src: string): Promise<void> => {
   }
 
   if (isAndroidApp()) {
-    const assetUrl = await prepareAndroidMediaAssetUrl(src);
+    // Background warm-up must never occupy Android's native download workers.
+    // Visible components perform the network fill when a disk entry is absent.
+    const assetUrl = await prepareAndroidMediaAssetUrl(
+      src,
+      undefined,
+      false,
+      priority === 'background'
+    );
     if (assetUrl) persistedMediaUrls.add(src);
     return;
   }
@@ -840,7 +850,7 @@ const flushPersistentMediaQueue = () => {
     queuedPersistentMediaTasks.delete(task.src);
     activePersistentMediaTasks += 1;
 
-    ensurePersistentMediaAvailable(task.src)
+    ensurePersistentMediaAvailable(task.src, task.priority)
       .catch(() => undefined)
       .finally(() => {
         pendingPersistentMedia.delete(task.src);
@@ -1019,6 +1029,12 @@ export const primeCachedMediaObjectUrl = (
   }
   if (retryFailed) {
     clearFailedMediaEntry(src);
+  }
+  if (isAndroidApp()) {
+    // The native cache returns a stable private-file URL that survives room
+    // unmounts and WebView process restarts. Do not manufacture a blob URL on
+    // Android; that second cache layer was the source of remount spinners.
+    return prepareAndroidMediaAssetUrl(src, undefined, retryFailed, priority === 'background');
   }
   if (!canRetryFailedMediaEntry(src)) {
     return Promise.resolve(undefined);
