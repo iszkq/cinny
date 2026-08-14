@@ -224,7 +224,7 @@ export const ImageContent = as<'div', ImageContentProps>(
 
         return mediaUrl;
       },
-      [androidApp, mx, useAuthentication]
+      [mx, useAuthentication]
     );
 
     const [srcState, loadSrc] = useAsyncCallback<
