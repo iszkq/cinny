@@ -59,22 +59,36 @@ const secureStorageKey = () => {
     : undefined;
 };
 
+const localTrustedBackupKey = () => {
+  const userId = localStorage.getItem('cinny_user_id');
+  const deviceId = localStorage.getItem('cinny_device_id');
+  return userId && deviceId
+    ? `cinny_android_backup_trusted:${encodeURIComponent(userId)}:${encodeURIComponent(deviceId)}`
+    : undefined;
+};
+
 const loadSecureKeys = async () => {
   if (!isAndroid() || !secureStorageKey()) return;
-  try {
-    const values = await AndroidSecureStorage.getAll();
-    Object.entries(values || {}).forEach(([key, value]) => {
-      if (typeof value === 'string') secureValues.set(key, value);
-    });
-    const encoded = values?.[secureStorageKey()];
-    if (!encoded) return;
-    const parsed = JSON.parse(encoded);
-    Object.entries(parsed).forEach(([keyId, value]) => {
-      const decoded = decodeKey(value);
-      if (decoded) secretStorageKeys.set(keyId, decoded);
-    });
-  } catch {
-    /* WebView fallback remains available. */
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      const values = await AndroidSecureStorage.getAll();
+      Object.entries(values || {}).forEach(([key, value]) => {
+        if (typeof value === 'string') secureValues.set(key, value);
+      });
+      const encoded = values?.[secureStorageKey()];
+      if (encoded) {
+        const parsed = JSON.parse(encoded);
+        Object.entries(parsed).forEach(([keyId, value]) => {
+          const decoded = decodeKey(value);
+          if (decoded) secretStorageKeys.set(keyId, decoded);
+        });
+      }
+      return;
+    } catch {
+      // Android Keystore can be temporarily unavailable while the WebView
+      // process is recreated. Retry before crypto observes an empty map.
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
   }
 };
 
@@ -88,13 +102,24 @@ export const setAndroidSecureValue = async (name, value) => {
   const key = secureValueKey(name);
   if (!key) return;
   secureValues.set(key, value);
+  if (name === 'session-backup-trusted') {
+    const localKey = localTrustedBackupKey();
+    if (localKey) localStorage.setItem(localKey, value);
+  }
   await AndroidSecureStorage.set({ key, value });
 };
 
 export const getAndroidSecureValue = (name) => {
   if (!isAndroid()) return undefined;
   const key = secureValueKey(name);
-  return key ? secureValues.get(key) : undefined;
+  if (!key) return undefined;
+  const secureValue = secureValues.get(key);
+  if (secureValue !== undefined) return secureValue;
+  if (name === 'session-backup-trusted') {
+    const localKey = localTrustedBackupKey();
+    return localKey ? localStorage.getItem(localKey) ?? undefined : undefined;
+  }
+  return undefined;
 };
 
 export const persistAndroidBackupKey = async (crypto, versionHint) => {
@@ -213,6 +238,8 @@ export function clearSecretStorageKeys() {
       AndroidSecureStorage.remove({ key: secureValueKey('session-backup-private-key') }),
       AndroidSecureStorage.remove({ key: secureValueKey('session-backup-trusted') }),
     ]).catch(() => undefined);
+    const localKey = localTrustedBackupKey();
+    if (localKey) localStorage.removeItem(localKey);
   }
 }
 

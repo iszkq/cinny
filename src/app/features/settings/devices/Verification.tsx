@@ -183,13 +183,12 @@ export function VerifyCurrentDeviceTile({
   const handleCancelVerification = () => setManualVerification(false);
 
   const backupNeedsRecovery =
+    !durableBackupTrust &&
     backupEnabled !== undefined &&
     backupInfo !== undefined &&
     backupInfo !== null &&
     backupTrust !== undefined &&
-    (!backupEnabled ||
-      (!durableBackupTrust && backupTrust?.trusted !== true) ||
-      (!durableBackupTrust && backupTrust?.matchesDecryptionKey !== true));
+    (!backupEnabled || backupTrust?.trusted !== true || backupTrust?.matchesDecryptionKey !== true);
   const currentDeviceNeedsVerification = verificationStatus === VerificationStatus.Unverified;
   if (!currentDeviceNeedsVerification && !backupNeedsRecovery) return null;
   const backupOnly = !currentDeviceNeedsVerification && backupNeedsRecovery;

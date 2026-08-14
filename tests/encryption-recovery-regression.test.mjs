@@ -64,6 +64,31 @@ test('verified devices restore the upstream encrypted-backup status and progress
   assert.match(verificationSource, /VerifyCurrentDeviceTile/);
 });
 
+test('Android cold starts retain account-scoped encrypted-backup trust', async () => {
+  const secureStorageSource = await readSource('src/client/secretStorageKeys.js');
+  const verificationSource = await readSource('src/app/features/settings/devices/Verification.tsx');
+
+  assert.match(
+    secureStorageSource,
+    /cinny_android_backup_trusted:\$\{encodeURIComponent\(userId\)\}:\$\{encodeURIComponent\(deviceId\)\}/
+  );
+  assert.match(secureStorageSource, /for \(let attempt = 0; attempt < 5; attempt \+= 1\)/);
+  assert.match(secureStorageSource, /setTimeout\(resolve, 250\)/);
+  assert.match(
+    secureStorageSource,
+    /name === 'session-backup-trusted'[\s\S]*localStorage\.setItem\(localKey, value\)/
+  );
+  assert.match(
+    secureStorageSource,
+    /name === 'session-backup-trusted'[\s\S]*localStorage\.getItem\(localKey\) \?\? undefined/
+  );
+  assert.match(secureStorageSource, /localStorage\.removeItem\(localKey\)/);
+  assert.match(
+    verificationSource,
+    /const backupNeedsRecovery =\s*!durableBackupTrust &&[\s\S]*\(!backupEnabled \|\|[\s\S]*backupTrust\?\.matchesDecryptionKey !== true\)/
+  );
+});
+
 test('the device page separates current-device trust from other devices', async () => {
   const devicesSource = await readSource('src/app/features/settings/devices/Devices.tsx');
   const verificationSource = await readSource('src/app/features/settings/devices/Verification.tsx');
