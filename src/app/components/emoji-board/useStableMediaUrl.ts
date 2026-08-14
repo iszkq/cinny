@@ -102,8 +102,9 @@ export const useStableMediaUrl = (
     autoRetryAttemptRef.current = 0;
   }, [fallbackSrc, src]);
 
-  const candidates = useMemo(() => {
-    const nextCandidates = buildMediaCandidates(
+  const candidates = useMemo(
+    () => {
+      const nextCandidates = buildMediaCandidates(
         {
           allowBrowserObjectUrlCache: objectUrlCacheEnabled,
           allowDirectSource: !requireObjectUrl,
@@ -113,16 +114,18 @@ export const useStableMediaUrl = (
         desktopFallbackSrc,
         fallbackSrc
       );
-    if (androidSrc && src) nextCandidates.unshift({ source: src, displayUrl: androidSrc });
-    if (androidFallbackSrc && fallbackSrc && fallbackSrc !== src) {
-      nextCandidates.push({ source: fallbackSrc, displayUrl: androidFallbackSrc });
-    }
-    return nextCandidates;
-  },
+      if (androidSrc && src) nextCandidates.unshift({ source: src, displayUrl: androidSrc });
+      if (androidFallbackSrc && fallbackSrc && fallbackSrc !== src) {
+        nextCandidates.push({ source: fallbackSrc, displayUrl: androidFallbackSrc });
+      }
+      return nextCandidates;
+    },
     // The media cache mutates outside React. cacheVersion is the explicit invalidation signal.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       cacheVersion,
+      androidFallbackSrc,
+      androidSrc,
       desktopFallbackSrc,
       desktopSrc,
       fallbackSrc,

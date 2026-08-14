@@ -28,6 +28,7 @@ const AndroidMediaCache = registerPlugin<AndroidMediaCachePlugin>('AndroidMediaC
 const cachedAssetUrls = new Map<string, string>();
 const pendingAssets = new Map<string, Promise<string | undefined>>();
 const forcedRefreshAssets = new Set<string>();
+const ANDROID_MEDIA_BRIDGE_TIMEOUT_MS = 12_000;
 
 export const toAndroidWebViewAssetUrl = (filePath: string): string => {
   const normalizedPath =
@@ -144,7 +145,7 @@ export const prepareAndroidMediaAssetUrl = (
   const pending = pendingAssets.get(pendingKey);
   if (pending) return pending;
 
-  const promise = AndroidMediaCache.prepare({
+  const nativePrepare = AndroidMediaCache.prepare({
     sourceUrl,
     accountKey: identity.accountKey,
     baseUrl: identity.baseUrl,
@@ -152,9 +153,13 @@ export const prepareAndroidMediaAssetUrl = (
     mimeType,
     forceRefresh: shouldForceRefresh,
     cacheOnly,
-  })
+  });
+  const timeout = new Promise<undefined>((resolve) => {
+    window.setTimeout(() => resolve(undefined), ANDROID_MEDIA_BRIDGE_TIMEOUT_MS);
+  });
+  const promise = Promise.race([nativePrepare, timeout])
     .then((asset) => {
-      if (!asset.filePath) return undefined;
+      if (!asset?.filePath) return undefined;
       const assetUrl = toAndroidWebViewAssetUrl(asset.filePath);
       cachedAssetUrls.set(identity.cacheKey, assetUrl);
       return assetUrl;

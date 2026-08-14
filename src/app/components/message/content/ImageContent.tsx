@@ -134,7 +134,11 @@ export const ImageContent = as<'div', ImageContentProps>(
     const [error, setError] = useState(false);
     const [stableRetryNonce, setStableRetryNonce] = useState(0);
     const [blurred, setBlurred] = useState(markedAsSpoiler ?? false);
-    const stablePreviewEnabled = autoPlay && previewMediaStrategy === 'stable' && !encInfo;
+    // The stable desktop/web preview waits for an object URL before mounting the
+    // image. Android has its own native file/decryption path; waiting here can
+    // leave every timeline image spinning when a WebView bridge call is delayed.
+    const stablePreviewEnabled =
+      !androidApp && autoPlay && previewMediaStrategy === 'stable' && !encInfo;
     const stableOriginalUrl =
       typeof url === 'string' && !url.startsWith('mxc://')
         ? url
@@ -161,10 +165,8 @@ export const ImageContent = as<'div', ImageContentProps>(
     const preferAndroidThumbnail = androidApp && !preferOriginalPreview;
     const preferAndroidStickerThumbnail = androidApp && preferOriginalPreview;
     const useAndroidThumbnailFirst =
-      preferAndroidStickerThumbnail ||
-      (preferAndroidThumbnail && !isAnimatedEmojiBoardMedia(info));
-    const stablePrimaryUrl =
-      useAndroidThumbnailFirst
+      preferAndroidStickerThumbnail || (preferAndroidThumbnail && !isAnimatedEmojiBoardMedia(info));
+    const stablePrimaryUrl = useAndroidThumbnailFirst
       ? stableThumbnailUrl ?? stableOriginalUrl
       : stableOriginalUrl;
     const stableFallbackUrl =
@@ -314,15 +316,7 @@ export const ImageContent = as<'div', ImageContentProps>(
             kind: 'original',
           };
         },
-        [
-          androidApp,
-          encInfo,
-          info,
-          mimeType,
-          preferOriginalPreview,
-          prepareMediaSrc,
-          url,
-        ]
+        [androidApp, encInfo, info, mimeType, preferOriginalPreview, prepareMediaSrc, url]
       )
     );
 
