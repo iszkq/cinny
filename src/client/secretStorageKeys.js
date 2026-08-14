@@ -100,17 +100,31 @@ export const getAndroidSecureValue = (name) => {
 export const persistAndroidBackupKey = async (crypto, versionHint) => {
   if (!isAndroid() || !crypto) return;
   try {
-    const [key, activeVersion] = await Promise.all([
+    const [key, activeVersion, backupInfo] = await Promise.all([
       crypto.getSessionBackupPrivateKey(),
       typeof versionHint === 'string'
         ? Promise.resolve(versionHint)
         : crypto.getActiveSessionBackupVersion(),
+      crypto.getKeyBackupInfo(),
     ]);
     const version = typeof versionHint === 'string' && versionHint ? versionHint : activeVersion;
-    if (!(key instanceof Uint8Array) || typeof version !== 'string' || !version) return;
+    if (
+      !(key instanceof Uint8Array) ||
+      typeof version !== 'string' ||
+      !version ||
+      !backupInfo?.version ||
+      backupInfo.version !== version
+    )
+      return;
+    const trust = await crypto.isKeyBackupTrusted(backupInfo);
+    if (trust?.matchesDecryptionKey !== true) return;
     await setAndroidSecureValue(
       'session-backup-private-key',
       JSON.stringify({ key: encodeKey(key), version })
+    );
+    await setAndroidSecureValue(
+      'session-backup-trusted',
+      JSON.stringify({ version, trustedAt: Date.now() })
     );
   } catch {
     // Secure storage is best effort and must never block startup.
@@ -131,6 +145,13 @@ export const restoreAndroidBackupKey = async (crypto) => {
     // Refusing it here caused the verified device to restart without its
     // otherwise valid decryption key attached.
     await crypto.storeSessionBackupPrivateKey(key, parsed.version);
+    // This marker is only written for a key that was previously stored by a
+    // successful recovery/verification. It lets the Android UI retain local
+    // trust while Rust Crypto performs its asynchronous startup check.
+    await setAndroidSecureValue(
+      'session-backup-trusted',
+      JSON.stringify({ version: parsed.version, trustedAt: Date.now() })
+    );
   } catch {
     // Ignore corrupt/stale values and let the normal recovery UI handle it.
   }
@@ -190,6 +211,7 @@ export function clearSecretStorageKeys() {
       AndroidSecureStorage.remove({ key }),
       AndroidSecureStorage.remove({ key: secureValueKey('verified-device') }),
       AndroidSecureStorage.remove({ key: secureValueKey('session-backup-private-key') }),
+      AndroidSecureStorage.remove({ key: secureValueKey('session-backup-trusted') }),
     ]).catch(() => undefined);
   }
 }

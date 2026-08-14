@@ -183,6 +183,32 @@ export const useKeyBackupTrust = (
     fetchTrust();
   }, [fetchTrust]);
 
+  // Rust Crypto may finish attaching the Android Keystore key shortly after
+  // the first backup-status event. Retry the read without requiring the user
+  // to leave and reopen the device panel.
+  useEffect(() => {
+    if (!isAndroidApp() || !crypto || !backupInfo) return undefined;
+    let disposed = false;
+    let attempt = 0;
+    let timer: number | undefined;
+    const retry = () => {
+      if (disposed || attempt >= 6) return;
+      attempt += 1;
+      void crypto.isKeyBackupTrusted(backupInfo).then((nextTrust) => {
+        if (disposed) return;
+        setTrust(nextTrust);
+        if (nextTrust?.matchesDecryptionKey !== true) {
+          timer = window.setTimeout(retry, 1_000);
+        }
+      });
+    };
+    timer = window.setTimeout(retry, 500);
+    return () => {
+      disposed = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [backupInfo, crypto]);
+
   useKeyBackupStatusChange(fetchTrust);
 
   useKeyBackupDecryptionKeyCached(fetchTrust);

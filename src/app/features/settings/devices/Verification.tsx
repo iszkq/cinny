@@ -37,7 +37,13 @@ import { withSearchParam } from '../../../pages/pathUtils';
 import { useAccountManagementActions } from '../../../hooks/useAccountManagement';
 import { openExternalUrl } from '../../../utils/desktop';
 import { isDesktopUpdaterSupported } from '../../../utils/desktopUpdater';
-import { useKeyBackupInfo, useKeyBackupStatus, useKeyBackupTrust } from '../../../hooks/useKeyBackup';
+import {
+  useKeyBackupInfo,
+  useKeyBackupStatus,
+  useKeyBackupTrust,
+} from '../../../hooks/useKeyBackup';
+import { getAndroidSecureValue } from '../../../../client/secretStorageKeys';
+import { isAndroidApp } from '../../../utils/nativePlatform';
 
 type VerificationStatusBadgeProps = {
   verificationStatus: VerificationStatus;
@@ -169,6 +175,8 @@ export function VerifyCurrentDeviceTile({
   const backupEnabled = useKeyBackupStatus(crypto);
   const backupInfo = useKeyBackupInfo(crypto);
   const backupTrust = useKeyBackupTrust(crypto, backupInfo);
+  const durableBackupTrust =
+    isAndroidApp() && Boolean(getAndroidSecureValue('session-backup-trusted'));
   const [learnMore, setLearnMore] = useState(false);
 
   const [manualVerification, setManualVerification] = useState(false);
@@ -180,8 +188,8 @@ export function VerifyCurrentDeviceTile({
     backupInfo !== null &&
     backupTrust !== undefined &&
     (!backupEnabled ||
-      backupTrust?.trusted !== true ||
-      backupTrust?.matchesDecryptionKey !== true);
+      (!durableBackupTrust && backupTrust?.trusted !== true) ||
+      (!durableBackupTrust && backupTrust?.matchesDecryptionKey !== true));
   const currentDeviceNeedsVerification = verificationStatus === VerificationStatus.Unverified;
   if (!currentDeviceNeedsVerification && !backupNeedsRecovery) return null;
   const backupOnly = !currentDeviceNeedsVerification && backupNeedsRecovery;
@@ -193,11 +201,9 @@ export function VerifyCurrentDeviceTile({
         title={backupOnly ? '加密备份未连接' : '\u672a\u9a8c\u8bc1'}
         description={
           <>
-            {
-              backupOnly
-                ? '当前设备已经验证，但本机尚未连接可信的消息备份解密密钥。请输入恢复密钥以连接加密备份。'
-                : '\u53ef\u4ee5\u4ece\u5176\u4ed6\u8bbe\u5907\u53d1\u8d77\u9a8c\u8bc1\uff0c\u6216\u8005\u76f4\u63a5\u624b\u52a8\u9a8c\u8bc1\u3002'
-            }{' '}
+            {backupOnly
+              ? '当前设备已经验证，但本机尚未连接可信的消息备份解密密钥。请输入恢复密钥以连接加密备份。'
+              : '\u53ef\u4ee5\u4ece\u5176\u4ed6\u8bbe\u5907\u53d1\u8d77\u9a8c\u8bc1\uff0c\u6216\u8005\u76f4\u63a5\u624b\u52a8\u9a8c\u8bc1\u3002'}{' '}
             {!backupOnly && (
               <Text as="a" size="T200" onClick={() => setLearnMore(!learnMore)}>
                 <b>{learnMore ? '\u6536\u8d77' : '\u4e86\u89e3\u66f4\u591a'}</b>

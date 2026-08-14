@@ -495,6 +495,12 @@ export const startClient = async (mx: MatrixClient) => {
             await crypto.loadSessionBackupPrivateKeyFromSecretStorage().catch(() => undefined);
           }
           await crypto.checkKeyBackupAndEnable();
+          const backupInfo = await crypto.getKeyBackupInfo();
+          if (!backupInfo?.version) throw new Error('Encrypted backup information is not ready.');
+          const backupTrust = await crypto.isKeyBackupTrusted(backupInfo);
+          if (backupTrust?.matchesDecryptionKey !== true) {
+            throw new Error('Android backup decryption key is not attached yet.');
+          }
           await persistAndroidBackupKey(crypto);
           androidCryptoTrustRestored.add(mx);
         })();
