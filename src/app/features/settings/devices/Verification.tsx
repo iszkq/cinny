@@ -22,7 +22,10 @@ import FocusTrap from 'focus-trap-react';
 import { CryptoApi, VerificationRequest } from 'matrix-js-sdk/lib/crypto-api';
 import { VerificationStatus } from '../../../hooks/useDeviceVerificationStatus';
 import { InfoCard } from '../../../components/info-card';
-import { ManualVerificationTile } from '../../../components/ManualVerification';
+import {
+  ManualVerificationMethod,
+  ManualVerificationTile,
+} from '../../../components/ManualVerification';
 import { SecretStorageKeyContent } from '../../../../types/matrix/accountData';
 import { AsyncState, AsyncStatus, useAsync } from '../../../hooks/useAsyncCallback';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
@@ -42,7 +45,6 @@ import {
   useKeyBackupStatus,
   useKeyBackupTrust,
 } from '../../../hooks/useKeyBackup';
-import { getAndroidSecureValue } from '../../../../client/secretStorageKeys';
 import { isAndroidApp } from '../../../utils/nativePlatform';
 
 type VerificationStatusBadgeProps = {
@@ -175,35 +177,37 @@ export function VerifyCurrentDeviceTile({
   const backupEnabled = useKeyBackupStatus(crypto);
   const backupInfo = useKeyBackupInfo(crypto);
   const backupTrust = useKeyBackupTrust(crypto, backupInfo);
-  const durableBackupTrust =
-    isAndroidApp() && Boolean(getAndroidSecureValue('session-backup-trusted'));
+  const androidApp = isAndroidApp();
   const [learnMore, setLearnMore] = useState(false);
 
   const [manualVerification, setManualVerification] = useState(false);
   const handleCancelVerification = () => setManualVerification(false);
 
   const backupNeedsRecovery =
-    !durableBackupTrust &&
+    !androidApp &&
     backupEnabled !== undefined &&
     backupInfo !== undefined &&
     backupInfo !== null &&
     backupTrust !== undefined &&
     (!backupEnabled || backupTrust?.trusted !== true || backupTrust?.matchesDecryptionKey !== true);
   const currentDeviceNeedsVerification = verificationStatus === VerificationStatus.Unverified;
-  if (!currentDeviceNeedsVerification && !backupNeedsRecovery) return null;
+  const recoveryOnly = androidApp && !currentDeviceNeedsVerification;
+  if (!currentDeviceNeedsVerification && !backupNeedsRecovery && !recoveryOnly) return null;
   const backupOnly = !currentDeviceNeedsVerification && backupNeedsRecovery;
 
   return (
     <>
       <InfoCard
-        variant="Critical"
-        title={backupOnly ? '加密备份未连接' : '\u672a\u9a8c\u8bc1'}
+        variant={recoveryOnly ? 'Surface' : 'Critical'}
+        title={recoveryOnly ? '恢复密钥' : backupOnly ? '加密备份未连接' : '\u672a\u9a8c\u8bc1'}
         description={
           <>
-            {backupOnly
+            {recoveryOnly
+              ? '当前设备已验证；加密备份的实际连接状态以下方卡片为准。如需重新连接备份或恢复旧消息，可随时重新输入恢复密钥。'
+              : backupOnly
               ? '当前设备已经验证，但本机尚未连接可信的消息备份解密密钥。请输入恢复密钥以连接加密备份。'
               : '\u53ef\u4ee5\u4ece\u5176\u4ed6\u8bbe\u5907\u53d1\u8d77\u9a8c\u8bc1\uff0c\u6216\u8005\u76f4\u63a5\u624b\u52a8\u9a8c\u8bc1\u3002'}{' '}
-            {!backupOnly && (
+            {!backupOnly && !recoveryOnly && (
               <Text as="a" size="T200" onClick={() => setLearnMore(!learnMore)}>
                 <b>{learnMore ? '\u6536\u8d77' : '\u4e86\u89e3\u66f4\u591a'}</b>
               </Text>
@@ -214,14 +218,14 @@ export function VerifyCurrentDeviceTile({
           !manualVerification && (
             <Button
               size="300"
-              variant="Critical"
+              variant={recoveryOnly ? 'Primary' : 'Critical'}
               fill="Soft"
               radii="300"
               outlined
               onClick={() => setManualVerification(true)}
             >
               <Text as="span" size="B300">
-                {backupOnly ? '输入恢复密钥' : '\u624b\u52a8\u9a8c\u8bc1'}
+                {backupOnly || recoveryOnly ? '输入恢复密钥' : '\u624b\u52a8\u9a8c\u8bc1'}
               </Text>
             </Button>
           )
@@ -233,6 +237,7 @@ export function VerifyCurrentDeviceTile({
         <ManualVerificationTile
           secretStorageKeyId={secretStorageKeyId}
           secretStorageKeyContent={secretStorageKeyContent}
+          initialMethod={recoveryOnly ? ManualVerificationMethod.RecoveryKey : undefined}
           options={
             <Chip
               type="button"

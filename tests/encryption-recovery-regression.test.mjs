@@ -64,7 +64,7 @@ test('verified devices restore the upstream encrypted-backup status and progress
   assert.match(verificationSource, /VerifyCurrentDeviceTile/);
 });
 
-test('Android cold starts retain account-scoped encrypted-backup trust', async () => {
+test('Android cold starts retain account-scoped trust without a duplicate backup warning', async () => {
   const secureStorageSource = await readSource('src/client/secretStorageKeys.js');
   const verificationSource = await readSource('src/app/features/settings/devices/Verification.tsx');
 
@@ -85,7 +85,17 @@ test('Android cold starts retain account-scoped encrypted-backup trust', async (
   assert.match(secureStorageSource, /localStorage\.removeItem\(localKey\)/);
   assert.match(
     verificationSource,
-    /const backupNeedsRecovery =\s*!durableBackupTrust &&[\s\S]*\(!backupEnabled \|\|[\s\S]*backupTrust\?\.matchesDecryptionKey !== true\)/
+    /const backupNeedsRecovery =\s*!androidApp &&[\s\S]*\(!backupEnabled \|\|[\s\S]*backupTrust\?\.matchesDecryptionKey !== true\)/
+  );
+  assert.match(
+    verificationSource,
+    /const recoveryOnly = androidApp && !currentDeviceNeedsVerification/
+  );
+  assert.match(verificationSource, /title=\{recoveryOnly \? '恢复密钥'/);
+  assert.match(verificationSource, /backupOnly \|\| recoveryOnly \? '输入恢复密钥'/);
+  assert.match(
+    verificationSource,
+    /initialMethod=\{recoveryOnly \? ManualVerificationMethod\.RecoveryKey : undefined\}/
   );
 });
 
