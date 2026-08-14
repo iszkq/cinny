@@ -594,10 +594,7 @@ export function OfficeFileEditor({
       const height = iosOfficeLayout
         ? stableViewportHeight
         : Math.round(window.visualViewport?.height ?? window.innerHeight);
-      document.documentElement.style.setProperty(
-        '--office-viewport-height',
-        `${height}px`
-      );
+      document.documentElement.style.setProperty('--office-viewport-height', `${height}px`);
     };
 
     updateOfficeViewportHeight();
@@ -1624,12 +1621,20 @@ export function OfficeFileEditor({
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      // A desktop Office document lives in its own Tauri window. The message
+      // renderer is allowed to unmount when the user switches rooms; that
+      // must not be interpreted as the user's request to close the document.
+      const detachedNativeOffice =
+        desktopNativeOffice &&
+        Boolean(sessionRef.current) &&
+        nativeWindowStateRef.current === 'active';
       const operation = saveOperationRef.current;
       if (operation?.stage === 'publishing') {
         operation.detached = true;
       } else {
         cancelSaveOperation();
       }
+      if (detachedNativeOffice) return;
       sessionRef.current = undefined;
       sourceBufferRef.current = undefined;
       androidSourceRequestRef.current = undefined;
@@ -1638,7 +1643,7 @@ export function OfficeFileEditor({
       iframeReadyRef.current = false;
       clearOpenTimeouts();
     };
-  }, [cancelAndroidChunkAck, cancelSaveOperation, clearOpenTimeouts]);
+  }, [cancelAndroidChunkAck, cancelSaveOperation, clearOpenTimeouts, desktopNativeOffice]);
 
   useEffect(() => {
     if (!backgroundPublishing && (!session || !dirty)) return undefined;
@@ -1848,6 +1853,7 @@ export function OfficeFileEditor({
     let unlistenAction: (() => void) | undefined;
     let openedHandle: NativeOfficeWindowHandle | undefined;
     const openingController = new AbortController();
+    let detached = false;
 
     const fallbackToInlineWindow = () => {
       if (disposed || sessionRef.current?.requestId !== requestId) return;
@@ -1874,6 +1880,11 @@ export function OfficeFileEditor({
       }
 
       openedHandle = await openNativeOfficeWindow(initialPayload, openingController.signal, () => {
+        if (detached || !mountedRef.current) {
+          unlistenAction?.();
+          clearNativeOfficeBinaries(nativeSessionId).catch(() => undefined);
+          return;
+        }
         if (
           !disposed &&
           nativeWindowStateRef.current === 'active' &&
@@ -1909,6 +1920,14 @@ export function OfficeFileEditor({
     openWindow().catch(fallbackToInlineWindow);
 
     return () => {
+      // Keep a successfully opened native window alive while its originating
+      // message component is unmounted by room navigation. The native window
+      // owns the document UI and will notify this listener when the user
+      // closes it.
+      if (!mountedRef.current && nativeWindowStateRef.current === 'active') {
+        detached = true;
+        return;
+      }
       disposed = true;
       openingController.abort();
       unlistenAction?.();

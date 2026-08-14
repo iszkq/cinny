@@ -270,6 +270,14 @@ export function NativeOfficeWindow() {
       .then(({ getCurrentWindow }) =>
         getCurrentWindow().onCloseRequested((event) => {
           if (closeAllowedRef.current) return;
+          // Preview windows can outlive the chat message that opened them.
+          // Once detached there is no parent modal left to acknowledge a
+          // clean close request, so close the native window directly.
+          if (payloadRef.current?.mode === 'preview' && !payloadRef.current.dirty) {
+            closeAllowedRef.current = true;
+            void closeCurrentWindow();
+            return;
+          }
           event.preventDefault();
           emitSessionAction({ type: 'close' });
         })
