@@ -1554,6 +1554,12 @@ export function OfficeFileEditor({
             const hasNewerChanges = dirtyRevisionRef.current > activeOperation.dirtyRevision;
             if (!settleSaveOperation(activeOperation)) return;
             if (mountedRef.current) setBackgroundPublishing(false);
+            if (!mountedRef.current && shouldClose) {
+              const activeSession = sessionRef.current;
+              if (activeSession) {
+                closeNativeOfficeWindow(activeSession.nativeSessionId).catch(() => undefined);
+              }
+            }
             if (!mountedRef.current || detached) return;
             dirtyRef.current = hasNewerChanges;
             setDirty(hasNewerChanges);
@@ -1802,6 +1808,10 @@ export function OfficeFileEditor({
       return;
     }
     if (action.type === 'discard') {
+      if (!mountedRef.current) {
+        closeNativeOfficeWindow(activeSession.nativeSessionId).catch(() => undefined);
+        return;
+      }
       closeModal();
       return;
     }
@@ -1926,6 +1936,14 @@ export function OfficeFileEditor({
       // closes it.
       if (!mountedRef.current && nativeWindowStateRef.current === 'active') {
         detached = true;
+        const activeHandle = nativeWindowRef.current ?? openedHandle;
+        if (activeHandle) {
+          emitNativeOfficeCommand(activeHandle.label, {
+            type: 'detached',
+            sessionId: nativeSessionId,
+            requestId,
+          }).catch(() => undefined);
+        }
         return;
       }
       disposed = true;

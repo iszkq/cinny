@@ -93,6 +93,11 @@ export type NativeOfficeWindowCommand =
       type: 'close';
       sessionId: string;
       requestId: string;
+    }
+  | {
+      type: 'detached';
+      sessionId: string;
+      requestId: string;
     };
 
 export type NativeOfficeWindowHandle = {

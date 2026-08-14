@@ -72,6 +72,7 @@ export function NativeOfficeWindow() {
   const sourceBufferRef = useRef<ArrayBuffer>();
   const consumedSourceTokensRef = useRef(new Set<string>());
   const closeAllowedRef = useRef(false);
+  const detachedRef = useRef(false);
   const [payload, setPayload] = useState<NativeOfficeWindowPayload>();
   const [maximized, setMaximized] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
@@ -137,6 +138,10 @@ export function NativeOfficeWindow() {
       }),
       listenNativeOfficeCommand(sessionId, requestId, (command) => {
         if (disposed) return;
+        if (command.type === 'detached') {
+          detachedRef.current = true;
+          return;
+        }
         if (command.type === 'close') {
           closeAllowedRef.current = true;
           closeCurrentWindow().catch(() => undefined);
@@ -273,7 +278,14 @@ export function NativeOfficeWindow() {
           // Preview windows can outlive the chat message that opened them.
           // Once detached there is no parent modal left to acknowledge a
           // clean close request, so close the native window directly.
-          if (payloadRef.current?.mode === 'preview' && !payloadRef.current.dirty) {
+          if (!payloadRef.current?.dirty || detachedRef.current) {
+            if (payloadRef.current?.dirty && detachedRef.current) {
+              event.preventDefault();
+              const nextPayload = { ...payloadRef.current, showClosePrompt: true };
+              payloadRef.current = nextPayload;
+              setPayload(nextPayload);
+              return;
+            }
             closeAllowedRef.current = true;
             void closeCurrentWindow();
             return;
@@ -321,12 +333,49 @@ export function NativeOfficeWindow() {
   };
 
   const handleWindowDragStart: React.PointerEventHandler<HTMLElement> = (event) => {
-    if (maximized || isInteractiveDragTarget(event.target)) return;
+    if (isInteractiveDragTarget(event.target)) return;
     if (event.pointerType === 'mouse' && event.button !== 0) return;
     event.preventDefault();
+    event.stopPropagation();
+    window.getSelection()?.removeAllRanges();
     import('@tauri-apps/api/window')
       .then(({ getCurrentWindow }) => getCurrentWindow().startDragging())
       .catch(() => undefined);
+  };
+
+  const handleCloseRequest = () => {
+    const currentPayload = payloadRef.current;
+    if (!currentPayload?.dirty) {
+      closeAllowedRef.current = true;
+      void closeCurrentWindow();
+      return;
+    }
+    if (detachedRef.current) {
+      const nextPayload = { ...currentPayload, showClosePrompt: true };
+      payloadRef.current = nextPayload;
+      setPayload(nextPayload);
+      return;
+    }
+    emitSessionAction({ type: 'close' });
+  };
+
+  const handleContinueEditing = () => {
+    if (!detachedRef.current || !payloadRef.current) {
+      emitSessionAction({ type: 'continue-editing' });
+      return;
+    }
+    const nextPayload = { ...payloadRef.current, showClosePrompt: false };
+    payloadRef.current = nextPayload;
+    setPayload(nextPayload);
+  };
+
+  const handleDiscard = () => {
+    if (detachedRef.current) {
+      closeAllowedRef.current = true;
+      void closeCurrentWindow();
+      return;
+    }
+    emitSessionAction({ type: 'discard' });
   };
 
   const submitPassword = (event: React.FormEvent<HTMLFormElement>) => {
@@ -429,7 +478,7 @@ export function NativeOfficeWindow() {
               variant="Surface"
               size="300"
               radii="300"
-              onClick={() => emitSessionAction({ type: 'close' })}
+              onClick={handleCloseRequest}
               aria-label={closeButtonLabel}
               title="关闭"
             >
@@ -583,7 +632,7 @@ export function NativeOfficeWindow() {
                   fill="Soft"
                   size="300"
                   radii="300"
-                  onClick={() => emitSessionAction({ type: 'continue-editing' })}
+                  onClick={handleContinueEditing}
                 >
                   <Text size="B300">继续编辑</Text>
                 </Button>
@@ -592,7 +641,7 @@ export function NativeOfficeWindow() {
                   fill="Soft"
                   size="300"
                   radii="300"
-                  onClick={() => emitSessionAction({ type: 'discard' })}
+                  onClick={handleDiscard}
                 >
                   <Text size="B300">不保存</Text>
                 </Button>

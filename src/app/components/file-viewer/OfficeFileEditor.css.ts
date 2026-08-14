@@ -224,6 +224,9 @@ export const editorHeader = style([
     padding: `${config.space.S200} ${config.space.S300}`,
     borderBottom: `${config.borderWidth.B300} solid ${color.Surface.ContainerLine}`,
     background: color.Surface.Container,
+    userSelect: 'none',
+    WebkitUserSelect: 'none',
+    cursor: 'default',
     '@media': {
       'screen and (max-width: 750px), screen and (max-height: 520px) and (pointer: coarse)': {
         minHeight: toRem(56),

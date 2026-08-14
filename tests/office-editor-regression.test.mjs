@@ -241,6 +241,34 @@ test('desktop Office uses an isolated native window and raw bounded binary excha
   assert.match(capabilitySource, /"office-window-\*"/);
 });
 
+test('detached Office windows keep reliable native close and maximized drag controls', async () => {
+  const editorSource = await readSource('src/app/components/file-viewer/OfficeFileEditor.tsx');
+  const windowSource = await readSource('src/app/utils/nativeOfficeWindow.ts');
+  const nativeViewSource = await readSource(
+    'src/app/components/file-viewer/NativeOfficeWindow.tsx'
+  );
+  const styleSource = await readSource('src/app/components/file-viewer/OfficeFileEditor.css.ts');
+
+  assert.match(windowSource, /type: 'detached'/);
+  assert.match(
+    editorSource,
+    /if \(!mountedRef\.current && nativeWindowStateRef\.current === 'active'\)[\s\S]*type: 'detached'/
+  );
+  assert.match(nativeViewSource, /const detachedRef = useRef\(false\)/);
+  assert.match(nativeViewSource, /command\.type === 'detached'[\s\S]*detachedRef\.current = true/);
+  assert.match(
+    nativeViewSource,
+    /if \(!payloadRef\.current\?\.dirty \|\| detachedRef\.current\)[\s\S]*closeCurrentWindow\(\)/
+  );
+  assert.match(
+    nativeViewSource,
+    /handleWindowDragStart[\s\S]*event\.preventDefault\(\);[\s\S]*removeAllRanges\(\);[\s\S]*startDragging\(\)/
+  );
+  assert.doesNotMatch(nativeViewSource, /if \(maximized \|\| isInteractiveDragTarget/);
+  assert.match(styleSource, /userSelect: 'none'/);
+  assert.match(styleSource, /WebkitUserSelect: 'none'/);
+});
+
 test('Office opening is bounded and mobile layout respects the viewport safe area', async () => {
   const editorSource = await readSource('src/app/components/file-viewer/OfficeFileEditor.tsx');
   const styleSource = await readSource('src/app/components/file-viewer/OfficeFileEditor.css.ts');
