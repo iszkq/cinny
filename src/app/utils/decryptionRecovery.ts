@@ -18,6 +18,8 @@ import { recordDecryptionDiagnostic } from './decryptionDiagnostics';
 const RECENT_DECRYPTION_RETRY_WINDOW_MS = 60 * 60 * 1000;
 const DECRYPTION_RETRY_DELAYS_MS = [0, 500, 2_000, 5_000, 15_000, 30_000, 60_000] as const;
 const DECRYPTION_IN_PROGRESS_POLL_MS = 250;
+// A backup lookup can legitimately race the sender's upload. Keep a bounded
+// cadence; the key-request flush below handles the live-session path.
 const BACKUP_LOOKUP_RETRY_DELAY_MS = 30_000;
 const UNKNOWN_MEGOLM_SESSION = 'MEGOLM_UNKNOWN_INBOUND_SESSION_ID';
 
@@ -66,7 +68,13 @@ const needsSessionRecovery = (mEvent: MatrixEvent): boolean =>
  */
 const processPendingCryptoRequests = (crypto: object): Promise<void> => {
   const pendingFlush = outgoingRequestFlushes.get(crypto);
-  if (pendingFlush) return pendingFlush;
+  if (pendingFlush) {
+    // A decryption retry can enqueue a room-key request while another flush is
+    // already running. Returning the old promise alone loses that newly queued
+    // request until the next /sync, which is exactly the intermittent Windows
+    // UTD pattern. Run one serialized follow-up pass after the active flush.
+    return pendingFlush.then(() => processPendingCryptoRequests(crypto));
+  }
 
   const rustCrypto = crypto as RustCryptoWithOutgoingRequests;
   const outgoingRequestsManager = rustCrypto.outgoingRequestsManager;

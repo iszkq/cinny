@@ -4,8 +4,11 @@ import {
   IndexedDBStore,
   IndexedDBCryptoStore,
   ClientEvent,
+  Direction,
+  MatrixEvent,
   SyncState,
 } from 'matrix-js-sdk';
+import type { ISavedSync } from 'matrix-js-sdk/lib/store';
 import { logger as matrixLogger } from 'matrix-js-sdk/lib/logger';
 
 import {
@@ -50,12 +53,143 @@ const androidStoreLastPersistedAt = new WeakMap<MatrixClient, number>();
 const androidStoreAccountKeys = new WeakMap<MatrixClient, string>();
 const androidNativeSnapshotLastPersistedAt = new WeakMap<MatrixClient, number>();
 const ANDROID_NATIVE_SNAPSHOT_INTERVAL_MS = 10_000;
+const ANDROID_HISTORY_ROOM_LIMIT = 64;
+const ANDROID_HISTORY_EVENTS_PER_ROOM = 320;
+const ANDROID_HISTORY_TOTAL_EVENTS = 6_000;
 const androidNativeSnapshotDirty = new WeakSet<MatrixClient>();
 
 const getRustCryptoDatabaseNames = (prefix: string): string[] => [
   `${prefix}::matrix-sdk-crypto`,
   `${prefix}::matrix-sdk-crypto-meta`,
 ];
+
+const getRoomTimelineEvents = (room: ReturnType<MatrixClient['getRooms']>[number]) => {
+  let firstTimeline = room.getLiveTimeline();
+  let previousTimeline = firstTimeline.getNeighbouringTimeline(Direction.Backward);
+  while (previousTimeline) {
+    firstTimeline = previousTimeline;
+    previousTimeline = firstTimeline.getNeighbouringTimeline(Direction.Backward);
+  }
+
+  const events: MatrixEvent[] = [];
+  for (
+    let timeline: typeof firstTimeline | null = firstTimeline;
+    timeline;
+    timeline = timeline.getNeighbouringTimeline(Direction.Forward)
+  ) {
+    events.push(...timeline.getEvents());
+  }
+  return events;
+};
+
+/**
+ * IndexedDBStore persists the sync accumulator, but deliberately does not
+ * persist events loaded later with paginateEventTimeline. Keep a bounded
+ * copy of the non-state events already viewed on Android so a killed WebView
+ * does not make every room look as if it has never been opened.
+ */
+const addAndroidTimelineHistory = (mx: MatrixClient, savedSync: ISavedSync): ISavedSync => {
+  const joinedRooms = mx
+    .getRooms()
+    .filter((room) => room.getMyMembership() === 'join')
+    .sort((left, right) => {
+      const leftEvents = left.getLiveTimeline().getEvents();
+      const rightEvents = right.getLiveTimeline().getEvents();
+      return (
+        (rightEvents[rightEvents.length - 1]?.getTs() ?? 0) -
+        (leftEvents[leftEvents.length - 1]?.getTs() ?? 0)
+      );
+    })
+    .slice(0, ANDROID_HISTORY_ROOM_LIMIT);
+
+  const roomsData = {
+    ...savedSync.roomsData,
+    join: { ...savedSync.roomsData.join },
+  } as ISavedSync['roomsData'];
+  let totalEvents = 0;
+
+  joinedRooms.forEach((room) => {
+    if (totalEvents >= ANDROID_HISTORY_TOTAL_EVENTS) return;
+    const roomData = roomsData.join?.[room.roomId] as unknown as
+      | {
+          timeline?: {
+            events?: Array<Record<string, unknown>>;
+            prev_batch?: string | null;
+            limited?: boolean;
+          };
+        }
+      | undefined;
+    if (!roomData?.timeline) return;
+
+    const timelineEvents = getRoomTimelineEvents(room)
+      .filter((event) => !event.isState() && typeof event.getId() === 'string')
+      .map((event) => event.event as Record<string, unknown>);
+    if (timelineEvents.length === 0) return;
+
+    const selectedEvents = timelineEvents.slice(-ANDROID_HISTORY_EVENTS_PER_ROOM);
+    const existingEvents = roomData.timeline.events ?? [];
+    const byId = new Map<string, Record<string, unknown>>();
+    [...existingEvents, ...selectedEvents].forEach((event) => {
+      const eventId = typeof event.event_id === 'string' ? event.event_id : undefined;
+      if (eventId) byId.set(eventId, event);
+    });
+    const mergedEvents = Array.from(byId.values()).sort(
+      (left, right) => Number(left.origin_server_ts ?? 0) - Number(right.origin_server_ts ?? 0)
+    );
+    const cappedEvents = mergedEvents.slice(-ANDROID_HISTORY_EVENTS_PER_ROOM);
+    roomData.timeline.events = cappedEvents;
+    roomData.timeline.limited = false;
+    // A token from the live timeline is valid for the beginning of the loaded
+    // segment. If we had to cap a larger room, stop pagination rather than
+    // claiming a token that would skip the discarded middle of the timeline.
+    roomData.timeline.prev_batch =
+      mergedEvents.length > cappedEvents.length
+        ? null
+        : room.getLiveTimeline().getPaginationToken(Direction.Backward) ??
+          roomData.timeline.prev_batch ??
+          null;
+    totalEvents += cappedEvents.length;
+  });
+
+  return { ...savedSync, roomsData };
+};
+
+const mergeAndroidSavedSync = (primary: ISavedSync, fallback: ISavedSync): ISavedSync => {
+  const roomsData = {
+    ...primary.roomsData,
+    join: { ...primary.roomsData.join },
+  } as ISavedSync['roomsData'];
+  Object.entries(fallback.roomsData.join ?? {}).forEach(([roomId, fallbackRoom]) => {
+    const primaryRoom = roomsData.join?.[roomId] as unknown as
+      | {
+          timeline?: {
+            events?: Array<Record<string, unknown>>;
+            prev_batch?: string | null;
+            limited?: boolean;
+          };
+        }
+      | undefined;
+    if (!primaryRoom) {
+      roomsData.join![roomId] = fallbackRoom;
+      return;
+    }
+    if (!primaryRoom.timeline || !fallbackRoom.timeline) return;
+    const byId = new Map<string, Record<string, unknown>>();
+    [...(fallbackRoom.timeline.events ?? []), ...(primaryRoom.timeline.events ?? [])].forEach(
+      (event) => {
+        if (typeof event.event_id === 'string')
+          byId.set(event.event_id, event as Record<string, unknown>);
+      }
+    );
+    primaryRoom.timeline.events = Array.from(byId.values()).sort(
+      (left, right) => Number(left.origin_server_ts ?? 0) - Number(right.origin_server_ts ?? 0)
+    ) as never;
+    if (!primaryRoom.timeline.prev_batch) {
+      primaryRoom.timeline.prev_batch = fallbackRoom.timeline.prev_batch ?? null;
+    }
+  });
+  return { ...primary, roomsData };
+};
 
 /**
  * Rust Crypto stores the local Olm machine (including the device identity),
@@ -359,25 +493,35 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
     try {
       let [savedToken, savedSync] = await Promise.all([
         indexedDBStore.getSavedSyncToken(),
-        (indexedDBStore as IndexedDBStore & {
-          getSavedSync(copy?: boolean): Promise<{ roomsData?: { join?: Record<string, unknown> } } | null>;
-        }).getSavedSync(false),
+        (
+          indexedDBStore as IndexedDBStore & {
+            getSavedSync(
+              copy?: boolean
+            ): Promise<{ roomsData?: { join?: Record<string, unknown> } } | null>;
+          }
+        ).getSavedSync(false),
       ]);
-      if (!savedToken || !savedSync) {
-        const nativeSnapshot = await loadAndroidClientSnapshot(accountKey);
-        if (nativeSnapshot) {
-          const restoredSync = nativeSnapshot.savedSync;
-          await indexedDBStore.setSyncData({
-            next_batch: restoredSync.nextBatch,
-            rooms: restoredSync.roomsData,
-            account_data: { events: restoredSync.accountData },
-          });
-          await indexedDBStore.save(true);
-          savedToken = restoredSync.nextBatch;
-          savedSync = restoredSync;
-          androidNativeSnapshotLastPersistedAt.set(mx, nativeSnapshot.savedAt);
-          matrixLogger.info('Restored Android Matrix sync data from native storage.');
-        }
+      // The native snapshot is the durable Android checkpoint. IndexedDB can
+      // survive with a token but lose part of its room data after a WebView
+      // renderer restart; only restoring when *both* values were absent left
+      // that partial state looking like a fresh/empty account. Prefer the
+      // complete native checkpoint whenever it exists. The next sync catches
+      // up any events received after the checkpoint.
+      const nativeSnapshot = await loadAndroidClientSnapshot(accountKey);
+      if (nativeSnapshot) {
+        const restoredSync = savedSync
+          ? mergeAndroidSavedSync(savedSync as ISavedSync, nativeSnapshot.savedSync)
+          : nativeSnapshot.savedSync;
+        await indexedDBStore.setSyncData({
+          next_batch: restoredSync.nextBatch,
+          rooms: restoredSync.roomsData,
+          account_data: { events: restoredSync.accountData },
+        });
+        await indexedDBStore.save(true);
+        savedToken = restoredSync.nextBatch;
+        savedSync = restoredSync;
+        androidNativeSnapshotLastPersistedAt.set(mx, nativeSnapshot.savedAt);
+        matrixLogger.info('Restored Android Matrix sync data from native storage.');
       }
       global.localStorage.setItem(
         'cinny_android_sync_store_status',
@@ -513,7 +657,10 @@ export const startClient = async (mx: MatrixClient) => {
   });
 };
 
-export const persistClientStore = (mx: MatrixClient, forceNativeSnapshot = false): Promise<void> => {
+export const persistClientStore = (
+  mx: MatrixClient,
+  forceNativeSnapshot = false
+): Promise<void> => {
   if (!isAndroidApp()) return mx.store.save(true).catch(() => undefined);
 
   // Android can deliver pause/pagehide and Sync events together. Serialising
@@ -531,12 +678,12 @@ export const persistClientStore = (mx: MatrixClient, forceNativeSnapshot = false
         const lastNativeSave = androidNativeSnapshotLastPersistedAt.get(mx) ?? 0;
         if (
           accountKey &&
-          androidNativeSnapshotDirty.has(mx) &&
+          (forceNativeSnapshot || androidNativeSnapshotDirty.has(mx)) &&
           (forceNativeSnapshot || now - lastNativeSave >= ANDROID_NATIVE_SNAPSHOT_INTERVAL_MS)
         ) {
           const savedSync = await mx.store.getSavedSync();
           if (savedSync) {
-            await saveAndroidClientSnapshot(accountKey, savedSync);
+            await saveAndroidClientSnapshot(accountKey, addAndroidTimelineHistory(mx, savedSync));
             androidNativeSnapshotLastPersistedAt.set(mx, now);
             androidNativeSnapshotDirty.delete(mx);
           }

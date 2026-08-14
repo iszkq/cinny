@@ -138,23 +138,30 @@ export const ImageContent = as<'div', ImageContentProps>(
       typeof url === 'string' && !url.startsWith('mxc://')
         ? url
         : mxcUrlToHttp(mx, url, useAuthentication) ?? undefined;
-    const stableThumbnailUrl = preferOriginalPreview
-      ? undefined
-      : typeof info?.thumbnail_url === 'string'
-      ? mxcUrlToHttp(mx, info.thumbnail_url, useAuthentication) ?? undefined
-      : !encInfo
-      ? mxcUrlToHttp(
-          mx,
-          url,
-          useAuthentication,
-          IMAGE_PREVIEW_WIDTH,
-          IMAGE_PREVIEW_HEIGHT,
-          'scale'
-        ) ?? undefined
-      : undefined;
-    const preferAndroidThumbnail =
-      androidApp && !preferOriginalPreview && !isAnimatedEmojiBoardMedia(info);
-    const stablePrimaryUrl = preferAndroidThumbnail
+    // Android WebViews are much more reliable when the first paint uses a
+    // bounded thumbnail.  Stickers used to opt out of thumbnails entirely
+    // (`preferOriginalPreview`), which made every incoming sticker wait for a
+    // potentially large animated original and commonly left the spinner up
+    // indefinitely. Keep the original as the fallback so animation/full
+    // resolution is still available once it is ready.
+    const stableThumbnailUrl =
+      (androidApp || !preferOriginalPreview) && typeof info?.thumbnail_url === 'string'
+        ? mxcUrlToHttp(mx, info.thumbnail_url, useAuthentication) ?? undefined
+        : !encInfo && (androidApp || !preferOriginalPreview)
+        ? mxcUrlToHttp(
+            mx,
+            url,
+            useAuthentication,
+            IMAGE_PREVIEW_WIDTH,
+            IMAGE_PREVIEW_HEIGHT,
+            'scale'
+          ) ?? undefined
+        : undefined;
+    const preferAndroidThumbnail = androidApp && !preferOriginalPreview;
+    const preferAndroidStickerThumbnail = androidApp && preferOriginalPreview;
+    const stablePrimaryUrl =
+      (preferAndroidThumbnail || preferAndroidStickerThumbnail) &&
+      !isAnimatedEmojiBoardMedia(info)
       ? stableThumbnailUrl ?? stableOriginalUrl
       : stableOriginalUrl;
     const stableFallbackUrl =

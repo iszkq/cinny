@@ -30,6 +30,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import org.json.JSONArray;
+
 @CapacitorPlugin(name = "AndroidMediaCache")
 public class AndroidMediaCachePlugin extends Plugin {
     private static final String CACHE_ROOT = "android-media-cache-v1";
@@ -60,6 +62,62 @@ public class AndroidMediaCachePlugin extends Plugin {
         MEDIA_EXECUTOR.execute(() -> prepareOnWorker(call));
     }
 
+    /**
+     * Resolve a cold-start media set with one native bridge call. React used
+     * to ask for every avatar/sticker separately, so hundreds of otherwise
+     * cheap disk hits were serialized through the WebView bridge and appeared
+     * one by one. This method never performs network I/O.
+     */
+    @PluginMethod
+    public void resolveCachedBatch(PluginCall call) {
+        MEDIA_EXECUTOR.execute(() -> {
+            String accountKey = call.getString("accountKey");
+            String sourceUrlsJson = call.getString("sourceUrlsJson");
+            if (accountKey == null || accountKey.trim().isEmpty()) {
+                call.reject("accountKey is required");
+                return;
+            }
+
+            try {
+                JSONArray sourceUrls = new JSONArray(sourceUrlsJson == null ? "[]" : sourceUrlsJson);
+                File accountDir = new File(
+                    new File(getContext().getFilesDir(), CACHE_ROOT),
+                    sha256(accountKey.trim().toLowerCase(Locale.ROOT))
+                );
+                JSObject assets = new JSObject();
+                int count = Math.min(sourceUrls.length(), 768);
+                for (int index = 0; index < count; index++) {
+                    String sourceUrl = sourceUrls.optString(index, "");
+                    if (sourceUrl.isEmpty()) continue;
+                    File cachedFile = findCachedFileForSource(accountDir, sourceUrl);
+                    String cachedMimeType = cachedFile != null
+                        ? mimeTypeFromExtension(cachedFile.getName())
+                        : null;
+                    if (
+                        cachedFile == null ||
+                        cachedFile.length() == 0 ||
+                        looksLikeHtmlOrJson(cachedFile, cachedMimeType)
+                    ) {
+                        continue;
+                    }
+
+                    cachedFile.setLastModified(System.currentTimeMillis());
+                    JSObject asset = new JSObject();
+                    asset.put("filePath", Uri.fromFile(cachedFile).toString());
+                    asset.put("mimeType", cachedMimeType);
+                    asset.put("size", cachedFile.length());
+                    assets.put(sourceUrl, asset);
+                }
+
+                JSObject result = new JSObject();
+                result.put("assets", assets);
+                call.resolve(result);
+            } catch (Exception error) {
+                call.reject("Failed to resolve cached Android media batch.", error);
+            }
+        });
+    }
+
     private void prepareOnWorker(PluginCall call) {
         String sourceUrl = call.getString("sourceUrl");
         String accountKey = call.getString("accountKey");
@@ -86,7 +144,7 @@ public class AndroidMediaCachePlugin extends Plugin {
             File assetDir = new File(accountDir, sha256(normalizeSourceUrl(sourceUrl)));
 
             if (forceRefresh) deleteRecursively(assetDir);
-            File cachedFile = findCachedFile(assetDir);
+            File cachedFile = forceRefresh ? null : findCachedFileForSource(accountDir, sourceUrl);
             String cachedMimeType = cachedFile != null
                 ? mimeTypeFromExtension(cachedFile.getName())
                 : null;
@@ -340,9 +398,22 @@ public class AndroidMediaCachePlugin extends Plugin {
 
     private static String normalizeSourceUrl(String sourceUrl) {
         Uri uri = canonicalizeMatrixMediaUri(Uri.parse(sourceUrl));
+        String path = uri.getPath();
+        boolean thumbnail = path != null && path.contains("/_matrix/media/v3/thumbnail/");
+        int requestedWidth = parsePositiveInt(uri.getQueryParameter("width"));
+        int requestedHeight = parsePositiveInt(uri.getQueryParameter("height"));
         TreeMap<String, List<String>> query = new TreeMap<>();
         for (String name : uri.getQueryParameterNames()) {
             if ("access_token".equalsIgnoreCase(name) || "allow_redirect".equalsIgnoreCase(name)) {
+                continue;
+            }
+            if (
+                thumbnail &&
+                ("width".equalsIgnoreCase(name) ||
+                    "height".equalsIgnoreCase(name) ||
+                    "method".equalsIgnoreCase(name) ||
+                    "animated".equalsIgnoreCase(name))
+            ) {
                 continue;
             }
             List<String> values = query.computeIfAbsent(name, ignored -> new ArrayList<>());
@@ -352,7 +423,23 @@ public class AndroidMediaCachePlugin extends Plugin {
         for (Map.Entry<String, List<String>> entry : query.entrySet()) {
             for (String value : entry.getValue()) builder.appendQueryParameter(entry.getKey(), value);
         }
+        if (thumbnail) {
+            int requestedSize = Math.max(requestedWidth, requestedHeight);
+            String sizeClass = requestedSize > 1024
+                ? "large"
+                : requestedSize > 128 ? "preview" : "small";
+            builder.appendQueryParameter("starfire_cache_size", sizeClass);
+        }
         return builder.build().toString();
+    }
+
+    private static int parsePositiveInt(String value) {
+        if (value == null) return 0;
+        try {
+            return Math.max(0, Integer.parseInt(value));
+        } catch (NumberFormatException ignored) {
+            return 0;
+        }
     }
 
     /**
@@ -424,6 +511,75 @@ public class AndroidMediaCachePlugin extends Plugin {
     private static File findCachedFile(File assetDir) {
         File[] files = assetDir.listFiles(file -> file.isFile() && file.getName().startsWith("media.") && !file.getName().endsWith(".download"));
         return files != null && files.length > 0 ? files[0] : null;
+    }
+
+    private static File findCachedFileForSource(File accountDir, String sourceUrl) throws Exception {
+        File currentDir = new File(accountDir, sha256(normalizeSourceUrl(sourceUrl)));
+        File currentFile = findCachedFile(currentDir);
+        if (currentFile != null && currentFile.length() > 0) {
+            String mimeType = mimeTypeFromExtension(currentFile.getName());
+            if (!looksLikeHtmlOrJson(currentFile, mimeType)) return currentFile;
+        }
+        for (String candidate : legacySourceCandidates(sourceUrl)) {
+            File assetDir = new File(accountDir, sha256(normalizeLegacySourceUrl(candidate)));
+            File cachedFile = findCachedFile(assetDir);
+            if (cachedFile != null && cachedFile.length() > 0) {
+                String mimeType = mimeTypeFromExtension(cachedFile.getName());
+                if (!looksLikeHtmlOrJson(cachedFile, mimeType)) return cachedFile;
+            }
+        }
+        return null;
+    }
+
+    /** Keep cache entries written by releases before the thumbnail bucket key. */
+    private static String normalizeLegacySourceUrl(String sourceUrl) {
+        Uri uri = canonicalizeMatrixMediaUri(Uri.parse(sourceUrl));
+        TreeMap<String, List<String>> query = new TreeMap<>();
+        for (String name : uri.getQueryParameterNames()) {
+            if ("access_token".equalsIgnoreCase(name) || "allow_redirect".equalsIgnoreCase(name)) continue;
+            query.computeIfAbsent(name, ignored -> new ArrayList<>()).addAll(uri.getQueryParameters(name));
+        }
+        Uri.Builder builder = uri.buildUpon().clearQuery();
+        for (Map.Entry<String, List<String>> entry : query.entrySet()) {
+            for (String value : entry.getValue()) builder.appendQueryParameter(entry.getKey(), value);
+        }
+        return builder.build().toString();
+    }
+
+    private static List<String> legacySourceCandidates(String sourceUrl) {
+        List<String> candidates = new ArrayList<>();
+        candidates.add(sourceUrl);
+        Uri uri = canonicalizeMatrixMediaUri(Uri.parse(sourceUrl));
+        String path = uri.getPath();
+        if (path == null || !path.contains("/_matrix/media/v3/thumbnail/")) return candidates;
+
+        int[][] dimensions = new int[][] {
+            {48, 48}, {96, 96}, {100, 100}, {128, 128},
+            {230, 460}, {256, 256}, {512, 512}, {640, 640}
+        };
+        String[] methods = new String[] { "crop", "scale" };
+        for (int[] dimension : dimensions) {
+            for (String method : methods) {
+                Uri.Builder builder = uri.buildUpon();
+                builder.clearQuery();
+                for (String name : uri.getQueryParameterNames()) {
+                    if (
+                        "access_token".equalsIgnoreCase(name) ||
+                        "allow_redirect".equalsIgnoreCase(name) ||
+                        "width".equalsIgnoreCase(name) ||
+                        "height".equalsIgnoreCase(name) ||
+                        "method".equalsIgnoreCase(name) ||
+                        "animated".equalsIgnoreCase(name)
+                    ) continue;
+                    for (String value : uri.getQueryParameters(name)) builder.appendQueryParameter(name, value);
+                }
+                builder.appendQueryParameter("width", Integer.toString(dimension[0]));
+                builder.appendQueryParameter("height", Integer.toString(dimension[1]));
+                builder.appendQueryParameter("method", method);
+                candidates.add(builder.build().toString());
+            }
+        }
+        return candidates;
     }
 
     private static void deleteCachedFiles(File assetDir) {

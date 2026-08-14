@@ -1,7 +1,7 @@
 import { useAtomValue, useSetAtom } from 'jotai';
 import React, { ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ClientEvent, MatrixEvent, RoomEvent, RoomEventHandlerMap } from 'matrix-js-sdk';
+import { ClientEvent, Direction, MatrixEvent, RoomEvent, RoomEventHandlerMap } from 'matrix-js-sdk';
 import { roomToUnreadAtom, unreadEqual, unreadInfoToUnread } from '../../state/room/roomToUnread';
 import NotificationSound from '../../../../public/sound/notification.ogg';
 import InviteSound from '../../../../public/sound/invite.ogg';
@@ -69,6 +69,7 @@ import { isAndroidApp } from '../../utils/nativePlatform';
 import { checkForAndroidUpdate, type PendingAndroidUpdate } from '../../utils/androidUpdater';
 import { AndroidUpdatePrompt } from '../../components/AndroidUpdatePrompt';
 import { primeCachedMediaObjectUrl, primePersistentMediaUrl } from '../../utils/mediaUrlCache';
+import { hydrateAndroidMediaAssetUrls } from '../../utils/androidMediaAssetCache';
 import { WeeklyCalendarMonitor } from '../../features/weekly-calendar/WeeklyCalendarMonitor';
 import { startDecryptionRecovery } from '../../utils/decryptionRecovery';
 
@@ -84,8 +85,14 @@ const TASKBAR_BADGE_ICON_SIZE = 64;
 const IMAGE_PACK_MEDIA_WARM_START_DELAY_MS = 15000;
 const ANDROID_UPDATE_AUTO_CHECK_DELAY_MS = 25_000;
 const ANDROID_UPDATE_AUTO_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
-const ANDROID_AVATAR_WARM_LIMIT = 384;
+// Keep startup work bounded. A native bridge call still schedules disk and
+// network work even when the asset is already cached; warming hundreds of
+// rooms at once made the PIN dialog and the first timeline interaction janky.
+const ANDROID_AVATAR_WARM_LIMIT = 192;
 const ANDROID_AVATAR_OBJECT_WARM_LIMIT = 64;
+const ANDROID_AVATAR_OBJECT_STARTUP_LIMIT = 24;
+const ANDROID_STARTUP_MEDIA_HYDRATION_LIMIT = 768;
+const ANDROID_STARTUP_MEDIA_GATE_MAX_WAIT_MS = 220;
 
 const taskbarBadgeIconCache = new Map<string, Uint8Array>();
 let activeTaskbarBadgeColor: string | undefined;
@@ -897,7 +904,7 @@ function AndroidAvatarMediaWarmFeature() {
       const ownUserId = mx.getUserId();
       const ownAvatarMxc = ownUserId ? mx.getUser(ownUserId)?.avatarUrl : undefined;
       if (ownAvatarMxc) {
-        const ownAvatarUrl = mxcUrlToHttp(mx, ownAvatarMxc, useAuthentication);
+        const ownAvatarUrl = mxcUrlToHttp(mx, ownAvatarMxc, useAuthentication, 100, 100, 'crop');
         if (ownAvatarUrl) avatarUrls.add(ownAvatarUrl);
       }
 
@@ -912,34 +919,47 @@ function AndroidAvatarMediaWarmFeature() {
         // RoomNavItem/Space. The previous original-size warm-up created a
         // different Android cache entry, so avatars in less frequently opened
         // Spaces still had to download again after the WebView was restarted.
-        const avatarUrl = mxcUrlToHttp(
-          mx,
-          avatarMxc,
-          useAuthentication,
-          96,
-          96,
-          'crop'
-        );
+        const avatarUrl = mxcUrlToHttp(mx, avatarMxc, useAuthentication, 96, 96, 'crop');
         if (avatarUrl) avatarUrls.add(avatarUrl);
+
+        // Read receipts, mentions and member/profile views use the member
+        // thumbnail rather than the room's 96px icon. Warm the same bounded
+        // 100px crop so every avatar surface can paint from the native cache
+        // after a process restart.
+        room.getMembers().forEach((member) => {
+          const memberAvatarMxc = member.getMxcAvatarUrl();
+          if (!memberAvatarMxc) return;
+          const memberAvatarUrl = mxcUrlToHttp(
+            mx,
+            memberAvatarMxc,
+            useAuthentication,
+            100,
+            100,
+            'crop'
+          );
+          if (memberAvatarUrl) avatarUrls.add(memberAvatarUrl);
+        });
       });
 
       const warmUrls = Array.from(avatarUrls).slice(0, ANDROID_AVATAR_WARM_LIMIT);
       warmUrls.forEach((avatarUrl) => {
         primePersistentMediaUrl(avatarUrl, 'background');
       });
-      warmUrls.slice(0, ANDROID_AVATAR_OBJECT_WARM_LIMIT).forEach((avatarUrl) => {
-        primeCachedMediaObjectUrl(avatarUrl, 'background');
-      });
+      warmUrls
+        .slice(0, Math.min(ANDROID_AVATAR_OBJECT_WARM_LIMIT, ANDROID_AVATAR_OBJECT_STARTUP_LIMIT))
+        .forEach((avatarUrl) => {
+          primeCachedMediaObjectUrl(avatarUrl, 'background');
+        });
     };
 
-    const followUpTimer = window.setTimeout(warmAvatarMedia, 1800);
+    const followUpTimer = window.setTimeout(warmAvatarMedia, 1200);
 
     const scheduleWarm = () => {
       if (disposed || typeof scheduledTimer === 'number') return;
       scheduledTimer = window.setTimeout(() => {
         scheduledTimer = undefined;
         warmAvatarMedia();
-      }, 80);
+      }, 350);
     };
 
     scheduleWarm();
@@ -954,6 +974,104 @@ function AndroidAvatarMediaWarmFeature() {
   }, [mx, useAuthentication]);
 
   return null;
+}
+
+const collectAndroidStartupMediaUrls = (
+  mx: ReturnType<typeof useMatrixClient>,
+  useAuthentication: boolean
+): string[] => {
+  const mediaUrls = new Set<string>();
+  const addMxc = (mxc: unknown, width: number, height: number, method: 'crop' | 'scale') => {
+    if (typeof mxc !== 'string') return;
+    const url = mxcUrlToHttp(mx, mxc, useAuthentication, width, height, method);
+    if (url) mediaUrls.add(url);
+  };
+
+  const ownUserId = mx.getUserId();
+  addMxc(ownUserId ? mx.getUser(ownUserId)?.avatarUrl : undefined, 96, 96, 'crop');
+
+  mx.getRooms().forEach((room) => {
+    if (room.getMyMembership() !== 'join') return;
+    addMxc(
+      room.getAvatarFallbackMember()?.getMxcAvatarUrl() ?? room.getMxcAvatarUrl(),
+      96,
+      96,
+      'crop'
+    );
+    room.getMembers().forEach((member) => addMxc(member.getMxcAvatarUrl(), 96, 96, 'crop'));
+
+    // The SDK's IndexedDB store only persists /sync timelines. Include the
+    // media sources already present in linked/paginated timelines so the one
+    // native cache lookup can satisfy the first chat paint after a process kill.
+    const timelines: MatrixEvent[] = [];
+    const seenTimelines = new Set<object>();
+    for (
+      let timeline: ReturnType<typeof room.getLiveTimeline> | null =
+        room.getLiveTimeline().getNeighbouringTimeline(Direction.Backward) ??
+        room.getLiveTimeline();
+      timeline;
+      timeline = timeline.getNeighbouringTimeline(Direction.Forward)
+    ) {
+      if (seenTimelines.has(timeline)) break;
+      seenTimelines.add(timeline);
+      timelines.push(...timeline.getEvents());
+    }
+
+    timelines.forEach((event) => {
+      const content = event.getContent() as {
+        url?: unknown;
+        file?: { url?: unknown };
+        info?: { thumbnail_url?: unknown };
+        msgtype?: unknown;
+      };
+      if (event.getType() !== 'm.sticker' && content.msgtype !== 'm.image') return;
+      const source = content.file?.url ?? content.url;
+      addMxc(source, 230, 460, 'scale');
+      addMxc(content.info?.thumbnail_url, 230, 460, 'scale');
+    });
+  });
+
+  return Array.from(mediaUrls).slice(0, ANDROID_STARTUP_MEDIA_HYDRATION_LIMIT);
+};
+
+/**
+ * Android's media files are durable, but asking each Avatar/Image component
+ * to discover them independently still makes a cold launch look like a slow
+ * network reload. Hold the client shell for one bounded native cache-index
+ * lookup, then let normal components render with their local file URLs ready.
+ */
+function AndroidNativeCacheGate({ children }: { children: ReactNode }) {
+  const mx = useMatrixClient();
+  const useAuthentication = useMediaAuthentication();
+  const [ready, setReady] = useState(() => !isAndroidApp());
+
+  useEffect(() => {
+    if (!isAndroidApp()) return undefined;
+    let disposed = false;
+    const timeoutId = window.setTimeout(() => {
+      if (!disposed) setReady(true);
+    }, ANDROID_STARTUP_MEDIA_GATE_MAX_WAIT_MS);
+
+    const urls = collectAndroidStartupMediaUrls(mx, useAuthentication);
+    if (urls.length === 0) {
+      window.clearTimeout(timeoutId);
+      setReady(true);
+    } else {
+      void hydrateAndroidMediaAssetUrls(urls).finally(() => {
+        if (!disposed) {
+          window.clearTimeout(timeoutId);
+          setReady(true);
+        }
+      });
+    }
+
+    return () => {
+      disposed = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [mx, useAuthentication]);
+
+  return ready ? <>{children}</> : null;
 }
 
 function FaviconUpdater() {
@@ -1223,7 +1341,7 @@ export function ClientNonUIFeatures({ children }: ClientNonUIFeaturesProps) {
       <MessageNotifications />
       <WeeklyCalendarMonitor />
       <GlobalImageViewer />
-      {children}
+      <AndroidNativeCacheGate>{children}</AndroidNativeCacheGate>
     </>
   );
 }

@@ -18,6 +18,10 @@ type AndroidMediaCachePlugin = {
     forceRefresh?: boolean;
     cacheOnly?: boolean;
   }): Promise<AndroidMediaAsset>;
+  resolveCachedBatch(options: {
+    sourceUrlsJson: string;
+    accountKey: string;
+  }): Promise<{ assets?: Record<string, AndroidMediaAsset> }>;
 };
 
 const AndroidMediaCache = registerPlugin<AndroidMediaCachePlugin>('AndroidMediaCache');
@@ -54,15 +58,55 @@ const normalizeSourceUrl = (sourceUrl: string): string => {
       .replace('/_matrix/media/r0/thumbnail/', '/_matrix/media/v3/thumbnail/');
     url.searchParams.delete('access_token');
     url.searchParams.delete('allow_redirect');
-    const entries = Array.from(url.searchParams.entries()).sort(
-      ([leftKey, leftValue], [rightKey, rightValue]) =>
+    const isThumbnail = url.pathname.includes('/_matrix/media/v3/thumbnail/');
+    const requestedWidth = Number.parseInt(url.searchParams.get('width') ?? '', 10) || 0;
+    const requestedHeight = Number.parseInt(url.searchParams.get('height') ?? '', 10) || 0;
+    const entries = Array.from(url.searchParams.entries())
+      .filter(
+        ([key]) =>
+          !isThumbnail || !['width', 'height', 'method', 'animated'].includes(key.toLowerCase())
+      )
+      .sort(([leftKey, leftValue], [rightKey, rightValue]) =>
         leftKey === rightKey ? leftValue.localeCompare(rightValue) : leftKey.localeCompare(rightKey)
-    );
+      );
     url.search = '';
     entries.forEach(([key, value]) => url.searchParams.append(key, value));
+    if (isThumbnail) {
+      const requestedSize = Math.max(requestedWidth, requestedHeight);
+      url.searchParams.set(
+        'starfire_cache_size',
+        requestedSize > 1024 ? 'large' : requestedSize > 128 ? 'preview' : 'small'
+      );
+    }
     return url.toString();
   } catch {
     return sourceUrl;
+  }
+};
+
+/**
+ * Populate the in-memory URL map from Android's private media directory in a
+ * single bridge call. This is intentionally cache-only: a cold start must not
+ * turn the cache index into a burst of network downloads before the shell is
+ * interactive.
+ */
+export const hydrateAndroidMediaAssetUrls = async (sourceUrls: string[]): Promise<void> => {
+  if (!isAndroidApp() || sourceUrls.length === 0) return;
+
+  const identity = getAndroidMediaIdentity(sourceUrls[0]);
+  const uniqueUrls = Array.from(new Set(sourceUrls)).slice(0, 768);
+  try {
+    const result = await AndroidMediaCache.resolveCachedBatch({
+      accountKey: identity.accountKey,
+      sourceUrlsJson: JSON.stringify(uniqueUrls),
+    });
+    Object.entries(result.assets ?? {}).forEach(([sourceUrl, asset]) => {
+      if (!asset?.filePath) return;
+      const sourceIdentity = getAndroidMediaIdentity(sourceUrl);
+      cachedAssetUrls.set(sourceIdentity.cacheKey, toAndroidWebViewAssetUrl(asset.filePath));
+    });
+  } catch {
+    // Individual media hooks retain their normal cache/network fallback.
   }
 };
 
