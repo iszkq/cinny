@@ -134,11 +134,7 @@ export const ImageContent = as<'div', ImageContentProps>(
     const [error, setError] = useState(false);
     const [stableRetryNonce, setStableRetryNonce] = useState(0);
     const [blurred, setBlurred] = useState(markedAsSpoiler ?? false);
-    // The stable desktop/web preview waits for an object URL before mounting the
-    // image. Android has its own native file/decryption path; waiting here can
-    // leave every timeline image spinning when a WebView bridge call is delayed.
-    const stablePreviewEnabled =
-      !androidApp && autoPlay && previewMediaStrategy === 'stable' && !encInfo;
+    const stablePreviewEnabled = autoPlay && previewMediaStrategy === 'stable' && !encInfo;
     const stableOriginalUrl =
       typeof url === 'string' && !url.startsWith('mxc://')
         ? url
@@ -206,19 +202,6 @@ export const ImageContent = as<'div', ImageContentProps>(
 
         if (mediaEncInfo) {
           return prepareEncryptedMediaObjectUrl(mediaUrl, mediaMimeType, mediaEncInfo);
-        }
-
-        // Android has a private native media cache. Use the cached file directly for
-        // unencrypted timeline media instead of routing it through Cache Storage and a
-        // second file-to-Blob read. This avoids two WebView bridge hops for every visible
-        // sticker or small image.
-        if (androidApp) {
-          const androidAssetUrl = await prepareAndroidMediaAssetUrl(
-            mediaUrl,
-            mediaMimeType,
-            retryFailed
-          );
-          if (androidAssetUrl) return androidAssetUrl;
         }
 
         if (isHttpUrl(mediaMxcUrl) && !shouldUseObjectUrlForMediaDisplay(mediaUrl)) {
