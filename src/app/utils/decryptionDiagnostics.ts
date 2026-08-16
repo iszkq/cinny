@@ -210,34 +210,62 @@ export const createDecryptionDiagnosticReport = async (
   const currentDevice = {
     userId: mx.getUserId(),
     deviceId: mx.getDeviceId(),
+    cryptoDeviceCreationTimeMs: null as number | null,
     crossSigningVerified: null as boolean | null,
     localVerified: null as boolean | null,
     verificationError: null as string | null,
     roomKeyRequestsEnabled: null as boolean | null,
     roomKeyForwardingEnabled: null as boolean | null,
+    serverDeviceFound: null as boolean | null,
+    serverCurve25519MatchesLocal: null as boolean | null,
+    serverEd25519MatchesLocal: null as boolean | null,
+    serverKeyQueryError: null as string | null,
+  };
+  const senderDevice = {
+    serverDeviceFound: null as boolean | null,
+    serverCurve25519MatchesEvent: null as boolean | null,
+    serverKeyQueryError: null as string | null,
   };
 
   if (crypto) {
     const olmMachine = (
       crypto as object as {
         olmMachine?: {
+          deviceCreationTimeMs?: unknown;
           roomKeyRequestsEnabled?: unknown;
           roomKeyForwardingEnabled?: unknown;
         };
       }
     ).olmMachine;
+    if (typeof olmMachine?.deviceCreationTimeMs === 'number') {
+      currentDevice.cryptoDeviceCreationTimeMs = olmMachine.deviceCreationTimeMs;
+    }
     if (typeof olmMachine?.roomKeyRequestsEnabled === 'boolean') {
       currentDevice.roomKeyRequestsEnabled = olmMachine.roomKeyRequestsEnabled;
     }
     if (typeof olmMachine?.roomKeyForwardingEnabled === 'boolean') {
       currentDevice.roomKeyForwardingEnabled = olmMachine.roomKeyForwardingEnabled;
     }
-    const [activeBackupResult, backupInfoResult, verificationResult] = await Promise.allSettled([
+    const userId = mx.getUserId();
+    const deviceId = mx.getDeviceId();
+    const senderId = mEvent.getSender();
+    const keyQueryUsers = Array.from(
+      new Set([userId, senderId].filter((value): value is string => !!value))
+    );
+    const [
+      activeBackupResult,
+      backupInfoResult,
+      verificationResult,
+      ownKeysResult,
+      serverKeysResult,
+    ] = await Promise.allSettled([
       crypto.getActiveSessionBackupVersion(),
       crypto.getKeyBackupInfo(),
-      mx.getUserId() && mx.getDeviceId()
-        ? crypto.getDeviceVerificationStatus(mx.getUserId()!, mx.getDeviceId()!)
+      userId && deviceId
+        ? crypto.getDeviceVerificationStatus(userId, deviceId)
         : Promise.resolve(null),
+      crypto.getOwnDeviceKeys(),
+      keyQueryUsers.length > 0 ? mx.downloadKeysForUsers(keyQueryUsers) : Promise.resolve(null),
     ]);
 
     if (activeBackupResult.status === 'fulfilled') {
@@ -264,6 +292,42 @@ export const createDecryptionDiagnosticReport = async (
     } else if (verificationResult.status === 'rejected') {
       currentDevice.verificationError = safeError(verificationResult.reason);
     }
+    if (serverKeysResult.status === 'rejected') {
+      const error = safeError(serverKeysResult.reason);
+      currentDevice.serverKeyQueryError = error;
+      senderDevice.serverKeyQueryError = error;
+    } else if (serverKeysResult.value) {
+      if (userId && deviceId) {
+        const serverDevice = serverKeysResult.value.device_keys?.[userId]?.[deviceId];
+        currentDevice.serverDeviceFound = !!serverDevice;
+        if (serverDevice && ownKeysResult.status === 'fulfilled') {
+          const serverCurve25519 = serverDevice.keys?.[`curve25519:${deviceId}`];
+          const serverEd25519 = serverDevice.keys?.[`ed25519:${deviceId}`];
+          currentDevice.serverCurve25519MatchesLocal =
+            typeof serverCurve25519 === 'string'
+              ? serverCurve25519 === ownKeysResult.value.curve25519
+              : false;
+          currentDevice.serverEd25519MatchesLocal =
+            typeof serverEd25519 === 'string'
+              ? serverEd25519 === ownKeysResult.value.ed25519
+              : false;
+        }
+      }
+
+      if (senderId && metadata.senderDeviceId) {
+        const serverSenderDevice =
+          serverKeysResult.value.device_keys?.[senderId]?.[metadata.senderDeviceId];
+        senderDevice.serverDeviceFound = !!serverSenderDevice;
+        if (serverSenderDevice) {
+          const serverSenderCurve25519 =
+            serverSenderDevice.keys?.[`curve25519:${metadata.senderDeviceId}`];
+          senderDevice.serverCurve25519MatchesEvent =
+            typeof serverSenderCurve25519 === 'string' && !!metadata.senderKey
+              ? serverSenderCurve25519 === metadata.senderKey
+              : null;
+        }
+      }
+    }
   }
 
   const eventId = mEvent.getId() ?? null;
@@ -282,11 +346,14 @@ export const createDecryptionDiagnosticReport = async (
       return 'invalid';
     }
   })();
+  const roomKeyWithheldStatusObserved =
+    failureReason?.startsWith('MEGOLM_KEY_WITHHELD') === true ||
+    sessionEntries.some((entry) => entry.failureReason?.startsWith('MEGOLM_KEY_WITHHELD'));
 
   return JSON.stringify(
     {
       report: 'Starfire decryption diagnostic',
-      schemaVersion: 1,
+      schemaVersion: 2,
       generatedAt: new Date().toISOString(),
       appVersion: APP_VERSION,
       platform: navigator.userAgent,
@@ -314,6 +381,8 @@ export const createDecryptionDiagnosticReport = async (
         sessionId: metadata.sessionId,
         senderKey: metadata.senderKey,
         senderDeviceId: metadata.senderDeviceId,
+        senderDevice,
+        roomKeyWithheldStatusObserved,
       },
       attempts: sessionEntries,
       privacy:

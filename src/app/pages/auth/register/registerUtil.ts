@@ -17,6 +17,7 @@ import {
 import { getHomePath, getLoginPath, withSearchParam } from '../../pathUtils';
 import { getMxIdLocalPart, getMxIdServer } from '../../../utils/matrix';
 import { setFallbackSession } from '../../../state/sessions';
+import { allowNewRustCryptoStore } from '../../../../client/rustCryptoStore';
 
 export enum RegisterError {
   UserTaken = 'UserTaken',
@@ -120,6 +121,7 @@ export const useRegisterComplete = (data?: CustomRegisterResponse) => {
 
       if (accessToken && deviceId) {
         setFallbackSession(accessToken, deviceId, userId, baseUrl);
+        allowNewRustCryptoStore({ userId, deviceId });
         const afterLoginRedirectPath = getAfterLoginRedirectPath();
         deleteAfterLoginRedirectPath();
         navigate(afterLoginRedirectPath ?? getHomePath(), { replace: true });

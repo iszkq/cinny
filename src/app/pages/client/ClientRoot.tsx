@@ -31,6 +31,7 @@ import {
   clearLoginData,
   initClient,
   logoutClient,
+  MissingCryptoStoreError,
   persistClientStore,
   startClient,
 } from '../../../client/initMatrix';
@@ -258,6 +259,18 @@ export function ClientRoot({ children }: ClientRootProps) {
       loadMatrix().catch(() => undefined);
     }
   }, [loadState, loadMatrix]);
+
+  useEffect(() => {
+    if (
+      loadState.status === AsyncStatus.Error &&
+      loadState.error instanceof MissingCryptoStoreError
+    ) {
+      // initClient already removed only the access token. Reload into the
+      // sign-in route while retaining the old identity long enough for login
+      // to prove its crypto database is gone and request a new Matrix device.
+      window.location.reload();
+    }
+  }, [loadState]);
 
   useEffect(() => {
     if (mx && !mx.clientRunning) {

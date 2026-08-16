@@ -21,26 +21,39 @@ test('an expired Matrix session keeps the local encryption store', async () => {
 
 test('Rust Crypto storage remains isolated per account and device', async () => {
   const source = await readSource('src/client/initMatrix.ts');
+  const storeSource = await readSource('src/client/rustCryptoStore.ts');
 
-  assert.match(source, /getRustCryptoDatabasePrefix/);
-  assert.match(source, /encodeURIComponent\(session\.userId\)/);
-  assert.match(source, /encodeURIComponent\(session\.deviceId\)/);
-  assert.match(source, /LEGACY_RUST_CRYPTO_DATABASE_PREFIX = 'matrix-js-sdk'/);
-  assert.match(source, /findExistingRustCryptoDatabasePrefixes/);
+  assert.match(storeSource, /getRustCryptoDatabasePrefix/);
+  assert.match(storeSource, /encodeURIComponent\(session\.userId\)/);
+  assert.match(storeSource, /encodeURIComponent\(session\.deviceId/);
+  assert.match(storeSource, /LEGACY_RUST_CRYPTO_DATABASE_PREFIX = 'matrix-js-sdk'/);
+  assert.match(storeSource, /findExistingRustCryptoDatabasePrefixes/);
   assert.match(source, /isRustCryptoAccountMismatch/);
   assert.match(source, /saveRustCryptoDatabasePrefix\(session, prefix\)/);
   assert.match(source, /cryptoDatabasePrefix: rustCryptoDatabasePrefixes\.get\(mx\)/);
 });
 
-test('re-login reuses the saved Matrix device identity for the same homeserver', async () => {
+test('re-login only reuses a saved Matrix device when its crypto identity still exists', async () => {
   const sessionSource = await readSource('src/app/state/sessions.ts');
   const loginSource = await readSource('src/app/pages/auth/login/loginUtil.ts');
+  const cryptoStoreSource = await readSource('src/client/rustCryptoStore.ts');
+  const clientSource = await readSource('src/client/initMatrix.ts');
+  const rootSource = await readSource('src/app/pages/client/ClientRoot.tsx');
 
   assert.match(sessionSource, /getFallbackSessionIdentity/);
   assert.match(sessionSource, /removeFallbackAccessToken/);
   assert.match(loginSource, /normalizeHomeserverUrl\(savedIdentity\.baseUrl\)/);
-  assert.match(loginSource, /device_id: savedIdentity\.deviceId/);
+  assert.match(loginSource, /loginMatchesSavedUser\(data, savedIdentity\.userId\)/);
+  assert.match(loginSource, /await hasPersistedRustCryptoStore\(savedIdentity\)/);
+  assert.match(loginSource, /device_id: savedIdentity!\.deviceId/);
   assert.match(loginSource, /mx\.loginRequest\(loginRequest\)/);
+  assert.match(loginSource, /allowNewRustCryptoStore/);
+  assert.match(cryptoStoreSource, /getRustCryptoDatabasePrefix/);
+  assert.match(cryptoStoreSource, /hasPersistedRustCryptoStore/);
+  assert.match(cryptoStoreSource, /isNewRustCryptoStoreAllowed/);
+  assert.match(clientSource, /removeFallbackAccessToken\(\)/);
+  assert.match(clientSource, /class MissingCryptoStoreError extends Error/);
+  assert.match(rootSource, /loadState\.error instanceof MissingCryptoStoreError/);
 });
 
 test('device settings use the upstream Cinny device and verification flow', async () => {
@@ -140,6 +153,12 @@ test('decryption diagnostics exclude message and key secrets', async () => {
 
   assert.match(diagnosticSource, /mEvent\.decryptionFailureReason/);
   assert.match(diagnosticSource, /wireContent\.session_id/);
+  assert.match(diagnosticSource, /cryptoDeviceCreationTimeMs/);
+  assert.match(diagnosticSource, /serverCurve25519MatchesLocal/);
+  assert.match(diagnosticSource, /serverEd25519MatchesLocal/);
+  assert.match(diagnosticSource, /serverCurve25519MatchesEvent/);
+  assert.match(diagnosticSource, /roomKeyWithheldStatusObserved/);
+  assert.match(diagnosticSource, /mx\.downloadKeysForUsers\(keyQueryUsers\)/);
   assert.match(diagnosticSource, /No message body, ciphertext, access token/);
   assert.doesNotMatch(diagnosticSource, /wireContent\.ciphertext/);
 });

@@ -11,6 +11,10 @@ import {
 } from '../../afterLoginRedirectPath';
 import { getHomePath } from '../../pathUtils';
 import { getFallbackSessionIdentity, setFallbackSession } from '../../../state/sessions';
+import {
+  allowNewRustCryptoStore,
+  hasPersistedRustCryptoStore,
+} from '../../../../client/rustCryptoStore';
 
 export enum GetBaseUrlError {
   NotAllow = 'NotAllow',
@@ -56,9 +60,31 @@ export enum LoginError {
 export type CustomLoginResponse = {
   baseUrl: string;
   response: LoginResponse;
+  reusedDeviceId: boolean;
 };
 
 const normalizeHomeserverUrl = (url: string): string => url.replace(/\/+$/, '');
+
+const getLoginUser = (data: LoginRequest): string | undefined => {
+  const loginData = data as LoginRequest & {
+    user?: unknown;
+    identifier?: { type?: unknown; user?: unknown };
+  };
+  if (loginData.identifier?.type === 'm.id.user' && typeof loginData.identifier.user === 'string') {
+    return loginData.identifier.user;
+  }
+  return typeof loginData.user === 'string' ? loginData.user : undefined;
+};
+
+const loginMatchesSavedUser = (data: LoginRequest, savedUserId: string): boolean => {
+  const loginUser = getLoginUser(data);
+  if (!loginUser) return false;
+  if (loginUser.startsWith('@')) return loginUser === savedUserId;
+
+  const separator = savedUserId.indexOf(':');
+  const savedLocalpart = separator > 1 ? savedUserId.slice(1, separator) : undefined;
+  return loginUser === savedLocalpart;
+};
 
 export const login = async (
   serverBaseUrl: string | (() => Promise<string>),
@@ -76,12 +102,14 @@ export const login = async (
   }
 
   const savedIdentity = getFallbackSessionIdentity();
-  const canReuseDeviceId =
-    savedIdentity &&
+  const mayReuseDeviceId =
+    !!savedIdentity &&
     normalizeHomeserverUrl(savedIdentity.baseUrl) === normalizeHomeserverUrl(url) &&
-    data.device_id === undefined;
+    data.device_id === undefined &&
+    loginMatchesSavedUser(data, savedIdentity.userId);
+  const canReuseDeviceId = mayReuseDeviceId && (await hasPersistedRustCryptoStore(savedIdentity));
   const loginRequest: LoginRequest = canReuseDeviceId
-    ? { ...data, device_id: savedIdentity.deviceId }
+    ? { ...data, device_id: savedIdentity!.deviceId }
     : data;
 
   const mx = createClient({ baseUrl: url });
@@ -117,12 +145,16 @@ export const login = async (
   return {
     baseUrl: url,
     response: res,
+    reusedDeviceId: canReuseDeviceId,
   };
 };
 
 export const completeLogin = (data: CustomLoginResponse, navigate: NavigateFunction) => {
   const { response: loginRes, baseUrl: loginBaseUrl } = data;
   setFallbackSession(loginRes.access_token, loginRes.device_id, loginRes.user_id, loginBaseUrl);
+  if (!data.reusedDeviceId) {
+    allowNewRustCryptoStore({ userId: loginRes.user_id, deviceId: loginRes.device_id });
+  }
   const afterLoginRedirectUrl = getAfterLoginRedirectPath();
   deleteAfterLoginRedirectPath();
   navigate(afterLoginRedirectUrl ?? getHomePath(), { replace: true });

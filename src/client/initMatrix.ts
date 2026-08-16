@@ -30,6 +30,15 @@ import {
   removeAndroidClientSnapshot,
   saveAndroidClientSnapshot,
 } from './androidClientStore';
+import {
+  clearNewRustCryptoStoreAllowance,
+  findExistingRustCryptoDatabasePrefixes,
+  getRustCryptoDatabasePrefix,
+  getSavedRustCryptoDatabasePrefix,
+  isNewRustCryptoStoreAllowed,
+  LEGACY_RUST_CRYPTO_DATABASE_PREFIX,
+  saveRustCryptoDatabasePrefix,
+} from './rustCryptoStore';
 
 type Session = {
   baseUrl: string;
@@ -39,8 +48,6 @@ type Session = {
 };
 
 const MALFORMED_ENCRYPTED_EVENT_WARNING = 'missing field `algorithm`';
-const LEGACY_RUST_CRYPTO_DATABASE_PREFIX = 'matrix-js-sdk';
-const RUST_CRYPTO_DATABASE_SELECTION_KEY_PREFIX = 'cinny_rust_crypto_database';
 const rustCryptoDatabasePrefixes = new WeakMap<MatrixClient, string>();
 const androidCryptoRestorePromises = new WeakMap<MatrixClient, Promise<void>>();
 const androidCryptoTrustRestoreTasks = new WeakMap<MatrixClient, Promise<void>>();
@@ -52,111 +59,6 @@ const androidNativeSnapshotLastPersistedAt = new WeakMap<MatrixClient, number>()
 const ANDROID_NATIVE_SNAPSHOT_INTERVAL_MS = 10_000;
 const androidNativeSnapshotDirty = new WeakSet<MatrixClient>();
 
-const getRustCryptoDatabaseNames = (prefix: string): string[] => [
-  `${prefix}::matrix-sdk-crypto`,
-  `${prefix}::matrix-sdk-crypto-meta`,
-];
-
-/**
- * Rust Crypto stores the local Olm machine (including the device identity),
- * so the IndexedDB prefix must be unique per Matrix account and device. The
- * SDK default is a single `matrix-js-sdk` database, which causes Android
- * WebViews to reopen a previous device's store after a re-login and fail with
- * an "account in the store doesn't match" error.
- */
-const getRustCryptoDatabasePrefix = (session: Session): string =>
-  `cinny-rust-crypto-${encodeURIComponent(session.userId)}-${encodeURIComponent(session.deviceId)}`;
-
-const getRustCryptoDatabaseSelectionKey = (session: Session): string =>
-  `${RUST_CRYPTO_DATABASE_SELECTION_KEY_PREFIX}:${encodeURIComponent(
-    session.userId
-  )}:${encodeURIComponent(session.deviceId)}`;
-
-const getSavedRustCryptoDatabasePrefix = (session: Session): string | undefined => {
-  try {
-    const prefix = global.localStorage.getItem(getRustCryptoDatabaseSelectionKey(session));
-    const scopedPrefix = getRustCryptoDatabasePrefix(session);
-    return prefix === LEGACY_RUST_CRYPTO_DATABASE_PREFIX || prefix === scopedPrefix
-      ? prefix
-      : undefined;
-  } catch {
-    return undefined;
-  }
-};
-
-const saveRustCryptoDatabasePrefix = (session: Session, prefix: string) => {
-  try {
-    global.localStorage.setItem(getRustCryptoDatabaseSelectionKey(session), prefix);
-  } catch {
-    // IndexedDB remains usable when localStorage is unavailable; only the
-    // compatibility selection marker is skipped in that environment.
-  }
-};
-
-const indexedDbDatabaseExists = (databaseName: string): Promise<boolean> =>
-  new Promise((resolve) => {
-    let settled = false;
-    const finish = (exists: boolean) => {
-      if (settled) return;
-      settled = true;
-      resolve(exists);
-    };
-    const request = global.indexedDB.open(databaseName);
-
-    request.onupgradeneeded = () => {
-      // Opening a missing database would create it. Abort that transaction so
-      // this compatibility probe remains read-only.
-      request.transaction?.abort();
-      finish(false);
-    };
-    request.onsuccess = () => {
-      request.result.close();
-      finish(true);
-    };
-    request.onerror = () => finish(false);
-    request.onblocked = () => finish(false);
-  });
-
-// Android WebView is allowed to evict best-effort IndexedDB data under storage
-// pressure. Rust Crypto keeps the device identity, verification trust and
-// Megolm keys there, so ask for durable storage before opening the database.
-// This is best effort: browsers that do not implement the Storage Manager API
-// still follow the normal SDK path.
-const requestPersistentCryptoStorage = async (): Promise<void> => {
-  try {
-    const storage = typeof navigator === 'undefined' ? undefined : navigator.storage;
-    if (!storage?.persist) return;
-    if ((await storage.persisted?.()) === true) return;
-    await storage.persist();
-  } catch {
-    // A denied persistence request must never prevent login or crypto startup.
-  }
-};
-
-const findExistingRustCryptoDatabasePrefixes = async (prefixes: string[]): Promise<Set<string>> => {
-  try {
-    if (typeof global.indexedDB?.databases === 'function') {
-      const databases = await global.indexedDB.databases();
-      const existingNames = new Set(databases.map(({ name }) => name));
-      return new Set(
-        prefixes.filter((prefix) =>
-          getRustCryptoDatabaseNames(prefix).some((name) => existingNames.has(name))
-        )
-      );
-    }
-
-    const results = await Promise.all(
-      prefixes.map(
-        async (prefix) =>
-          [prefix, await indexedDbDatabaseExists(getRustCryptoDatabaseNames(prefix)[0])] as const
-      )
-    );
-    return new Set(results.filter(([, exists]) => exists).map(([prefix]) => prefix));
-  } catch {
-    return new Set();
-  }
-};
-
 const isRustCryptoAccountMismatch = (error: unknown): boolean => {
   const message = error instanceof Error ? error.message : String(error);
   const normalizedMessage = message.toLowerCase();
@@ -165,6 +67,13 @@ const isRustCryptoAccountMismatch = (error: unknown): boolean => {
     normalizedMessage.includes('match the account')
   );
 };
+
+export class MissingCryptoStoreError extends Error {
+  constructor() {
+    super('本机加密数据库已丢失。为避免在旧设备 ID 下生成不兼容的新密钥，请重新登录以创建新设备。');
+    this.name = 'MissingCryptoStoreError';
+  }
+}
 
 const initRustCryptoForSession = async (mx: MatrixClient, session: Session): Promise<string> => {
   const scopedPrefix = getRustCryptoDatabasePrefix(session);
@@ -178,6 +87,7 @@ const initRustCryptoForSession = async (mx: MatrixClient, session: Session): Pro
   ]);
   const legacyExists = existingPrefixes.has(LEGACY_RUST_CRYPTO_DATABASE_PREFIX);
   const scopedExists = existingPrefixes.has(scopedPrefix);
+  const storeCreationAllowed = isNewRustCryptoStoreAllowed(session);
   const candidates: string[] = [];
   const addCandidate = (prefix: string) => {
     if (!candidates.includes(prefix)) candidates.push(prefix);
@@ -190,9 +100,9 @@ const initRustCryptoForSession = async (mx: MatrixClient, session: Session): Pro
       savedPrefix === LEGACY_RUST_CRYPTO_DATABASE_PREFIX ? scopedExists : legacyExists;
 
     // A marker can outlive IndexedDB after Android/WebView storage cleanup.
-    // Only create a fresh store from that marker when no compatible database
-    // remains; otherwise recover the database that still contains the keys.
-    if (savedDatabaseExists || !anotherDatabaseExists) {
+    // Only create a fresh store from that marker when this is a newly-issued
+    // device session; otherwise recover the database that still contains keys.
+    if (savedDatabaseExists || (!anotherDatabaseExists && storeCreationAllowed)) {
       addCandidate(savedPrefix);
     }
   }
@@ -206,16 +116,28 @@ const initRustCryptoForSession = async (mx: MatrixClient, session: Session): Pro
     if (legacyExists) addCandidate(LEGACY_RUST_CRYPTO_DATABASE_PREFIX);
     if (scopedExists) addCandidate(scopedPrefix);
   }
-  if (candidates.length === 0) addCandidate(scopedPrefix);
+  if (candidates.length === 0) {
+    if (!storeCreationAllowed) {
+      removeFallbackAccessToken();
+      throw new MissingCryptoStoreError();
+    }
+    addCandidate(scopedPrefix);
+  }
 
   // A legacy selection may belong to another login despite having the same
   // database name. Keep the scoped store as its one safe mismatch fallback.
-  if (candidates[0] === LEGACY_RUST_CRYPTO_DATABASE_PREFIX) addCandidate(scopedPrefix);
+  if (
+    candidates[0] === LEGACY_RUST_CRYPTO_DATABASE_PREFIX &&
+    (scopedExists || storeCreationAllowed)
+  ) {
+    addCandidate(scopedPrefix);
+  }
 
   for (const prefix of candidates) {
     try {
       await mx.initRustCrypto({ cryptoDatabasePrefix: prefix });
       saveRustCryptoDatabasePrefix(session, prefix);
+      clearNewRustCryptoStoreAllowance(session);
       return prefix;
     } catch (error) {
       if (prefix !== LEGACY_RUST_CRYPTO_DATABASE_PREFIX || !isRustCryptoAccountMismatch(error)) {
@@ -224,7 +146,8 @@ const initRustCryptoForSession = async (mx: MatrixClient, session: Session): Pro
     }
   }
 
-  throw new Error('Unable to initialize the Rust Crypto database.');
+  removeFallbackAccessToken();
+  throw new MissingCryptoStoreError();
 };
 
 let webMatrixLoggerFilterInstalled = false;
