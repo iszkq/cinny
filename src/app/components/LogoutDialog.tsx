@@ -21,8 +21,7 @@ export const LogoutDialog = forwardRef<HTMLDivElement, LogoutDialogProps>(
     const verificationStatus = useDeviceVerificationStatus(
       mx.getCrypto(),
       mx.getSafeUserId(),
-      mx.getDeviceId() ?? undefined,
-      true
+      mx.getDeviceId() ?? undefined
     );
 
     const [logoutState, logout] = useAsyncCallback<void, Error, []>(
@@ -53,18 +52,20 @@ export const LogoutDialog = forwardRef<HTMLDivElement, LogoutDialogProps>(
               verificationStatus === VerificationStatus.Unverified && (
                 <InfoCard
                   variant="Critical"
-              title="设备未验证"
-              description="请先验证设备，再退出登录，以免丢失加密消息。"
+                  title="设备未验证"
+                  description="请先验证设备，再退出登录，以免丢失加密消息。"
                 />
               )
             ) : (
               <InfoCard
                 variant="Critical"
-              title="提示"
-              description="请先开启设备验证，或从设置中导出加密数据，避免无法再次访问消息。"
+                title="提示"
+                description="请先开启设备验证，或从设置中导出加密数据，避免无法再次访问消息。"
               />
             ))}
-          <Text priority="400">{'\u4f60\u5373\u5c06\u9000\u51fa\u767b\u5f55\uff0c\u786e\u5b9a\u7ee7\u7eed\u5417\uff1f'}</Text>
+          <Text priority="400">
+            {'\u4f60\u5373\u5c06\u9000\u51fa\u767b\u5f55\uff0c\u786e\u5b9a\u7ee7\u7eed\u5417\uff1f'}
+          </Text>
           {logoutState.status === AsyncStatus.Error && (
             <Text style={{ color: color.Critical.Main }} size="T300">
               {'\u9000\u51fa\u767b\u5f55\u5931\u8d25\uff01'} {logoutState.error.message}

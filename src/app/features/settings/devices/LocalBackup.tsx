@@ -1,5 +1,6 @@
 import React, { FormEventHandler, useCallback, useEffect, useState } from 'react';
 import { Box, Button, color, Icon, Icons, Spinner, Text, toRem } from 'folds';
+import FileSaver from 'file-saver';
 import { SequenceCard } from '../../../components/sequence-card';
 import { SettingTile } from '../../../components/setting-tile';
 import { SequenceCardStyle } from '../styles.css';
@@ -10,7 +11,6 @@ import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { decryptMegolmKeyFile, encryptMegolmKeyFile } from '../../../../util/cryptE2ERoomKeys';
 import { useAlive } from '../../../hooks/useAlive';
 import { useFilePicker } from '../../../hooks/useFilePicker';
-import { saveDownloadedFile } from '../../../utils/saveDownloadedFile';
 
 function ExportKeys() {
   const mx = useMatrixClient();
@@ -20,7 +20,7 @@ function ExportKeys() {
     useCallback(
       async (password) => {
         const crypto = mx.getCrypto();
-        if (!crypto) throw new Error('\u53d1\u751f\u610f\u5916\u9519\u8bef\uff0c\u672a\u627e\u5230\u52a0\u5bc6\u6a21\u5757\u3002');
+        if (!crypto) throw new Error('Unexpected Error! Crypto module not found!');
         const keysJSON = await crypto.exportRoomKeysAsJson();
 
         const encKeys = await encryptMegolmKeyFile(keysJSON, password);
@@ -28,7 +28,7 @@ function ExportKeys() {
         const blob = new Blob([encKeys], {
           type: 'text/plain;charset=us-ascii',
         });
-        await saveDownloadedFile(blob, 'cinny-keys.txt');
+        FileSaver.saveAs(blob, 'cinny-keys.txt');
       },
       [mx]
     )
@@ -66,7 +66,7 @@ function ExportKeys() {
             {(match, doMatch, passRef, confPassRef) => (
               <>
                 <Box grow="Yes" direction="Column" gap="100">
-                  <Text size="L400">{'\u65b0\u5bc6\u7801'}</Text>
+                  <Text size="L400">New Password</Text>
                   <PasswordInput
                     ref={passRef}
                     name="passwordInput"
@@ -80,7 +80,7 @@ function ExportKeys() {
                   />
                 </Box>
                 <Box grow="Yes" direction="Column" gap="100">
-                  <Text size="L400">{'\u786e\u8ba4\u5bc6\u7801'}</Text>
+                  <Text size="L400">Confirm Password</Text>
                   <PasswordInput
                     ref={confPassRef}
                     style={{ color: match ? undefined : color.Critical.Main }}
@@ -107,7 +107,7 @@ function ExportKeys() {
             before={exporting ? <Spinner size="200" variant="Secondary" fill="Soft" /> : undefined}
           >
             <Text as="span" size="B400">
-              {'\u5bfc\u51fa'}
+              Export
             </Text>
           </Button>
         </Box>
@@ -127,10 +127,8 @@ function ExportKeysTile() {
   return (
     <>
       <SettingTile
-        title={'\u5bfc\u51fa\u6d88\u606f\u6570\u636e'}
-        description={
-          '\u5c06\u53d7\u5bc6\u7801\u4fdd\u62a4\u7684\u52a0\u5bc6\u6570\u636e\u5907\u4efd\u4fdd\u5b58\u5230\u5f53\u524d\u8bbe\u5907\uff0c\u65b9\u4fbf\u540e\u7eed\u89e3\u5bc6\u6d88\u606f\u3002'
-        }
+        title="Export Messages Data"
+        description="Save password protected copy of encryption data on your device to decrypt messages later."
         after={
           <Box>
             <Button
@@ -146,7 +144,7 @@ function ExportKeysTile() {
               }
             >
               <Text as="span" size="B300" truncate>
-                {expand ? '\u6536\u8d77' : '\u5c55\u5f00'}
+                {expand ? 'Collapse' : 'Expand'}
               </Text>
             </Button>
           </Box>
@@ -169,7 +167,7 @@ function ImportKeys({ file, onDone }: ImportKeysProps) {
     useCallback(
       async (password) => {
         const crypto = mx.getCrypto();
-        if (!crypto) throw new Error('\u53d1\u751f\u610f\u5916\u9519\u8bef\uff0c\u672a\u627e\u5230\u52a0\u5bc6\u6a21\u5757\u3002');
+        if (!crypto) throw new Error('Unexpected Error! Crypto module not found!');
 
         const arrayBuffer = await file.arrayBuffer();
         const keys = await decryptMegolmKeyFile(arrayBuffer, password);
@@ -211,7 +209,7 @@ function ImportKeys({ file, onDone }: ImportKeysProps) {
       <Box as="form" onSubmit={handleSubmit} direction="Column" gap="100">
         <Box gap="200" alignItems="End">
           <Box grow="Yes" direction="Column" gap="100">
-            <Text size="L400">{'\u5bc6\u7801'}</Text>
+            <Text size="L400">Password</Text>
             <PasswordInput
               name="passwordInput"
               size="400"
@@ -233,7 +231,7 @@ function ImportKeys({ file, onDone }: ImportKeysProps) {
             before={decrypting ? <Spinner size="200" variant="Secondary" fill="Soft" /> : undefined}
           >
             <Text as="span" size="B400">
-              {'\u89e3\u5bc6'}
+              Decrypt
             </Text>
           </Button>
         </Box>
@@ -258,10 +256,8 @@ function ImportKeysTile() {
   return (
     <>
       <SettingTile
-        title={'\u5bfc\u5165\u6d88\u606f\u6570\u636e'}
-        description={
-          '\u4ece\u8bbe\u5907\u4e2d\u8f7d\u5165\u53d7\u5bc6\u7801\u4fdd\u62a4\u7684\u52a0\u5bc6\u6570\u636e\u5907\u4efd\uff0c\u7528\u4e8e\u89e3\u5bc6\u4f60\u7684\u6d88\u606f\u3002'
-        }
+        title="Import Messages Data"
+        description="Load password protected copy of encryption data from device to decrypt your messages."
         after={
           <Box>
             {file ? (
@@ -292,7 +288,7 @@ function ImportKeysTile() {
                 before={<Icon size="100" src={Icons.ArrowRight} />}
               >
                 <Text as="span" size="B300">
-                  {'\u5bfc\u5165'}
+                  Import
                 </Text>
               </Button>
             )}
@@ -307,7 +303,7 @@ function ImportKeysTile() {
 export function LocalBackup() {
   return (
     <Box direction="Column" gap="100">
-      <Text size="L400">{'\u672c\u5730\u5907\u4efd'}</Text>
+      <Text size="L400">Local Backup</Text>
       <SequenceCard
         className={SequenceCardStyle}
         variant="SurfaceVariant"

@@ -227,38 +227,6 @@ const initRustCryptoForSession = async (mx: MatrixClient, session: Session): Pro
   throw new Error('Unable to initialize the Rust Crypto database.');
 };
 
-// Starfire supports verified-device recovery. Allow Rust Crypto to request a
-// missing Megolm session from the sender's other devices when backup lookup
-// cannot provide it. The SDK disables this by default for Element's policy.
-const enableMissingRoomKeyRequests = (mx: MatrixClient): void => {
-  const crypto = mx.getCrypto() as
-    | (object & {
-        olmMachine?: {
-          roomKeyRequestsEnabled?: boolean;
-          roomKeyForwardingEnabled?: boolean;
-        };
-      })
-    | undefined;
-  const olmMachine = crypto?.olmMachine;
-  if (olmMachine && 'roomKeyRequestsEnabled' in olmMachine) {
-    try {
-      olmMachine.roomKeyRequestsEnabled = true;
-      // Only verified devices are eligible. Let another verified Starfire
-      // installation recover a key held by this device when backup missed it.
-      if ('roomKeyForwardingEnabled' in olmMachine) {
-        olmMachine.roomKeyForwardingEnabled = true;
-      }
-      if (olmMachine.roomKeyRequestsEnabled !== true) {
-        matrixLogger.warn('Rust Crypto did not enable automatic room key requests.');
-      } else {
-        matrixLogger.info('Rust Crypto automatic room key requests enabled.');
-      }
-    } catch (error) {
-      matrixLogger.warn('Failed to enable Rust Crypto automatic room key requests.', error);
-    }
-  }
-};
-
 let webMatrixLoggerFilterInstalled = false;
 
 const isIgnorableWebMatrixWarning = (messages: unknown[]): boolean => {
@@ -433,8 +401,6 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
       });
     }
   }
-  enableMissingRoomKeyRequests(mx);
-
   mx.setMaxListeners(200);
 
   return mx;

@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React from 'react';
 import { Box, Text, IconButton, Icon, Icons, Scroll } from 'folds';
 import { Page, PageContent, PageHeader } from '../../../components/page';
 import { SequenceCard } from '../../../components/sequence-card';
@@ -6,7 +6,6 @@ import { SequenceCardStyle } from '../styles.css';
 import { SettingTile } from '../../../components/setting-tile';
 import { useDeviceIds, useDeviceList, useSplitCurrentDevice } from '../../../hooks/useDeviceList';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
-import { BackupRestoreTile } from '../../../components/BackupRestore';
 import { LocalBackup } from './LocalBackup';
 import { DeviceLogoutBtn, DeviceKeyDetails, DeviceTile, DeviceTilePlaceholder } from './DeviceTile';
 import { OtherDevices } from './OtherDevices';
@@ -26,8 +25,7 @@ import {
   useSecretStorageKeyContent,
 } from '../../../hooks/useSecretStorage';
 import { useCrossSigningActive } from '../../../hooks/useCrossSigning';
-import { isClientSyncReady } from '../../../hooks/useClientSyncReady';
-import { useSyncState } from '../../../hooks/useSyncState';
+import { BackupRestoreTile } from '../../../components/BackupRestore';
 
 function DevicesPlaceholder() {
   return (
@@ -45,24 +43,13 @@ export function Devices({ requestClose }: DevicesProps) {
   const mx = useMatrixClient();
   const crypto = mx.getCrypto();
   const crossSigningActive = useCrossSigningActive();
-  const [securitySyncReady, setSecuritySyncReady] = useState(() =>
-    isClientSyncReady(mx.getSyncState())
-  );
-  useSyncState(
-    mx,
-    useCallback((state) => {
-      setSecuritySyncReady(isClientSyncReady(state));
-    }, [])
-  );
   const [devices, refreshDeviceList] = useDeviceList();
 
   const [currentDevice, otherDevices] = useSplitCurrentDevice(devices);
-  const currentDeviceId = mx.getDeviceId() ?? currentDevice?.device_id;
   const verificationStatus = useDeviceVerificationStatus(
     crypto,
     mx.getSafeUserId(),
-    currentDeviceId,
-    true
+    currentDevice?.device_id
   );
 
   const otherDevicesId = useDeviceIds(otherDevices);
@@ -83,7 +70,7 @@ export function Devices({ requestClose }: DevicesProps) {
         <Box grow="Yes" gap="200">
           <Box grow="Yes" alignItems="Center" gap="200">
             <Text size="H3" truncate>
-              {'\u8bbe\u5907'}
+              Devices
             </Text>
           </Box>
           <Box shrink="No">
@@ -98,7 +85,7 @@ export function Devices({ requestClose }: DevicesProps) {
           <PageContent>
             <Box direction="Column" gap="700">
               <Box direction="Column" gap="100">
-                <Text size="L400">{'\u5b89\u5168'}</Text>
+                <Text size="L400">Security</Text>
                 <SequenceCard
                   className={SequenceCardStyle}
                   variant="SurfaceVariant"
@@ -106,16 +93,11 @@ export function Devices({ requestClose }: DevicesProps) {
                   gap="400"
                 >
                   <SettingTile
-                    title={'\u8bbe\u5907\u9a8c\u8bc1'}
-                    description="恢复密钥只验证正在使用的本机；其他设备需在下方逐台点击“验证”，并在两台设备上比对表情。"
+                    title="Device Verification"
+                    description="To verify device identity and grant access to encrypted messages."
                     after={
                       <>
-                        {!crossSigningActive &&
-                          (securitySyncReady ? (
-                            <EnableVerification visible />
-                          ) : (
-                            <Text size="T200">正在同步安全设置…</Text>
-                          ))}
+                        <EnableVerification visible={!crossSigningActive} />
                         {crossSigningActive && (
                           <Box gap="200" alignItems="Center">
                             <VerificationStatusBadge
@@ -131,7 +113,7 @@ export function Devices({ requestClose }: DevicesProps) {
                 </SequenceCard>
               </Box>
               <Box direction="Column" gap="100">
-                <Text size="L400">{'\u5f53\u524d\u8bbe\u5907'}</Text>
+                <Text size="L400">Current</Text>
                 {currentDevice ? (
                   <SequenceCard
                     className={SequenceCardStyle}
@@ -142,20 +124,19 @@ export function Devices({ requestClose }: DevicesProps) {
                     <DeviceTile
                       device={currentDevice}
                       refreshDeviceList={refreshDeviceList}
-                      options={
-                        <DeviceLogoutBtn />
-                      }
+                      options={<DeviceLogoutBtn />}
                     >
                       {crypto && <DeviceKeyDetails crypto={crypto} />}
                     </DeviceTile>
-                    {crypto && defaultSecretStorageKeyId && defaultSecretStorageKeyContent && (
+                    {crossSigningActive &&
+                      verificationStatus === VerificationStatus.Unverified &&
+                      defaultSecretStorageKeyId &&
+                      defaultSecretStorageKeyContent && (
                         <VerifyCurrentDeviceTile
-                          verificationStatus={verificationStatus}
-                          crypto={crypto}
                           secretStorageKeyId={defaultSecretStorageKeyId}
                           secretStorageKeyContent={defaultSecretStorageKeyContent}
                         />
-                    )}
+                      )}
                     {crypto && verificationStatus === VerificationStatus.Verified && (
                       <BackupRestoreTile crypto={crypto} />
                     )}

@@ -47,13 +47,13 @@ function DeviceActiveTime({ ts }: { ts: number }) {
   const [dateFormatString] = useSetting(settingsAtom, 'dateFormatString');
 
   return (
-      <Text className={BreakWord} size="T200">
+    <Text className={BreakWord} size="T200">
       <Text size="Inherit" as="span" priority="300">
-        {'\u6700\u540e\u6d3b\u52a8\uff1a'}
+        {'Last activity: '}
       </Text>
       <>
-        {today(ts) && '\u4eca\u5929'}
-        {yesterday(ts) && '\u6628\u5929'}
+        {today(ts) && 'Today'}
+        {yesterday(ts) && 'Yesterday'}
         {!today(ts) && !yesterday(ts) && timeDayMonYear(ts, dateFormatString)}{' '}
         {timeHourMinute(ts, hour24Clock)}
       </>
@@ -66,12 +66,12 @@ function DeviceDetails({ device }: { device: IMyDevice }) {
     <>
       {typeof device.device_id === 'string' && (
         <Text className={BreakWord} size="T200" priority="300">
-          {'\u8bbe\u5907 ID\uff1a'} <i>{device.device_id}</i>
+          Device ID: <i>{device.device_id}</i>
         </Text>
       )}
       {typeof device.last_seen_ip === 'string' && (
         <Text className={BreakWord} size="T200" priority="300">
-          {'IP \u5730\u5740\uff1a'} <i>{device.last_seen_ip}</i>
+          IP Address: <i>{device.last_seen_ip}</i>
         </Text>
       )}
     </>
@@ -97,12 +97,8 @@ export function DeviceKeyDetails({ crypto }: DeviceKeyDetailsProps) {
 
   return (
     <Text className={BreakWord} size="T200" priority="300">
-      {'\u8bbe\u5907\u5bc6\u94a5\uff1a'}{' '}
-      <i>
-        {keysState.status === AsyncStatus.Success
-          ? keysState.data.ed25519
-          : '\u8f7d\u5165\u4e2d...'}
-      </i>
+      Device Key:{' '}
+      <i>{keysState.status === AsyncStatus.Success ? keysState.data.ed25519 : 'loading...'}</i>
     </Text>
   );
 }
@@ -149,7 +145,7 @@ function DeviceRename({ device, onCancel, onRename, refreshDeviceList }: DeviceR
 
   return (
     <Box as="form" onSubmit={handleSubmit} direction="Column" gap="100">
-      <Text size="L400">{'\u8bbe\u5907\u540d\u79f0'}</Text>
+      <Text size="L400">Device Name</Text>
       <Box gap="200">
         <Box grow="Yes" direction="Column">
           <Input
@@ -173,7 +169,7 @@ function DeviceRename({ device, onCancel, onRename, refreshDeviceList }: DeviceR
             disabled={renaming}
             before={renaming && <Spinner size="100" variant="Success" fill="Solid" />}
           >
-            <Text size="B300">{'\u4fdd\u5b58'}</Text>
+            <Text size="B300">Save</Text>
           </Button>
           <Button
             type="button"
@@ -184,7 +180,7 @@ function DeviceRename({ device, onCancel, onRename, refreshDeviceList }: DeviceR
             onClick={onCancel}
             disabled={renaming}
           >
-            <Text size="B300">{'\u53d6\u6d88'}</Text>
+            <Text size="B300">Cancel</Text>
           </Button>
         </Box>
       </Box>
@@ -193,7 +189,7 @@ function DeviceRename({ device, onCancel, onRename, refreshDeviceList }: DeviceR
           {renameState.error.message}
         </Text>
       ) : (
-        <Text size="T200">{'\u8bbe\u5907\u540d\u79f0\u5bf9\u516c\u5f00\u53ef\u89c1\u3002'}</Text>
+        <Text size="T200">Device names are visible to public.</Text>
       )}
     </Box>
   );
@@ -207,7 +203,7 @@ export function DeviceLogoutBtn() {
   return (
     <>
       <Chip variant="Secondary" fill="Soft" radii="Pill" onClick={() => setPrompt(true)}>
-        <Text size="B300">{'\u9000\u51fa\u767b\u5f55'}</Text>
+        <Text size="B300">Logout</Text>
       </Chip>
       {prompt && (
         <Overlay open backdrop={<OverlayBackdrop />}>
@@ -248,7 +244,7 @@ export function DeviceDeleteBtn({
       onClick={() => onDeleteToggle(deviceId)}
       disabled={disabled}
     >
-      <Text size="B300">{'\u64a4\u9500'}</Text>
+      <Text size="B300">Undo</Text>
     </Chip>
   ) : (
     <Chip
@@ -311,7 +307,7 @@ export function DeviceTile({
                   onClick={() => setEdit(true)}
                   disabled={disabled}
                 >
-                  <Text size="B300">{'\u7f16\u8f91'}</Text>
+                  <Text size="B300">Edit</Text>
                 </Chip>
               )}
             </Box>

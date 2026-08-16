@@ -44,8 +44,7 @@ function UnverifiedIndicator({ requestOpenSettings }: UnverifiedIndicatorProps) 
   const verificationStatus = useDeviceVerificationStatus(
     crypto,
     mx.getSafeUserId(),
-    currentDeviceId,
-    true
+    currentDeviceId
   );
   const backupEnabled = useKeyBackupStatus(crypto);
   const backupInfo = useKeyBackupInfo(crypto);
@@ -69,8 +68,7 @@ function UnverifiedIndicator({ requestOpenSettings }: UnverifiedIndicatorProps) 
     // proof that a verified device became unverified.
     ((!crossSigningActive && verificationStatus === VerificationStatus.Unverified) ||
       verificationStatus === VerificationStatus.Unverified);
-  const unverified =
-    deviceUnverified || backupUnverified;
+  const unverified = deviceUnverified || backupUnverified;
 
   const otherDevicesId = useDeviceIds(otherDevices);
   const unverifiedDeviceCount = useUnverifiedDeviceCount(

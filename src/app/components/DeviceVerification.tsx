@@ -1,5 +1,4 @@
 import {
-  CryptoEvent,
   ShowSasCallbacks,
   VerificationPhase,
   VerificationRequest,
@@ -26,15 +25,11 @@ import FocusTrap from 'focus-trap-react';
 import {
   useVerificationRequestPhase,
   useVerificationRequestReceived,
+  useVerifierCancel,
   useVerifierShowSas,
 } from '../hooks/useVerificationRequest';
-import { AsyncState, AsyncStatus, useAsyncCallback } from '../hooks/useAsyncCallback';
+import { AsyncStatus, useAsyncCallback } from '../hooks/useAsyncCallback';
 import { ContainerColor } from '../styles/ContainerColor.css';
-import { useMatrixClient } from '../hooks/useMatrixClient';
-import {
-  CompletedDeviceVerificationResult,
-  persistCompletedDeviceVerification,
-} from '../utils/matrix-crypto';
 
 const DialogHeaderStyles: CSSProperties = {
   padding: `0 ${config.space.S200} 0 ${config.space.S400}`,
@@ -59,7 +54,7 @@ function VerificationUnexpected({ message, onClose }: VerificationUnexpectedProp
     <Box direction="Column" gap="400">
       <Text>{message}</Text>
       <Button variant="Secondary" fill="Soft" onClick={onClose}>
-        <Text size="B400">关闭</Text>
+        <Text size="B400">Close</Text>
       </Button>
     </Box>
   );
@@ -68,11 +63,8 @@ function VerificationUnexpected({ message, onClose }: VerificationUnexpectedProp
 function VerificationWaitAccept() {
   return (
     <Box direction="Column" gap="400">
-      <Text>请在另一台设备上接受验证请求。</Text>
-      <Text size="T200">
-        这里正在验证另一台设备，必须由目标设备接受；恢复密钥只用于恢复当前设备和加密备份。
-      </Text>
-      <WaitingMessage message="正在等待另一台设备接受验证请求..." />
+      <Text>Please accept the request from other device.</Text>
+      <WaitingMessage message="Waiting for request to be accepted..." />
     </Box>
   );
 }
@@ -81,26 +73,21 @@ type VerificationAcceptProps = {
   onAccept: () => Promise<void>;
 };
 function VerificationAccept({ onAccept }: VerificationAcceptProps) {
-  const [acceptState, accept] = useAsyncCallback<void, Error, []>(onAccept);
+  const [acceptState, accept] = useAsyncCallback(onAccept);
 
   const accepting = acceptState.status === AsyncStatus.Loading;
   return (
     <Box direction="Column" gap="400">
-      <Text>点击“接受”开始设备验证。</Text>
+      <Text>Click accept to start the verification process.</Text>
       <Button
         variant="Primary"
         fill="Solid"
-        onClick={() => {
-          accept().catch(() => undefined);
-        }}
+        onClick={accept}
         before={accepting && <Spinner size="100" variant="Primary" fill="Solid" />}
         disabled={accepting}
       >
-        <Text size="B400">接受</Text>
+        <Text size="B400">Accept</Text>
       </Button>
-      {acceptState.status === AsyncStatus.Error && (
-        <Text size="T200">接受验证请求失败：{acceptState.error.message}</Text>
-      )}
     </Box>
   );
 }
@@ -108,8 +95,8 @@ function VerificationAccept({ onAccept }: VerificationAcceptProps) {
 function VerificationWaitStart() {
   return (
     <Box direction="Column" gap="400">
-      <Text>验证请求已被接受。</Text>
-      <WaitingMessage message="正在等待另一台设备继续响应..." />
+      <Text>Verification request has been accepted.</Text>
+      <WaitingMessage message="Waiting for the response from other device..." />
     </Box>
   );
 }
@@ -118,47 +105,26 @@ type VerificationStartProps = {
   onStart: () => Promise<void>;
 };
 function AutoVerificationStart({ onStart }: VerificationStartProps) {
-  const [startState, start] = useAsyncCallback<void, Error, []>(onStart);
-
   useEffect(() => {
-    start().catch(() => undefined);
-  }, [start]);
-
-  if (startState.status === AsyncStatus.Error) {
-    return (
-      <Box direction="Column" gap="400">
-        <Text>启动设备验证失败：{startState.error.message}</Text>
-        <Button
-          variant="Primary"
-          fill="Soft"
-          onClick={() => {
-            start().catch(() => undefined);
-          }}
-        >
-          <Text size="B400">重试</Text>
-        </Button>
-      </Box>
-    );
-  }
+    onStart();
+  }, [onStart]);
 
   return (
     <Box direction="Column" gap="400">
-      <WaitingMessage message="正在启动表情比对验证..." />
+      <WaitingMessage message="Starting verification using emoji comparison..." />
     </Box>
   );
 }
 
 function CompareEmoji({ sasData }: { sasData: ShowSasCallbacks }) {
-  const [confirmState, confirm] = useAsyncCallback<void, Error, []>(
-    useCallback(() => sasData.confirm(), [sasData])
-  );
+  const [confirmState, confirm] = useAsyncCallback(useCallback(() => sasData.confirm(), [sasData]));
 
   const confirming =
     confirmState.status === AsyncStatus.Loading || confirmState.status === AsyncStatus.Success;
 
   return (
     <Box direction="Column" gap="400">
-      <Text>请确认两台设备上显示的表情和顺序完全一致：</Text>
+      <Text>Confirm the emoji below are displayed on both devices, in the same order:</Text>
       <Box
         className={ContainerColor({ variant: 'SurfaceVariant' })}
         style={{
@@ -187,24 +153,19 @@ function CompareEmoji({ sasData }: { sasData: ShowSasCallbacks }) {
         <Button
           variant="Primary"
           fill="Soft"
-          onClick={() => {
-            confirm().catch(() => undefined);
-          }}
+          onClick={confirm}
           disabled={confirming}
           before={confirming && <Spinner size="100" variant="Primary" />}
         >
-          <Text size="B400">一致</Text>
+          <Text size="B400">They Match</Text>
         </Button>
-        {confirmState.status === AsyncStatus.Error && (
-          <Text size="T200">确认失败：{confirmState.error.message}</Text>
-        )}
         <Button
           variant="Primary"
           fill="Soft"
           onClick={() => sasData.mismatch()}
           disabled={confirming}
         >
-          <Text size="B400">不一致</Text>
+          <Text size="B400">Do not Match</Text>
         </Button>
       </Box>
     </Box>
@@ -213,17 +174,16 @@ function CompareEmoji({ sasData }: { sasData: ShowSasCallbacks }) {
 
 type SasVerificationProps = {
   verifier: Verifier;
+  onCancel: () => void;
 };
-function SasVerification({ verifier }: SasVerificationProps) {
+function SasVerification({ verifier, onCancel }: SasVerificationProps) {
   const [sasData, setSasData] = useState<ShowSasCallbacks>();
 
   useVerifierShowSas(verifier, setSasData);
+  useVerifierCancel(verifier, onCancel);
 
   useEffect(() => {
-    // Cancellation is already reflected by VerificationRequest.phase. Do not
-    // call request.cancel() again from the verifier rejection: during SAS
-    // tie-breaking or final synchronization that can cancel the winning flow.
-    verifier.verify().catch(() => undefined);
+    verifier.verify();
   }, [verifier]);
 
   if (sasData) {
@@ -232,76 +192,36 @@ function SasVerification({ verifier }: SasVerificationProps) {
 
   return (
     <Box direction="Column" gap="400">
-      <WaitingMessage message="正在启动表情比对验证..." />
+      <WaitingMessage message="Starting verification using emoji comparison..." />
     </Box>
   );
 }
 
 type VerificationDoneProps = {
-  state: AsyncState<CompletedDeviceVerificationResult, Error>;
-  onRetry: () => void;
   onExit: () => void;
 };
-function VerificationDone({ state, onRetry, onExit }: VerificationDoneProps) {
-  if (state.status === AsyncStatus.Idle || state.status === AsyncStatus.Loading) {
-    return (
-      <Box direction="Column" gap="400">
-        <WaitingMessage message="表情验证已通过，正在保存设备可信状态..." />
-        <Text size="T200">可关闭此窗口，可信状态仍会在后台继续保存。</Text>
-      </Box>
-    );
-  }
-
-  if (state.status === AsyncStatus.Error) {
-    return (
-      <Box direction="Column" gap="400">
-        <Text>表情验证已通过，但设备可信状态保存失败。</Text>
-        <Text size="T200">{state.error.message}</Text>
-        <Button variant="Primary" fill="Solid" onClick={onRetry}>
-          <Text size="B400">重新保存</Text>
-        </Button>
-      </Box>
-    );
-  }
-
+function VerificationDone({ onExit }: VerificationDoneProps) {
   return (
     <Box direction="Column" gap="400">
       <div>
-        <Text>设备验证已完成，可信状态已保存。</Text>
+        <Text>Your device is verified.</Text>
       </div>
-      {!state.data.crossSigningSynced && (
-        <Text size="T200">本机可信状态已保存；跨设备签名会在加密数据同步后自动补齐。</Text>
-      )}
       <Button variant="Primary" fill="Solid" onClick={onExit}>
-        <Text size="B400">完成</Text>
+        <Text size="B400">Okay</Text>
       </Button>
     </Box>
   );
 }
 
 type VerificationCanceledProps = {
-  request: VerificationRequest;
   onClose: () => void;
 };
-function VerificationCanceled({ request, onClose }: VerificationCanceledProps) {
-  const message = (() => {
-    if (request.cancellationCode === 'm.accepted') {
-      return '此请求已由另一台设备或另一个验证窗口接管，请在仍在进行的验证窗口中完成操作。';
-    }
-    if (request.cancellationCode === 'm.timeout') {
-      return '设备验证已超时。请保持两台设备在线并重新发起验证。';
-    }
-    if (request.cancellationCode === 'm.mismatched_sas') {
-      return '两台设备确认的表情不一致，验证已安全取消。';
-    }
-    return '设备验证已取消，本次请求没有写入任何错误的可信状态。';
-  })();
-
+function VerificationCanceled({ onClose }: VerificationCanceledProps) {
   return (
     <Box direction="Column" gap="400">
-      <Text>{message}</Text>
+      <Text>Verification has been canceled.</Text>
       <Button variant="Secondary" fill="Soft" onClick={onClose}>
-        <Text size="B400">关闭</Text>
+        <Text size="B400">Close</Text>
       </Button>
     </Box>
   );
@@ -312,34 +232,7 @@ type DeviceVerificationProps = {
   onExit: () => void;
 };
 export function DeviceVerification({ request, onExit }: DeviceVerificationProps) {
-  const mx = useMatrixClient();
   const phase = useVerificationRequestPhase(request);
-
-  const persistVerification = useCallback(async () => {
-    const crypto = mx.getCrypto();
-    if (!crypto) {
-      throw new Error('未找到加密模块，请重新打开应用后重试。');
-    }
-
-    const result = await persistCompletedDeviceVerification(
-      crypto,
-      request,
-      mx.getDeviceId() ?? undefined
-    );
-    mx.emit(CryptoEvent.DevicesUpdated, [request.otherUserId], false);
-    return result;
-  }, [mx, request]);
-  const [persistState, runPersistVerification] = useAsyncCallback<
-    CompletedDeviceVerificationResult,
-    Error,
-    []
-  >(persistVerification);
-
-  useEffect(() => {
-    if (phase === VerificationPhase.Done && persistState.status === AsyncStatus.Idle) {
-      runPersistVerification().catch(() => undefined);
-    }
-  }, [phase, persistState.status, runPersistVerification]);
 
   const handleCancel = useCallback(() => {
     if (request.phase !== VerificationPhase.Done && request.phase !== VerificationPhase.Cancelled) {
@@ -352,8 +245,6 @@ export function DeviceVerification({ request, onExit }: DeviceVerificationProps)
   const handleStart = useCallback(async () => {
     await request.startVerification(VerificationMethod.Sas);
   }, [request]);
-
-  const handleDone = useCallback(() => onExit(), [onExit]);
 
   return (
     <Overlay open backdrop={<OverlayBackdrop />}>
@@ -368,7 +259,7 @@ export function DeviceVerification({ request, onExit }: DeviceVerificationProps)
           <Dialog variant="Surface">
             <Header style={DialogHeaderStyles} variant="Surface" size="500">
               <Box grow="Yes">
-                <Text size="H4">设备验证</Text>
+                <Text size="H4">Device Verification</Text>
               </Box>
               <IconButton size="300" radii="300" onClick={handleCancel}>
                 <Icon src={Icons.Cross} />
@@ -389,24 +280,16 @@ export function DeviceVerification({ request, onExit }: DeviceVerificationProps)
                 ))}
               {phase === VerificationPhase.Started &&
                 (request.verifier ? (
-                  <SasVerification verifier={request.verifier} />
+                  <SasVerification verifier={request.verifier} onCancel={handleCancel} />
                 ) : (
                   <VerificationUnexpected
-                    message="验证流程出现异常：验证已开始，但缺少验证器。"
+                    message="Unexpected Error! Verification is started but verifier is missing."
                     onClose={handleCancel}
                   />
                 ))}
-              {phase === VerificationPhase.Done && (
-                <VerificationDone
-                  state={persistState}
-                  onRetry={() => {
-                    runPersistVerification().catch(() => undefined);
-                  }}
-                  onExit={handleDone}
-                />
-              )}
+              {phase === VerificationPhase.Done && <VerificationDone onExit={onExit} />}
               {phase === VerificationPhase.Cancelled && (
-                <VerificationCanceled request={request} onClose={handleCancel} />
+                <VerificationCanceled onClose={handleCancel} />
               )}
             </Box>
           </Dialog>
