@@ -131,13 +131,24 @@ const restoreSessionFromBackup = async (
       cryptoApi.getSessionBackupPrivateKey(),
     ]);
     if (!activeVersion || !backupInfo || backupInfo.version !== activeVersion || !privateKey) {
-      recordDecryptionDiagnostic(mx, mEvent, 'backup_lookup_unavailable');
+      recordDecryptionDiagnostic(mx, mEvent, 'backup_lookup_unavailable', {
+        activeBackupVersion: activeVersion ?? null,
+        backupServerVersion: backupInfo?.version ?? null,
+        hasBackupPrivateKey: Boolean(privateKey),
+      });
       return 'retry';
     }
 
     const trust = await cryptoApi.isKeyBackupTrusted(backupInfo);
-    if (!trust.trusted || !trust.matchesDecryptionKey) {
-      recordDecryptionDiagnostic(mx, mEvent, 'backup_lookup_unavailable');
+    // trusted describes the backup signature chain. It can be false while a
+    // verified recovery key is already attached (for example before
+    // cross-signing has finished syncing). For decryption, the key match is
+    // the cryptographic gate; getBackupDecryptor verifies it again below.
+    if (trust.matchesDecryptionKey !== true) {
+      recordDecryptionDiagnostic(mx, mEvent, 'backup_lookup_unavailable', {
+        backupTrusted: trust.trusted,
+        matchesDecryptionKey: trust.matchesDecryptionKey,
+      });
       return 'retry';
     }
 

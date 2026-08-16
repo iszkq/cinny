@@ -36,6 +36,11 @@ type DecryptionDiagnosticEntry = {
   algorithm: string | null;
   retryAttempt?: number;
   retryDelayMs?: number;
+  activeBackupVersion?: string | null;
+  backupServerVersion?: string | null;
+  hasBackupPrivateKey?: boolean;
+  backupTrusted?: boolean;
+  matchesDecryptionKey?: boolean;
   error?: string | null;
   online: boolean;
   visibility: DocumentVisibilityState;
@@ -125,6 +130,11 @@ export const recordDecryptionDiagnostic = (
   details: {
     retryAttempt?: number;
     retryDelayMs?: number;
+    activeBackupVersion?: string | null;
+    backupServerVersion?: string | null;
+    hasBackupPrivateKey?: boolean;
+    backupTrusted?: boolean;
+    matchesDecryptionKey?: boolean;
     error?: unknown;
   } = {}
 ): void => {
@@ -143,6 +153,11 @@ export const recordDecryptionDiagnostic = (
     algorithm: metadata.algorithm,
     retryAttempt: details.retryAttempt,
     retryDelayMs: details.retryDelayMs,
+    activeBackupVersion: details.activeBackupVersion,
+    backupServerVersion: details.backupServerVersion,
+    hasBackupPrivateKey: details.hasBackupPrivateKey,
+    backupTrusted: details.backupTrusted,
+    matchesDecryptionKey: details.matchesDecryptionKey,
     error: safeError(details.error),
     online: navigator.onLine,
     visibility: document.visibilityState,

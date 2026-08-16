@@ -436,6 +436,11 @@ test('missing Megolm sessions recover in a client-level queue across every platf
   assert.match(source, /restoreSessionFromBackup/);
   assert.match(source, /getSessionBackupPrivateKey\(\)/);
   assert.match(source, /isKeyBackupTrusted\(backupInfo\)/);
+  assert.match(source, /trust\.matchesDecryptionKey !== true/);
+  assert.doesNotMatch(source, /!trust\.trusted \|\| !trust\.matchesDecryptionKey/);
+  assert.match(source, /backupTrusted: trust\.trusted/);
+  assert.match(source, /matchesDecryptionKey: trust\.matchesDecryptionKey/);
+  assert.match(source, /hasBackupPrivateKey: Boolean\(privateKey\)/);
   assert.match(source, /mx\.http\.authedRequest<KeyBackupSession>/);
   assert.match(source, /crypto\.importBackedUpRoomKeys\(keys, activeVersion\)/);
   assert.match(source, /'backup_key_imported'/);
