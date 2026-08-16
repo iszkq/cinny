@@ -49,6 +49,8 @@ const PLAY_TIME_THROTTLE_OPS = {
 };
 const AUDIO_PLAYBACK_RATES = [1, 1.25, 1.5, 2];
 const AUDIO_DOWNLOAD_TIMEOUT_MS = 45_000;
+const LONG_TRANSCRIPTION_MIN_CHARS = 240;
+const COLLAPSED_TRANSCRIPTION_LINES = 6;
 
 type RenderMediaControlProps = {
   after: ReactNode;
@@ -126,6 +128,7 @@ export function AudioContent({
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const [currentTime, setCurrentTime] = useState(0);
+  const [transcriptionExpanded, setTranscriptionExpanded] = useState(false);
   // duration in seconds. (NOTE: info.duration is in milliseconds)
   const infoDuration = info.duration ?? 0;
   const [duration, setDuration] = useState((infoDuration >= 0 ? infoDuration : 0) / 1000);
@@ -186,6 +189,10 @@ export function AudioContent({
   const shouldShowTranscriptionText =
     !!transcriptionText &&
     (transcriptionState.status !== AsyncStatus.Loading || mode === 'browser');
+  const hasLongTranscription =
+    !!transcriptionText &&
+    (transcriptionText.length > LONG_TRANSCRIPTION_MIN_CHARS ||
+      transcriptionText.split(/\r?\n/).length > COLLAPSED_TRANSCRIPTION_LINES);
   const transcriptionActionLabel =
     transcriptionState.status === AsyncStatus.Loading
       ? '\u8f6c\u5199\u4e2d'
@@ -196,6 +203,7 @@ export function AudioContent({
       : '\u8f6c\u5199';
 
   const handleTranscribe = () => {
+    setTranscriptionExpanded(false);
     transcribe({
       getBlob: loadAudioBlob,
     }).catch(() => undefined);
@@ -276,9 +284,42 @@ export function AudioContent({
           {(transcriptionState.status !== AsyncStatus.Idle || shouldShowTranscriptionText) && (
             <Box direction="Column" gap="100">
               {shouldShowTranscriptionText && (
-                <Text size="T300" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                  {transcriptionText}
-                </Text>
+                <>
+                  <Text
+                    size="T300"
+                    style={{
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-word',
+                      ...(!transcriptionExpanded && hasLongTranscription
+                        ? {
+                            display: '-webkit-box',
+                            WebkitBoxOrient: 'vertical',
+                            WebkitLineClamp: COLLAPSED_TRANSCRIPTION_LINES,
+                            overflow: 'hidden',
+                          }
+                        : undefined),
+                    }}
+                  >
+                    {transcriptionText}
+                  </Text>
+                  {hasLongTranscription && (
+                    <Box justifyContent="End">
+                      <Chip
+                        variant="SurfaceVariant"
+                        radii="300"
+                        onClick={() => setTranscriptionExpanded((expanded) => !expanded)}
+                        before={
+                          <Icon
+                            src={transcriptionExpanded ? Icons.ChevronTop : Icons.ChevronBottom}
+                            size="50"
+                          />
+                        }
+                      >
+                        <Text size="B300">{transcriptionExpanded ? '收起' : '展开全文'}</Text>
+                      </Chip>
+                    </Box>
+                  )}
+                </>
               )}
               {transcriptionError && (
                 <Text size="T200" style={{ color: color.Critical.Main }}>
