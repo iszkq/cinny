@@ -16,19 +16,16 @@ test('account profile no longer exposes or updates avatar frames', async () => {
   assert.match(source, /mx\.setAvatarUrl\(upload\.mxc\)/);
 });
 
-test('account password change uses Matrix capability negotiation and UIA', async () => {
+test('account settings link to the server account management page', async () => {
   const accountSource = await readSource('src/app/features/settings/account/Account.tsx');
-  const passwordSource = await readSource('src/app/features/settings/account/AccountPassword.tsx');
+  const profileSource = await readSource('src/app/features/settings/account/Profile.tsx');
 
-  assert.match(accountSource, /<AccountPassword \/>/);
-  assert.match(passwordSource, /capabilities\['m\.change_password'\]/);
-  assert.match(passwordSource, /服务器能力信息显示不支持修改密码，但仍可尝试/);
-  assert.doesNotMatch(passwordSource, /disabled=\{passwordChangeCapabilityDisabled\}/);
-  assert.match(passwordSource, /mx\.setPassword\(authDict, newPassword, logoutDevices\)/);
-  assert.match(passwordSource, /httpStatus !== 404/);
-  assert.match(passwordSource, /prefix: '\/_matrix\/client\/r0'/);
-  assert.match(passwordSource, /errorValue\.httpStatus === 401/);
-  assert.match(passwordSource, /pickUIAFlow\(nextAuthData\.flows \?\? \[\]\)/);
-  assert.match(passwordSource, /<ActionUIA/);
-  assert.match(passwordSource, /const \[logoutDevices, setLogoutDevices\] = useState\(false\)/);
+  assert.doesNotMatch(accountSource, /AccountPassword/);
+  assert.match(profileSource, /账户管理/);
+  assert.match(profileSource, /authMetadata\?\.account_management_uri/);
+  assert.match(profileSource, /openExternalUrl\(accountManagementUrl\)/);
+  assert.match(
+    profileSource,
+    /account\.\$\{homeserverUrl\.hostname\.slice\('matrix\.'\.length\)\}/
+  );
 });

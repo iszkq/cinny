@@ -42,6 +42,8 @@ import { createUploadAtom, UploadSuccess } from '../../../state/upload';
 import { CompactUploadCardRenderer } from '../../../components/upload-card';
 import { useCapabilities } from '../../../hooks/useCapabilities';
 import { AVATAR_ACCEPT, AVATAR_MAX_FILE_SIZE, validateAvatarFile } from '../../../utils/avatar';
+import { useAuthMetadata } from '../../../hooks/useAuthMetadata';
+import { openExternalUrl } from '../../../utils/desktop';
 
 type ProfileProps = {
   profile: UserProfile;
@@ -351,6 +353,63 @@ function ProfileDisplayName({ profile, userId }: ProfileProps) {
   );
 }
 
+function ManageAccount() {
+  const mx = useMatrixClient();
+  const authMetadata = useAuthMetadata();
+  const [error, setError] = useState<string>();
+  const accountManagementUrl = useMemo(() => {
+    if (authMetadata?.account_management_uri) return authMetadata.account_management_uri;
+    if (authMetadata?.issuer) return authMetadata.issuer;
+
+    try {
+      const homeserverUrl = new URL(mx.getHomeserverUrl());
+      if (!homeserverUrl.hostname.startsWith('matrix.')) return undefined;
+      const accountHostname = `account.${homeserverUrl.hostname.slice('matrix.'.length)}`;
+      return `${homeserverUrl.protocol}//${accountHostname}/account/`;
+    } catch {
+      return undefined;
+    }
+  }, [authMetadata, mx]);
+
+  const handleOpen = () => {
+    if (!accountManagementUrl) {
+      setError('服务器没有提供账户管理地址，请联系管理员。');
+      return;
+    }
+    setError(undefined);
+    void openExternalUrl(accountManagementUrl).catch((errorValue: unknown) => {
+      setError(errorValue instanceof Error ? errorValue.message : '账户管理页面打开失败。');
+    });
+  };
+
+  return (
+    <SettingTile
+      title={<Text size="L400">账户管理</Text>}
+      description="在服务器账户中心管理密码、邮箱和其他账户设置。"
+      after={
+        <Button
+          size="300"
+          variant="Secondary"
+          fill="Soft"
+          outlined
+          radii="300"
+          disabled={!accountManagementUrl}
+          onClick={handleOpen}
+          before={<Icon src={Icons.External} size="100" />}
+        >
+          <Text size="B300">管理账户</Text>
+        </Button>
+      }
+    >
+      {error && (
+        <Text size="T200" style={{ color: color.Critical.Main }}>
+          {error}
+        </Text>
+      )}
+    </SettingTile>
+  );
+}
+
 export function Profile() {
   const mx = useMatrixClient();
   const userId = mx.getUserId()!;
@@ -367,6 +426,7 @@ export function Profile() {
       >
         <ProfileAvatar userId={userId} profile={profile} />
         <ProfileDisplayName userId={userId} profile={profile} />
+        <ManageAccount />
       </SequenceCard>
     </Box>
   );
