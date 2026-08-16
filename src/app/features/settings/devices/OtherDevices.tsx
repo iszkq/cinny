@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { Box, Button, config, Menu, Spinner, Text } from 'folds';
+import { Box, Button, color, config, Menu, Spinner, Text } from 'folds';
 import { AuthDict, IMyDevice, MatrixError } from 'matrix-js-sdk';
 import { SequenceCard } from '../../../components/sequence-card';
 import { SequenceCardStyle } from '../styles.css';
@@ -15,6 +15,7 @@ import { useAuthMetadata } from '../../../hooks/useAuthMetadata';
 import { withSearchParam } from '../../../pages/pathUtils';
 import { useAccountManagementActions } from '../../../hooks/useAccountManagement';
 import { SettingTile } from '../../../components/setting-tile';
+import { openExternalUrl } from '../../../utils/desktop';
 
 type OtherDevicesProps = {
   devices: IMyDevice[];
@@ -26,6 +27,7 @@ export function OtherDevices({ devices, refreshDeviceList, showVerification }: O
   const crypto = mx.getCrypto();
   const authMetadata = useAuthMetadata();
   const accountManagementActions = useAccountManagementActions();
+  const [accountManagementError, setAccountManagementError] = useState<string>();
 
   const [deleted, setDeleted] = useState<Set<string>>(new Set());
 
@@ -33,12 +35,15 @@ export function OtherDevices({ devices, refreshDeviceList, showVerification }: O
     const authUrl = authMetadata?.account_management_uri ?? authMetadata?.issuer;
     if (!authUrl) return;
 
-    window.open(
+    setAccountManagementError(undefined);
+    void openExternalUrl(
       withSearchParam(authUrl, {
         action: accountManagementActions.sessionsList,
-      }),
-      '_blank'
-    );
+      })
+    ).catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      setAccountManagementError(`无法打开设备管理页面：${message}`);
+    });
   }, [authMetadata, accountManagementActions]);
 
   const handleDeleteOIDC = useCallback(
@@ -46,13 +51,16 @@ export function OtherDevices({ devices, refreshDeviceList, showVerification }: O
       const authUrl = authMetadata?.account_management_uri ?? authMetadata?.issuer;
       if (!authUrl) return;
 
-      window.open(
+      setAccountManagementError(undefined);
+      void openExternalUrl(
         withSearchParam(authUrl, {
           action: accountManagementActions.sessionEnd,
           device_id: deviceId,
-        }),
-        '_blank'
-      );
+        })
+      ).catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        setAccountManagementError(`无法打开设备删除页面：${message}`);
+      });
     },
     [authMetadata, accountManagementActions]
   );
@@ -104,7 +112,7 @@ export function OtherDevices({ devices, refreshDeviceList, showVerification }: O
   return devices.length > 0 ? (
     <>
       <Box direction="Column" gap="100">
-        <Text size="L400">Others</Text>
+        <Text size="L400">其他设备</Text>
         {authMetadata && (
           <SequenceCard
             className={SequenceCardStyle}
@@ -113,8 +121,8 @@ export function OtherDevices({ devices, refreshDeviceList, showVerification }: O
             gap="400"
           >
             <SettingTile
-              title="Device Dashboard"
-              description="Manage your devices on OIDC dashboard."
+              title="设备管理"
+              description="在账户管理页面查看和管理设备。"
               after={
                 <Button
                   size="300"
@@ -124,11 +132,16 @@ export function OtherDevices({ devices, refreshDeviceList, showVerification }: O
                   outlined
                   onClick={handleDashboardOIDC}
                 >
-                  <Text size="B300">Open</Text>
+                  <Text size="B300">打开</Text>
                 </Button>
               }
             />
           </SequenceCard>
+        )}
+        {accountManagementError && (
+          <Text size="T200" style={{ color: color.Critical.Main }}>
+            <b>{accountManagementError}</b>
+          </Text>
         )}
         {devices
           .sort((d1, d2) => {
@@ -198,20 +211,18 @@ export function OtherDevices({ devices, refreshDeviceList, showVerification }: O
             <Box grow="Yes" direction="Column">
               {deleteError ? (
                 <Text size="T200">
-                  <b>Failed to logout devices! Please try again. {deleteError.message}</b>
+                  <b>设备退出失败，请重试。{deleteError.message}</b>
                 </Text>
               ) : (
                 <Text size="T200">
-                  <b>Logout from selected devices. ({deleted.size} selected)</b>
+                  <b>退出所选设备（已选择 {deleted.size} 个）</b>
                 </Text>
               )}
               {authData && (
                 <ActionUIAFlowsLoader
                   authData={authData}
                   unsupported={() => (
-                    <Text size="T200">
-                      Authentication steps to perform this action are not supported by client.
-                    </Text>
+                    <Text size="T200">客户端暂不支持完成此操作所需的身份验证步骤。</Text>
                   )}
                 >
                   {(ongoingFlow) => (
@@ -234,7 +245,7 @@ export function OtherDevices({ devices, refreshDeviceList, showVerification }: O
                 disabled={deleting}
                 onClick={handleCancelDelete}
               >
-                <Text size="B300">Cancel</Text>
+                <Text size="B300">取消</Text>
               </Button>
               <Button
                 size="300"
@@ -244,7 +255,7 @@ export function OtherDevices({ devices, refreshDeviceList, showVerification }: O
                 before={deleting && <Spinner variant="Critical" fill="Solid" size="100" />}
                 onClick={() => deleteDevices()}
               >
-                <Text size="B300">Logout</Text>
+                <Text size="B300">退出登录</Text>
               </Button>
             </Box>
           </Box>

@@ -20,7 +20,7 @@ function ExportKeys() {
     useCallback(
       async (password) => {
         const crypto = mx.getCrypto();
-        if (!crypto) throw new Error('Unexpected Error! Crypto module not found!');
+        if (!crypto) throw new Error('加密模块不可用。');
         const keysJSON = await crypto.exportRoomKeysAsJson();
 
         const encKeys = await encryptMegolmKeyFile(keysJSON, password);
@@ -66,7 +66,7 @@ function ExportKeys() {
             {(match, doMatch, passRef, confPassRef) => (
               <>
                 <Box grow="Yes" direction="Column" gap="100">
-                  <Text size="L400">New Password</Text>
+                  <Text size="L400">新密码</Text>
                   <PasswordInput
                     ref={passRef}
                     name="passwordInput"
@@ -80,7 +80,7 @@ function ExportKeys() {
                   />
                 </Box>
                 <Box grow="Yes" direction="Column" gap="100">
-                  <Text size="L400">Confirm Password</Text>
+                  <Text size="L400">确认密码</Text>
                   <PasswordInput
                     ref={confPassRef}
                     style={{ color: match ? undefined : color.Critical.Main }}
@@ -107,7 +107,7 @@ function ExportKeys() {
             before={exporting ? <Spinner size="200" variant="Secondary" fill="Soft" /> : undefined}
           >
             <Text as="span" size="B400">
-              Export
+              导出
             </Text>
           </Button>
         </Box>
@@ -127,8 +127,8 @@ function ExportKeysTile() {
   return (
     <>
       <SettingTile
-        title="Export Messages Data"
-        description="Save password protected copy of encryption data on your device to decrypt messages later."
+        title="导出消息密钥"
+        description="将加密消息密钥导出为受密码保护的本地文件，以便日后恢复消息。"
         after={
           <Box>
             <Button
@@ -144,7 +144,7 @@ function ExportKeysTile() {
               }
             >
               <Text as="span" size="B300" truncate>
-                {expand ? 'Collapse' : 'Expand'}
+                {expand ? '收起' : '展开'}
               </Text>
             </Button>
           </Box>
@@ -167,7 +167,7 @@ function ImportKeys({ file, onDone }: ImportKeysProps) {
     useCallback(
       async (password) => {
         const crypto = mx.getCrypto();
-        if (!crypto) throw new Error('Unexpected Error! Crypto module not found!');
+        if (!crypto) throw new Error('加密模块不可用。');
 
         const arrayBuffer = await file.arrayBuffer();
         const keys = await decryptMegolmKeyFile(arrayBuffer, password);
@@ -209,7 +209,7 @@ function ImportKeys({ file, onDone }: ImportKeysProps) {
       <Box as="form" onSubmit={handleSubmit} direction="Column" gap="100">
         <Box gap="200" alignItems="End">
           <Box grow="Yes" direction="Column" gap="100">
-            <Text size="L400">Password</Text>
+            <Text size="L400">密码</Text>
             <PasswordInput
               name="passwordInput"
               size="400"
@@ -231,7 +231,7 @@ function ImportKeys({ file, onDone }: ImportKeysProps) {
             before={decrypting ? <Spinner size="200" variant="Secondary" fill="Soft" /> : undefined}
           >
             <Text as="span" size="B400">
-              Decrypt
+              解密并导入
             </Text>
           </Button>
         </Box>
@@ -256,8 +256,8 @@ function ImportKeysTile() {
   return (
     <>
       <SettingTile
-        title="Import Messages Data"
-        description="Load password protected copy of encryption data from device to decrypt your messages."
+        title="导入消息密钥"
+        description="从受密码保护的本地备份文件导入密钥，以恢复加密消息。"
         after={
           <Box>
             {file ? (
@@ -288,7 +288,7 @@ function ImportKeysTile() {
                 before={<Icon size="100" src={Icons.ArrowRight} />}
               >
                 <Text as="span" size="B300">
-                  Import
+                  选择文件
                 </Text>
               </Button>
             )}
@@ -303,7 +303,7 @@ function ImportKeysTile() {
 export function LocalBackup() {
   return (
     <Box direction="Column" gap="100">
-      <Text size="L400">Local Backup</Text>
+      <Text size="L400">本地备份</Text>
       <SequenceCard
         className={SequenceCardStyle}
         variant="SurfaceVariant"

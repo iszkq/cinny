@@ -35,6 +35,7 @@ import { stopPropagation } from '../../../utils/keyboard';
 import { useAuthMetadata } from '../../../hooks/useAuthMetadata';
 import { withSearchParam } from '../../../pages/pathUtils';
 import { useAccountManagementActions } from '../../../hooks/useAccountManagement';
+import { openExternalUrl } from '../../../utils/desktop';
 
 type VerificationStatusBadgeProps = {
   verificationStatus: VerificationStatus;
@@ -53,7 +54,7 @@ export function VerificationStatusBadge({
   if (verificationStatus === VerificationStatus.Unverified) {
     return (
       <Badge variant="Critical" fill="Solid" size="500">
-        <Text size="L400">Unverified</Text>
+        <Text size="L400">未验证</Text>
       </Badge>
     );
   }
@@ -61,14 +62,14 @@ export function VerificationStatusBadge({
   if (otherUnverifiedCount > 0) {
     return (
       <Badge variant="Warning" fill="Solid" size="500">
-        <Text size="L400">{otherUnverifiedCount} Unverified</Text>
+        <Text size="L400">{otherUnverifiedCount} 个未验证</Text>
       </Badge>
     );
   }
 
   return (
     <Badge variant="Success" fill="Solid" size="500">
-      <Text size="L400">Verified</Text>
+      <Text size="L400">已验证</Text>
     </Badge>
   );
 }
@@ -76,21 +77,21 @@ export function VerificationStatusBadge({
 function LearnStartVerificationFromOtherDevice() {
   return (
     <Box direction="Column">
-      <Text size="T200">Steps to verify from other device.</Text>
+      <Text size="T200">从其他设备发起验证的步骤：</Text>
       <Text as="div" size="T200">
         <ul style={{ margin: `${config.space.S100} 0` }}>
-          <li>Open your other verified device.</li>
+          <li>打开另一台已经验证的设备。</li>
           <li>
-            Open <i>Settings</i>.
+            打开<i>设置</i>。
           </li>
           <li>
-            Find this device in <i>Devices/Sessions</i> section.
+            在<i>设备/会话</i>中找到当前设备。
           </li>
-          <li>Initiate verification.</li>
+          <li>发起设备验证。</li>
         </ul>
       </Text>
       <Text size="T200">
-        If you do not have any verified device press the <i>&quot;Verify Manually&quot;</i> button.
+        如果没有其他已验证设备，请点击<i>“手动验证”</i>。
       </Text>
     </Box>
   );
@@ -113,12 +114,12 @@ export function VerifyCurrentDeviceTile({
     <>
       <InfoCard
         variant="Critical"
-        title="Unverified"
+        title="未验证"
         description={
           <>
-            Start verification from other device or verify manually.{' '}
+            请从其他设备发起验证，或使用恢复密钥手动验证。{' '}
             <Text as="a" size="T200" onClick={() => setLearnMore(!learnMore)}>
-              <b>{learnMore ? 'View Less' : 'Learn More'}</b>
+              <b>{learnMore ? '收起说明' : '了解更多'}</b>
             </Text>
           </>
         }
@@ -133,7 +134,7 @@ export function VerifyCurrentDeviceTile({
               onClick={() => setManualVerification(true)}
             >
               <Text as="span" size="B300">
-                Verify Manually
+                手动验证
               </Text>
             </Button>
           )
@@ -190,8 +191,8 @@ export function VerifyOtherDeviceTile({ crypto, deviceId }: VerifyOtherDeviceTil
   return (
     <InfoCard
       variant="Warning"
-      title="Unverified"
-      description="Verify device identity and grant access to encrypted messages."
+      title="未验证"
+      description="验证设备身份，并允许该设备访问加密消息。"
       after={
         <Button
           size="300"
@@ -202,7 +203,7 @@ export function VerifyOtherDeviceTile({ crypto, deviceId }: VerifyOtherDeviceTil
           disabled={requesting}
         >
           <Text as="span" size="B300">
-            Verify
+            验证
           </Text>
         </Button>
       }
@@ -230,7 +231,7 @@ export function EnableVerification({ visible }: EnableVerificationProps) {
       {visible && (
         <Button size="300" radii="300" onClick={() => setOpen(true)}>
           <Text as="span" size="B300">
-            Enable
+            启用
           </Text>
         </Button>
       )}
@@ -273,12 +274,11 @@ export function DeviceVerificationOptions() {
 
     if (authMetadata) {
       const authUrl = authMetadata.account_management_uri ?? authMetadata.issuer;
-      window.open(
+      void openExternalUrl(
         withSearchParam(authUrl, {
           action: accountManagementActions.crossSigningReset,
-        }),
-        '_blank'
-      );
+        })
+      ).catch(() => undefined);
       return;
     }
 
@@ -324,7 +324,7 @@ export function DeviceVerificationOptions() {
                   fill="None"
                 >
                   <Text as="span" size="T300" truncate>
-                    Reset
+                    重置
                   </Text>
                 </MenuItem>
               </Box>

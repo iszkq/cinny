@@ -49,11 +49,11 @@ function DeviceActiveTime({ ts }: { ts: number }) {
   return (
     <Text className={BreakWord} size="T200">
       <Text size="Inherit" as="span" priority="300">
-        {'Last activity: '}
+        {'最近活动：'}
       </Text>
       <>
-        {today(ts) && 'Today'}
-        {yesterday(ts) && 'Yesterday'}
+        {today(ts) && '今天'}
+        {yesterday(ts) && '昨天'}
         {!today(ts) && !yesterday(ts) && timeDayMonYear(ts, dateFormatString)}{' '}
         {timeHourMinute(ts, hour24Clock)}
       </>
@@ -66,12 +66,12 @@ function DeviceDetails({ device }: { device: IMyDevice }) {
     <>
       {typeof device.device_id === 'string' && (
         <Text className={BreakWord} size="T200" priority="300">
-          Device ID: <i>{device.device_id}</i>
+          设备 ID：<i>{device.device_id}</i>
         </Text>
       )}
       {typeof device.last_seen_ip === 'string' && (
         <Text className={BreakWord} size="T200" priority="300">
-          IP Address: <i>{device.last_seen_ip}</i>
+          IP 地址：<i>{device.last_seen_ip}</i>
         </Text>
       )}
     </>
@@ -97,8 +97,8 @@ export function DeviceKeyDetails({ crypto }: DeviceKeyDetailsProps) {
 
   return (
     <Text className={BreakWord} size="T200" priority="300">
-      Device Key:{' '}
-      <i>{keysState.status === AsyncStatus.Success ? keysState.data.ed25519 : 'loading...'}</i>
+      设备密钥：
+      <i>{keysState.status === AsyncStatus.Success ? keysState.data.ed25519 : '加载中……'}</i>
     </Text>
   );
 }
@@ -145,7 +145,7 @@ function DeviceRename({ device, onCancel, onRename, refreshDeviceList }: DeviceR
 
   return (
     <Box as="form" onSubmit={handleSubmit} direction="Column" gap="100">
-      <Text size="L400">Device Name</Text>
+      <Text size="L400">设备名称</Text>
       <Box gap="200">
         <Box grow="Yes" direction="Column">
           <Input
@@ -169,7 +169,7 @@ function DeviceRename({ device, onCancel, onRename, refreshDeviceList }: DeviceR
             disabled={renaming}
             before={renaming && <Spinner size="100" variant="Success" fill="Solid" />}
           >
-            <Text size="B300">Save</Text>
+            <Text size="B300">保存</Text>
           </Button>
           <Button
             type="button"
@@ -180,7 +180,7 @@ function DeviceRename({ device, onCancel, onRename, refreshDeviceList }: DeviceR
             onClick={onCancel}
             disabled={renaming}
           >
-            <Text size="B300">Cancel</Text>
+            <Text size="B300">取消</Text>
           </Button>
         </Box>
       </Box>
@@ -189,7 +189,7 @@ function DeviceRename({ device, onCancel, onRename, refreshDeviceList }: DeviceR
           {renameState.error.message}
         </Text>
       ) : (
-        <Text size="T200">Device names are visible to public.</Text>
+        <Text size="T200">设备名称对其他人可见。</Text>
       )}
     </Box>
   );
@@ -203,7 +203,7 @@ export function DeviceLogoutBtn() {
   return (
     <>
       <Chip variant="Secondary" fill="Soft" radii="Pill" onClick={() => setPrompt(true)}>
-        <Text size="B300">Logout</Text>
+        <Text size="B300">退出登录</Text>
       </Chip>
       {prompt && (
         <Overlay open backdrop={<OverlayBackdrop />}>
@@ -244,10 +244,12 @@ export function DeviceDeleteBtn({
       onClick={() => onDeleteToggle(deviceId)}
       disabled={disabled}
     >
-      <Text size="B300">Undo</Text>
+      <Text size="B300">撤销</Text>
     </Chip>
   ) : (
     <Chip
+      aria-label="删除此设备"
+      title="删除此设备"
       variant="Secondary"
       fill="None"
       radii="Pill"
@@ -307,7 +309,7 @@ export function DeviceTile({
                   onClick={() => setEdit(true)}
                   disabled={disabled}
                 >
-                  <Text size="B300">Edit</Text>
+                  <Text size="B300">编辑</Text>
                 </Chip>
               )}
             </Box>

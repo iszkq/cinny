@@ -45,6 +45,7 @@ test('re-login reuses the saved Matrix device identity for the same homeserver',
 
 test('device settings use the upstream Cinny device and verification flow', async () => {
   const devicesSource = await readSource('src/app/features/settings/devices/Devices.tsx');
+  const otherDevicesSource = await readSource('src/app/features/settings/devices/OtherDevices.tsx');
   const verificationSource = await readSource('src/app/features/settings/devices/Verification.tsx');
   const setupSource = await readSource('src/app/components/DeviceVerificationSetup.tsx');
   const manualSource = await readSource('src/app/components/ManualVerification.tsx');
@@ -54,6 +55,9 @@ test('device settings use the upstream Cinny device and verification flow', asyn
   assert.match(devicesSource, /<VerificationStatusBadge/);
   assert.match(devicesSource, /<VerifyCurrentDeviceTile/);
   assert.match(devicesSource, /<LocalBackup \/>/);
+  assert.match(otherDevicesSource, /openExternalUrl\(/);
+  assert.match(otherDevicesSource, /accountManagementActions\.sessionEnd/);
+  assert.doesNotMatch(otherDevicesSource, /window\.open\(/);
   assert.match(
     verificationSource,
     /crypto\.requestDeviceVerification\(mx\.getSafeUserId\(\), deviceId\)/

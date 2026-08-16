@@ -43,7 +43,7 @@ export function PasswordStage({
         size="500"
       >
         <Box grow="Yes">
-          <Text size="H4">Account Password</Text>
+          <Text size="H4">账户密码</Text>
         </Box>
         <IconButton size="300" onClick={onCancel} radii="300">
           <Icon src={Icons.Cross} />
@@ -57,12 +57,9 @@ export function PasswordStage({
         gap="400"
       >
         <Box direction="Column" gap="400">
-          <Text size="T200">
-            To perform this action you need to authenticate yourself by entering you account
-            password.
-          </Text>
+          <Text size="T200">请输入账户密码以验证身份并继续此操作。</Text>
           <Box direction="Column" gap="100">
-            <Text size="L400">Password</Text>
+            <Text size="L400">密码</Text>
             <PasswordInput size="400" name="passwordInput" outlined autoFocus required />
             {errorCode && (
               <Box alignItems="Center" gap="100" style={{ color: color.Critical.Main }}>
@@ -70,7 +67,7 @@ export function PasswordStage({
                 <Text size="T200">
                   <b>
                     {errorCode === ErrorCode.M_FORBIDDEN
-                      ? 'Invalid Password!'
+                      ? '密码不正确！'
                       : `${errorCode}: ${error}`}
                   </b>
                 </Text>
@@ -80,7 +77,7 @@ export function PasswordStage({
         </Box>
         <Button variant="Primary" type="submit">
           <Text as="span" size="B400">
-            Continue
+            继续
           </Text>
         </Button>
       </Box>

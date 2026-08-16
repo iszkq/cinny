@@ -41,12 +41,12 @@ export function UIAFlowOverlay({
             gap="200"
           >
             <Chip as="div" radii="Pill" outlined>
-              <Text as="span" size="T300">{`Step ${currentStep}/${stepCount}`}</Text>
+              <Text as="span" size="T300">{`第 ${currentStep}/${stepCount} 步`}</Text>
             </Chip>
             <TooltipProvider
               tooltip={
                 <Tooltip variant="Critical">
-                  <Text>Exit</Text>
+                  <Text>退出</Text>
                 </Tooltip>
               }
               position="Top"
