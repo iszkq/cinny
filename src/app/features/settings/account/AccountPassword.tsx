@@ -1,5 +1,5 @@
 import React, { FormEventHandler, useCallback, useMemo, useState } from 'react';
-import { AuthDict, IAuthData, MatrixError } from 'matrix-js-sdk';
+import { AuthDict, IAuthData, MatrixError, Method, MatrixClient } from 'matrix-js-sdk';
 import {
   Box,
   Button,
@@ -32,6 +32,30 @@ type ChangePasswordDialogProps = {
   onSuccess: () => void;
 };
 
+const setPasswordWithLegacyFallback = async (
+  mx: MatrixClient,
+  authDict: AuthDict,
+  newPassword: string,
+  logoutDevices: boolean
+) => {
+  const body = {
+    auth: authDict,
+    new_password: newPassword,
+    logout_devices: logoutDevices,
+  };
+
+  try {
+    return await mx.setPassword(authDict, newPassword, logoutDevices);
+  } catch (errorValue) {
+    if (!(errorValue instanceof MatrixError) || errorValue.httpStatus !== 404) throw errorValue;
+
+    // Some older homeservers expose this endpoint under the legacy r0 prefix only.
+    return mx.http.authedRequest(Method.Post, '/account/password', undefined, body, {
+      prefix: '/_matrix/client/r0',
+    });
+  }
+};
+
 function ChangePasswordDialog({ requestClose, onSuccess }: ChangePasswordDialogProps) {
   const mx = useMatrixClient();
   const [newPassword, setNewPassword] = useState('');
@@ -52,7 +76,7 @@ function ChangePasswordDialog({ requestClose, onSuccess }: ChangePasswordDialogP
       setError(undefined);
 
       try {
-        await mx.setPassword(authDict, newPassword, logoutDevices);
+        await setPasswordWithLegacyFallback(mx, authDict, newPassword, logoutDevices);
         setAuthData(undefined);
         onSuccess();
       } catch (errorValue) {
