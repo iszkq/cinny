@@ -22,6 +22,8 @@ test('account password change uses Matrix capability negotiation and UIA', async
 
   assert.match(accountSource, /<AccountPassword \/>/);
   assert.match(passwordSource, /capabilities\['m\.change_password'\]/);
+  assert.match(passwordSource, /服务器能力信息显示不支持修改密码，但仍可尝试/);
+  assert.doesNotMatch(passwordSource, /disabled=\{passwordChangeCapabilityDisabled\}/);
   assert.match(passwordSource, /mx\.setPassword\(authDict, newPassword, logoutDevices\)/);
   assert.match(passwordSource, /errorValue\.httpStatus === 401/);
   assert.match(passwordSource, /pickUIAFlow\(nextAuthData\.flows \?\? \[\]\)/);

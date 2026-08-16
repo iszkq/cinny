@@ -216,7 +216,7 @@ export function AccountPassword() {
   const capabilities = useCapabilities();
   const [changePassword, setChangePassword] = useState(false);
   const [passwordChanged, setPasswordChanged] = useState(false);
-  const passwordChangeDisabled = capabilities['m.change_password']?.enabled === false;
+  const passwordChangeCapabilityDisabled = capabilities['m.change_password']?.enabled === false;
 
   return (
     <Box direction="Column" gap="100">
@@ -230,8 +230,8 @@ export function AccountPassword() {
         <SettingTile
           title="登录密码"
           description={
-            passwordChangeDisabled
-              ? '当前服务器不允许客户端修改登录密码。'
+            passwordChangeCapabilityDisabled
+              ? '服务器能力信息显示不支持修改密码，但仍可尝试；最终以服务器实际响应为准。'
               : '修改 Matrix 账号密码。操作前需要重新验证你的身份。'
           }
           after={
@@ -246,7 +246,6 @@ export function AccountPassword() {
                 fill="Soft"
                 size="300"
                 radii="300"
-                disabled={passwordChangeDisabled}
                 onClick={() => {
                   setPasswordChanged(false);
                   setChangePassword(true);
