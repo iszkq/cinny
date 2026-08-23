@@ -32,6 +32,7 @@ import { AuthServerProvider } from '../../hooks/useAuthServer';
 import { tryDecodeURIComponent } from '../../utils/dom';
 import { createClient, validateAuthMetadata, ValidatedAuthMetadata } from 'matrix-js-sdk';
 import { AuthMetadataProvider } from '../../hooks/useAuthMetadata';
+import { consumeCryptoDeviceRecoveryNotice } from '../../state/sessions';
 
 const currentAuthPath = (pathname: string): string => {
   if (matchPath(LOGIN_PATH, pathname)) {
@@ -73,6 +74,7 @@ export function AuthLayout() {
   const { server: urlEncodedServer } = useParams();
 
   const clientConfig = useClientConfig();
+  const [cryptoDeviceRecoveryNotice] = useState(consumeCryptoDeviceRecoveryNotice);
 
   const defaultServer = clientDefaultServer(clientConfig);
   let server: string = urlEncodedServer ? tryDecodeURIComponent(urlEncodedServer) : defaultServer;
@@ -169,6 +171,11 @@ export function AuthLayout() {
           </Header>
           <Box className={css.AuthCardContent} direction="Column">
             <Box direction="Column" gap="100">
+              {cryptoDeviceRecoveryNotice && (
+                <Text style={{ color: color.Critical.Main }} size="T300">
+                  检测到本机登录会话的加密设备身份已在服务器失效。星火已安全停用旧会话，请重新登录并验证新设备；本地设置和缓存未被清除。
+                </Text>
+              )}
               <Text as="label" size="L400" priority="300">
                 家服务器
               </Text>

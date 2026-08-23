@@ -24,6 +24,7 @@ export type SessionStoreName = {
 };
 
 const FALLBACK_SOFT_LOGOUT_KEY = 'cinny_soft_logout';
+const CRYPTO_DEVICE_RECOVERY_NOTICE_KEY = 'cinny_crypto_device_recovery_notice';
 
 /**
  * Migration code for old session
@@ -63,6 +64,14 @@ export const clearFallbackSessionSoftLogout = () => {
 };
 export const isFallbackSessionSoftLoggedOut = (): boolean =>
   localStorage.getItem(FALLBACK_SOFT_LOGOUT_KEY) === 'true';
+export const markCryptoDeviceRecoveryNotice = () => {
+  sessionStorage.setItem(CRYPTO_DEVICE_RECOVERY_NOTICE_KEY, 'true');
+};
+export const consumeCryptoDeviceRecoveryNotice = (): boolean => {
+  const pending = sessionStorage.getItem(CRYPTO_DEVICE_RECOVERY_NOTICE_KEY) === 'true';
+  sessionStorage.removeItem(CRYPTO_DEVICE_RECOVERY_NOTICE_KEY);
+  return pending;
+};
 export const getFallbackSessionIdentity = (): SessionIdentity | undefined => {
   const baseUrl = localStorage.getItem('cinny_hs_base_url');
   const userId = localStorage.getItem('cinny_user_id');

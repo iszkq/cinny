@@ -30,6 +30,7 @@ import {
   clearExpiredSessionAfterLogout,
   clearLoginData,
   initClient,
+  InvalidCryptoDeviceError,
   logoutClient,
   MissingCryptoStoreError,
   persistClientStore,
@@ -267,11 +268,12 @@ export function ClientRoot({ children }: ClientRootProps) {
   useEffect(() => {
     if (
       loadState.status === AsyncStatus.Error &&
-      loadState.error instanceof MissingCryptoStoreError
+      (loadState.error instanceof MissingCryptoStoreError ||
+        loadState.error instanceof InvalidCryptoDeviceError)
     ) {
       // initClient already removed only the access token. Reload into the
-      // sign-in route while retaining the old identity long enough for login
-      // to prove its crypto database is gone and request a new Matrix device.
+      // sign-in route while retaining settings and the old identity metadata;
+      // normal login will request a fresh Matrix device when required.
       window.location.reload();
     }
   }, [loadState]);

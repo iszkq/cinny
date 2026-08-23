@@ -65,6 +65,40 @@ test('re-login only reuses a saved Matrix device when its crypto identity still 
   assert.match(rootSource, /loadState\.error instanceof MissingCryptoStoreError/);
 });
 
+test('an updated client replaces a retained session whose server crypto identity disappeared', async () => {
+  const clientSource = await readSource('src/client/initMatrix.ts');
+  const rootSource = await readSource('src/app/pages/client/ClientRoot.tsx');
+  const authSource = await readSource('src/app/pages/auth/AuthLayout.tsx');
+  const sessionSource = await readSource('src/app/state/sessions.ts');
+
+  assert.match(clientSource, /inspectCurrentDeviceIdentity/);
+  assert.match(
+    clientSource,
+    /Promise\.all\(\[[\s\S]*mx\.getDevices\(\),[\s\S]*mx\.downloadKeysForUsers/
+  );
+  assert.match(clientSource, /serverCurve25519 === ownKeys\.curve25519/);
+  assert.match(clientSource, /serverEd25519 === ownKeys\.ed25519/);
+  assert.match(clientSource, /DEVICE_IDENTITY_CONFIRM_DELAY_MS/);
+  assert.match(clientSource, /if \(confirmedStatus !== 'invalid'\) return/);
+  assert.match(clientSource, /if \(!newlyIssuedDevice\) await validateExistingCryptoDevice/);
+  assert.match(
+    clientSource,
+    /await Promise\.allSettled\(\[clearAndroidClientSnapshot\(mx\), mx\.store\.deleteAllData\(\)\]\)/
+  );
+  assert.match(clientSource, /removeFallbackAccessToken\(\)/);
+  assert.doesNotMatch(
+    clientSource.slice(
+      clientSource.indexOf('const invalidateCurrentCryptoDevice'),
+      clientSource.indexOf('const validateExistingCryptoDevice')
+    ),
+    /localStorage\.clear|clearDesktopMediaCache|clearClientStores/
+  );
+  assert.match(rootSource, /loadState\.error instanceof InvalidCryptoDeviceError/);
+  assert.match(sessionSource, /markCryptoDeviceRecoveryNotice/);
+  assert.match(authSource, /consumeCryptoDeviceRecoveryNotice/);
+  assert.match(authSource, /加密设备身份已在服务器失效/);
+});
+
 test('device settings use the upstream Cinny device and verification flow', async () => {
   const devicesSource = await readSource('src/app/features/settings/devices/Devices.tsx');
   const otherDevicesSource = await readSource('src/app/features/settings/devices/OtherDevices.tsx');

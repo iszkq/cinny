@@ -23,6 +23,7 @@ import { isDesktopUpdaterSupported } from '../app/utils/desktopUpdater';
 import { pushSessionToSW } from '../sw-session';
 import {
   clearFallbackSessionSoftLogout,
+  markCryptoDeviceRecoveryNotice,
   markFallbackSessionSoftLoggedOut,
   removeFallbackAccessToken,
 } from '../app/state/sessions';
@@ -62,6 +63,10 @@ const androidStoreAccountKeys = new WeakMap<MatrixClient, string>();
 const androidNativeSnapshotLastPersistedAt = new WeakMap<MatrixClient, number>();
 const ANDROID_NATIVE_SNAPSHOT_INTERVAL_MS = 10_000;
 const androidNativeSnapshotDirty = new WeakSet<MatrixClient>();
+const DEVICE_IDENTITY_QUERY_TIMEOUT_MS = 8_000;
+const DEVICE_IDENTITY_CONFIRM_DELAY_MS = 1_000;
+
+type DeviceIdentityStatus = 'valid' | 'invalid' | 'inconclusive';
 
 const isRustCryptoAccountMismatch = (error: unknown): boolean => {
   const message = error instanceof Error ? error.message : String(error);
@@ -79,7 +84,106 @@ export class MissingCryptoStoreError extends Error {
   }
 }
 
-const initRustCryptoForSession = async (mx: MatrixClient, session: Session): Promise<string> => {
+export class InvalidCryptoDeviceError extends Error {
+  constructor() {
+    super('当前设备的服务器加密身份已失效。请重新登录以安全创建新的加密设备。');
+    this.name = 'InvalidCryptoDeviceError';
+  }
+}
+
+const settleWithin = async <T>(task: Promise<T>, timeoutMs: number): Promise<T | undefined> => {
+  let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      task,
+      new Promise<undefined>((resolve) => {
+        timer = globalThis.setTimeout(() => resolve(undefined), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) globalThis.clearTimeout(timer);
+  }
+};
+
+const inspectCurrentDeviceIdentity = async (
+  mx: MatrixClient,
+  session: Session
+): Promise<DeviceIdentityStatus> => {
+  const crypto = mx.getCrypto();
+  if (!crypto) return 'inconclusive';
+
+  try {
+    const result = await settleWithin(
+      Promise.all([
+        mx.getDevices(),
+        mx.downloadKeysForUsers([session.userId]),
+        crypto.getOwnDeviceKeys(),
+      ]),
+      DEVICE_IDENTITY_QUERY_TIMEOUT_MS
+    );
+    if (!result) return 'inconclusive';
+
+    const [serverDevices, serverKeys, ownKeys] = result;
+    // A homeserver can return a successful /keys/query envelope containing a
+    // domain failure. Treat that as a transient query problem, never as proof
+    // that the local device should be replaced.
+    if (serverKeys.failures && Object.keys(serverKeys.failures).length > 0) {
+      return 'inconclusive';
+    }
+
+    const serverSessionFound = serverDevices.devices.some(
+      (device) => device.device_id === session.deviceId
+    );
+    const serverDevice = serverKeys.device_keys?.[session.userId]?.[session.deviceId];
+    if (!serverSessionFound || !serverDevice) return 'invalid';
+
+    const serverCurve25519 = serverDevice.keys?.[`curve25519:${session.deviceId}`];
+    const serverEd25519 = serverDevice.keys?.[`ed25519:${session.deviceId}`];
+    return serverCurve25519 === ownKeys.curve25519 && serverEd25519 === ownKeys.ed25519
+      ? 'valid'
+      : 'invalid';
+  } catch {
+    // Offline startup, homeserver errors and timeouts are not identity damage.
+    return 'inconclusive';
+  }
+};
+
+const invalidateCurrentCryptoDevice = async (mx: MatrixClient): Promise<void> => {
+  mx.stopClient();
+  await settleWithin(
+    mx.logout().catch(() => undefined),
+    DEVICE_IDENTITY_QUERY_TIMEOUT_MS
+  );
+  await Promise.allSettled([clearAndroidClientSnapshot(mx), mx.store.deleteAllData()]);
+  pushSessionToSW();
+  removeFallbackAccessToken();
+  clearFallbackSessionSoftLogout();
+  markCryptoDeviceRecoveryNotice();
+};
+
+const validateExistingCryptoDevice = async (mx: MatrixClient, session: Session): Promise<void> => {
+  const initialStatus = await inspectCurrentDeviceIdentity(mx, session);
+  if (initialStatus !== 'invalid') return;
+
+  await new Promise<void>((resolve) => {
+    globalThis.setTimeout(resolve, DEVICE_IDENTITY_CONFIRM_DELAY_MS);
+  });
+  const confirmedStatus = await inspectCurrentDeviceIdentity(mx, session);
+  if (confirmedStatus !== 'invalid') return;
+
+  await invalidateCurrentCryptoDevice(mx);
+  throw new InvalidCryptoDeviceError();
+};
+
+type RustCryptoInitialization = {
+  prefix: string;
+  newlyIssuedDevice: boolean;
+};
+
+const initRustCryptoForSession = async (
+  mx: MatrixClient,
+  session: Session
+): Promise<RustCryptoInitialization> => {
   const scopedPrefix = getRustCryptoDatabasePrefix(session);
   const savedPrefix = getSavedRustCryptoDatabasePrefix(session);
   // Enumerate IndexedDB only once. Some WebViews make this surprisingly
@@ -142,7 +246,7 @@ const initRustCryptoForSession = async (mx: MatrixClient, session: Session): Pro
       await mx.initRustCrypto({ cryptoDatabasePrefix: prefix });
       saveRustCryptoDatabasePrefix(session, prefix);
       clearNewRustCryptoStoreAllowance(session);
-      return prefix;
+      return { prefix, newlyIssuedDevice: storeCreationAllowed };
     } catch (error) {
       if (prefix !== LEGACY_RUST_CRYPTO_DATABASE_PREFIX || !isRustCryptoAccountMismatch(error)) {
         throw error;
@@ -297,8 +401,16 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
       matrixLogger.error('Unable to inspect Android IndexedDB sync store.', error);
     }
   }
-  const cryptoDatabasePrefix = await initRustCryptoForSession(mx, session);
+  const { prefix: cryptoDatabasePrefix, newlyIssuedDevice } = await initRustCryptoForSession(
+    mx,
+    session
+  );
   rustCryptoDatabasePrefixes.set(mx, cryptoDatabasePrefix);
+  // A normal app update preserves the access token and IndexedDB. Verify that
+  // the retained server session still owns the same E2EE identity before sync
+  // can expose undecryptable events. A freshly-issued login is skipped once so
+  // Rust Crypto can perform its first device-key upload without racing us.
+  if (!newlyIssuedDevice) await validateExistingCryptoDevice(mx, session);
   if (isAndroidApp()) {
     // Attach before startClient so a cache-prepared sync is checkpointed even
     // when React has not mounted its later UI listeners yet.
