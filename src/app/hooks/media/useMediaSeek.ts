@@ -19,8 +19,18 @@ export const useMediaSeek = (
   const seek = useCallback(
     (time: number) => {
       const targetEl = getTargetElement();
-      if (!targetEl) return;
-      targetEl.currentTime = time;
+      if (!targetEl || !Number.isFinite(time)) return;
+
+      const duration = targetEl.duration;
+      const boundedTime = Number.isFinite(duration)
+        ? Math.max(0, Math.min(time, duration))
+        : Math.max(0, time);
+      if (!Number.isFinite(boundedTime)) return;
+      try {
+        targetEl.currentTime = boundedTime;
+      } catch {
+        // Media can change source while a range gesture is in progress.
+      }
     },
     [getTargetElement]
   );

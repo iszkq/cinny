@@ -108,12 +108,22 @@ export const login = async (
     data.device_id === undefined &&
     loginMatchesSavedUser(data, savedIdentity.userId);
   const canReuseDeviceId = mayReuseDeviceId && (await hasPersistedRustCryptoStore(savedIdentity));
+  let reusedDeviceId = canReuseDeviceId;
   const loginRequest: LoginRequest = canReuseDeviceId
     ? { ...data, device_id: savedIdentity!.deviceId }
     : data;
 
-  const mx = createClient({ baseUrl: url });
-  const [err, res] = await to<LoginResponse, MatrixError>(mx.loginRequest(loginRequest));
+  let mx = createClient({ baseUrl: url });
+  let [err, res] = await to<LoginResponse, MatrixError>(mx.loginRequest(loginRequest));
+
+  // A homeserver can reject a stale/deleted device id with the same 403 used
+  // for invalid credentials. Retry once without the old device id so a valid
+  // password is not reported as incorrect after device state was reset.
+  if (err?.httpStatus === 403 && canReuseDeviceId) {
+    mx = createClient({ baseUrl: url });
+    [err, res] = await to<LoginResponse, MatrixError>(mx.loginRequest(data));
+    reusedDeviceId = false;
+  }
 
   if (err) {
     if (err.httpStatus === 400) {
@@ -135,6 +145,7 @@ export const login = async (
     if (err.httpStatus === 403) {
       throw new MatrixError({
         errcode: LoginError.Forbidden,
+        error: err.data?.error ?? err.message,
       });
     }
 
@@ -144,8 +155,8 @@ export const login = async (
   }
   return {
     baseUrl: url,
-    response: res,
-    reusedDeviceId: canReuseDeviceId,
+    response: res!,
+    reusedDeviceId,
   };
 };
 

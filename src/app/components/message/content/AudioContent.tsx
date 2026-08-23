@@ -140,8 +140,8 @@ export function AudioContent({
   const { seek } = useMediaSeek(getAudioRef);
   const { volume, mute, setMute, setVolume } = useMediaVolume(getAudioRef);
   const handlePlayTimeCallback: PlayTimeCallback = useCallback((d, ct) => {
-    setDuration(d);
-    setCurrentTime(ct);
+    if (Number.isFinite(d) && d >= 0) setDuration(d);
+    if (Number.isFinite(ct) && ct >= 0) setCurrentTime(ct);
   }, []);
   useMediaPlayTimeCallback(
     getAudioRef,
@@ -216,8 +216,11 @@ export function AudioContent({
           step={1}
           min={0}
           max={duration || 1}
-          values={[currentTime]}
-          onChange={(values) => seek(values[0])}
+          values={[Number.isFinite(currentTime) ? currentTime : 0]}
+          onChange={(values) => {
+            const nextTime = values[0];
+            if (Number.isFinite(nextTime)) seek(nextTime);
+          }}
           renderTrack={(params) => (
             <div {...params.props}>
               {params.children}

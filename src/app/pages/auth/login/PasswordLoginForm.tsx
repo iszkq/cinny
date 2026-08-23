@@ -55,6 +55,8 @@ const copy = {
     '\u5f53\u524d\u5ba2\u6237\u7aef\u5b9e\u4f8b\u4e0d\u5141\u8bb8\u4f7f\u7528\u81ea\u5b9a\u4e49\u670d\u52a1\u5668\u767b\u5f55\u3002',
   invalidServer: '\u672a\u80fd\u627e\u5230\u5bf9\u5e94\u7684 Matrix ID \u670d\u52a1\u5668\u3002',
   forbidden: '\u7528\u6237\u540d\u6216\u5bc6\u7801\u9519\u8bef\u3002',
+  deviceLimit:
+    '\u8be5\u8d26\u53f7\u5df2\u8fbe\u5230\u670d\u52a1\u5668\u5141\u8bb8\u7684\u8bbe\u5907\u6570\u91cf\u4e0a\u9650\uff0c\u8bf7\u5728\u5176\u4ed6\u8bbe\u5907\u4e2d\u79fb\u9664\u8bbe\u5907\u540e\u91cd\u8bd5\u3002',
   userDeactivated: '\u8be5\u8d26\u6237\u5df2\u88ab\u505c\u7528\u3002',
   invalidRequest: '\u767b\u5f55\u5931\u8d25\uff0c\u8bf7\u6c42\u4e2d\u7684\u90e8\u5206\u6570\u636e\u65e0\u6548\u3002',
   rateLimited: '\u767b\u5f55\u5931\u8d25\uff0c\u5f53\u524d\u8bf7\u6c42\u8fc7\u4e8e\u9891\u7e41\uff0c\u8bf7\u7a0d\u540e\u518d\u8bd5\u3002',
@@ -66,6 +68,23 @@ const copy = {
     '\u8fd9\u4e2a\u8d26\u6237\u5df2\u542f\u7528 PIN \u4fdd\u62a4\uff0c\u8bf7\u5148\u8f93\u5165\u5df2\u7ecf\u8bbe\u7f6e\u7684 PIN \u7801\u540e\u518d\u8fdb\u5165\u3002',
   continueLogin: '\u7ee7\u7eed\u767b\u5f55',
 } as const;
+
+const getForbiddenLoginMessage = (error: MatrixError): string => {
+  const detail = error.data?.error?.trim();
+  if (!detail) return copy.forbidden;
+
+  if (/\bdevice(?:s)?\b|\bdevice.?limit\b|\bmaximum number\b|\u8bbe\u5907|\u4e0a\u9650/i.test(detail)) {
+    return copy.deviceLimit;
+  }
+
+  // Keep the server's reason visible for non-standard 403 responses. This
+  // avoids incorrectly calling rate limits, account policies, or gateways a
+  // bad password.
+  if (!/^invalid username\/password$/i.test(detail)) {
+    return `\u767b\u5f55\u88ab\u670d\u52a1\u5668\u62d2\u7edd\uff1a${detail}`;
+  }
+  return copy.forbidden;
+};
 
 function UsernameHint({ server }: { server: string }) {
   const [anchor, setAnchor] = useState<RectCords>();
@@ -334,7 +353,7 @@ export function PasswordLoginForm({ defaultUsername, defaultEmail }: PasswordLog
           {loginState.status === AsyncStatus.Error && (
             <>
               {loginState.error.errcode === LoginError.Forbidden && (
-                <FieldError message={copy.forbidden} />
+                <FieldError message={getForbiddenLoginMessage(loginState.error)} />
               )}
               {loginState.error.errcode === LoginError.UserDeactivated && (
                 <FieldError message={copy.userDeactivated} />

@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { Box, Button, color, config, Menu, Spinner, Text } from 'folds';
+import { Box, Button, Chip, color, config, Input, Menu, Spinner, Text } from 'folds';
 import { AuthDict, IMyDevice, MatrixError } from 'matrix-js-sdk';
 import { SequenceCard } from '../../../components/sequence-card';
 import { SequenceCardStyle } from '../styles.css';
@@ -22,6 +22,21 @@ type OtherDevicesProps = {
   refreshDeviceList: () => Promise<void>;
   showVerification?: boolean;
 };
+
+const DEVICE_CLEANUP_PRESETS = [7, 30] as const;
+
+export const getInactiveDeviceIds = (
+  devices: IMyDevice[],
+  inactiveDays: number,
+  now = Date.now()
+): string[] => {
+  if (!Number.isFinite(inactiveDays) || inactiveDays <= 0) return [];
+  const cutoff = now - inactiveDays * 24 * 60 * 60 * 1000;
+  return devices
+    .filter((device) => typeof device.last_seen_ts === 'number' && device.last_seen_ts < cutoff)
+    .map((device) => device.device_id);
+};
+
 export function OtherDevices({ devices, refreshDeviceList, showVerification }: OtherDevicesProps) {
   const mx = useMatrixClient();
   const crypto = mx.getCrypto();
@@ -30,6 +45,7 @@ export function OtherDevices({ devices, refreshDeviceList, showVerification }: O
   const [accountManagementError, setAccountManagementError] = useState<string>();
 
   const [deleted, setDeleted] = useState<Set<string>>(new Set());
+  const [inactiveDays, setInactiveDays] = useState('30');
 
   const handleDashboardOIDC = useCallback(() => {
     const authUrl = authMetadata?.account_management_uri ?? authMetadata?.issuer;
@@ -77,6 +93,14 @@ export function OtherDevices({ devices, refreshDeviceList, showVerification }: O
     });
   }, []);
 
+  const selectInactiveDevices = useCallback(
+    (days = Number(inactiveDays)) => {
+      const ids = getInactiveDeviceIds(devices, days);
+      setDeleted(new Set(ids));
+    },
+    [devices, inactiveDays]
+  );
+
   const [deleteState, setDeleteState] = useState<AsyncState<void, MatrixError>>({
     status: AsyncStatus.Idle,
   });
@@ -99,6 +123,13 @@ export function OtherDevices({ devices, refreshDeviceList, showVerification }: O
       [refreshDeviceList]
     )
   );
+  const handleSelectedDeviceAction = useCallback(() => {
+    if (authMetadata) {
+      handleDashboardOIDC();
+      return;
+    }
+    deleteDevices();
+  }, [authMetadata, handleDashboardOIDC, deleteDevices]);
   const [authData, deleteError] = useUIAMatrixError(
     deleteState.status === AsyncStatus.Error ? deleteState.error : undefined
   );
@@ -143,7 +174,63 @@ export function OtherDevices({ devices, refreshDeviceList, showVerification }: O
             <b>{accountManagementError}</b>
           </Text>
         )}
+        <SequenceCard
+          className={SequenceCardStyle}
+          variant="SurfaceVariant"
+          direction="Column"
+          gap="300"
+        >
+          <SettingTile
+            title="清理长期未使用的设备"
+            description={
+              authMetadata
+                ? '当前服务器要求在账户管理页面完成设备删除。这里可以帮助你筛选设备。'
+                : '只会选择有最近活动时间且超过期限的其他设备，不会自动删除；确认后还需完成身份验证。'
+            }
+            after={
+              <Box alignItems="Center" gap="200" wrap="Wrap" justifyContent="End">
+                <Input
+                  type="number"
+                  min={1}
+                  max={3650}
+                  value={inactiveDays}
+                  onChange={(event) => setInactiveDays(event.currentTarget.value)}
+                  size="300"
+                  variant="Background"
+                  outlined
+                  style={{ width: 88 }}
+                  aria-label="未活动天数"
+                />
+                <Text size="T300">天</Text>
+                {DEVICE_CLEANUP_PRESETS.map((days) => (
+                  <Chip
+                    key={days}
+                    variant="SurfaceVariant"
+                    radii="300"
+                    onClick={() => {
+                      setInactiveDays(String(days));
+                      selectInactiveDevices(days);
+                    }}
+                  >
+                    <Text size="B300">{days} 天</Text>
+                  </Chip>
+                ))}
+                <Button
+                  size="300"
+                  variant="Secondary"
+                  fill="Soft"
+                  radii="300"
+                  outlined
+                  onClick={() => selectInactiveDevices()}
+                >
+                  <Text size="B300">选择设备</Text>
+                </Button>
+              </Box>
+            }
+          />
+        </SequenceCard>
         {devices
+          .slice()
           .sort((d1, d2) => {
             if (!d1.last_seen_ts || !d2.last_seen_ts) return 0;
             return d1.last_seen_ts < d2.last_seen_ts ? 1 : -1;
@@ -253,9 +340,9 @@ export function OtherDevices({ devices, refreshDeviceList, showVerification }: O
                 radii="300"
                 disabled={deleting}
                 before={deleting && <Spinner variant="Critical" fill="Solid" size="100" />}
-                onClick={() => deleteDevices()}
+                onClick={handleSelectedDeviceAction}
               >
-                <Text size="B300">退出登录</Text>
+                <Text size="B300">{authMetadata ? '在账户管理中处理' : '退出登录'}</Text>
               </Button>
             </Box>
           </Box>
