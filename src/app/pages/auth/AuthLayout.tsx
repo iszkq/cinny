@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Box, Header, Scroll, Spinner, Text, color } from 'folds';
 import {
   Outlet,
@@ -30,6 +30,8 @@ import { AuthFlowsLoader } from '../../components/AuthFlowsLoader';
 import { AuthFlowsProvider } from '../../hooks/useAuthFlows';
 import { AuthServerProvider } from '../../hooks/useAuthServer';
 import { tryDecodeURIComponent } from '../../utils/dom';
+import { createClient, validateAuthMetadata, ValidatedAuthMetadata } from 'matrix-js-sdk';
+import { AuthMetadataProvider } from '../../hooks/useAuthMetadata';
 
 const currentAuthPath = (pathname: string): string => {
   if (matchPath(LOGIN_PATH, pathname)) {
@@ -121,6 +123,28 @@ export function AuthLayout() {
 
   const [autoDiscoveryError, autoDiscoveryInfo] =
     discoveryState.status === AsyncStatus.Success ? discoveryState.data.response : [];
+  const [authMetadata, setAuthMetadata] = useState<ValidatedAuthMetadata>();
+
+  useEffect(() => {
+    const baseUrl = autoDiscoveryInfo?.['m.homeserver']?.base_url;
+    if (!baseUrl) {
+      setAuthMetadata(undefined);
+      return undefined;
+    }
+
+    let disposed = false;
+    createClient({ baseUrl })
+      .getAuthMetadata()
+      .then((metadata) => {
+        if (!disposed) setAuthMetadata(validateAuthMetadata(metadata));
+      })
+      .catch(() => {
+        if (!disposed) setAuthMetadata(undefined);
+      });
+    return () => {
+      disposed = true;
+    };
+  }, [autoDiscoveryInfo]);
 
   return (
     <Scroll variant="Background" visibility="Hover" size="300" hideTrack>
@@ -191,7 +215,9 @@ export function AuthLayout() {
                         >
                           {(authFlows) => (
                             <AuthFlowsProvider value={authFlows}>
-                              <Outlet />
+                              <AuthMetadataProvider value={authMetadata}>
+                                <Outlet />
+                              </AuthMetadataProvider>
                             </AuthFlowsProvider>
                           )}
                         </AuthFlowsLoader>

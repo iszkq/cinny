@@ -22,6 +22,7 @@ import {
   RectCords,
   Spinner,
   Text,
+  Dialog,
   config,
 } from 'folds';
 import FocusTrap from 'focus-trap-react';
@@ -49,6 +50,7 @@ import { stopPropagation } from '../../../utils/keyboard';
 import { markAccountPinVerified, resolveAccountPinLoginRequirement } from '../../../utils/pinLock';
 import { AccountPinDialog } from '../../../components/pin-lock';
 import { openExternalUrl } from '../../../utils/desktop';
+import { useAccountManagementActions } from '../../../hooks/useAccountManagement';
 
 const copy = {
   hintTitle: '\u63d0\u793a',
@@ -181,6 +183,7 @@ export function PasswordLoginForm({ defaultUsername, defaultEmail }: PasswordLog
   const server = useAuthServer();
   const clientConfig = useClientConfig();
   const authMetadata = useAuthMetadata();
+  const accountManagementActions = useAccountManagementActions();
   const navigate = useNavigate();
 
   const serverDiscovery = useAutoDiscoveryInfo();
@@ -189,6 +192,7 @@ export function PasswordLoginForm({ defaultUsername, defaultEmail }: PasswordLog
   const [handledSuccess, setHandledSuccess] = useState(false);
   const [resolvingPinRequirement, setResolvingPinRequirement] = useState(false);
   const [accountManagementError, setAccountManagementError] = useState<string>();
+  const [showDeviceLimitDialog, setShowDeviceLimitDialog] = useState(false);
 
   const [loginState, startLogin] = useAsyncCallback<
     CustomLoginResponse,
@@ -249,6 +253,16 @@ export function PasswordLoginForm({ defaultUsername, defaultEmail }: PasswordLog
       disposed = true;
     };
   }, [handledSuccess, loginSuccessData, navigate]);
+
+  useEffect(() => {
+    if (
+      loginState.status === AsyncStatus.Error &&
+      loginState.error.errcode === LoginError.Forbidden &&
+      isDeviceLimitLoginError(loginState.error)
+    ) {
+      setShowDeviceLimitDialog(true);
+    }
+  }, [loginState]);
 
   const handleUsernameLogin = (username: string, password: string) => {
     startLogin(baseUrl, {
@@ -328,7 +342,9 @@ export function PasswordLoginForm({ defaultUsername, defaultEmail }: PasswordLog
   const openAccountManagement = () => {
     if (!accountManagementUrl) return;
     setAccountManagementError(undefined);
-    void openExternalUrl(accountManagementUrl).catch((error: unknown) => {
+    const url = new URL(accountManagementUrl);
+    url.searchParams.set('action', accountManagementActions.sessionsList);
+    void openExternalUrl(url.toString()).catch((error: unknown) => {
       setAccountManagementError(error instanceof Error ? error.message : String(error));
     });
   };
@@ -382,19 +398,6 @@ export function PasswordLoginForm({ defaultUsername, defaultEmail }: PasswordLog
               {loginState.error.errcode === LoginError.Forbidden && (
                 <Box direction="Column" gap="100">
                   <FieldError message={getForbiddenLoginMessage(loginState.error)} />
-                  {isDeviceLimitLoginError(loginState.error) && accountManagementUrl && (
-                    <Button
-                      type="button"
-                      size="300"
-                      variant="Secondary"
-                      fill="Soft"
-                      radii="300"
-                      outlined
-                      onClick={openAccountManagement}
-                    >
-                      <Text size="B300">打开服务器账户管理页面删除设备</Text>
-                    </Button>
-                  )}
                   {accountManagementError && (
                     <Text size="T200" style={{ color: color.Critical.Main }}>
                       无法打开账户管理页面：{accountManagementError}
@@ -452,6 +455,43 @@ export function PasswordLoginForm({ defaultUsername, defaultEmail }: PasswordLog
             completeLogin(pinProtectedLogin, navigate);
           }}
         />
+      )}
+      {showDeviceLimitDialog && (
+        <Overlay open backdrop={<OverlayBackdrop />}>
+          <OverlayCenter>
+            <Dialog variant="Surface">
+              <Box direction="Column" gap="400" style={{ padding: config.space.S500 }}>
+                <Box direction="Column" gap="200" alignItems="Center">
+                  <Text size="H3">设备数量已达上限</Text>
+                  <Text size="T300" align="Center">
+                    你的账户已登录到设备的数量上限。若要继续，请从现有设备中移除不再使用的设备，然后重新登录。
+                  </Text>
+                </Box>
+                {accountManagementUrl ? (
+                  <Button type="button" variant="Primary" onClick={openAccountManagement}>
+                    <Text size="B400">管理设备</Text>
+                  </Button>
+                ) : (
+                  <Text size="T300" style={{ color: color.Critical.Main }} align="Center">
+                    当前服务器未提供账户管理页面，请联系服务器管理员清理设备。
+                  </Text>
+                )}
+                {accountManagementError && (
+                  <Text size="T300" style={{ color: color.Critical.Main }} align="Center">
+                    无法打开账户管理页面：{accountManagementError}
+                  </Text>
+                )}
+                <Button
+                  type="button"
+                  variant="Critical"
+                  onClick={() => setShowDeviceLimitDialog(false)}
+                >
+                  <Text size="B400">取消</Text>
+                </Button>
+              </Box>
+            </Dialog>
+          </OverlayCenter>
+        </Overlay>
       )}
     </Box>
   );

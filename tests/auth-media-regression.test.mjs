@@ -34,14 +34,17 @@ test('login shows server-specific 403 reasons instead of always blaming credenti
   assert.match(source, /invalid username\\\/password/);
   assert.match(source, /isDeviceLimitLoginError/);
   assert.match(source, /account_management_uri/);
-  assert.match(source, /打开服务器账户管理页面删除设备/);
+  assert.match(source, /设备数量已达上限/);
+  assert.match(source, /管理设备/);
+  assert.match(source, /sessionsList/);
+  assert.match(source, /searchParams\.set\('action'/);
 });
 
 test('device settings offer safe inactive-device selection instead of silent deletion', async () => {
   const source = await readSource('src/app/features/settings/devices/OtherDevices.tsx');
 
   assert.match(source, /getInactiveDeviceIds/);
-  assert.match(source, /DEVICE_CLEANUP_PRESETS = \[7, 30\]/);
+  assert.match(source, /DEVICE_CLEANUP_PRESETS = \[7, 30, 60, 90\]/);
   assert.match(source, /last_seen_ts/);
   assert.match(source, /不会自动删除/);
   assert.match(source, /完成身份验证/);

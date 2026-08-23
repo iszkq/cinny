@@ -23,7 +23,7 @@ type OtherDevicesProps = {
   showVerification?: boolean;
 };
 
-const DEVICE_CLEANUP_PRESETS = [7, 30] as const;
+const DEVICE_CLEANUP_PRESETS = [7, 30, 60, 90] as const;
 
 export const getInactiveDeviceIds = (
   devices: IMyDevice[],
