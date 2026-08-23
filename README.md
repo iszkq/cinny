@@ -4,7 +4,7 @@
 
 星火是基于上游 [Cinny](https://github.com/cinnyapp/cinny) 深度定制的中文 Matrix 客户端。在保留 Cinny 轻量、现代界面的基础上，项目补充了中文体验、消息与会话管理、AI 工具、Office 文档协作、音视频会议和跨平台客户端能力。
 
-当前版本：`1.9.5`
+当前版本：`1.9.6`
 
 支持 Web / PWA、Windows 桌面端（Tauri 2）和 Android（Capacitor 8）。三端共用同一套 React 代码；iPhone 和 iPad 可使用响应式 Web / PWA 版本。
 
