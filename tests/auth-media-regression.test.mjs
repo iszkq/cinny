@@ -48,6 +48,7 @@ test('device settings offer safe inactive-device selection instead of silent del
   assert.match(source, /last_seen_ts/);
   assert.match(source, /不会自动删除/);
   assert.match(source, /完成身份验证/);
+  assert.match(source, /!authMetadata &&/);
   assert.match(source, /authMetadata \? '在账户管理中处理' : '退出登录'/);
   assert.match(source, /handleSelectedDeviceAction/);
 });

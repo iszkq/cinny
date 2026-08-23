@@ -174,61 +174,59 @@ export function OtherDevices({ devices, refreshDeviceList, showVerification }: O
             <b>{accountManagementError}</b>
           </Text>
         )}
-        <SequenceCard
-          className={SequenceCardStyle}
-          variant="SurfaceVariant"
-          direction="Column"
-          gap="300"
-        >
-          <SettingTile
-            title="清理长期未使用的设备"
-            description={
-              authMetadata
-                ? '当前服务器要求在账户管理页面完成设备删除。这里可以帮助你筛选设备。'
-                : '只会选择有最近活动时间且超过期限的其他设备，不会自动删除；确认后还需完成身份验证。'
-            }
-            after={
-              <Box alignItems="Center" gap="200" wrap="Wrap" justifyContent="End">
-                <Input
-                  type="number"
-                  min={1}
-                  max={3650}
-                  value={inactiveDays}
-                  onChange={(event) => setInactiveDays(event.currentTarget.value)}
-                  size="300"
-                  variant="Background"
-                  outlined
-                  style={{ width: 88 }}
-                  aria-label="未活动天数"
-                />
-                <Text size="T300">天</Text>
-                {DEVICE_CLEANUP_PRESETS.map((days) => (
-                  <Chip
-                    key={days}
-                    variant="SurfaceVariant"
+        {!authMetadata && (
+          <SequenceCard
+            className={SequenceCardStyle}
+            variant="SurfaceVariant"
+            direction="Column"
+            gap="300"
+          >
+            <SettingTile
+              title="清理长期未使用的设备"
+              description="只会选择有最近活动时间且超过期限的其他设备，不会自动删除；确认后还需完成身份验证。"
+              after={
+                <Box alignItems="Center" gap="200" wrap="Wrap" justifyContent="End">
+                  <Input
+                    type="number"
+                    min={1}
+                    max={3650}
+                    value={inactiveDays}
+                    onChange={(event) => setInactiveDays(event.currentTarget.value)}
+                    size="300"
+                    variant="Background"
+                    outlined
+                    style={{ width: 88 }}
+                    aria-label="未活动天数"
+                  />
+                  <Text size="T300">天</Text>
+                  {DEVICE_CLEANUP_PRESETS.map((days) => (
+                    <Chip
+                      key={days}
+                      variant="SurfaceVariant"
+                      radii="300"
+                      onClick={() => {
+                        setInactiveDays(String(days));
+                        selectInactiveDevices(days);
+                      }}
+                    >
+                      <Text size="B300">{days} 天</Text>
+                    </Chip>
+                  ))}
+                  <Button
+                    size="300"
+                    variant="Secondary"
+                    fill="Soft"
                     radii="300"
-                    onClick={() => {
-                      setInactiveDays(String(days));
-                      selectInactiveDevices(days);
-                    }}
+                    outlined
+                    onClick={() => selectInactiveDevices()}
                   >
-                    <Text size="B300">{days} 天</Text>
-                  </Chip>
-                ))}
-                <Button
-                  size="300"
-                  variant="Secondary"
-                  fill="Soft"
-                  radii="300"
-                  outlined
-                  onClick={() => selectInactiveDevices()}
-                >
-                  <Text size="B300">选择设备</Text>
-                </Button>
-              </Box>
-            }
-          />
-        </SequenceCard>
+                    <Text size="B300">选择设备</Text>
+                  </Button>
+                </Box>
+              }
+            />
+          </SequenceCard>
+        )}
         {devices
           .slice()
           .sort((d1, d2) => {
