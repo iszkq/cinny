@@ -334,7 +334,7 @@ function ThreadMessageView({
 }: ThreadMessageViewProps) {
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
-  if (shouldHideHistoricalDecryptionFailure(mx, mEvent)) return null;
+  if (shouldHideHistoricalDecryptionFailure(mEvent)) return null;
   const eventId = mEvent.getId();
   const senderId = mEvent.getSender() ?? '';
   const displayName =

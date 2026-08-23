@@ -173,10 +173,11 @@ test('pre-join encrypted history is hidden without masking other failures', asyn
 
   assert.match(visibilitySource, /HISTORICAL_MESSAGE_USER_NOT_JOINED/);
   assert.match(visibilitySource, /mEvent\.isEncrypted\(\)/);
-  assert.match(visibilitySource, /hasEncryptionStateEvent\(\)/);
   assert.match(visibilitySource, /decryptionFailureReason/);
+  assert.match(visibilitySource, /return true/);
+  assert.doesNotMatch(visibilitySource, /hasEncryptionStateEvent\(\)/);
   assert.match(encryptedContentSource, /shouldHideHistoricalDecryptionFailure/);
-  assert.match(timelineSource, /shouldHideHistoricalDecryptionFailure\(mx, mEvent\)/);
+  assert.match(timelineSource, /shouldHideHistoricalDecryptionFailure\(mEvent\)/);
 });
 
 test('browser call controls do not extend the Node events shim', async () => {

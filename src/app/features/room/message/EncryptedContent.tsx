@@ -58,7 +58,7 @@ export function EncryptedContent({ mEvent, children }: EncryptedContentProps) {
     return <span aria-busy="true">正在恢复加密消息…</span>;
   }
 
-  if (shouldHideHistoricalDecryptionFailure(mx, mEvent)) return null;
+  if (shouldHideHistoricalDecryptionFailure(mEvent)) return null;
 
   return <>{children()}</>;
 }

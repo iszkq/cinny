@@ -1978,7 +1978,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
         );
       },
       [MessageEvent.RoomMessageEncrypted]: (mEventId, mEvent, item, timelineSet, collapse) => {
-        if (shouldHideHistoricalDecryptionFailure(mx, mEvent)) return null;
+        if (shouldHideHistoricalDecryptionFailure(mEvent)) return null;
         const reactionRelations = getEventReactions(timelineSet, mEventId);
         const reactions = reactionRelations && reactionRelations.getSortedAnnotationsByKey();
         const hasReactions = reactions && reactions.length > 0;
