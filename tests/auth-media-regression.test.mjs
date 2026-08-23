@@ -29,11 +29,20 @@ test('audio controls keep decoded duration and smooth seek state stable', async 
   const audioSource = await readSource('src/app/components/message/content/AudioContent.tsx');
   const playTimeSource = await readSource('src/app/hooks/media/useMediaPlayTimeCallback.ts');
 
+  assert.match(audioSource, /AUDIO_DURATION_DECODE_MAX_BYTES/);
+  assert.match(audioSource, /decodeAudioData\(await blob\.arrayBuffer\(\)\)/);
+  assert.match(audioSource, /void decodeAudioDuration\(fileContent\)\.then/);
   assert.match(audioSource, /infoDuration\) && infoDuration > 0/);
   assert.match(audioSource, /Number\.isFinite\(d\) && d > 0/);
   assert.match(audioSource, /sliderTime/);
   assert.match(audioSource, /onFinalChange=\{\(values\)/);
+  const onChangeStart = audioSource.indexOf('onChange={(values) =>');
+  const onFinalChangeStart = audioSource.indexOf('onFinalChange={(values) =>');
+  assert.ok(onChangeStart >= 0 && onFinalChangeStart > onChangeStart);
+  assert.doesNotMatch(audioSource.slice(onChangeStart, onFinalChangeStart), /\bseek\(/);
+  assert.match(audioSource.slice(onFinalChangeStart), /seek\(nextTime\)/);
   assert.match(audioSource, /step=\{0\.01\}/);
+  assert.match(audioSource, /wait: 100/);
   assert.match(audioSource, /pointerEvents: 'none'/);
   assert.match(playTimeSource, /durationchange/);
   assert.match(playTimeSource, /loadeddata/);

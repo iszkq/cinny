@@ -44,13 +44,35 @@ import { AIHUBMIX_AUDIO_TRANSCRIPTION_MAX_FILE_SIZE } from '../../../utils/ai';
 import { ScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
 
 const PLAY_TIME_THROTTLE_OPS = {
-  wait: 500,
+  // Keep the visual progress responsive without re-rendering on every media
+  // event (which can be much more frequent on desktop browsers).
+  wait: 100,
   immediate: true,
 };
 const AUDIO_PLAYBACK_RATES = [1, 1.25, 1.5, 2];
 const AUDIO_DOWNLOAD_TIMEOUT_MS = 45_000;
 const LONG_TRANSCRIPTION_MIN_CHARS = 240;
 const COLLAPSED_TRANSCRIPTION_LINES = 6;
+const AUDIO_DURATION_DECODE_MAX_BYTES = 50 * 1024 * 1024;
+
+const decodeAudioDuration = async (blob: Blob): Promise<number | undefined> => {
+  if (blob.size > AUDIO_DURATION_DECODE_MAX_BYTES) return undefined;
+  const AudioContextConstructor =
+    window.AudioContext ??
+    (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!AudioContextConstructor) return undefined;
+
+  let context: AudioContext | undefined;
+  try {
+    context = new AudioContextConstructor();
+    const buffer = await context.decodeAudioData(await blob.arrayBuffer());
+    return Number.isFinite(buffer.duration) && buffer.duration > 0 ? buffer.duration : undefined;
+  } catch {
+    return undefined;
+  } finally {
+    await context?.close().catch(() => undefined);
+  }
+};
 
 type RenderMediaControlProps = {
   after: ReactNode;
@@ -121,6 +143,12 @@ export function AudioContent({
       const fileContent = encInfo
         ? await downloadEncryptedMedia(mediaUrl, (encBuf) => decryptFile(encBuf, mimeType, encInfo))
         : await downloadMedia(mediaUrl);
+      // Some WebM containers report 0/Infinity until their cues are parsed.
+      // Decode the already-downloaded blob in the background so the final
+      // duration appears without delaying the first play interaction.
+      void decodeAudioDuration(fileContent).then((decodedDuration) => {
+        if (decodedDuration) setDuration(decodedDuration);
+      });
       return URL.createObjectURL(fileContent);
     }, [mx, url, useAuthentication, mimeType, encInfo])
   );
@@ -229,7 +257,6 @@ export function AudioContent({
             const nextTime = values[0];
             if (Number.isFinite(nextTime)) {
               setSliderTime(nextTime);
-              seek(nextTime);
             }
           }}
           onFinalChange={(values) => {
