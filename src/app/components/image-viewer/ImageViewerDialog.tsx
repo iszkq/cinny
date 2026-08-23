@@ -32,11 +32,11 @@ import { mobileOrTablet } from '../../utils/user-agent';
 import {
   closeNativeImagePreviewWindow,
   createNativeImagePreviewId,
-  emitNativeImagePreviewPayload,
   focusNativeImagePreviewWindow,
   getTransferableImagePreviewSrc,
   listenNativeImagePreviewAction,
   openNativeImagePreviewWindow,
+  type NativeImagePreviewPayload,
 } from '../../utils/nativeImagePreview';
 
 type ImageViewerDialogProps = Omit<
@@ -56,6 +56,7 @@ type WindowOffset = {
 type NativePreviewRef = {
   previewId: string;
   label: string;
+  updatePayload: (payload: NativeImagePreviewPayload) => Promise<void>;
   unlistenAction: () => void;
   unlistenReady: () => void;
   unlistenDestroyed: () => void;
@@ -342,14 +343,20 @@ export function ImageViewerDialog({
         return;
       }
 
-      const payload = await buildNativePreviewPayload(previewId);
-      if (cancelled) {
-        releaseActionListener();
-        return;
-      }
-
+      const input = latestNativeInputRef.current;
       const nativePreview = await openNativeImagePreviewWindow(
-        payload,
+        {
+          previewId,
+          // Open the native shell before serializing or downloading the full
+          // image. The active payload is delivered by the update effect below.
+          src: '',
+          alt: input.alt,
+          loading: true,
+          canPrev: input.canPrev,
+          canNext: input.canNext,
+          imageOcrConfig: input.imageOcrConfig,
+          originalLoadFailed: input.originalLoadFailed,
+        },
         openAbortController.signal,
         handleNativeClosed
       );
@@ -374,6 +381,7 @@ export function ImageViewerDialog({
       nativePreviewRef.current = {
         previewId,
         label: nativePreview.label,
+        updatePayload: nativePreview.updatePayload,
         unlistenAction: releaseActionListener,
         unlistenReady,
         unlistenDestroyed,
@@ -397,7 +405,7 @@ export function ImageViewerDialog({
       openAbortController.abort();
       releaseActionListener();
     };
-  }, [buildNativePreviewPayload, closeNativePreview, desktopNativePreview, open]);
+  }, [closeNativePreview, desktopNativePreview, open]);
 
   useEffect(() => {
     const nativePreview = nativePreviewRef.current;
@@ -407,7 +415,7 @@ export function ImageViewerDialog({
     buildNativePreviewPayload(nativePreview.previewId)
       .then((payload) => {
         if (cancelled) return;
-        emitNativeImagePreviewPayload(nativePreview.label, payload).catch(() => undefined);
+        nativePreview.updatePayload(payload).catch(() => undefined);
       })
       .catch(() => undefined);
 

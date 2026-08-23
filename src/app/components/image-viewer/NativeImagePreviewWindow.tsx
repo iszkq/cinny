@@ -184,7 +184,7 @@ function NativeImagePreviewWindowContent() {
     );
   }
 
-  if (!payload) {
+  if (!payload?.src) {
     return (
       <Box
         style={{

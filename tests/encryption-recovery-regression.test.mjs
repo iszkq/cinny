@@ -164,22 +164,6 @@ test('decryption diagnostics exclude message and key secrets', async () => {
   assert.doesNotMatch(diagnosticSource, /wireContent\.ciphertext/);
 });
 
-test('pre-join encrypted history is hidden without masking other failures', async () => {
-  const visibilitySource = await readSource('src/app/utils/decryptionVisibility.ts');
-  const encryptedContentSource = await readSource(
-    'src/app/features/room/message/EncryptedContent.tsx'
-  );
-  const timelineSource = await readSource('src/app/features/room/RoomTimeline.tsx');
-
-  assert.match(visibilitySource, /HISTORICAL_MESSAGE_USER_NOT_JOINED/);
-  assert.match(visibilitySource, /mEvent\.isEncrypted\(\)/);
-  assert.match(visibilitySource, /decryptionFailureReason/);
-  assert.match(visibilitySource, /return true/);
-  assert.doesNotMatch(visibilitySource, /hasEncryptionStateEvent\(\)/);
-  assert.match(encryptedContentSource, /shouldHideHistoricalDecryptionFailure/);
-  assert.match(timelineSource, /shouldHideHistoricalDecryptionFailure\(mEvent\)/);
-});
-
 test('browser call controls do not extend the Node events shim', async () => {
   const source = await readSource('src/app/plugins/call/CallControl.ts');
 

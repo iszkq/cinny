@@ -25,6 +25,15 @@ test('desktop image previews use per-session labels and close exact abandoned wi
   assert.match(dialogSource, /const openAbortController = new AbortController\(\)/);
   assert.match(dialogSource, /openAbortController\.abort\(\)/);
   assert.match(
+    lifecycleSource,
+    /await Promise\.race\(\[windowCreated, windowDestroyed, openingAborted, creationTimedOut\]\)/
+  );
+  assert.doesNotMatch(lifecycleSource, /initialPayloadDelivered/);
+  assert.match(dialogSource, /src: '',[\s\S]*loading: true/);
+  assert.match(windowSource, /if \(!payload\?\.src\)/);
+  assert.match(lifecycleSource, /Object\.assign\(payload, nextPayload\)/);
+  assert.match(dialogSource, /nativePreview\.updatePayload\(payload\)/);
+  assert.match(
     dialogSource,
     /nativePreview\.unlistenDestroyed\(\);[\s\S]*closeNativeImagePreviewWindow\(nativePreview\.label\)/
   );

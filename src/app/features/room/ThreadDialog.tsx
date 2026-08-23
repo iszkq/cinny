@@ -72,7 +72,6 @@ import {
 import { getMxIdLocalPart, mxcUrlToHttp } from '../../utils/matrix';
 import { dispatchRoomFollowLatest } from '../../utils/roomViewEvents';
 import { POLL_START_EVENT_TYPE, UNSTABLE_POLL_START_EVENT_TYPE } from '../../utils/polls';
-import { shouldHideHistoricalDecryptionFailure } from '../../utils/decryptionVisibility';
 import { GetContentCallback, MessageEvent } from '../../../types/matrix/room';
 import colorMXID from '../../../util/colorMXID';
 import { EncryptedContent } from './message';
@@ -334,7 +333,6 @@ function ThreadMessageView({
 }: ThreadMessageViewProps) {
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
-  if (shouldHideHistoricalDecryptionFailure(mEvent)) return null;
   const eventId = mEvent.getId();
   const senderId = mEvent.getSender() ?? '';
   const displayName =

@@ -117,7 +117,6 @@ import { useSyncState } from '../../hooks/useSyncState';
 import { RenderMessageContent } from '../../components/RenderMessageContent';
 import { Image } from '../../components/media';
 import { ImageViewer } from '../../components/image-viewer';
-import { shouldHideHistoricalDecryptionFailure } from '../../utils/decryptionVisibility';
 import type { ViewerImageItem } from '../../components/message/content/ImageContent';
 import { roomToParentsAtom } from '../../state/room/roomToParents';
 import { useRoomUnread } from '../../state/hooks/unread';
@@ -1978,7 +1977,6 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
         );
       },
       [MessageEvent.RoomMessageEncrypted]: (mEventId, mEvent, item, timelineSet, collapse) => {
-        if (shouldHideHistoricalDecryptionFailure(mEvent)) return null;
         const reactionRelations = getEventReactions(timelineSet, mEventId);
         const reactions = reactionRelations && reactionRelations.getSortedAnnotationsByKey();
         const hasReactions = reactions && reactions.length > 0;

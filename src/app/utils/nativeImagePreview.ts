@@ -20,6 +20,7 @@ export type NativeImagePreviewAction = {
 
 export type NativeImagePreviewWindowHandle = {
   label: string;
+  updatePayload: (payload: NativeImagePreviewPayload) => Promise<void>;
   unlistenReady: () => void;
   unlistenDestroyed: () => void;
 };
@@ -36,7 +37,7 @@ export const NATIVE_IMAGE_PREVIEW_ACTION_EVENT = 'cinny://image-preview-action';
 
 const DATA_URL_RE = /^data:/i;
 const BLOB_URL_RE = /^blob:/i;
-const NATIVE_IMAGE_PREVIEW_READY_TIMEOUT_MS = 15_000;
+const NATIVE_IMAGE_PREVIEW_CREATE_TIMEOUT_MS = 10_000;
 let nativePreviewWindowSeq = 0;
 
 const getNativePreviewWindowUrl = (previewId: string): string => {
@@ -120,23 +121,14 @@ export const openNativeImagePreviewWindow = async (
   // unique to this preview keeps a quick close/reopen from finding that stale WebView and treating
   // failed show/focus calls as a successful open.
   const label = getNativeImagePreviewWindowLabel(payload.previewId);
+  const updatePayload = async (nextPayload: NativeImagePreviewPayload): Promise<void> => {
+    Object.assign(payload, nextPayload);
+    await emitTo(label, NATIVE_IMAGE_PREVIEW_UPDATE_EVENT, nextPayload);
+  };
   let previewWindow: InstanceType<typeof WebviewWindow> | undefined;
   let windowCreated: Promise<void> | undefined;
   let disposeWindowCreationListeners: () => void = () => undefined;
   let disposeDestroyedListener: () => void = () => undefined;
-
-  let initialPayloadSettled = false;
-  let resolveInitialPayload: () => void = () => undefined;
-  let rejectInitialPayload: (reason?: unknown) => void = () => undefined;
-  const initialPayloadDelivered = new Promise<void>((resolve, reject) => {
-    resolveInitialPayload = resolve;
-    rejectInitialPayload = reject;
-  });
-  const settleInitialPayload = (callback: () => void) => {
-    if (initialPayloadSettled) return;
-    initialPayloadSettled = true;
-    callback();
-  };
 
   const existingWindow = await WebviewWindow.getByLabel(label);
   if (existingWindow) {
@@ -158,6 +150,7 @@ export const openNativeImagePreviewWindow = async (
 
     return {
       label,
+      updatePayload,
       unlistenReady: () => undefined,
       unlistenDestroyed,
     };
@@ -167,9 +160,7 @@ export const openNativeImagePreviewWindow = async (
     NATIVE_IMAGE_PREVIEW_READY_EVENT,
     (event: EventPayload<{ previewId?: string }>) => {
       if (event.payload?.previewId !== payload.previewId) return;
-      emitTo(label, NATIVE_IMAGE_PREVIEW_UPDATE_EVENT, payload)
-        .then(() => settleInitialPayload(resolveInitialPayload))
-        .catch((error) => settleInitialPayload(() => rejectInitialPayload(error)));
+      emitTo(label, NATIVE_IMAGE_PREVIEW_UPDATE_EVENT, payload).catch(() => undefined);
     }
   );
 
@@ -266,19 +257,21 @@ export const openNativeImagePreviewWindow = async (
       removeAbortListener = () => signal.removeEventListener('abort', handleAbort);
     });
 
-    let readyTimeout: number | undefined;
+    let creationTimeout: number | undefined;
 
     try {
-      await Promise.race([windowCreated, windowDestroyed, openingAborted]);
-
-      const readyTimedOut = new Promise<never>((_resolve, reject) => {
-        readyTimeout = window.setTimeout(
-          () => reject(new Error('Image preview window did not become ready in time.')),
-          NATIVE_IMAGE_PREVIEW_READY_TIMEOUT_MS
+      const creationTimedOut = new Promise<never>((_resolve, reject) => {
+        creationTimeout = window.setTimeout(
+          () => reject(new Error('Image preview window was not created in time.')),
+          NATIVE_IMAGE_PREVIEW_CREATE_TIMEOUT_MS
         );
       });
 
-      await Promise.race([initialPayloadDelivered, windowDestroyed, openingAborted, readyTimedOut]);
+      // Show the native window as soon as Tauri has created it. The child
+      // webview sends a ready event and receives the image payload separately;
+      // waiting for that event here made a slow child fall back to the inline
+      // web dialog after a long blank delay.
+      await Promise.race([windowCreated, windowDestroyed, openingAborted, creationTimedOut]);
 
       if (signal?.aborted) {
         throw new Error('Image preview window opening was cancelled.');
@@ -287,14 +280,15 @@ export const openNativeImagePreviewWindow = async (
       await openingWindow.show();
       await openingWindow.setFocus().catch(() => undefined);
     } finally {
-      if (readyTimeout !== undefined) {
-        window.clearTimeout(readyTimeout);
+      if (creationTimeout !== undefined) {
+        window.clearTimeout(creationTimeout);
       }
       removeAbortListener();
     }
 
     return {
       label,
+      updatePayload,
       unlistenReady,
       unlistenDestroyed: disposeDestroyedListener,
     };
