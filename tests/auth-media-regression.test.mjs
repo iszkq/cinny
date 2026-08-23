@@ -37,6 +37,8 @@ test('audio controls keep decoded duration and smooth seek state stable', async 
   assert.match(audioSource, /pointerEvents: 'none'/);
   assert.match(playTimeSource, /durationchange/);
   assert.match(playTimeSource, /loadeddata/);
+  assert.match(playTimeSource, /targetEl\.seekable\.length/);
+  assert.match(audioSource, /duration > 0 \? secondsToMinutesAndSeconds\(duration\) : '--:--'/);
 });
 
 test('login shows server-specific 403 reasons instead of always blaming credentials', async () => {

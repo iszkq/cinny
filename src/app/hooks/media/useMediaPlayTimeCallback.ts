@@ -10,7 +10,14 @@ export const useMediaPlayTimeCallback = (
     const targetEl = getTargetElement();
     const handleChange = () => {
       if (!targetEl) return;
-      onPlayTimeCallback(targetEl.duration, targetEl.currentTime);
+      let duration = targetEl.duration;
+      // WebM files can briefly expose an infinite/zero duration while the
+      // container is being indexed. A finite seekable end is a safe fallback.
+      if ((!Number.isFinite(duration) || duration <= 0) && targetEl.seekable.length > 0) {
+        const seekableEnd = targetEl.seekable.end(targetEl.seekable.length - 1);
+        if (Number.isFinite(seekableEnd) && seekableEnd > 0) duration = seekableEnd;
+      }
+      onPlayTimeCallback(duration, targetEl.currentTime);
     };
     targetEl?.addEventListener('timeupdate', handleChange);
     targetEl?.addEventListener('loadedmetadata', handleChange);

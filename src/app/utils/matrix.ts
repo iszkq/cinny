@@ -515,7 +515,10 @@ export const getVideoInfo = (video: HTMLVideoElement, fileOrBlob: File | Blob): 
 
 export const getAudioInfo = (audio: HTMLAudioElement, fileOrBlob: File | Blob): IAudioInfo => {
   const info: IAudioInfo = {};
-  info.duration = Number.isNaN(audio.duration) ? undefined : Math.floor(audio.duration * 1000);
+  info.duration =
+    Number.isFinite(audio.duration) && audio.duration > 0
+      ? Math.floor(audio.duration * 1000)
+      : undefined;
   info.mimetype = fileOrBlob.type;
   info.size = fileOrBlob.size;
   return info;

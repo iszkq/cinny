@@ -134,13 +134,14 @@ test('the sidebar stays critical until both device and key backup are verified',
   assert.match(backupHookSource, /useKeyBackupDecryptionKeyCached\(fetchTrust\)/);
 });
 
-test('automatic room-key request and forwarding policy is left at the SDK default', async () => {
+test('automatic room-key recovery requests are enabled for verified own devices', async () => {
   const initSource = await readSource('src/client/initMatrix.ts');
   const recoverySource = await readSource('src/app/utils/decryptionRecovery.ts');
   const featuresSource = await readSource('src/app/pages/client/ClientNonUIFeatures.tsx');
 
   assert.doesNotMatch(initSource, /enableMissingRoomKeyRequests/);
-  assert.doesNotMatch(initSource, /roomKeyRequestsEnabled\s*=\s*true/);
+  assert.match(initSource, /roomKeyRequestsEnabled\?\s*:\s*boolean/);
+  assert.match(initSource, /roomKeyRequestsEnabled\s*=\s*true/);
   assert.doesNotMatch(initSource, /roomKeyForwardingEnabled\s*=\s*true/);
   assert.match(recoverySource, /restoreSessionFromBackup/);
   assert.match(recoverySource, /trust\.matchesDecryptionKey !== true/);

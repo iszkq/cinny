@@ -207,7 +207,8 @@ export function AudioContent({
       ? '\u91cd\u8bd5\u8f6c\u5199'
       : '\u8f6c\u5199';
   const renderedCurrentTime = Number.isFinite(currentTime) ? Math.max(0, currentTime) : 0;
-  const seekMax = Math.max(duration, renderedCurrentTime, sliderTime ?? 0, 1);
+  const seekMax = Math.max(duration, 1);
+  const progressTime = duration > 0 ? Math.min(sliderTime ?? renderedCurrentTime, duration) : 0;
 
   const handleTranscribe = () => {
     setTranscriptionExpanded(false);
@@ -223,7 +224,7 @@ export function AudioContent({
           step={0.01}
           min={0}
           max={seekMax}
-          values={[Math.min(sliderTime ?? renderedCurrentTime, seekMax)]}
+          values={[progressTime]}
           onChange={(values) => {
             const nextTime = values[0];
             if (Number.isFinite(nextTime)) {
@@ -252,7 +253,7 @@ export function AudioContent({
                 size="300"
                 min={0}
                 max={seekMax}
-                value={Math.min(sliderTime ?? renderedCurrentTime, seekMax)}
+                value={progressTime}
                 radii="300"
                 style={{ pointerEvents: 'none' }}
               />
@@ -377,7 +378,7 @@ export function AudioContent({
         </Chip>
         <Text size="T200">{`${secondsToMinutesAndSeconds(
           Math.min(renderedCurrentTime, duration || renderedCurrentTime)
-        )} / ${secondsToMinutesAndSeconds(duration)}`}</Text>
+        )} / ${duration > 0 ? secondsToMinutesAndSeconds(duration) : '--:--'}`}</Text>
       </>
     ),
     rightControl: (

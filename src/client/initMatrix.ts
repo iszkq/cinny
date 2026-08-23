@@ -136,6 +136,19 @@ const initRustCryptoForSession = async (mx: MatrixClient, session: Session): Pro
   for (const prefix of candidates) {
     try {
       await mx.initRustCrypto({ cryptoDatabasePrefix: prefix });
+      // The SDK currently disables room-key requests by default. That leaves
+      // a newly-created client unable to recover a live Megolm session which
+      // is still available on another verified device (the common case for
+      // browser/incognito logins). Requests are sent only to this account's
+      // own devices and are required for intermittent UTD recovery.
+      const crypto = mx.getCrypto() as
+        | (object & {
+            olmMachine?: { roomKeyRequestsEnabled?: boolean };
+          })
+        | undefined;
+      if (crypto?.olmMachine && 'roomKeyRequestsEnabled' in crypto.olmMachine) {
+        crypto.olmMachine.roomKeyRequestsEnabled = true;
+      }
       saveRustCryptoDatabasePrefix(session, prefix);
       clearNewRustCryptoStoreAllowance(session);
       return prefix;
