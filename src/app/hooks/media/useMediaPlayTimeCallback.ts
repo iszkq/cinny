@@ -14,10 +14,16 @@ export const useMediaPlayTimeCallback = (
     };
     targetEl?.addEventListener('timeupdate', handleChange);
     targetEl?.addEventListener('loadedmetadata', handleChange);
+    targetEl?.addEventListener('durationchange', handleChange);
+    targetEl?.addEventListener('loadeddata', handleChange);
+    targetEl?.addEventListener('canplay', handleChange);
     targetEl?.addEventListener('ended', handleChange);
     return () => {
       targetEl?.removeEventListener('timeupdate', handleChange);
       targetEl?.removeEventListener('loadedmetadata', handleChange);
+      targetEl?.removeEventListener('durationchange', handleChange);
+      targetEl?.removeEventListener('loadeddata', handleChange);
+      targetEl?.removeEventListener('canplay', handleChange);
       targetEl?.removeEventListener('ended', handleChange);
     };
   }, [getTargetElement, onPlayTimeCallback]);

@@ -25,6 +25,20 @@ test('media seeking ignores non-finite values and clamps to duration', async () 
   assert.match(audioSource, /Number\.isFinite\(nextTime\)/);
 });
 
+test('audio controls keep decoded duration and smooth seek state stable', async () => {
+  const audioSource = await readSource('src/app/components/message/content/AudioContent.tsx');
+  const playTimeSource = await readSource('src/app/hooks/media/useMediaPlayTimeCallback.ts');
+
+  assert.match(audioSource, /infoDuration\) && infoDuration > 0/);
+  assert.match(audioSource, /Number\.isFinite\(d\) && d > 0/);
+  assert.match(audioSource, /sliderTime/);
+  assert.match(audioSource, /onFinalChange=\{\(values\)/);
+  assert.match(audioSource, /step=\{0\.01\}/);
+  assert.match(audioSource, /pointerEvents: 'none'/);
+  assert.match(playTimeSource, /durationchange/);
+  assert.match(playTimeSource, /loadeddata/);
+});
+
 test('login shows server-specific 403 reasons instead of always blaming credentials', async () => {
   const source = await readSource('src/app/pages/auth/login/PasswordLoginForm.tsx');
 

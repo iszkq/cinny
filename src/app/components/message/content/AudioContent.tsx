@@ -131,7 +131,10 @@ export function AudioContent({
   const [transcriptionExpanded, setTranscriptionExpanded] = useState(false);
   // duration in seconds. (NOTE: info.duration is in milliseconds)
   const infoDuration = info.duration ?? 0;
-  const [duration, setDuration] = useState((infoDuration >= 0 ? infoDuration : 0) / 1000);
+  const [duration, setDuration] = useState(
+    Number.isFinite(infoDuration) && infoDuration > 0 ? infoDuration / 1000 : 0
+  );
+  const [sliderTime, setSliderTime] = useState<number | null>(null);
 
   const getAudioRef = useCallback(() => audioRef.current, []);
   const { loading } = useMediaLoading(getAudioRef);
@@ -140,7 +143,9 @@ export function AudioContent({
   const { seek } = useMediaSeek(getAudioRef);
   const { volume, mute, setMute, setVolume } = useMediaVolume(getAudioRef);
   const handlePlayTimeCallback: PlayTimeCallback = useCallback((d, ct) => {
-    if (Number.isFinite(d) && d >= 0) setDuration(d);
+    // Some browsers briefly report NaN or 0 while a blob is being decoded.
+    // Never replace a known duration with that transient value.
+    if (Number.isFinite(d) && d > 0) setDuration(d);
     if (Number.isFinite(ct) && ct >= 0) setCurrentTime(ct);
   }, []);
   useMediaPlayTimeCallback(
@@ -201,6 +206,8 @@ export function AudioContent({
       : transcriptionState.status === AsyncStatus.Error
       ? '\u91cd\u8bd5\u8f6c\u5199'
       : '\u8f6c\u5199';
+  const renderedCurrentTime = Number.isFinite(currentTime) ? Math.max(0, currentTime) : 0;
+  const seekMax = Math.max(duration, renderedCurrentTime, sliderTime ?? 0, 1);
 
   const handleTranscribe = () => {
     setTranscriptionExpanded(false);
@@ -213,25 +220,41 @@ export function AudioContent({
     after: (
       <Box direction="Column" gap="200">
         <Range
-          step={1}
+          step={0.01}
           min={0}
-          max={duration || 1}
-          values={[Number.isFinite(currentTime) ? currentTime : 0]}
+          max={seekMax}
+          values={[Math.min(sliderTime ?? renderedCurrentTime, seekMax)]}
           onChange={(values) => {
             const nextTime = values[0];
+            if (Number.isFinite(nextTime)) {
+              setSliderTime(nextTime);
+              seek(nextTime);
+            }
+          }}
+          onFinalChange={(values) => {
+            const nextTime = values[0];
             if (Number.isFinite(nextTime)) seek(nextTime);
+            setSliderTime(null);
           }}
           renderTrack={(params) => (
-            <div {...params.props}>
+            <div
+              {...params.props}
+              style={{
+                ...params.props.style,
+                position: 'relative',
+                touchAction: 'none',
+              }}
+            >
               {params.children}
               <ProgressBar
                 as="div"
                 variant="Secondary"
                 size="300"
                 min={0}
-                max={duration}
-                value={currentTime}
+                max={seekMax}
+                value={Math.min(sliderTime ?? renderedCurrentTime, seekMax)}
                 radii="300"
+                style={{ pointerEvents: 'none' }}
               />
             </div>
           )}
@@ -245,7 +268,8 @@ export function AudioContent({
               {...params.props}
               style={{
                 ...params.props.style,
-                zIndex: 0,
+                zIndex: 2,
+                touchAction: 'none',
               }}
             />
           )}
@@ -352,7 +376,7 @@ export function AudioContent({
           <Text size="B300">{playing ? '\u6682\u505c' : '\u64ad\u653e'}</Text>
         </Chip>
         <Text size="T200">{`${secondsToMinutesAndSeconds(
-          currentTime
+          Math.min(renderedCurrentTime, duration || renderedCurrentTime)
         )} / ${secondsToMinutesAndSeconds(duration)}`}</Text>
       </>
     ),
