@@ -7,6 +7,7 @@ import {
   isDecryptionRecoveryPending,
   observeEncryptedEvent,
 } from '../../../utils/decryptionRecovery';
+import { shouldHideHistoricalDecryptionFailure } from '../../../utils/decryptionVisibility';
 
 type EncryptedContentProps = {
   mEvent: MatrixEvent;
@@ -56,6 +57,8 @@ export function EncryptedContent({ mEvent, children }: EncryptedContentProps) {
     // renderer is shown.
     return <span aria-busy="true">正在恢复加密消息…</span>;
   }
+
+  if (shouldHideHistoricalDecryptionFailure(mx, mEvent)) return null;
 
   return <>{children()}</>;
 }
