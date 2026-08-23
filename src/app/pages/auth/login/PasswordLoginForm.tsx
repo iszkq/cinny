@@ -1,7 +1,14 @@
-import React, { FormEventHandler, MouseEventHandler, useCallback, useEffect, useState } from 'react';
+import React, {
+  FormEventHandler,
+  MouseEventHandler,
+  useCallback,
+  useEffect,
+  useState,
+} from 'react';
 import {
   Box,
   Button,
+  color,
   Header,
   Icon,
   IconButton,
@@ -27,6 +34,7 @@ import { APP_WEB_DEVICE_NAME } from '../../../constants/branding';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { useAuthServer } from '../../../hooks/useAuthServer';
 import { useClientConfig } from '../../../hooks/useClientConfig';
+import { useAuthMetadata } from '../../../hooks/useAuthMetadata';
 import {
   completeLogin,
   CustomLoginResponse,
@@ -38,11 +46,9 @@ import { PasswordInput } from '../../../components/password-input';
 import { FieldError } from '../FiledError';
 import { getResetPasswordPath } from '../../pathUtils';
 import { stopPropagation } from '../../../utils/keyboard';
-import {
-  markAccountPinVerified,
-  resolveAccountPinLoginRequirement,
-} from '../../../utils/pinLock';
+import { markAccountPinVerified, resolveAccountPinLoginRequirement } from '../../../utils/pinLock';
 import { AccountPinDialog } from '../../../components/pin-lock';
+import { openExternalUrl } from '../../../utils/desktop';
 
 const copy = {
   hintTitle: '\u63d0\u793a',
@@ -58,8 +64,10 @@ const copy = {
   deviceLimit:
     '\u8be5\u8d26\u53f7\u5df2\u8fbe\u5230\u670d\u52a1\u5668\u5141\u8bb8\u7684\u8bbe\u5907\u6570\u91cf\u4e0a\u9650\uff0c\u8bf7\u5728\u5176\u4ed6\u8bbe\u5907\u4e2d\u79fb\u9664\u8bbe\u5907\u540e\u91cd\u8bd5\u3002',
   userDeactivated: '\u8be5\u8d26\u6237\u5df2\u88ab\u505c\u7528\u3002',
-  invalidRequest: '\u767b\u5f55\u5931\u8d25\uff0c\u8bf7\u6c42\u4e2d\u7684\u90e8\u5206\u6570\u636e\u65e0\u6548\u3002',
-  rateLimited: '\u767b\u5f55\u5931\u8d25\uff0c\u5f53\u524d\u8bf7\u6c42\u8fc7\u4e8e\u9891\u7e41\uff0c\u8bf7\u7a0d\u540e\u518d\u8bd5\u3002',
+  invalidRequest:
+    '\u767b\u5f55\u5931\u8d25\uff0c\u8bf7\u6c42\u4e2d\u7684\u90e8\u5206\u6570\u636e\u65e0\u6548\u3002',
+  rateLimited:
+    '\u767b\u5f55\u5931\u8d25\uff0c\u5f53\u524d\u8bf7\u6c42\u8fc7\u4e8e\u9891\u7e41\uff0c\u8bf7\u7a0d\u540e\u518d\u8bd5\u3002',
   unknown: '\u767b\u5f55\u5931\u8d25\uff0c\u539f\u56e0\u672a\u77e5\u3002',
   forgotPassword: '\u5fd8\u8bb0\u5bc6\u7801\uff1f',
   login: '\u767b\u5f55',
@@ -73,7 +81,9 @@ const getForbiddenLoginMessage = (error: MatrixError): string => {
   const detail = error.data?.error?.trim();
   if (!detail) return copy.forbidden;
 
-  if (/\bdevice(?:s)?\b|\bdevice.?limit\b|\bmaximum number\b|\u8bbe\u5907|\u4e0a\u9650/i.test(detail)) {
+  if (
+    /\bdevice(?:s)?\b|\bdevice.?limit\b|\bmaximum number\b|\u8bbe\u5907|\u4e0a\u9650/i.test(detail)
+  ) {
     return copy.deviceLimit;
   }
 
@@ -84,6 +94,13 @@ const getForbiddenLoginMessage = (error: MatrixError): string => {
     return `\u767b\u5f55\u88ab\u670d\u52a1\u5668\u62d2\u7edd\uff1a${detail}`;
   }
   return copy.forbidden;
+};
+
+const isDeviceLimitLoginError = (error: MatrixError): boolean => {
+  const detail = error.data?.error ?? error.message ?? '';
+  return /\bdevice(?:s)?\b|\bdevice.?limit\b|\bmaximum number\b|\u8bbe\u5907|\u4e0a\u9650/i.test(
+    detail
+  );
 };
 
 function UsernameHint({ server }: { server: string }) {
@@ -163,6 +180,7 @@ type PasswordLoginFormProps = {
 export function PasswordLoginForm({ defaultUsername, defaultEmail }: PasswordLoginFormProps) {
   const server = useAuthServer();
   const clientConfig = useClientConfig();
+  const authMetadata = useAuthMetadata();
   const navigate = useNavigate();
 
   const serverDiscovery = useAutoDiscoveryInfo();
@@ -170,14 +188,14 @@ export function PasswordLoginForm({ defaultUsername, defaultEmail }: PasswordLog
   const [pinProtectedLogin, setPinProtectedLogin] = useState<CustomLoginResponse>();
   const [handledSuccess, setHandledSuccess] = useState(false);
   const [resolvingPinRequirement, setResolvingPinRequirement] = useState(false);
+  const [accountManagementError, setAccountManagementError] = useState<string>();
 
   const [loginState, startLogin] = useAsyncCallback<
     CustomLoginResponse,
     MatrixError,
     Parameters<typeof login>
   >(useCallback(login, []));
-  const loginSuccessData =
-    loginState.status === AsyncStatus.Success ? loginState.data : undefined;
+  const loginSuccessData = loginState.status === AsyncStatus.Success ? loginState.data : undefined;
 
   useEffect(() => {
     if (!loginSuccessData) {
@@ -306,6 +324,15 @@ export function PasswordLoginForm({ defaultUsername, defaultEmail }: PasswordLog
     handleUsernameLogin(username, password);
   };
 
+  const accountManagementUrl = authMetadata?.account_management_uri;
+  const openAccountManagement = () => {
+    if (!accountManagementUrl) return;
+    setAccountManagementError(undefined);
+    void openExternalUrl(accountManagementUrl).catch((error: unknown) => {
+      setAccountManagementError(error instanceof Error ? error.message : String(error));
+    });
+  };
+
   return (
     <Box as="form" onSubmit={handleSubmit} direction="Inherit" gap="400">
       <Box direction="Column" gap="100">
@@ -353,7 +380,27 @@ export function PasswordLoginForm({ defaultUsername, defaultEmail }: PasswordLog
           {loginState.status === AsyncStatus.Error && (
             <>
               {loginState.error.errcode === LoginError.Forbidden && (
-                <FieldError message={getForbiddenLoginMessage(loginState.error)} />
+                <Box direction="Column" gap="100">
+                  <FieldError message={getForbiddenLoginMessage(loginState.error)} />
+                  {isDeviceLimitLoginError(loginState.error) && accountManagementUrl && (
+                    <Button
+                      type="button"
+                      size="300"
+                      variant="Secondary"
+                      fill="Soft"
+                      radii="300"
+                      outlined
+                      onClick={openAccountManagement}
+                    >
+                      <Text size="B300">打开服务器账户管理页面删除设备</Text>
+                    </Button>
+                  )}
+                  {accountManagementError && (
+                    <Text size="T200" style={{ color: color.Critical.Main }}>
+                      无法打开账户管理页面：{accountManagementError}
+                    </Text>
+                  )}
+                </Box>
               )}
               {loginState.error.errcode === LoginError.UserDeactivated && (
                 <FieldError message={copy.userDeactivated} />
@@ -401,10 +448,7 @@ export function PasswordLoginForm({ defaultUsername, defaultEmail }: PasswordLog
           submitLabel={copy.continueLogin}
           onCancel={() => setPinProtectedLogin(undefined)}
           onSuccess={() => {
-            markAccountPinVerified(
-              pinProtectedLogin.baseUrl,
-              pinProtectedLogin.response.user_id
-            );
+            markAccountPinVerified(pinProtectedLogin.baseUrl, pinProtectedLogin.response.user_id);
             completeLogin(pinProtectedLogin, navigate);
           }}
         />

@@ -32,6 +32,9 @@ test('login shows server-specific 403 reasons instead of always blaming credenti
   assert.match(source, /device\.?limit|maximum number|\u8bbe\u5907/);
   assert.match(source, /return `\\u767b\\u5f55\\u88ab\\u670d\\u52a1\\u5668\\u62d2\\u7edd/);
   assert.match(source, /invalid username\\\/password/);
+  assert.match(source, /isDeviceLimitLoginError/);
+  assert.match(source, /account_management_uri/);
+  assert.match(source, /打开服务器账户管理页面删除设备/);
 });
 
 test('device settings offer safe inactive-device selection instead of silent deletion', async () => {
