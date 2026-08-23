@@ -21,7 +21,11 @@ import { restorePinLockStorage, snapshotPinLockStorage } from '../app/utils/pinL
 import { clearDesktopMediaCache } from '../app/utils/desktopMediaAssetCache';
 import { isDesktopUpdaterSupported } from '../app/utils/desktopUpdater';
 import { pushSessionToSW } from '../sw-session';
-import { removeFallbackAccessToken } from '../app/state/sessions';
+import {
+  clearFallbackSessionSoftLogout,
+  markFallbackSessionSoftLoggedOut,
+  removeFallbackAccessToken,
+} from '../app/state/sessions';
 import { isAndroidApp } from '../app/utils/nativePlatform';
 import { CryptoEvent } from 'matrix-js-sdk/lib/crypto-api/CryptoEvent';
 import {
@@ -136,19 +140,6 @@ const initRustCryptoForSession = async (mx: MatrixClient, session: Session): Pro
   for (const prefix of candidates) {
     try {
       await mx.initRustCrypto({ cryptoDatabasePrefix: prefix });
-      // The SDK currently disables room-key requests by default. That leaves
-      // a newly-created client unable to recover a live Megolm session which
-      // is still available on another verified device (the common case for
-      // browser/incognito logins). Requests are sent only to this account's
-      // own devices and are required for intermittent UTD recovery.
-      const crypto = mx.getCrypto() as
-        | (object & {
-            olmMachine?: { roomKeyRequestsEnabled?: boolean };
-          })
-        | undefined;
-      if (crypto?.olmMachine && 'roomKeyRequestsEnabled' in crypto.olmMachine) {
-        crypto.olmMachine.roomKeyRequestsEnabled = true;
-      }
       saveRustCryptoDatabasePrefix(session, prefix);
       clearNewRustCryptoStoreAllowance(session);
       return prefix;
@@ -596,7 +587,7 @@ export const clearLocalSessionAfterLogout = async (mx?: MatrixClient) => {
  * Explicit sign-out and "clear local data" still use the destructive cleanup
  * above.
  */
-export const clearExpiredSessionAfterLogout = async (mx?: MatrixClient) => {
+export const clearExpiredSessionAfterLogout = async (mx?: MatrixClient, softLogout = false) => {
   pushSessionToSW();
   mx?.stopClient();
   try {
@@ -606,9 +597,15 @@ export const clearExpiredSessionAfterLogout = async (mx?: MatrixClient) => {
     // A failed sync-store cleanup must not prevent returning to sign-in.
   }
   // Keep the homeserver, user and device identity. Reusing the same Matrix
-  // device ID after re-authentication lets this installation reopen the same
-  // encryption store instead of silently becoming an unverified new device.
+  // device ID is allowed only after an explicit server-issued soft logout.
+  // For every other invalid session, the identity is retained only to make the
+  // sign-in screen convenient; login will request a fresh Matrix device.
   removeFallbackAccessToken();
+  if (softLogout) {
+    markFallbackSessionSoftLoggedOut();
+  } else {
+    clearFallbackSessionSoftLogout();
+  }
   await clearDesktopMediaCache();
 };
 

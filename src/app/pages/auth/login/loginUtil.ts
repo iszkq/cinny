@@ -10,7 +10,11 @@ import {
   getAfterLoginRedirectPath,
 } from '../../afterLoginRedirectPath';
 import { getHomePath } from '../../pathUtils';
-import { getFallbackSessionIdentity, setFallbackSession } from '../../../state/sessions';
+import {
+  getFallbackSessionIdentity,
+  isFallbackSessionSoftLoggedOut,
+  setFallbackSession,
+} from '../../../state/sessions';
 import {
   allowNewRustCryptoStore,
   hasPersistedRustCryptoStore,
@@ -86,6 +90,26 @@ const loginMatchesSavedUser = (data: LoginRequest, savedUserId: string): boolean
   return loginUser === savedLocalpart;
 };
 
+const reusedDeviceStillHasServerKeys = async (
+  baseUrl: string,
+  loginResponse: LoginResponse
+): Promise<boolean> => {
+  const authenticatedClient = createClient({
+    baseUrl,
+    accessToken: loginResponse.access_token,
+    userId: loginResponse.user_id,
+    deviceId: loginResponse.device_id,
+  });
+  try {
+    const keys = await authenticatedClient.downloadKeysForUsers([loginResponse.user_id]);
+    return Boolean(keys.device_keys?.[loginResponse.user_id]?.[loginResponse.device_id]);
+  } catch {
+    // A transient key-query failure is not evidence that a device is invalid.
+    // Let normal startup retry instead of creating an unnecessary new device.
+    return true;
+  }
+};
+
 export const login = async (
   serverBaseUrl: string | (() => Promise<string>),
   data: LoginRequest
@@ -103,12 +127,17 @@ export const login = async (
 
   const savedIdentity = getFallbackSessionIdentity();
   const mayReuseDeviceId =
+    isFallbackSessionSoftLoggedOut() &&
     !!savedIdentity &&
     normalizeHomeserverUrl(savedIdentity.baseUrl) === normalizeHomeserverUrl(url) &&
     data.device_id === undefined &&
     loginMatchesSavedUser(data, savedIdentity.userId);
   const canReuseDeviceId = mayReuseDeviceId && (await hasPersistedRustCryptoStore(savedIdentity));
   let reusedDeviceId = canReuseDeviceId;
+  // Reusing a Matrix device is safe only for an explicit server-issued soft
+  // logout. A normal login with the same username must receive a new device:
+  // the old server-side device or its device keys may have been deleted while
+  // the local Rust Crypto database still exists.
   const loginRequest: LoginRequest = canReuseDeviceId
     ? { ...data, device_id: savedIdentity!.deviceId }
     : data;
@@ -120,6 +149,23 @@ export const login = async (
   // for invalid credentials. Retry once without the old device id so a valid
   // password is not reported as incorrect after device state was reset.
   if (err?.httpStatus === 403 && canReuseDeviceId) {
+    mx = createClient({ baseUrl: url });
+    [err, res] = await to<LoginResponse, MatrixError>(mx.loginRequest(data));
+    reusedDeviceId = false;
+  }
+
+  // Some homeservers accept a reused device_id even when its E2EE device keys
+  // have disappeared. The local Rust store then believes those keys are still
+  // uploaded, leaving the device unable to receive new room keys. Replace that
+  // split-brain session with a newly-issued device before client startup.
+  if (!err && res && reusedDeviceId && !(await reusedDeviceStillHasServerKeys(url, res))) {
+    const staleClient = createClient({
+      baseUrl: url,
+      accessToken: res.access_token,
+      userId: res.user_id,
+      deviceId: res.device_id,
+    });
+    await staleClient.logout().catch(() => undefined);
     mx = createClient({ baseUrl: url });
     [err, res] = await to<LoginResponse, MatrixError>(mx.loginRequest(data));
     reusedDeviceId = false;
@@ -153,9 +199,14 @@ export const login = async (
       errcode: LoginError.Unknown,
     });
   }
+  if (!res) {
+    throw new MatrixError({
+      errcode: LoginError.Unknown,
+    });
+  }
   return {
     baseUrl: url,
-    response: res!,
+    response: res,
     reusedDeviceId,
   };
 };

@@ -5,9 +5,11 @@ import test from 'node:test';
 const readSource = (relativePath) =>
   readFile(new URL(`../${relativePath}`, import.meta.url), 'utf8');
 
-test('an expired Matrix session keeps the local encryption store', async () => {
+test('only an explicit soft logout may reuse the local Matrix device', async () => {
   const clientSource = await readSource('src/client/initMatrix.ts');
   const rootSource = await readSource('src/app/pages/client/ClientRoot.tsx');
+  const sessionSource = await readSource('src/app/state/sessions.ts');
+  const loginSource = await readSource('src/app/pages/auth/login/loginUtil.ts');
   const start = clientSource.indexOf('export const clearExpiredSessionAfterLogout');
   const end = clientSource.indexOf('export const logoutClient', start);
   const body = clientSource.slice(start, end);
@@ -16,7 +18,12 @@ test('an expired Matrix session keeps the local encryption store', async () => {
   assert.doesNotMatch(body, /removeFallbackSession\(\)/);
   assert.match(body, /await mx\?\.store\.deleteAllData\(\)/);
   assert.doesNotMatch(body, /clearStores\(\)|localStorage\.clear\(\)/);
-  assert.match(rootSource, /await clearExpiredSessionAfterLogout\(mx\)/);
+  assert.match(rootSource, /error\.httpStatus === 401 && error\.data\?\.soft_logout === true/);
+  assert.match(rootSource, /await clearExpiredSessionAfterLogout\(mx, softLogout\)/);
+  assert.match(sessionSource, /FALLBACK_SOFT_LOGOUT_KEY = 'cinny_soft_logout'/);
+  assert.match(loginSource, /isFallbackSessionSoftLoggedOut\(\) &&/);
+  assert.match(loginSource, /reusedDeviceStillHasServerKeys/);
+  assert.match(loginSource, /await staleClient\.logout\(\)\.catch/);
 });
 
 test('Rust Crypto storage remains isolated per account and device', async () => {
@@ -44,8 +51,10 @@ test('re-login only reuses a saved Matrix device when its crypto identity still 
   assert.match(sessionSource, /removeFallbackAccessToken/);
   assert.match(loginSource, /normalizeHomeserverUrl\(savedIdentity\.baseUrl\)/);
   assert.match(loginSource, /loginMatchesSavedUser\(data, savedIdentity\.userId\)/);
+  assert.match(loginSource, /isFallbackSessionSoftLoggedOut\(\)/);
   assert.match(loginSource, /await hasPersistedRustCryptoStore\(savedIdentity\)/);
   assert.match(loginSource, /device_id: savedIdentity!\.deviceId/);
+  assert.match(loginSource, /downloadKeysForUsers\(\[loginResponse\.user_id\]\)/);
   assert.match(loginSource, /mx\.loginRequest\(loginRequest\)/);
   assert.match(loginSource, /allowNewRustCryptoStore/);
   assert.match(cryptoStoreSource, /getRustCryptoDatabasePrefix/);
@@ -134,18 +143,18 @@ test('the sidebar stays critical until both device and key backup are verified',
   assert.match(backupHookSource, /useKeyBackupDecryptionKeyCached\(fetchTrust\)/);
 });
 
-test('automatic room-key recovery requests are enabled for verified own devices', async () => {
+test('automatic room-key request and forwarding policy is left at the SDK default', async () => {
   const initSource = await readSource('src/client/initMatrix.ts');
   const recoverySource = await readSource('src/app/utils/decryptionRecovery.ts');
   const featuresSource = await readSource('src/app/pages/client/ClientNonUIFeatures.tsx');
 
   assert.doesNotMatch(initSource, /enableMissingRoomKeyRequests/);
-  assert.match(initSource, /roomKeyRequestsEnabled\?\s*:\s*boolean/);
-  assert.match(initSource, /roomKeyRequestsEnabled\s*=\s*true/);
+  assert.doesNotMatch(initSource, /roomKeyRequestsEnabled\s*=\s*true/);
   assert.doesNotMatch(initSource, /roomKeyForwardingEnabled\s*=\s*true/);
-  assert.match(recoverySource, /restoreSessionFromBackup/);
-  assert.match(recoverySource, /trust\.matchesDecryptionKey !== true/);
-  assert.match(recoverySource, /crypto\.importBackedUpRoomKeys\(keys, activeVersion\)/);
+  assert.match(recoverySource, /SDK_RECOVERY_GRACE_MS = 15_000/);
+  assert.match(recoverySource, /SDK is deliberately the sole owner/);
+  assert.doesNotMatch(recoverySource, /restoreSessionFromBackup/);
+  assert.doesNotMatch(recoverySource, /outgoingRequestsManager|onSyncCompleted|attemptDecryption/);
   assert.match(featuresSource, /useEffect\(\(\) => startDecryptionRecovery\(mx\), \[mx\]\)/);
 });
 
@@ -157,6 +166,8 @@ test('decryption diagnostics exclude message and key secrets', async () => {
   assert.match(diagnosticSource, /cryptoDeviceCreationTimeMs/);
   assert.match(diagnosticSource, /serverCurve25519MatchesLocal/);
   assert.match(diagnosticSource, /serverEd25519MatchesLocal/);
+  assert.match(diagnosticSource, /serverDeviceSessionFound/);
+  assert.match(diagnosticSource, /mx\.getDevices\(\)/);
   assert.match(diagnosticSource, /serverCurve25519MatchesEvent/);
   assert.match(diagnosticSource, /roomKeyWithheldStatusObserved/);
   assert.match(diagnosticSource, /mx\.downloadKeysForUsers\(keyQueryUsers\)/);

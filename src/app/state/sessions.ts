@@ -23,6 +23,8 @@ export type SessionStoreName = {
   crypto: string;
 };
 
+const FALLBACK_SOFT_LOGOUT_KEY = 'cinny_soft_logout';
+
 /**
  * Migration code for old session
  */
@@ -41,16 +43,26 @@ export function setFallbackSession(
   localStorage.setItem('cinny_device_id', deviceId);
   localStorage.setItem('cinny_user_id', userId);
   localStorage.setItem('cinny_hs_base_url', baseUrl);
+  localStorage.removeItem(FALLBACK_SOFT_LOGOUT_KEY);
 }
 export const removeFallbackSession = () => {
   localStorage.removeItem('cinny_hs_base_url');
   localStorage.removeItem('cinny_user_id');
   localStorage.removeItem('cinny_device_id');
   localStorage.removeItem('cinny_access_token');
+  localStorage.removeItem(FALLBACK_SOFT_LOGOUT_KEY);
 };
 export const removeFallbackAccessToken = () => {
   localStorage.removeItem('cinny_access_token');
 };
+export const markFallbackSessionSoftLoggedOut = () => {
+  localStorage.setItem(FALLBACK_SOFT_LOGOUT_KEY, 'true');
+};
+export const clearFallbackSessionSoftLogout = () => {
+  localStorage.removeItem(FALLBACK_SOFT_LOGOUT_KEY);
+};
+export const isFallbackSessionSoftLoggedOut = (): boolean =>
+  localStorage.getItem(FALLBACK_SOFT_LOGOUT_KEY) === 'true';
 export const getFallbackSessionIdentity = (): SessionIdentity | undefined => {
   const baseUrl = localStorage.getItem('cinny_hs_base_url');
   const userId = localStorage.getItem('cinny_user_id');

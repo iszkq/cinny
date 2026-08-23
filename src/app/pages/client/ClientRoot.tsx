@@ -171,8 +171,12 @@ function ClientRootOptions({ mx }: { mx?: MatrixClient }) {
 
 const useLogoutListener = (mx?: MatrixClient) => {
   useEffect(() => {
-    const handleLogout: HttpApiEventHandlerMap[HttpApiEvent.SessionLoggedOut] = async () => {
-      await clearExpiredSessionAfterLogout(mx);
+    const handleLogout: HttpApiEventHandlerMap[HttpApiEvent.SessionLoggedOut] = async (error) => {
+      // Match Element's lifecycle boundary: only an explicit soft logout may
+      // reopen the existing device and Rust Crypto store. A generic expired or
+      // revoked token must get a fresh device on the next login.
+      const softLogout = error.httpStatus === 401 && error.data?.soft_logout === true;
+      await clearExpiredSessionAfterLogout(mx, softLogout);
       window.location.reload();
     };
 

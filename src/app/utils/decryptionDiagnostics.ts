@@ -216,9 +216,11 @@ export const createDecryptionDiagnosticReport = async (
     verificationError: null as string | null,
     roomKeyRequestsEnabled: null as boolean | null,
     roomKeyForwardingEnabled: null as boolean | null,
+    serverDeviceSessionFound: null as boolean | null,
     serverDeviceFound: null as boolean | null,
     serverCurve25519MatchesLocal: null as boolean | null,
     serverEd25519MatchesLocal: null as boolean | null,
+    serverDeviceSessionQueryError: null as string | null,
     serverKeyQueryError: null as string | null,
   };
   const senderDevice = {
@@ -257,6 +259,7 @@ export const createDecryptionDiagnosticReport = async (
       backupInfoResult,
       verificationResult,
       ownKeysResult,
+      serverDevicesResult,
       serverKeysResult,
     ] = await Promise.allSettled([
       crypto.getActiveSessionBackupVersion(),
@@ -265,6 +268,7 @@ export const createDecryptionDiagnosticReport = async (
         ? crypto.getDeviceVerificationStatus(userId, deviceId)
         : Promise.resolve(null),
       crypto.getOwnDeviceKeys(),
+      mx.getDevices(),
       keyQueryUsers.length > 0 ? mx.downloadKeysForUsers(keyQueryUsers) : Promise.resolve(null),
     ]);
 
@@ -291,6 +295,13 @@ export const createDecryptionDiagnosticReport = async (
       currentDevice.localVerified = verificationResult.value.localVerified;
     } else if (verificationResult.status === 'rejected') {
       currentDevice.verificationError = safeError(verificationResult.reason);
+    }
+    if (serverDevicesResult.status === 'rejected') {
+      currentDevice.serverDeviceSessionQueryError = safeError(serverDevicesResult.reason);
+    } else if (deviceId) {
+      currentDevice.serverDeviceSessionFound = serverDevicesResult.value.devices.some(
+        (device) => device.device_id === deviceId
+      );
     }
     if (serverKeysResult.status === 'rejected') {
       const error = safeError(serverKeysResult.reason);
@@ -353,7 +364,7 @@ export const createDecryptionDiagnosticReport = async (
   return JSON.stringify(
     {
       report: 'Starfire decryption diagnostic',
-      schemaVersion: 2,
+      schemaVersion: 3,
       generatedAt: new Date().toISOString(),
       appVersion: APP_VERSION,
       platform: navigator.userAgent,
