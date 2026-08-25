@@ -190,6 +190,12 @@ test('Android secure storage and database compatibility remain intact', async ()
   assert.match(initSource, /crypto\.isSecretStorageReady\(\)/);
   assert.match(initSource, /crypto\.bootstrapCrossSigning\(\{\}\)/);
   assert.match(initSource, /if \(!newlyIssuedDevice && !isAndroidApp\(\)\)/);
+  assert.match(initSource, /Android WebView\/IndexedDB can briefly report an empty database list/);
+  assert.match(initSource, /if \(isAndroidApp\(\)\) \{[\s\S]*addCandidate\(scopedPrefix\)/);
+  assert.match(
+    initSource,
+    /if \(!isAndroidApp\(\)\) \{\s*removeAndroidPersistedSession\(\);\s*removeFallbackAccessToken\(\);/
+  );
   assert.match(nativeSecureStorageSource, /new KeyGenParameterSpec\.Builder/);
   assert.match(nativeSecureStorageSource, /KeyProperties\.PURPOSE_ENCRYPT/);
   assert.match(nativeSecureStorageSource, /KeyProperties\.BLOCK_MODE_GCM/);

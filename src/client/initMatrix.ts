@@ -190,16 +190,26 @@ const initRustCryptoForSession = async (
 ): Promise<RustCryptoInitialization> => {
   const scopedPrefix = getRustCryptoDatabasePrefix(session);
   const savedPrefix = getSavedRustCryptoDatabasePrefix(session);
+  const storeCreationAllowed = isNewRustCryptoStoreAllowed(session);
   // Enumerate IndexedDB only once. Some WebViews make this surprisingly
   // expensive, and the old implementation performed the same full scan twice
   // on every launch before Rust Crypto could even start.
-  const existingPrefixes = await findExistingRustCryptoDatabasePrefixes([
+  const cryptoPrefixes = [
     LEGACY_RUST_CRYPTO_DATABASE_PREFIX,
     scopedPrefix,
-  ]);
+  ];
+  let existingPrefixes = await findExistingRustCryptoDatabasePrefixes(cryptoPrefixes);
+  // Android WebView/IndexedDB can briefly report an empty database list while
+  // the renderer is being recreated. Never treat that transient state as a
+  // revoked login; give the store a few bounded attempts to reappear first.
+  if (isAndroidApp() && existingPrefixes.size === 0 && !storeCreationAllowed) {
+    for (let attempt = 0; attempt < 4 && existingPrefixes.size === 0; attempt += 1) {
+      await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 350));
+      existingPrefixes = await findExistingRustCryptoDatabasePrefixes(cryptoPrefixes);
+    }
+  }
   const legacyExists = existingPrefixes.has(LEGACY_RUST_CRYPTO_DATABASE_PREFIX);
   const scopedExists = existingPrefixes.has(scopedPrefix);
-  const storeCreationAllowed = isNewRustCryptoStoreAllowed(session);
   const candidates: string[] = [];
   const addCandidate = (prefix: string) => {
     if (!candidates.includes(prefix)) candidates.push(prefix);
@@ -230,11 +240,18 @@ const initRustCryptoForSession = async (
   }
   if (candidates.length === 0) {
     if (!storeCreationAllowed) {
-      await removeAndroidPersistedSession();
-      removeFallbackAccessToken();
-      throw new MissingCryptoStoreError();
+      if (isAndroidApp()) {
+        // Keep Android's durable session. A missing IndexedDB view can be a
+        // renderer-restart race; creating the scoped store lets the Matrix
+        // client recover without forcing the user through login again.
+        addCandidate(scopedPrefix);
+      } else {
+        removeFallbackAccessToken();
+        throw new MissingCryptoStoreError();
+      }
+    } else {
+      addCandidate(scopedPrefix);
     }
-    addCandidate(scopedPrefix);
   }
 
   // A legacy selection may belong to another login despite having the same
@@ -259,8 +276,10 @@ const initRustCryptoForSession = async (
     }
   }
 
-  await removeAndroidPersistedSession();
-  removeFallbackAccessToken();
+  if (!isAndroidApp()) {
+    removeAndroidPersistedSession();
+    removeFallbackAccessToken();
+  }
   throw new MissingCryptoStoreError();
 };
 
