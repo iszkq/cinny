@@ -30,6 +30,8 @@ import {
 } from '../hooks/useVerificationRequest';
 import { AsyncStatus, useAsyncCallback } from '../hooks/useAsyncCallback';
 import { ContainerColor } from '../styles/ContainerColor.css';
+import { persistAndroidCryptoState } from '../../client/initMatrix';
+import { useMatrixClient } from '../hooks/useMatrixClient';
 
 const DialogHeaderStyles: CSSProperties = {
   padding: `0 ${config.space.S200} 0 ${config.space.S400}`,
@@ -303,7 +305,12 @@ type DeviceVerificationProps = {
   onExit: () => void;
 };
 export function DeviceVerification({ request, onExit }: DeviceVerificationProps) {
+  const mx = useMatrixClient();
   const phase = useVerificationRequestPhase(request);
+
+  useEffect(() => {
+    if (phase === VerificationPhase.Done) void persistAndroidCryptoState(mx);
+  }, [mx, phase]);
 
   const handleCancel = useCallback(() => {
     if (request.phase !== VerificationPhase.Done && request.phase !== VerificationPhase.Cancelled) {

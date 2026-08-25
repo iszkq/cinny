@@ -1,3 +1,8 @@
+import {
+  persistAndroidSession,
+  removeAndroidPersistedSession,
+} from '../../client/secretStorageKeys';
+
 // import { atom } from 'jotai';
 // import {
 //   atomWithLocalStorage,
@@ -34,7 +39,7 @@ const CRYPTO_DEVICE_RECOVERY_NOTICE_KEY = 'cinny_crypto_device_recovery_notice';
 //   crypto: 'crypto-store',
 // } as const;
 
-export function setFallbackSession(
+export async function setFallbackSession(
   accessToken: string,
   deviceId: string,
   userId: string,
@@ -45,8 +50,10 @@ export function setFallbackSession(
   localStorage.setItem('cinny_user_id', userId);
   localStorage.setItem('cinny_hs_base_url', baseUrl);
   localStorage.removeItem(FALLBACK_SOFT_LOGOUT_KEY);
+  await persistAndroidSession({ accessToken, deviceId, userId, baseUrl });
 }
 export const removeFallbackSession = () => {
+  void removeAndroidPersistedSession();
   localStorage.removeItem('cinny_hs_base_url');
   localStorage.removeItem('cinny_user_id');
   localStorage.removeItem('cinny_device_id');
@@ -54,6 +61,7 @@ export const removeFallbackSession = () => {
   localStorage.removeItem(FALLBACK_SOFT_LOGOUT_KEY);
 };
 export const removeFallbackAccessToken = () => {
+  void removeAndroidPersistedSession();
   localStorage.removeItem('cinny_access_token');
 };
 export const markFallbackSessionSoftLoggedOut = () => {

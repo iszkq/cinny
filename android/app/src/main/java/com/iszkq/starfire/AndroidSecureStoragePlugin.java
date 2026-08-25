@@ -1,6 +1,8 @@
 package com.iszkq.starfire;
 
 import android.content.SharedPreferences;
+import android.security.keystore.KeyGenParameterSpec;
+import android.security.keystore.KeyProperties;
 import android.util.Base64;
 
 import com.getcapacitor.JSObject;
@@ -31,7 +33,14 @@ public class AndroidSecureStoragePlugin extends Plugin {
             return ((KeyStore.SecretKeyEntry) store.getEntry(KEY_ALIAS, null)).getSecretKey();
         }
         KeyGenerator generator = KeyGenerator.getInstance("AES", ANDROID_KEYSTORE);
-        generator.init(256);
+        generator.init(new KeyGenParameterSpec.Builder(
+            KEY_ALIAS,
+            KeyProperties.PURPOSE_ENCRYPT | KeyProperties.PURPOSE_DECRYPT
+        )
+            .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+            .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+            .setKeySize(256)
+            .build());
         return generator.generateKey();
     }
 

@@ -80,7 +80,10 @@ test('an updated client replaces a retained session whose server crypto identity
   assert.match(clientSource, /serverEd25519 === ownKeys\.ed25519/);
   assert.match(clientSource, /DEVICE_IDENTITY_CONFIRM_DELAY_MS/);
   assert.match(clientSource, /if \(confirmedStatus !== 'invalid'\) return/);
-  assert.match(clientSource, /if \(!newlyIssuedDevice\) await validateExistingCryptoDevice/);
+  assert.match(
+    clientSource,
+    /if \(!newlyIssuedDevice && !isAndroidApp\(\)\) await validateExistingCryptoDevice/
+  );
   assert.match(
     clientSource,
     /await Promise\.allSettled\(\[clearAndroidClientSnapshot\(mx\), mx\.store\.deleteAllData\(\)\]\)/
@@ -154,6 +157,11 @@ test('backup restore after verification uses the existing client-scoped progress
 test('Android secure storage and database compatibility remain intact', async () => {
   const secureStorageSource = await readSource('src/client/secretStorageKeys.js');
   const initSource = await readSource('src/client/initMatrix.ts');
+  const sessionSource = await readSource('src/app/state/sessions.ts');
+  const entrySource = await readSource('src/index.tsx');
+  const nativeSecureStorageSource = await readSource(
+    'android/app/src/main/java/com/iszkq/starfire/AndroidSecureStoragePlugin.java'
+  );
 
   assert.match(secureStorageSource, /cinny_android_backup_trusted:/);
   assert.match(secureStorageSource, /session-backup-private-key/);
@@ -161,6 +169,31 @@ test('Android secure storage and database compatibility remain intact', async ()
   assert.match(initSource, /persistAndroidBackupKey\(crypto/);
   assert.match(initSource, /requestPersistentAndroidStorage\(\)/);
   assert.match(initSource, /loadAndroidClientSnapshot/);
+  assert.match(secureStorageSource, /ACTIVE_SESSION_KEY = 'cinny_android_active_session_v1'/);
+  assert.match(secureStorageSource, /persistAndroidSession/);
+  assert.match(secureStorageSource, /hydrateAndroidSession/);
+  assert.match(
+    secureStorageSource,
+    /export const persistAndroidSession[\s\S]*attempt < 5[\s\S]*AndroidSecureStorage\.set/
+  );
+  assert.doesNotMatch(
+    secureStorageSource,
+    /const loadSecureKeys = async \(\) => \{\s*if \(!isAndroid\(\) \|\| !secureStorageKey\(\)\) return;/
+  );
+  assert.match(secureStorageSource, /const scopedStorageKey = secureStorageKey\(\)/);
+  assert.match(sessionSource, /await persistAndroidSession/);
+  assert.match(sessionSource, /removeAndroidPersistedSession/);
+  assert.match(entrySource, /if \(isAndroidApp\(\)\) await hydrateAndroidSession\(\)/);
+  assert.match(initSource, /persistAndroidCryptoState/);
+  assert.match(initSource, /setAndroidSecureValue\('verified-device', '1'\)/);
+  assert.match(initSource, /crypto\.isCrossSigningReady\(\)/);
+  assert.match(initSource, /crypto\.isSecretStorageReady\(\)/);
+  assert.match(initSource, /crypto\.bootstrapCrossSigning\(\{\}\)/);
+  assert.match(initSource, /if \(!newlyIssuedDevice && !isAndroidApp\(\)\)/);
+  assert.match(nativeSecureStorageSource, /new KeyGenParameterSpec\.Builder/);
+  assert.match(nativeSecureStorageSource, /KeyProperties\.PURPOSE_ENCRYPT/);
+  assert.match(nativeSecureStorageSource, /KeyProperties\.BLOCK_MODE_GCM/);
+  assert.doesNotMatch(nativeSecureStorageSource, /generator\.init\(256\)/);
 });
 
 test('the sidebar stays critical until both device and key backup are verified', async () => {

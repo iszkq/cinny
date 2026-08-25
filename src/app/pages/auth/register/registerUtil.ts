@@ -120,11 +120,12 @@ export const useRegisterComplete = (data?: CustomRegisterResponse) => {
       const deviceId = response.device_id;
 
       if (accessToken && deviceId) {
-        setFallbackSession(accessToken, deviceId, userId, baseUrl);
-        allowNewRustCryptoStore({ userId, deviceId });
-        const afterLoginRedirectPath = getAfterLoginRedirectPath();
-        deleteAfterLoginRedirectPath();
-        navigate(afterLoginRedirectPath ?? getHomePath(), { replace: true });
+        void setFallbackSession(accessToken, deviceId, userId, baseUrl).then(() => {
+          allowNewRustCryptoStore({ userId, deviceId });
+          const afterLoginRedirectPath = getAfterLoginRedirectPath();
+          deleteAfterLoginRedirectPath();
+          navigate(afterLoginRedirectPath ?? getHomePath(), { replace: true });
+        });
       } else {
         const username = getMxIdLocalPart(userId);
         const userServer = getMxIdServer(userId);

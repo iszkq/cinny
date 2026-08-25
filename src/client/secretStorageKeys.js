@@ -5,6 +5,7 @@ const AndroidSecureStorage = registerPlugin('AndroidSecureStorage');
 const secretStorageKeys = new Map();
 const secureValues = new Map();
 const STORAGE_PREFIX = 'cinny_android_secret_storage_keys:';
+const ACTIVE_SESSION_KEY = 'cinny_android_active_session_v1';
 const isAndroid = () => Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android';
 const storageKey = () => {
   if (!isAndroid() || typeof localStorage === 'undefined') return undefined;
@@ -68,14 +69,15 @@ const localTrustedBackupKey = () => {
 };
 
 const loadSecureKeys = async () => {
-  if (!isAndroid() || !secureStorageKey()) return;
+  if (!isAndroid()) return;
   for (let attempt = 0; attempt < 5; attempt += 1) {
     try {
       const values = await AndroidSecureStorage.getAll();
       Object.entries(values || {}).forEach(([key, value]) => {
         if (typeof value === 'string') secureValues.set(key, value);
       });
-      const encoded = values?.[secureStorageKey()];
+      const scopedStorageKey = secureStorageKey();
+      const encoded = scopedStorageKey ? values?.[scopedStorageKey] : undefined;
       if (encoded) {
         const parsed = JSON.parse(encoded);
         Object.entries(parsed).forEach(([keyId, value]) => {
@@ -89,6 +91,76 @@ const loadSecureKeys = async () => {
       // process is recreated. Retry before crypto observes an empty map.
       await new Promise((resolve) => setTimeout(resolve, 250));
     }
+  }
+};
+
+const isValidAndroidSession = (session) =>
+  session &&
+  typeof session.baseUrl === 'string' &&
+  typeof session.userId === 'string' &&
+  typeof session.deviceId === 'string' &&
+  typeof session.accessToken === 'string' &&
+  session.baseUrl.length > 0 &&
+  session.userId.length > 0 &&
+  session.deviceId.length > 0 &&
+  session.accessToken.length > 0;
+
+/**
+ * Keep the active Android Matrix session outside WebView storage. Android can
+ * recreate the renderer process independently of the app, while encrypted
+ * SharedPreferences in the native app data directory survive until explicit
+ * removal or uninstall.
+ */
+export const persistAndroidSession = async (session) => {
+  if (!isAndroid() || !isValidAndroidSession(session)) return;
+  const value = JSON.stringify(session);
+  secureValues.set(ACTIVE_SESSION_KEY, value);
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      await AndroidSecureStorage.set({ key: ACTIVE_SESSION_KEY, value });
+      return;
+    } catch {
+      // Keystore access can briefly fail immediately after process recreation.
+      // Keep retrying while localStorage remains the live in-process copy.
+      if (attempt < 4) await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  }
+};
+
+export const removeAndroidPersistedSession = async () => {
+  if (!isAndroid()) return;
+  secureValues.delete(ACTIVE_SESSION_KEY);
+  await AndroidSecureStorage.remove({ key: ACTIVE_SESSION_KEY }).catch(() => undefined);
+};
+
+export const hydrateAndroidSession = async () => {
+  if (!isAndroid()) return;
+  await loadSecureKeys();
+  const webViewSession = {
+    accessToken: localStorage.getItem('cinny_access_token'),
+    deviceId: localStorage.getItem('cinny_device_id'),
+    userId: localStorage.getItem('cinny_user_id'),
+    baseUrl: localStorage.getItem('cinny_hs_base_url'),
+  };
+  if (isValidAndroidSession(webViewSession)) {
+    // One-time migration for users upgrading from builds that only kept the
+    // session in WebView storage.
+    await persistAndroidSession(webViewSession);
+    return;
+  }
+  const encoded = secureValues.get(ACTIVE_SESSION_KEY);
+  if (typeof encoded !== 'string') return;
+  try {
+    const session = JSON.parse(encoded);
+    if (!isValidAndroidSession(session)) return;
+    // A current WebView session always wins. Native storage is disaster
+    // recovery only and must never overwrite a newer successful login.
+    localStorage.setItem('cinny_access_token', session.accessToken);
+    localStorage.setItem('cinny_device_id', session.deviceId);
+    localStorage.setItem('cinny_user_id', session.userId);
+    localStorage.setItem('cinny_hs_base_url', session.baseUrl);
+  } catch {
+    // Ignore an unreadable native session and show the normal login screen.
   }
 };
 
@@ -223,7 +295,7 @@ function getPrivateKey(keyId) {
   return undefined;
 }
 
-export function clearSecretStorageKeys() {
+export async function clearSecretStorageKeys() {
   secretStorageKeys.clear();
   const key = storageKey();
   if (key && isAndroid()) {
@@ -232,12 +304,16 @@ export function clearSecretStorageKeys() {
     } catch {
       /* ignore */
     }
-    void Promise.all([
-      AndroidSecureStorage.remove({ key }),
-      AndroidSecureStorage.remove({ key: secureValueKey('verified-device') }),
-      AndroidSecureStorage.remove({ key: secureValueKey('session-backup-private-key') }),
-      AndroidSecureStorage.remove({ key: secureValueKey('session-backup-trusted') }),
-    ]).catch(() => undefined);
+    const scopedKeys = [
+      key,
+      secureValueKey('verified-device'),
+      secureValueKey('session-backup-private-key'),
+      secureValueKey('session-backup-trusted'),
+    ].filter(Boolean);
+    scopedKeys.forEach((scopedKey) => secureValues.delete(scopedKey));
+    await Promise.all(
+      scopedKeys.map((scopedKey) => AndroidSecureStorage.remove({ key: scopedKey }))
+    ).catch(() => undefined);
     const localKey = localTrustedBackupKey();
     if (localKey) localStorage.removeItem(localKey);
   }

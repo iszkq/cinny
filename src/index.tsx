@@ -23,6 +23,7 @@ import { isNativeBibleWindow } from './app/utils/nativeBibleWindow';
 import { isNativeOfficeWindow } from './app/utils/nativeOfficeWindow';
 import { initializePWAInstall } from './app/utils/pwaInstall';
 import { initializeAndroidAppShell, isAndroidApp } from './app/utils/nativePlatform';
+import { hydrateAndroidSession } from './client/secretStorageKeys';
 import { DownloadPage } from './app/pages/download';
 
 document.body.classList.add(configClass, varsClass);
@@ -398,7 +399,11 @@ const renderRootApp = () => {
   );
 };
 
-const mountApp = () => {
+const mountApp = async () => {
+  // Native session restoration must finish before the router decides whether
+  // to show login. This is Android-only; web and desktop keep their path.
+  if (isAndroidApp()) await hydrateAndroidSession();
+
   const rootContainer = document.getElementById('root');
 
   if (rootContainer === null) {
@@ -410,7 +415,7 @@ const mountApp = () => {
   root.render(<RootErrorBoundary>{renderRootApp()}</RootErrorBoundary>);
 };
 
-mountApp();
+void mountApp();
 
 window.setTimeout(() => {
   const rootText = document.getElementById('root')?.textContent ?? '';

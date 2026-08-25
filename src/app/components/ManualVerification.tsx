@@ -20,6 +20,7 @@ import { SecretStorageRecoveryKey, SecretStorageRecoveryPassphrase } from './Sec
 import { useMatrixClient } from '../hooks/useMatrixClient';
 import { AsyncStatus, useAsyncCallback } from '../hooks/useAsyncCallback';
 import { storePrivateKey } from '../../client/secretStorageKeys';
+import { persistAndroidCryptoState } from '../../client/initMatrix';
 
 export enum ManualVerificationMethod {
   RecoveryPassphrase = 'passphrase',
@@ -142,6 +143,7 @@ export function ManualVerificationTile({
       await crypto.bootstrapSecretStorage({});
 
       await crypto.loadSessionBackupPrivateKeyFromSecretStorage();
+      await persistAndroidCryptoState(mx);
     },
     [mx, secretStorageKeyId]
   );

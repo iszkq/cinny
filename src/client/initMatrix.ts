@@ -14,6 +14,9 @@ import {
   persistAndroidBackupKey,
   restoreAndroidBackupKey,
   getAndroidSecureValue,
+  setAndroidSecureValue,
+  removeAndroidPersistedSession,
+  clearSecretStorageKeys,
 } from './secretStorageKeys';
 import { clearNavToActivePathStore } from '../app/state/navToActivePath';
 import { SETTINGS_STORAGE_KEY } from '../app/state/settingsStorage';
@@ -156,6 +159,7 @@ const invalidateCurrentCryptoDevice = async (mx: MatrixClient): Promise<void> =>
   );
   await Promise.allSettled([clearAndroidClientSnapshot(mx), mx.store.deleteAllData()]);
   pushSessionToSW();
+  await removeAndroidPersistedSession();
   removeFallbackAccessToken();
   clearFallbackSessionSoftLogout();
   markCryptoDeviceRecoveryNotice();
@@ -226,6 +230,7 @@ const initRustCryptoForSession = async (
   }
   if (candidates.length === 0) {
     if (!storeCreationAllowed) {
+      await removeAndroidPersistedSession();
       removeFallbackAccessToken();
       throw new MissingCryptoStoreError();
     }
@@ -254,6 +259,7 @@ const initRustCryptoForSession = async (
     }
   }
 
+  await removeAndroidPersistedSession();
   removeFallbackAccessToken();
   throw new MissingCryptoStoreError();
 };
@@ -410,7 +416,11 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
   // the retained server session still owns the same E2EE identity before sync
   // can expose undecryptable events. A freshly-issued login is skipped once so
   // Rust Crypto can perform its first device-key upload without racing us.
-  if (!newlyIssuedDevice) await validateExistingCryptoDevice(mx, session);
+  // Native Matrix clients restore the local crypto account and let an
+  // explicit server logout end the session. Android /devices and /keys/query
+  // can be temporarily incomplete during process recreation; treating two
+  // such responses as destructive proof caused intermittent sign-outs.
+  if (!newlyIssuedDevice && !isAndroidApp()) await validateExistingCryptoDevice(mx, session);
   if (isAndroidApp()) {
     // Attach before startClient so a cache-prepared sync is checkpointed even
     // when React has not mounted its later UI listeners yet.
@@ -490,6 +500,17 @@ export const startClient = async (mx: MatrixClient) => {
           const deviceId = mx.getDeviceId();
           if (getAndroidSecureValue('verified-device') === '1' && userId && deviceId) {
             await crypto.setDeviceVerified(userId, deviceId, true);
+            const [crossSigningReady, secretStorageReady] = await Promise.all([
+              crypto.isCrossSigningReady(),
+              crypto.isSecretStorageReady(),
+            ]);
+            if (!crossSigningReady && secretStorageReady) {
+              // Recover the already-existing cross-signing private keys from
+              // Android-backed Secret Storage. bootstrapCrossSigning is
+              // idempotent when server keys exist and avoids a false
+              // unverified state after WebView process recreation.
+              await crypto.bootstrapCrossSigning({}).catch(() => undefined);
+            }
           }
           if (!getAndroidSecureValue('session-backup-private-key')) {
             // Older Android builds could keep the Secret Storage private key
@@ -507,6 +528,7 @@ export const startClient = async (mx: MatrixClient) => {
             throw new Error('Android backup decryption key is not attached yet.');
           }
           await persistAndroidBackupKey(crypto);
+          await persistAndroidCryptoState(mx);
           androidCryptoTrustRestored.add(mx);
         })();
         androidCryptoTrustRestoreTasks.set(mx, task);
@@ -529,6 +551,31 @@ export const startClient = async (mx: MatrixClient) => {
     disablePresence: true,
     initialSyncLimit: INITIAL_SYNC_LIMIT,
   });
+};
+
+/** Persist Android trust only after the SDK reports this exact device as verified. */
+export const persistAndroidCryptoState = async (mx: MatrixClient): Promise<void> => {
+  if (!isAndroidApp()) return;
+  const crypto = mx.getCrypto();
+  const userId = mx.getUserId();
+  const deviceId = mx.getDeviceId();
+  if (!crypto || !userId || !deviceId) return;
+
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    try {
+      const verification = await crypto.getDeviceVerificationStatus(userId, deviceId);
+      if (verification?.isVerified()) {
+        await setAndroidSecureValue('verified-device', '1');
+        break;
+      }
+    } catch {
+      // A transient device-list read must not erase a durable marker.
+    }
+    if (attempt < 5) {
+      await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 500));
+    }
+  }
+  await persistAndroidBackupKey(crypto);
 };
 
 export const persistClientStore = (
@@ -567,6 +614,7 @@ export const persistClientStore = (
       }
     });
   androidStoreSaveTasks.set(mx, task);
+  if (forceNativeSnapshot) void persistAndroidCryptoState(mx);
   return task;
 };
 
@@ -656,6 +704,9 @@ export const clearAllLocalData = async (mx?: MatrixClient) => {
     // Ignore cleanup failures so the rest of local data can still be cleared.
   }
 
+  await clearSecretStorageKeys();
+  await removeAndroidPersistedSession();
+
   await clearAllServiceWorkerCaches();
   await clearAllServiceWorkerRegistrations();
   await clearDesktopMediaCache();
@@ -681,6 +732,9 @@ export const clearLocalSessionAfterLogout = async (mx?: MatrixClient) => {
   } catch {
     // ignore cleanup failures so logout can still continue.
   }
+
+  await clearSecretStorageKeys();
+  await removeAndroidPersistedSession();
 
   const preservedSettingsEntries = snapshotLocalStorageEntries([SETTINGS_STORAGE_KEY]);
   const preservedPinLockEntries = snapshotPinLockStorage();
@@ -712,6 +766,7 @@ export const clearExpiredSessionAfterLogout = async (mx?: MatrixClient, softLogo
   // device ID is allowed only after an explicit server-issued soft logout.
   // For every other invalid session, the identity is retained only to make the
   // sign-in screen convenient; login will request a fresh Matrix device.
+  await removeAndroidPersistedSession();
   removeFallbackAccessToken();
   if (softLogout) {
     markFallbackSessionSoftLoggedOut();

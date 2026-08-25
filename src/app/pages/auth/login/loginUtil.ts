@@ -211,9 +211,14 @@ export const login = async (
   };
 };
 
-export const completeLogin = (data: CustomLoginResponse, navigate: NavigateFunction) => {
+export const completeLogin = async (data: CustomLoginResponse, navigate: NavigateFunction) => {
   const { response: loginRes, baseUrl: loginBaseUrl } = data;
-  setFallbackSession(loginRes.access_token, loginRes.device_id, loginRes.user_id, loginBaseUrl);
+  await setFallbackSession(
+    loginRes.access_token,
+    loginRes.device_id,
+    loginRes.user_id,
+    loginBaseUrl
+  );
   if (!data.reusedDeviceId) {
     allowNewRustCryptoStore({ userId: loginRes.user_id, deviceId: loginRes.device_id });
   }
@@ -227,7 +232,7 @@ export const useLoginComplete = (data?: CustomLoginResponse) => {
 
   useEffect(() => {
     if (data) {
-      completeLogin(data, navigate);
+      void completeLogin(data, navigate);
     }
   }, [data, navigate]);
 };

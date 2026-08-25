@@ -21,6 +21,7 @@ import { ContainerColor } from '../styles/ContainerColor.css';
 import { copyToClipboard } from '../utils/dom';
 import { AsyncStatus, useAsyncCallback } from '../hooks/useAsyncCallback';
 import { clearSecretStorageKeys } from '../../client/secretStorageKeys';
+import { persistAndroidCryptoState } from '../../client/initMatrix';
 import { ActionUIA, ActionUIAFlowsLoader } from './ActionUIA';
 import { useMatrixClient } from '../hooks/useMatrixClient';
 import { useAlive } from '../hooks/useAlive';
@@ -143,7 +144,7 @@ function SetupVerification({ onComplete }: SetupVerificationProps) {
         if (!recoveryKeyData.encodedPrivateKey) {
           throw new Error('无法创建恢复密钥。');
         }
-        clearSecretStorageKeys();
+        await clearSecretStorageKeys();
 
         await crypto.bootstrapSecretStorage({
           createSecretStorageKey: async () => recoveryKeyData,
@@ -156,6 +157,7 @@ function SetupVerification({ onComplete }: SetupVerificationProps) {
         });
 
         await crypto.resetKeyBackup();
+        await persistAndroidCryptoState(mx);
 
         onComplete(recoveryKeyData.encodedPrivateKey);
       },
