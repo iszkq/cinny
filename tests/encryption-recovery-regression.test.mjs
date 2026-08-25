@@ -189,7 +189,8 @@ test('automatic room-key request and forwarding policy is left at the SDK defaul
   assert.match(recoverySource, /SDK is deliberately the sole owner/);
   assert.doesNotMatch(recoverySource, /restoreSessionFromBackup/);
   assert.doesNotMatch(recoverySource, /outgoingRequestsManager|onSyncCompleted|attemptDecryption/);
-  assert.match(featuresSource, /useEffect\(\(\) => startDecryptionRecovery\(mx\), \[mx\]\)/);
+  assert.match(featuresSource, /startDecryptionRecovery\(mx\)/);
+  assert.match(featuresSource, /startBackgroundRoomDecryption\(mx\)/);
 });
 
 test('decryption diagnostics exclude message and key secrets', async () => {

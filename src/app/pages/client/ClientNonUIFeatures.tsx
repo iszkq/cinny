@@ -71,6 +71,7 @@ import { AndroidUpdatePrompt } from '../../components/AndroidUpdatePrompt';
 import { primeCachedMediaObjectUrl, primePersistentMediaUrl } from '../../utils/mediaUrlCache';
 import { WeeklyCalendarMonitor } from '../../features/weekly-calendar/WeeklyCalendarMonitor';
 import { startDecryptionRecovery } from '../../utils/decryptionRecovery';
+import { startBackgroundRoomDecryption } from '../../utils/backgroundDecryption';
 
 const EXTERNAL_LINK_SELECTOR = 'a[href]';
 const DESKTOP_UPDATE_AUTO_CHECK_DELAY_MS = 30000;
@@ -268,7 +269,14 @@ function PresenceSyncFeature() {
 function DecryptionRecoveryFeature() {
   const mx = useMatrixClient();
 
-  useEffect(() => startDecryptionRecovery(mx), [mx]);
+  useEffect(() => {
+    const stopRecovery = startDecryptionRecovery(mx);
+    const stopBackground = startBackgroundRoomDecryption(mx);
+    return () => {
+      stopRecovery();
+      stopBackground();
+    };
+  }, [mx]);
 
   return null;
 }

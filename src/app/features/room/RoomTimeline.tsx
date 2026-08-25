@@ -16,6 +16,7 @@ import {
   EventTimeline,
   EventTimelineSet,
   EventTimelineSetHandlerMap,
+  EventType,
   IContent,
   MatrixClient,
   MatrixEvent,
@@ -143,6 +144,7 @@ import { ThreadDialog } from './ThreadDialog';
 import { ScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
 import { POLL_START_EVENT_TYPE, UNSTABLE_POLL_START_EVENT_TYPE } from '../../utils/polls';
 import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
+import { prioritizeRoomDecryption } from '../../utils/backgroundDecryption';
 
 const TimelineFloat = as<'div', css.TimelineFloatVariants>(
   ({ position, className, ...props }, ref) => (
@@ -637,7 +639,11 @@ const useTimelinePagination = (
   return handleTimelinePagination;
 };
 
-const useLiveEventArrive = (room: Room, onArrive: (mEvent: MatrixEvent) => void) => {
+const useLiveEventArrive = (
+  room: Room,
+  onArrive: (mEvent: MatrixEvent) => void,
+  onRedaction: () => void
+) => {
   useEffect(() => {
     const handleTimelineEvent: EventTimelineSetHandlerMap[RoomEvent.Timeline] = (
       mEvent,
@@ -647,11 +653,17 @@ const useLiveEventArrive = (room: Room, onArrive: (mEvent: MatrixEvent) => void)
       data
     ) => {
       if (eventRoom?.roomId !== room.roomId || !data?.liveEvent) return;
+      if (mEvent.getType() === EventType.RoomRedaction) {
+        onRedaction();
+        return;
+      }
       onArrive(mEvent);
     };
-    const handleRedaction: RoomEventHandlerMap[RoomEvent.Redaction] = (mEvent, eventRoom) => {
+    const handleRedaction: RoomEventHandlerMap[RoomEvent.Redaction] = (_mEvent, eventRoom) => {
       if (eventRoom?.roomId !== room.roomId) return;
-      onArrive(mEvent);
+      // The SDK mutates the redacted event in place. Re-render without adding
+      // the redaction event to the visible timeline range.
+      onRedaction();
     };
 
     room.on(RoomEvent.Timeline, handleTimelineEvent);
@@ -660,7 +672,7 @@ const useLiveEventArrive = (room: Room, onArrive: (mEvent: MatrixEvent) => void)
       room.removeListener(RoomEvent.Timeline, handleTimelineEvent);
       room.removeListener(RoomEvent.Redaction, handleRedaction);
     };
-  }, [room, onArrive]);
+  }, [room, onArrive, onRedaction]);
 };
 
 const useLiveTimelineRefresh = (room: Room, onRefresh: () => void) => {
@@ -868,11 +880,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
 
   useEffect(() => {
     if (!room.hasEncryptionStateEvent()) return;
-    // The sync loop discovers every room, but the room on screen gets the
-    // first explicit decryption pass. This mirrors the demand-driven approach
-    // used by mature Matrix clients and never blocks rendering or retries
-    // failures ahead of the SDK's own recovery policy.
-    void decryptAllTimelineEvent(mx, liveTimeline, { retryFailures: false });
+    prioritizeRoomDecryption(mx, room);
   }, [liveTimeline, mx, room]);
 
   const liveTimelineLinked =
@@ -1130,7 +1138,8 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
         }
       },
       [eventId, mx, navigateRoom, room, timelinePageLimit, unreadInfo, privateReceipt]
-    )
+    ),
+    useCallback(() => setTimeline((current) => ({ ...current })), [])
   );
 
   useEffect(() => {

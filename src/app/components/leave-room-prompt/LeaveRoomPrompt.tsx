@@ -20,6 +20,8 @@ import { MatrixError } from 'matrix-js-sdk';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
 import { stopPropagation } from '../../utils/keyboard';
+import { Membership } from '../../../types/matrix/room';
+import { removeRoomFromEditableParents } from '../../utils/space';
 
 type LeaveRoomPromptProps = {
   roomId: string;
@@ -31,11 +33,9 @@ export function LeaveRoomPrompt({ roomId, onDone, onCancel }: LeaveRoomPromptPro
 
   const [leaveState, leaveRoom] = useAsyncCallback<undefined, MatrixError, []>(
     useCallback(async () => {
-      // Wait for the server membership event before closing the prompt. This
-      // keeps the local room list in sync and makes an already-left room
-      // recoverable after a transient client restart.
       await mx.leave(roomId);
-      await mx.forget(roomId).catch(() => undefined);
+      mx.getRoom(roomId)?.updateMyMembership(Membership.Leave);
+      void removeRoomFromEditableParents(mx, roomId);
     }, [mx, roomId])
   );
 

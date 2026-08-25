@@ -1025,29 +1025,9 @@ export const MessageDeleteItem = as<
 
   useEffect(() => {
     if (deleteState.status !== AsyncStatus.Success) return;
-    const eventId = mEvent.getId();
-    if (!eventId) return;
-
-    // Matrix redactions are echoed by the server, but that can take a round
-    // trip. Mark the event locally as redacted as soon as the request is
-    // accepted so every open client view updates immediately; the remote
-    // redaction event then converges the same state on other devices.
-    mEvent.setUnsigned({
-      ...mEvent.getUnsigned(),
-      redacted_because: {
-        event_id: `$local-redaction-${eventId}`,
-        type: EventType.RoomRedaction,
-        room_id: room.roomId,
-        sender: mx.getSafeUserId(),
-        origin_server_ts: Date.now(),
-        content: {},
-        unsigned: {},
-        redacts: eventId,
-      },
-    });
     setOpen(false);
     onClose?.();
-  }, [deleteState.status, mEvent, mx, onClose, room.roomId]);
+  }, [deleteState.status, onClose]);
 
   const handleSubmit: FormEventHandler<HTMLFormElement> = (evt) => {
     evt.preventDefault();

@@ -6,7 +6,6 @@ import React, {
   useMemo,
   useRef,
   useState,
-  useEffect,
 } from 'react';
 import {
   Overlay,
@@ -25,25 +24,24 @@ import {
   color,
   TextArea,
   Dialog,
-  Menu,
-  toRem,
-  Scroll,
-  MenuItem,
 } from 'folds';
 import { Room } from 'matrix-js-sdk';
 import { isKeyHotkey } from 'is-hotkey';
 import FocusTrap from 'focus-trap-react';
 import { stopPropagation } from '../../utils/keyboard';
 import { useDirectUsers } from '../../hooks/useDirectUsers';
-import { getMxIdLocalPart, getMxIdServer, isUserId } from '../../utils/matrix';
+import { getMxIdLocalPart, isUserId } from '../../utils/matrix';
 import { Membership } from '../../../types/matrix/room';
 import { useAsyncSearch, UseAsyncSearchOptions } from '../../hooks/useAsyncSearch';
-import { highlightText, makeHighlightRegex } from '../../plugins/react-custom-html-parser';
 import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { BreakWord } from '../../styles/Text.css';
 import { useAlive } from '../../hooks/useAlive';
-import { DirectoryUser } from '../../features/search/directorySearch';
+import {
+  UserDirectoryResult,
+  UserDirectorySearchMenu,
+  useUserDirectorySearch,
+} from '../user-directory-search';
 
 const SEARCH_OPTIONS: UseAsyncSearchOptions = {
   limit: 1000,
@@ -62,18 +60,16 @@ export function InviteUserPrompt({ room, requestClose }: InviteUserProps) {
   const alive = useAlive();
 
   const inputRef = useRef<HTMLInputElement>(null);
-  const searchRequestRef = useRef(0);
   const directUsers = useDirectUsers();
   const [validUserId, setValidUserId] = useState<string>();
   const [query, setQuery] = useState('');
-  const [directoryUsers, setDirectoryUsers] = useState<DirectoryUser[]>([]);
-  const [directoryLoading, setDirectoryLoading] = useState(false);
+  const { users: directoryUsers, loading: directoryLoading } = useUserDirectorySearch(mx, query);
 
   const filteredUsers = useMemo(
     () =>
       directUsers.filter((userId) => {
         const membership = room.getMember(userId)?.membership;
-        return membership !== Membership.Join;
+        return membership !== Membership.Join && membership !== Membership.Invite;
       }),
     [directUsers, room]
   );
@@ -82,35 +78,24 @@ export function InviteUserPrompt({ room, requestClose }: InviteUserProps) {
     getUserIdString,
     SEARCH_OPTIONS
   );
-  const queryHighlighRegex = result?.query
-    ? makeHighlightRegex(result.query.split(' '))
-    : undefined;
-
-  // Direct-room users are useful offline, while the homeserver directory is
-  // what makes display-name search work for people not already in a DM.
-  useEffect(() => {
-    const term = query.trim();
-    if (!term || isUserId(term)) {
-      setDirectoryUsers([]);
-      setDirectoryLoading(false);
-      return undefined;
-    }
-    const requestId = ++searchRequestRef.current;
-    const timer = window.setTimeout(() => {
-      setDirectoryLoading(true);
-      mx.searchUserDirectory({ term: term.startsWith('@') ? term.slice(1) : term, limit: 20 })
-        .then(({ results }) => {
-          if (searchRequestRef.current === requestId) setDirectoryUsers(results);
-        })
-        .catch(() => {
-          if (searchRequestRef.current === requestId) setDirectoryUsers([]);
-        })
-        .finally(() => {
-          if (searchRequestRef.current === requestId) setDirectoryLoading(false);
-        });
-    }, 180);
-    return () => window.clearTimeout(timer);
-  }, [mx, query]);
+  const searchUsers = useMemo(() => {
+    const usersById = new Map<string, UserDirectoryResult>();
+    directoryUsers.forEach((user) => usersById.set(user.user_id, user));
+    result?.items.forEach((userId) => {
+      if (usersById.has(userId)) return;
+      const user = mx.getUser(userId);
+      usersById.set(userId, {
+        user_id: userId,
+        display_name: user?.displayName,
+        avatar_url: user?.avatarUrl,
+      });
+    });
+    return Array.from(usersById.values()).filter((user) => {
+      if (user.user_id === mx.getUserId()) return false;
+      const membership = room.getMember(user.user_id)?.membership;
+      return membership !== Membership.Join && membership !== Membership.Invite;
+    });
+  }, [directoryUsers, mx, result, room]);
 
   const [inviteState, invite] = useAsyncCallback<void, Error, [string, string | undefined]>(
     useCallback(
@@ -178,9 +163,9 @@ export function InviteUserPrompt({ room, requestClose }: InviteUserProps) {
       resetSearch();
       return;
     }
-    if (isKeyHotkey('tab', evt) && result && result.items.length > 0) {
+    if (isKeyHotkey('tab', evt) && searchUsers.length > 0) {
       evt.preventDefault();
-      const userId = result.items[0];
+      const userId = searchUsers[0].user_id;
       handleUserId(userId);
     }
   };
@@ -223,7 +208,7 @@ export function InviteUserPrompt({ room, requestClose }: InviteUserProps) {
               >
                 <Box direction="Column" gap="100">
                   <Text size="L400">{'\u7528\u6237 ID'}</Text>
-                  <div>
+                  <div style={{ position: 'relative' }}>
                     <Input
                       size="500"
                       ref={inputRef}
@@ -236,76 +221,14 @@ export function InviteUserPrompt({ room, requestClose }: InviteUserProps) {
                       autoComplete="off"
                       required
                     />
-                    {(directoryUsers.length > 0 || (result && result.items.length > 0)) && (
-                      <FocusTrap
-                        focusTrapOptions={{
-                          initialFocus: false,
-                          onDeactivate: resetSearch,
-                          returnFocusOnDeactivate: false,
-                          clickOutsideDeactivates: true,
-                          allowOutsideClick: true,
-                          isKeyForward: (evt: KeyboardEvent) => isKeyHotkey('arrowdown', evt),
-                          isKeyBackward: (evt: KeyboardEvent) => isKeyHotkey('arrowup', evt),
-                          escapeDeactivates: stopPropagation,
-                        }}
-                      >
-                        <Box style={{ position: 'relative' }}>
-                          <Menu style={{ position: 'absolute', top: 0, zIndex: 1, width: '100%' }}>
-                            <Scroll size="300" style={{ maxHeight: toRem(100) }}>
-                              <div style={{ padding: config.space.S100 }}>
-                                {[
-                                  ...directoryUsers.map((user) => user.user_id),
-                                  ...(result?.items ?? []),
-                                ]
-                                  .filter((userId, index, users) => users.indexOf(userId) === index)
-                                  .map((userId) => {
-                                    const directoryUser = directoryUsers.find(
-                                      (user) => user.user_id === userId
-                                    );
-                                    const username = `${getMxIdLocalPart(userId)}`;
-                                    const userServer = getMxIdServer(userId);
-
-                                    return (
-                                      <MenuItem
-                                        key={userId}
-                                        type="button"
-                                        size="300"
-                                        variant="Surface"
-                                        radii="300"
-                                        onClick={() => handleUserId(userId)}
-                                        after={
-                                          <Text size="T200" truncate>
-                                            {userServer}
-                                          </Text>
-                                        }
-                                        disabled={inviting}
-                                      >
-                                        <Box grow="Yes">
-                                          <Text size="T300" truncate>
-                                            <b>
-                                              {directoryUser?.display_name ??
-                                                (queryHighlighRegex
-                                                  ? highlightText(queryHighlighRegex, [
-                                                      username ?? userId,
-                                                    ])
-                                                  : username)}
-                                            </b>
-                                          </Text>
-                                          {directoryUser?.display_name && (
-                                            <Text size="T200" truncate>
-                                              {userId}
-                                            </Text>
-                                          )}
-                                        </Box>
-                                      </MenuItem>
-                                    );
-                                  })}
-                                {directoryLoading && <Spinner size="200" variant="Secondary" />}
-                              </div>
-                            </Scroll>
-                          </Menu>
-                        </Box>
-                      </FocusTrap>
+                    {!isUserId(query.trim()) && (
+                      <UserDirectorySearchMenu
+                        mx={mx}
+                        users={searchUsers}
+                        query={query}
+                        loading={directoryLoading}
+                        onSelect={handleUserId}
+                      />
                     )}
                   </div>
                 </Box>

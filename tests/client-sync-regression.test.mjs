@@ -99,8 +99,8 @@ test('initial messages stay bounded and the visible encrypted room is prioritize
 
   assert.match(clientSource, /INITIAL_SYNC_LIMIT = 4/);
   assert.match(clientSource, /initialSyncLimit: INITIAL_SYNC_LIMIT/);
-  assert.match(
-    timelineSource,
-    /decryptAllTimelineEvent\(mx, liveTimeline, \{ retryFailures: false \}\)/
-  );
+  assert.match(timelineSource, /prioritizeRoomDecryption\(mx, room\)/);
+  const backgroundSource = await readSource('src/app/utils/backgroundDecryption.ts');
+  assert.match(backgroundSource, /getTimelines\(\)/);
+  assert.match(backgroundSource, /retryFailures: true/);
 });

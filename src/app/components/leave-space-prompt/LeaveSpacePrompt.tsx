@@ -20,6 +20,10 @@ import { MatrixError } from 'matrix-js-sdk';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
 import { stopPropagation } from '../../utils/keyboard';
+import { Membership } from '../../../types/matrix/room';
+import { removeRoomFromEditableParents } from '../../utils/space';
+import { getHomePath } from '../../pages/pathUtils';
+import { useNavigate } from 'react-router-dom';
 
 type LeaveSpacePromptProps = {
   roomId: string;
@@ -28,11 +32,13 @@ type LeaveSpacePromptProps = {
 };
 export function LeaveSpacePrompt({ roomId, onDone, onCancel }: LeaveSpacePromptProps) {
   const mx = useMatrixClient();
+  const navigate = useNavigate();
 
   const [leaveState, leaveRoom] = useAsyncCallback<undefined, MatrixError, []>(
     useCallback(async () => {
       await mx.leave(roomId);
-      await mx.forget(roomId).catch(() => undefined);
+      mx.getRoom(roomId)?.updateMyMembership(Membership.Leave);
+      void removeRoomFromEditableParents(mx, roomId);
     }, [mx, roomId])
   );
 
@@ -42,9 +48,10 @@ export function LeaveSpacePrompt({ roomId, onDone, onCancel }: LeaveSpacePromptP
 
   useEffect(() => {
     if (leaveState.status === AsyncStatus.Success) {
+      navigate(getHomePath(), { replace: true });
       onDone();
     }
-  }, [leaveState, onDone]);
+  }, [leaveState, navigate, onDone]);
 
   return (
     <Overlay open backdrop={<OverlayBackdrop />}>
