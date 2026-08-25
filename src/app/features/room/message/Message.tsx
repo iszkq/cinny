@@ -1023,6 +1023,32 @@ export const MessageDeleteItem = as<
     )
   );
 
+  useEffect(() => {
+    if (deleteState.status !== AsyncStatus.Success) return;
+    const eventId = mEvent.getId();
+    if (!eventId) return;
+
+    // Matrix redactions are echoed by the server, but that can take a round
+    // trip. Mark the event locally as redacted as soon as the request is
+    // accepted so every open client view updates immediately; the remote
+    // redaction event then converges the same state on other devices.
+    mEvent.setUnsigned({
+      ...mEvent.getUnsigned(),
+      redacted_because: {
+        event_id: `$local-redaction-${eventId}`,
+        type: EventType.RoomRedaction,
+        room_id: room.roomId,
+        sender: mx.getSafeUserId(),
+        origin_server_ts: Date.now(),
+        content: {},
+        unsigned: {},
+        redacts: eventId,
+      },
+    });
+    setOpen(false);
+    onClose?.();
+  }, [deleteState.status, mEvent, mx, onClose, room.roomId]);
+
   const handleSubmit: FormEventHandler<HTMLFormElement> = (evt) => {
     evt.preventDefault();
     const eventId = mEvent.getId();
@@ -1035,7 +1061,7 @@ export const MessageDeleteItem = as<
     const target = evt.target as HTMLFormElement | undefined;
     const reasonInput = target?.reasonInput as HTMLInputElement | undefined;
     const reason = reasonInput && reasonInput.value.trim();
-    deleteMessage(eventId, reason);
+    deleteMessage(eventId, reason).catch(() => undefined);
   };
 
   const handleClose = () => {
@@ -1102,6 +1128,7 @@ export const MessageDeleteItem = as<
                     ) : undefined
                   }
                   aria-disabled={deleteState.status === AsyncStatus.Loading}
+                  disabled={deleteState.status === AsyncStatus.Loading}
                 >
                   <Text size="B400">
                     {deleteState.status === AsyncStatus.Loading ? '删除中...' : '删除'}

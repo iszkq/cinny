@@ -54,7 +54,7 @@ import { MobileSettingsProvider } from './MobileSettings';
 
 const CLIENT_STORE_PERSIST_INTERVAL_MS = 30_000;
 const ANDROID_CLIENT_STORE_PERSIST_INTERVAL_MS = 10_000;
-const INITIAL_SYNC_ENTRY_FALLBACK_MS = 3_000;
+const INITIAL_SYNC_ENTRY_FALLBACK_MS = 1_200;
 
 function ClientRootLoading() {
   return (

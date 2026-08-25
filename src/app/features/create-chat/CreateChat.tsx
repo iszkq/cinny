@@ -1,5 +1,18 @@
-import { Box, Button, color, config, Icon, Icons, Input, Spinner, Switch, Text } from 'folds';
-import React, { FormEventHandler, useCallback, useState } from 'react';
+import {
+  Box,
+  Button,
+  color,
+  config,
+  Icon,
+  Icons,
+  Input,
+  Menu,
+  MenuItem,
+  Spinner,
+  Switch,
+  Text,
+} from 'folds';
+import React, { FormEventHandler, useCallback, useEffect, useRef, useState } from 'react';
 import { ICreateRoomStateEvent, MatrixError, Preset, Visibility } from 'matrix-js-sdk';
 import { useNavigate } from 'react-router-dom';
 import { SettingTile } from '../../components/setting-tile';
@@ -12,6 +25,7 @@ import { millisecondsToMinutes } from '../../utils/common';
 import { createRoomEncryptionState } from '../../components/create-room';
 import { useAlive } from '../../hooks/useAlive';
 import { getDirectRoomPath } from '../../pages/pathUtils';
+import { DirectoryUser } from '../search/directorySearch';
 
 type CreateChatProps = {
   defaultUserId?: string;
@@ -23,6 +37,28 @@ export function CreateChat({ defaultUserId }: CreateChatProps) {
 
   const [encryption, setEncryption] = useState(true);
   const [invalidUserId, setInvalidUserId] = useState(false);
+  const [userId, setUserId] = useState(defaultUserId ?? '');
+  const [directoryUsers, setDirectoryUsers] = useState<DirectoryUser[]>([]);
+  const searchRequestRef = useRef(0);
+
+  useEffect(() => {
+    const term = userId.trim();
+    if (!term || isUserId(term)) {
+      setDirectoryUsers([]);
+      return undefined;
+    }
+    const requestId = ++searchRequestRef.current;
+    const timer = window.setTimeout(() => {
+      mx.searchUserDirectory({ term: term.startsWith('@') ? term.slice(1) : term, limit: 20 })
+        .then(({ results }) => {
+          if (searchRequestRef.current === requestId) setDirectoryUsers(results);
+        })
+        .catch(() => {
+          if (searchRequestRef.current === requestId) setDirectoryUsers([]);
+        });
+    }, 180);
+    return () => window.clearTimeout(timer);
+  }, [mx, userId]);
 
   const [createState, create] = useAsyncCallback<string, Error | MatrixError, [string, boolean]>(
     useCallback(
@@ -56,17 +92,18 @@ export function CreateChat({ defaultUserId }: CreateChatProps) {
 
     const target = evt.target as HTMLFormElement | undefined;
     const userIdInput = target?.userIdInput as HTMLInputElement | undefined;
-    const userId = userIdInput?.value.trim();
+    const enteredUserId = userIdInput?.value.trim();
 
-    if (!userIdInput || !userId) return;
-    if (!isUserId(userId)) {
+    if (!userIdInput || !enteredUserId) return;
+    if (!isUserId(enteredUserId)) {
       setInvalidUserId(true);
       return;
     }
 
-    create(userId, encryption).then((roomId) => {
+    create(enteredUserId, encryption).then((roomId) => {
       if (alive()) {
         userIdInput.value = '';
+        setUserId('');
         navigate(getDirectRoomPath(roomId));
       }
     });
@@ -76,18 +113,48 @@ export function CreateChat({ defaultUserId }: CreateChatProps) {
     <Box as="form" onSubmit={handleSubmit} grow="Yes" direction="Column" gap="500">
       <Box direction="Column" gap="100">
         <Text size="L400">{'\u7528\u6237 ID'}</Text>
-        <Input
-          defaultValue={defaultUserId}
-          placeholder="@username:server"
-          name="userIdInput"
-          variant="SurfaceVariant"
-          size="500"
-          radii="400"
-          required
-          autoFocus
-          autoComplete="off"
-          disabled={disabled}
-        />
+        <div style={{ position: 'relative' }}>
+          <Input
+            value={userId}
+            onChange={(evt) => {
+              setUserId(evt.currentTarget.value);
+              setInvalidUserId(false);
+            }}
+            placeholder="@username:server"
+            name="userIdInput"
+            variant="SurfaceVariant"
+            size="500"
+            radii="400"
+            required
+            autoFocus
+            autoComplete="off"
+            disabled={disabled}
+          />
+          {directoryUsers.length > 0 && (
+            <Menu style={{ position: 'absolute', top: '100%', zIndex: 2, width: '100%' }}>
+              {directoryUsers.map((user) => (
+                <MenuItem
+                  key={user.user_id}
+                  type="button"
+                  size="300"
+                  radii="300"
+                  onClick={() => setUserId(user.user_id)}
+                  disabled={disabled}
+                >
+                  <Box grow="Yes" direction="Column">
+                    <Text size="T300" truncate>
+                      <b>{user.display_name ?? user.user_id}</b>
+                    </Text>
+                    <Text size="T200" truncate>
+                      {user.user_id}
+                    </Text>
+                  </Box>
+                  <Text size="T300">选择</Text>
+                </MenuItem>
+              ))}
+            </Menu>
+          )}
+        </div>
         {invalidUserId && (
           <Box style={{ color: color.Critical.Main }} alignItems="Center" gap="100">
             <Icon src={Icons.Warning} filled size="50" />

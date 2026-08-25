@@ -865,6 +865,16 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     [timeline.linkedTimelines, timelineVersion]
   );
   const liveTimeline = getLiveTimeline(room);
+
+  useEffect(() => {
+    if (!room.hasEncryptionStateEvent()) return;
+    // The sync loop discovers every room, but the room on screen gets the
+    // first explicit decryption pass. This mirrors the demand-driven approach
+    // used by mature Matrix clients and never blocks rendering or retries
+    // failures ahead of the SDK's own recovery policy.
+    void decryptAllTimelineEvent(mx, liveTimeline, { retryFailures: false });
+  }, [liveTimeline, mx, room]);
+
   const liveTimelineLinked =
     timeline.linkedTimelines[timeline.linkedTimelines.length - 1] === liveTimeline;
   const imageViewerItems = useMemo(
@@ -1063,7 +1073,6 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             setTimeline((current) => ({ ...current }));
           };
           mEvt.on(MatrixEventEvent.Decrypted, handleDecrypted);
-
         }
 
         if (reactionOrEditEvent(mEvt)) {

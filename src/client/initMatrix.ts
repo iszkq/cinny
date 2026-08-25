@@ -448,7 +448,7 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
 // Match the SDK's safe default: enough recent events to paint the room and a
 // reliable backward-pagination token, while older history keeps loading on
 // demand instead of blocking the whole account's first sync.
-const INITIAL_SYNC_LIMIT = 8;
+const INITIAL_SYNC_LIMIT = 4;
 
 export const startClient = async (mx: MatrixClient) => {
   if (isAndroidApp()) {

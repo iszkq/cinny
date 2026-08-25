@@ -8,7 +8,7 @@ test('client waits for initial Matrix sync before mounting room features', async
   const source = await readSource('src/app/pages/client/ClientRoot.tsx');
 
   assert.match(source, /const \[loading, setLoading\] = useState\(true\)/);
-  assert.match(source, /INITIAL_SYNC_ENTRY_FALLBACK_MS = 3_000/);
+  assert.match(source, /INITIAL_SYNC_ENTRY_FALLBACK_MS = 1_200/);
   assert.match(source, /mx\.getRooms\(\)\.length > 0/);
   assert.match(source, /const clientReady = !startupFailed && !!mx && !loading/);
   assert.match(source, /startClient first performs homeserver capability requests/);
@@ -91,4 +91,16 @@ test('the first room list is revealed in cancellable activity-sorted batches', a
   assert.match(utilsSource, /window\.clearTimeout\(batchTimerRef\.current\)/);
   assert.match(roomListSource, /action\.type === 'APPEND'/);
   assert.match(inviteListSource, /action\.type === 'APPEND'/);
+});
+
+test('initial messages stay bounded and the visible encrypted room is prioritized', async () => {
+  const clientSource = await readSource('src/client/initMatrix.ts');
+  const timelineSource = await readSource('src/app/features/room/RoomTimeline.tsx');
+
+  assert.match(clientSource, /INITIAL_SYNC_LIMIT = 4/);
+  assert.match(clientSource, /initialSyncLimit: INITIAL_SYNC_LIMIT/);
+  assert.match(
+    timelineSource,
+    /decryptAllTimelineEvent\(mx, liveTimeline, \{ retryFailures: false \}\)/
+  );
 });

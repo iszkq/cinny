@@ -31,12 +31,13 @@ export function LeaveSpacePrompt({ roomId, onDone, onCancel }: LeaveSpacePromptP
 
   const [leaveState, leaveRoom] = useAsyncCallback<undefined, MatrixError, []>(
     useCallback(async () => {
-      mx.leave(roomId);
+      await mx.leave(roomId);
+      await mx.forget(roomId).catch(() => undefined);
     }, [mx, roomId])
   );
 
   const handleLeave = () => {
-    leaveRoom();
+    leaveRoom().catch(() => undefined);
   };
 
   useEffect(() => {
@@ -74,7 +75,9 @@ export function LeaveSpacePrompt({ roomId, onDone, onCancel }: LeaveSpacePromptP
             </Header>
             <Box style={{ padding: config.space.S400 }} direction="Column" gap="400">
               <Box direction="Column" gap="200">
-                <Text priority="400">{'\u786e\u5b9a\u8981\u9000\u51fa\u8be5\u7a7a\u95f4\u5417\uff1f'}</Text>
+                <Text priority="400">
+                  {'\u786e\u5b9a\u8981\u9000\u51fa\u8be5\u7a7a\u95f4\u5417\uff1f'}
+                </Text>
                 {leaveState.status === AsyncStatus.Error && (
                   <Text style={{ color: color.Critical.Main }} size="T300">
                     {'\u9000\u51fa\u7a7a\u95f4\u5931\u8d25\uff01'} {leaveState.error.message}
@@ -91,6 +94,10 @@ export function LeaveSpacePrompt({ roomId, onDone, onCancel }: LeaveSpacePromptP
                   ) : undefined
                 }
                 aria-disabled={
+                  leaveState.status === AsyncStatus.Loading ||
+                  leaveState.status === AsyncStatus.Success
+                }
+                disabled={
                   leaveState.status === AsyncStatus.Loading ||
                   leaveState.status === AsyncStatus.Success
                 }
