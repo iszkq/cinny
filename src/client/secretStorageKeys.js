@@ -83,9 +83,11 @@ const localTrustedBackupKey = () => {
 
 const hydrateScopedSecretStorageKeys = () => {
   const scopedStorageKey = secureStorageKey();
+  // The fixed Android value is authoritative. A scoped value can be stale
+  // after a renderer restart restores WebView identity in a different order.
   const encoded =
-    (scopedStorageKey ? secureValues.get(scopedStorageKey) : undefined) ??
-    secureValues.get(GLOBAL_SECRET_KEYS_KEY);
+    secureValues.get(GLOBAL_SECRET_KEYS_KEY) ??
+    (scopedStorageKey ? secureValues.get(scopedStorageKey) : undefined);
   if (typeof encoded !== 'string') return;
   try {
     const parsed = JSON.parse(encoded);
@@ -266,9 +268,9 @@ export const setAndroidSecureValue = async (name, value) => {
 export const getAndroidSecureValue = (name) => {
   if (!isAndroid()) return undefined;
   const key = secureValueKey(name);
-  const secureValue = key ? secureValues.get(key) : undefined;
-  if (secureValue !== undefined) return secureValue;
-  return secureValues.get(globalSecureValueKey(name));
+  const globalValue = secureValues.get(globalSecureValueKey(name));
+  if (globalValue !== undefined) return globalValue;
+  return key ? secureValues.get(key) : undefined;
 };
 
 export const hasAndroidSecretStorageKey = () =>

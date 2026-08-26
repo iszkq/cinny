@@ -615,12 +615,20 @@ export const startClient = async (mx: MatrixClient) => {
         const task = (async () => {
           const userId = mx.getUserId();
           const deviceId = mx.getDeviceId();
-          if (getAndroidSecureValue('verified-device') === '1' && userId && deviceId) {
+          const verifiedMarker = getAndroidSecureValue('verified-device');
+          recordAndroidDiagnostic('crypto_restore_preflight', {
+            verifiedMarkerPresent: verifiedMarker === '1',
+            hasSecretStorageKey: hasAndroidSecretStorageKey(),
+            hasBackupKey: !!getAndroidSecureValue('session-backup-private-key'),
+            hasSecretsBundle: !!getAndroidSecureValue('crypto-secrets-bundle'),
+          });
+          if (verifiedMarker === '1' && userId && deviceId) {
             // Restore the exact cross-signing and backup secrets captured when
             // the user completed verification. This is encrypted by Android
             // Keystore and survives renderer/process death independently of
             // WebView IndexedDB.
             let secretsRestored = await restoreAndroidSecretsBundle(crypto);
+            recordAndroidDiagnostic('crypto_secrets_bundle_restore', { restored: secretsRestored });
             if (!secretsRestored && hasAndroidSecretStorageKey()) {
               // Some users may background the app immediately after the
               // verification finishes, before exportSecretsBundle completes.
@@ -658,6 +666,7 @@ export const startClient = async (mx: MatrixClient) => {
             // rather than merely setting a local/UI verification flag.
             await mx.downloadKeysForUsers([userId]);
             await crypto.crossSignDevice(deviceId);
+            recordAndroidDiagnostic('crypto_device_cross_sign_completed');
             await mx.downloadKeysForUsers([userId]);
             const verification = await crypto.getDeviceVerificationStatus(userId, deviceId);
             recordAndroidDiagnostic('crypto_verification_status', {
@@ -692,7 +701,10 @@ export const startClient = async (mx: MatrixClient) => {
         androidCryptoTrustRestoreTasks.set(mx, task);
         try {
           await task;
-        } catch {
+        } catch (error) {
+          recordAndroidDiagnostic('crypto_restore_failed', {
+            error: error instanceof Error ? error.name : String(error).slice(0, 120),
+          });
           // A transient server/crypto startup error is retried on the next
           // healthy sync state; it must not block the room shell.
         } finally {

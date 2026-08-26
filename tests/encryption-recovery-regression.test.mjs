@@ -177,7 +177,8 @@ test('Android secure storage and database compatibility remain intact', async ()
     secureStorageSource,
     /The global Android key is the source of truth[\s\S]*AndroidSecureStorage\.set\(\{ key: globalKey/
   );
-  assert.match(secureStorageSource, /return secureValues\.get\(globalSecureValueKey\(name\)\)/);
+  assert.match(secureStorageSource, /const globalValue = secureValues\.get\(globalSecureValueKey\(name\)\)/);
+  assert.match(secureStorageSource, /secureValues\.get\(globalSecureValueKey\(name\)\)[\s\S]*return key \? secureValues\.get/);
   assert.match(secureStorageSource, /globalSecureValueKey\('verified-device'\)/);
   assert.match(secureStorageSource, /persistAndroidSession/);
   assert.match(secureStorageSource, /hydrateAndroidSession/);
@@ -202,6 +203,8 @@ test('Android secure storage and database compatibility remain intact', async ()
   assert.match(initSource, /persistAndroidSecretsBundle\(crypto\)/);
   assert.match(initSource, /await crypto\.crossSignDevice\(deviceId\)/);
   assert.match(initSource, /verification\?\.crossSigningVerified !== true/);
+  assert.match(initSource, /crypto_restore_preflight/);
+  assert.match(initSource, /crypto_restore_failed/);
   assert.match(initSource, /if \(!secretsRestored && hasAndroidSecretStorageKey\(\)\)/);
   assert.match(initSource, /secretStorageStatus\.secretStorageKeyValidityMap\[name\] === true/);
   assert.match(initSource, /if \(!newlyIssuedDevice && !isAndroidApp\(\)\)/);
