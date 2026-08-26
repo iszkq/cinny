@@ -374,6 +374,29 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
         }
       : undefined;
 
+  // A renderer may be recreated long after the access token's original
+  // lifetime. Refresh once before constructing the client so the first sync
+  // does not race an already-expired token and emit Session.logged_out. This
+  // is best-effort: offline startup continues with the persisted token and
+  // the SDK will retry on the first authenticated request.
+  let clientSession = session;
+  if (tokenRefreshFunction && session.refreshToken) {
+    const refreshed = await settleWithin(
+      tokenRefreshFunction(session.refreshToken),
+      DEVICE_IDENTITY_QUERY_TIMEOUT_MS
+    );
+    if (refreshed) {
+      clientSession = {
+        ...session,
+        accessToken: refreshed.accessToken,
+        refreshToken: refreshed.refreshToken,
+        expiresInMs: refreshed.expiry
+          ? Math.max(0, refreshed.expiry.getTime() - Date.now())
+          : session.expiresInMs,
+      };
+    }
+  }
+
   const indexedDBStore = new IndexedDBStore({
     indexedDB: global.indexedDB,
     localStorage: global.localStorage,
@@ -383,14 +406,14 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
   const legacyCryptoStore = new IndexedDBCryptoStore(global.indexedDB, 'crypto-store');
 
   const mx = createClient({
-    baseUrl: session.baseUrl,
-    accessToken: session.accessToken,
-    refreshToken: session.refreshToken,
+    baseUrl: clientSession.baseUrl,
+    accessToken: clientSession.accessToken,
+    refreshToken: clientSession.refreshToken,
     tokenRefreshFunction,
-    userId: session.userId,
+    userId: clientSession.userId,
     store: indexedDBStore,
     cryptoStore: legacyCryptoStore,
-    deviceId: session.deviceId,
+    deviceId: clientSession.deviceId,
     timelineSupport: true,
     cryptoCallbacks: cryptoCallbacks as any,
     verificationMethods: ['m.sas.v1'],
@@ -856,15 +879,16 @@ export const clearExpiredSessionAfterLogout = async (mx?: MatrixClient, softLogo
   } catch {
     // A failed sync-store cleanup must not prevent returning to sign-in.
   }
-  // Keep the homeserver, user and device identity. Reusing the same Matrix
-  // device ID is allowed only after an explicit server-issued soft logout.
-  // For every other invalid session, the identity is retained only to make the
-  // sign-in screen convenient; login will request a fresh Matrix device.
-  // Expiring Android access tokens are refreshed by matrix-js-sdk before this
-  // point. Reaching SessionLoggedOut therefore means the server rejected both
-  // the access and refresh credentials (or explicitly revoked the session).
-  await removeAndroidPersistedSession();
-  removeFallbackAccessToken();
+  // Android's encrypted session is deliberately retained here. This event can
+  // be caused by an expired access token, a renderer restart race, or a
+  // temporary homeserver/network failure. Deleting the native record at this
+  // boundary destroys the only durable refresh token and turns a recoverable
+  // expiry into a password-login loop. Explicit logout and clear-local-data
+  // still remove it via clearLocalSessionAfterLogout/clearAllLocalData.
+  if (!isAndroidApp()) {
+    await removeAndroidPersistedSession();
+    removeFallbackAccessToken();
+  }
   if (softLogout) {
     markFallbackSessionSoftLoggedOut();
   } else {

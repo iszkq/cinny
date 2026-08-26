@@ -87,7 +87,11 @@ export const removeFallbackSession = () => {
   localStorage.removeItem(FALLBACK_SOFT_LOGOUT_KEY);
 };
 export const removeFallbackAccessToken = () => {
-  void removeAndroidPersistedSession();
+  // Removing the in-memory/WebView access token must not remove the Android
+  // encrypted session. The latter contains the refresh token and is the
+  // durable source of truth across renderer/process restarts. Explicit
+  // logout and clear-local-data call removeAndroidPersistedSession() through
+  // their full-session cleanup paths.
   localStorage.removeItem('cinny_access_token');
 };
 export const markFallbackSessionSoftLoggedOut = () => {
