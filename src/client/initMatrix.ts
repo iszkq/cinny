@@ -368,7 +368,9 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
             refreshToken: nextRefreshToken,
             expiresInMs: response.expires_in_ms,
           });
-          recordAndroidDiagnostic('access_token_refreshed', { hasRotatedRefreshToken: !!response.refresh_token });
+          recordAndroidDiagnostic('access_token_refreshed', {
+            hasRotatedRefreshToken: !!response.refresh_token,
+          });
           return {
             accessToken: response.access_token,
             refreshToken: nextRefreshToken,
@@ -623,6 +625,13 @@ export const startClient = async (mx: MatrixClient) => {
             hasSecretsBundle: !!getAndroidSecureValue('crypto-secrets-bundle'),
           });
           if (verifiedMarker === '1' && userId && deviceId) {
+            // Refresh through Rust Crypto itself before importing the trusted
+            // bundle. MatrixClient.downloadKeysForUsers only returns the raw
+            // /keys/query response; it does not feed that response into the
+            // Rust identity store. Importing before Rust has the current
+            // public identity can therefore leave the private keys present
+            // while the identity (and thus this device) remains untrusted.
+            await crypto.userHasCrossSigningKeys(userId, true);
             // Restore the exact cross-signing and backup secrets captured when
             // the user completed verification. This is encrypted by Android
             // Keystore and survives renderer/process death independently of
@@ -664,15 +673,34 @@ export const startClient = async (mx: MatrixClient) => {
             // Sign this same device ID with the restored self-signing key and
             // upload the signature: this restores real cross-signing trust,
             // rather than merely setting a local/UI verification flag.
-            await mx.downloadKeysForUsers([userId]);
             await crypto.crossSignDevice(deviceId);
             recordAndroidDiagnostic('crypto_device_cross_sign_completed');
-            await mx.downloadKeysForUsers([userId]);
-            const verification = await crypto.getDeviceVerificationStatus(userId, deviceId);
-            recordAndroidDiagnostic('crypto_verification_status', {
-              crossSigningVerified: verification?.crossSigningVerified === true,
-            });
-            if (verification?.crossSigningVerified !== true) {
+
+            // crossSignDevice uploads the signature, but the Rust store still
+            // needs a processed /keys/query response before its Device object
+            // reflects that signature. Retry the Rust-owned query briefly to
+            // cover homeserver propagation without repeatedly signing.
+            const refreshCrossSigningVerification = async (attempt: number): Promise<boolean> => {
+              await crypto.userHasCrossSigningKeys(userId, true);
+              const [verification, identity] = await Promise.all([
+                crypto.getDeviceVerificationStatus(userId, deviceId),
+                crypto.getUserVerificationStatus(userId),
+              ]);
+              const verified = verification?.crossSigningVerified === true;
+              recordAndroidDiagnostic('crypto_verification_status', {
+                attempt,
+                signedByOwner: verification?.signedByOwner === true,
+                identityVerified: identity.isCrossSigningVerified(),
+                crossSigningVerified: verified,
+              });
+              if (verified || attempt >= 5) return verified;
+              await new Promise<void>((resolve) => {
+                globalThis.setTimeout(resolve, 500);
+              });
+              return refreshCrossSigningVerification(attempt + 1);
+            };
+            const crossSigningVerified = await refreshCrossSigningVerification(1);
+            if (!crossSigningVerified) {
               throw new Error('Android device cross-signing trust is not ready.');
             }
           }

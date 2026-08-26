@@ -171,14 +171,26 @@ test('Android secure storage and database compatibility remain intact', async ()
   assert.match(initSource, /requestPersistentAndroidStorage\(\)/);
   assert.match(initSource, /loadAndroidClientSnapshot/);
   assert.match(secureStorageSource, /ACTIVE_SESSION_KEY = 'cinny_android_active_session_v1'/);
-  assert.match(secureStorageSource, /GLOBAL_SECRET_KEYS_KEY = 'cinny_android_secret_storage_keys_v1'/);
-  assert.match(secureStorageSource, /GLOBAL_CRYPTO_VALUE_PREFIX = 'cinny_android_crypto_value_v1:'/);
+  assert.match(
+    secureStorageSource,
+    /GLOBAL_SECRET_KEYS_KEY = 'cinny_android_secret_storage_keys_v1'/
+  );
+  assert.match(
+    secureStorageSource,
+    /GLOBAL_CRYPTO_VALUE_PREFIX = 'cinny_android_crypto_value_v1:'/
+  );
   assert.match(
     secureStorageSource,
     /The global Android key is the source of truth[\s\S]*AndroidSecureStorage\.set\(\{ key: globalKey/
   );
-  assert.match(secureStorageSource, /const globalValue = secureValues\.get\(globalSecureValueKey\(name\)\)/);
-  assert.match(secureStorageSource, /secureValues\.get\(globalSecureValueKey\(name\)\)[\s\S]*return key \? secureValues\.get/);
+  assert.match(
+    secureStorageSource,
+    /const globalValue = secureValues\.get\(globalSecureValueKey\(name\)\)/
+  );
+  assert.match(
+    secureStorageSource,
+    /secureValues\.get\(globalSecureValueKey\(name\)\)[\s\S]*return key \? secureValues\.get/
+  );
   assert.match(secureStorageSource, /globalSecureValueKey\('verified-device'\)/);
   assert.match(secureStorageSource, /persistAndroidSession/);
   assert.match(secureStorageSource, /hydrateAndroidSession/);
@@ -190,7 +202,10 @@ test('Android secure storage and database compatibility remain intact', async ()
     secureStorageSource,
     /const loadSecureKeys = async \(\) => \{\s*if \(!isAndroid\(\)\) return false;/
   );
-  assert.match(secureStorageSource, /const isAndroidBuild = import\.meta\.env\.VITE_ANDROID_APP === 'true'/);
+  assert.match(
+    secureStorageSource,
+    /const isAndroidBuild = import\.meta\.env\.VITE_ANDROID_APP === 'true'/
+  );
   assert.match(secureStorageSource, /if \(!nativeStorageLoaded\) \{/);
   assert.match(secureStorageSource, /const scopedStorageKey = secureStorageKey\(\)/);
   assert.match(secureStorageSource, /hydrateScopedSecretStorageKeys\(\);[\s\S]*return;/);
@@ -201,8 +216,11 @@ test('Android secure storage and database compatibility remain intact', async ()
   assert.match(initSource, /setAndroidSecureValue\('verified-device', '1'\)/);
   assert.match(initSource, /restoreAndroidSecretsBundle\(crypto\)/);
   assert.match(initSource, /persistAndroidSecretsBundle\(crypto\)/);
+  assert.match(initSource, /await crypto\.userHasCrossSigningKeys\(userId, true\)/);
   assert.match(initSource, /await crypto\.crossSignDevice\(deviceId\)/);
-  assert.match(initSource, /verification\?\.crossSigningVerified !== true/);
+  assert.match(initSource, /verification\?\.crossSigningVerified === true/);
+  assert.match(initSource, /identity\.isCrossSigningVerified\(\)/);
+  assert.doesNotMatch(initSource, /await mx\.downloadKeysForUsers\(\[userId\]\)/);
   assert.match(initSource, /crypto_restore_preflight/);
   assert.match(initSource, /crypto_restore_failed/);
   assert.match(initSource, /if \(!secretsRestored && hasAndroidSecretStorageKey\(\)\)/);
