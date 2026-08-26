@@ -6,6 +6,8 @@ const secretStorageKeys = new Map();
 const secureValues = new Map();
 const STORAGE_PREFIX = 'cinny_android_secret_storage_keys:';
 const ACTIVE_SESSION_KEY = 'cinny_android_active_session_v1';
+const GLOBAL_SECRET_KEYS_KEY = 'cinny_android_secret_storage_keys_v1';
+const GLOBAL_CRYPTO_VALUE_PREFIX = 'cinny_android_crypto_value_v1:';
 const NATIVE_STORAGE_RETRY_COUNT = 20;
 const NATIVE_STORAGE_RETRY_DELAY_MS = 250;
 // The APK is compiled with VITE_ANDROID_APP=true. After Android kills the
@@ -80,7 +82,9 @@ const localTrustedBackupKey = () => {
 
 const hydrateScopedSecretStorageKeys = () => {
   const scopedStorageKey = secureStorageKey();
-  const encoded = scopedStorageKey ? secureValues.get(scopedStorageKey) : undefined;
+  const encoded =
+    (scopedStorageKey ? secureValues.get(scopedStorageKey) : undefined) ??
+    secureValues.get(GLOBAL_SECRET_KEYS_KEY);
   if (typeof encoded !== 'string') return;
   try {
     const parsed = JSON.parse(encoded);
@@ -220,14 +224,25 @@ const secureValueKey = (name) => {
   return key ? `${key}:${name}` : undefined;
 };
 
+const globalSecureValueKey = (name) => `${GLOBAL_CRYPTO_VALUE_PREFIX}${name}`;
+
 export const setAndroidSecureValue = async (name, value) => {
   if (!isAndroid()) return;
   const key = secureValueKey(name);
-  if (!key) return;
+  const globalKey = globalSecureValueKey(name);
   for (let attempt = 0; attempt < NATIVE_STORAGE_RETRY_COUNT; attempt += 1) {
     try {
-      await AndroidSecureStorage.set({ key, value });
-      secureValues.set(key, value);
+      // The global Android key is the source of truth. It is deliberately
+      // independent of WebView user/device identity, which may be absent for
+      // a few frames while the renderer is recreated after the app is killed.
+      await AndroidSecureStorage.set({ key: globalKey, value });
+      secureValues.set(globalKey, value);
+      // Keep the old account/device-scoped copy for migration and diagnostics,
+      // but never make a missing WebView identity prevent persistence.
+      if (key) {
+        await AndroidSecureStorage.set({ key, value });
+        secureValues.set(key, value);
+      }
       if (name === 'session-backup-trusted') {
         const localKey = localTrustedBackupKey();
         if (localKey) localStorage.setItem(localKey, value);
@@ -243,10 +258,9 @@ export const setAndroidSecureValue = async (name, value) => {
 export const getAndroidSecureValue = (name) => {
   if (!isAndroid()) return undefined;
   const key = secureValueKey(name);
-  if (!key) return undefined;
-  const secureValue = secureValues.get(key);
+  const secureValue = key ? secureValues.get(key) : undefined;
   if (secureValue !== undefined) return secureValue;
-  return undefined;
+  return secureValues.get(globalSecureValueKey(name));
 };
 
 export const hasAndroidSecretStorageKey = () =>
@@ -354,7 +368,6 @@ export const restoreAndroidSecretsBundle = async (crypto) => {
 const persistKeysSecurely = async () => {
   if (!isAndroid()) return;
   const key = secureStorageKey();
-  if (!key) return;
   const encoded = {};
   secretStorageKeys.forEach((value, keyId) => {
     encoded[keyId] = encodeKey(value);
@@ -362,8 +375,12 @@ const persistKeysSecurely = async () => {
   const value = JSON.stringify(encoded);
   for (let attempt = 0; attempt < NATIVE_STORAGE_RETRY_COUNT; attempt += 1) {
     try {
-      await AndroidSecureStorage.set({ key, value });
-      secureValues.set(key, value);
+      await AndroidSecureStorage.set({ key: GLOBAL_SECRET_KEYS_KEY, value });
+      secureValues.set(GLOBAL_SECRET_KEYS_KEY, value);
+      if (key) {
+        await AndroidSecureStorage.set({ key, value });
+        secureValues.set(key, value);
+      }
       return;
     } catch {
       if (attempt < NATIVE_STORAGE_RETRY_COUNT - 1) {
@@ -402,7 +419,7 @@ function getPrivateKey(keyId) {
 export async function clearSecretStorageKeys() {
   secretStorageKeys.clear();
   const key = storageKey();
-  if (key && isAndroid()) {
+  if (isAndroid()) {
     try {
       localStorage.removeItem(key);
     } catch {
@@ -414,6 +431,11 @@ export async function clearSecretStorageKeys() {
       secureValueKey('session-backup-private-key'),
       secureValueKey('session-backup-trusted'),
       secureValueKey('crypto-secrets-bundle'),
+      GLOBAL_SECRET_KEYS_KEY,
+      globalSecureValueKey('verified-device'),
+      globalSecureValueKey('session-backup-private-key'),
+      globalSecureValueKey('session-backup-trusted'),
+      globalSecureValueKey('crypto-secrets-bundle'),
     ].filter(Boolean);
     scopedKeys.forEach((scopedKey) => secureValues.delete(scopedKey));
     await Promise.all(

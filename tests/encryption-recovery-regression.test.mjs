@@ -171,6 +171,14 @@ test('Android secure storage and database compatibility remain intact', async ()
   assert.match(initSource, /requestPersistentAndroidStorage\(\)/);
   assert.match(initSource, /loadAndroidClientSnapshot/);
   assert.match(secureStorageSource, /ACTIVE_SESSION_KEY = 'cinny_android_active_session_v1'/);
+  assert.match(secureStorageSource, /GLOBAL_SECRET_KEYS_KEY = 'cinny_android_secret_storage_keys_v1'/);
+  assert.match(secureStorageSource, /GLOBAL_CRYPTO_VALUE_PREFIX = 'cinny_android_crypto_value_v1:'/);
+  assert.match(
+    secureStorageSource,
+    /The global Android key is the source of truth[\s\S]*AndroidSecureStorage\.set\(\{ key: globalKey/
+  );
+  assert.match(secureStorageSource, /return secureValues\.get\(globalSecureValueKey\(name\)\)/);
+  assert.match(secureStorageSource, /globalSecureValueKey\('verified-device'\)/);
   assert.match(secureStorageSource, /persistAndroidSession/);
   assert.match(secureStorageSource, /hydrateAndroidSession/);
   assert.match(
