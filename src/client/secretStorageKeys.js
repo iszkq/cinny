@@ -1,4 +1,5 @@
 import { Capacitor, registerPlugin } from '@capacitor/core';
+import { recordAndroidDiagnostic } from './androidDiagnostics';
 
 const AndroidSecureStorage = registerPlugin('AndroidSecureStorage');
 
@@ -109,8 +110,12 @@ const loadSecureKeys = async () => {
       // hydrateAndroidSession repeats it after restoring a missing identity
       // from the native session record.
       hydrateScopedSecretStorageKeys();
+      recordAndroidDiagnostic('native_secure_storage_read_ok', {
+        entries: Object.keys(values || {}).length,
+      });
       return true;
     } catch {
+      recordAndroidDiagnostic('native_secure_storage_read_retry', { attempt: attempt + 1 });
       // Android Keystore can be temporarily unavailable while the WebView
       // process is recreated. Retry before crypto observes an empty map.
       if (attempt < NATIVE_STORAGE_RETRY_COUNT - 1) {
@@ -206,6 +211,7 @@ export const hydrateAndroidSession = async () => {
         localStorage.removeItem('cinny_refresh_token');
       }
       hydrateScopedSecretStorageKeys();
+      recordAndroidDiagnostic('native_session_restored', { hasRefreshToken: !!session.refreshToken });
       return;
     } catch {
       // Fall through to the one-time WebView migration below.
@@ -216,6 +222,7 @@ export const hydrateAndroidSession = async () => {
     // session in WebView storage.
     await persistAndroidSession(webViewSession);
     hydrateScopedSecretStorageKeys();
+    recordAndroidDiagnostic('native_session_migrated_from_webview');
   }
 };
 
@@ -247,6 +254,7 @@ export const setAndroidSecureValue = async (name, value) => {
         const localKey = localTrustedBackupKey();
         if (localKey) localStorage.setItem(localKey, value);
       }
+      recordAndroidDiagnostic('native_crypto_value_written', { name });
       return;
     } catch (error) {
       if (attempt === NATIVE_STORAGE_RETRY_COUNT - 1) throw error;

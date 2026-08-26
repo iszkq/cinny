@@ -51,6 +51,8 @@ import { getFallbackSession } from '../../state/sessions';
 import { AutoDiscovery } from './AutoDiscovery';
 import { isAndroidApp, isNativeApp } from '../../utils/nativePlatform';
 import { MobileSettingsProvider } from './MobileSettings';
+import { copyToClipboard } from '../../utils/dom';
+import { getAndroidDiagnosticsReport } from '../../../client/androidDiagnostics';
 
 const CLIENT_STORE_PERSIST_INTERVAL_MS = 30_000;
 const ANDROID_CLIENT_STORE_PERSIST_INTERVAL_MS = 10_000;
@@ -201,6 +203,7 @@ export function ClientRoot({ children }: ClientRootProps) {
   // A bounded fallback below still lets the user enter if optional startup
   // data is malformed while the background sync recovers.
   const [loading, setLoading] = useState(true);
+  const [diagnosticsCopied, setDiagnosticsCopied] = useState(false);
   const lastStorePersistedAtRef = useRef(0);
   const { baseUrl, userId } = getFallbackSession() ?? {};
 
@@ -384,6 +387,20 @@ export function ClientRoot({ children }: ClientRootProps) {
                   )}
                   {startState.status === AsyncStatus.Error && (
                     <Text>{`客户端启动失败：${startState.error.message}`}</Text>
+                  )}
+                  {isAndroidApp() && (
+                    <Button
+                      variant="Secondary"
+                      onClick={async () => {
+                        const copied = await copyToClipboard(getAndroidDiagnosticsReport());
+                        setDiagnosticsCopied(copied);
+                        if (copied) window.setTimeout(() => setDiagnosticsCopied(false), 2500);
+                      }}
+                    >
+                      <Text as="span" size="B400">
+                        {diagnosticsCopied ? '诊断信息已复制' : '复制 Android 诊断信息'}
+                      </Text>
+                    </Button>
                   )}
                   <Button
                     variant="Critical"

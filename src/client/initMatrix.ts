@@ -51,6 +51,7 @@ import {
   LEGACY_RUST_CRYPTO_DATABASE_PREFIX,
   saveRustCryptoDatabasePrefix,
 } from './rustCryptoStore';
+import { recordAndroidDiagnostic } from './androidDiagnostics';
 
 type Session = {
   baseUrl: string;
@@ -337,6 +338,9 @@ const requestPersistentAndroidStorage = async (): Promise<void> => {
 
 export const initClient = async (session: Session): Promise<MatrixClient> => {
   installWebMatrixLoggerFilter();
+  recordAndroidDiagnostic('client_init_begin', {
+    hasRefreshToken: !!session.refreshToken,
+  });
   await hydrateSecretStorageKeys();
 
   // Android sessions can outlive the short-lived access token returned by a
@@ -364,6 +368,7 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
             refreshToken: nextRefreshToken,
             expiresInMs: response.expires_in_ms,
           });
+          recordAndroidDiagnostic('access_token_refreshed', { hasRotatedRefreshToken: !!response.refresh_token });
           return {
             accessToken: response.access_token,
             refreshToken: nextRefreshToken,
@@ -511,6 +516,7 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
     session
   );
   rustCryptoDatabasePrefixes.set(mx, cryptoDatabasePrefix);
+  recordAndroidDiagnostic('crypto_store_opened', { newlyIssuedDevice });
   // A normal app update preserves the access token and IndexedDB. Verify that
   // the retained server session still owns the same E2EE identity before sync
   // can expose undecryptable events. A freshly-issued login is skipped once so
@@ -654,6 +660,9 @@ export const startClient = async (mx: MatrixClient) => {
             await crypto.crossSignDevice(deviceId);
             await mx.downloadKeysForUsers([userId]);
             const verification = await crypto.getDeviceVerificationStatus(userId, deviceId);
+            recordAndroidDiagnostic('crypto_verification_status', {
+              crossSigningVerified: verification?.crossSigningVerified === true,
+            });
             if (verification?.crossSigningVerified !== true) {
               throw new Error('Android device cross-signing trust is not ready.');
             }
@@ -670,6 +679,9 @@ export const startClient = async (mx: MatrixClient) => {
           const backupInfo = await crypto.getKeyBackupInfo();
           if (!backupInfo?.version) throw new Error('Encrypted backup information is not ready.');
           const backupTrust = await crypto.isKeyBackupTrusted(backupInfo);
+          recordAndroidDiagnostic('backup_verification_status', {
+            trusted: backupTrust?.matchesDecryptionKey === true,
+          });
           if (backupTrust?.matchesDecryptionKey !== true) {
             throw new Error('Android backup decryption key is not attached yet.');
           }

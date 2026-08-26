@@ -1,5 +1,5 @@
-import React from 'react';
-import { Box, Text, IconButton, Icon, Icons, Scroll } from 'folds';
+import React, { useState } from 'react';
+import { Box, Button, Text, IconButton, Icon, Icons, Scroll } from 'folds';
 import { Page, PageContent, PageHeader } from '../../../components/page';
 import { SequenceCard } from '../../../components/sequence-card';
 import { SequenceCardStyle } from '../styles.css';
@@ -26,6 +26,9 @@ import {
 } from '../../../hooks/useSecretStorage';
 import { useCrossSigningActive } from '../../../hooks/useCrossSigning';
 import { BackupRestoreTile } from '../../../components/BackupRestore';
+import { copyToClipboard } from '../../../utils/dom';
+import { isAndroidApp } from '../../../utils/nativePlatform';
+import { getAndroidDiagnosticsReport } from '../../../../client/androidDiagnostics';
 
 function DevicesPlaceholder() {
   return (
@@ -63,6 +66,13 @@ export function Devices({ requestClose }: DevicesProps) {
   const defaultSecretStorageKeyContent = useSecretStorageKeyContent(
     defaultSecretStorageKeyId ?? ''
   );
+  const [diagnosticsCopied, setDiagnosticsCopied] = useState(false);
+
+  const copyAndroidDiagnostics = async () => {
+    const copied = await copyToClipboard(getAndroidDiagnosticsReport());
+    setDiagnosticsCopied(copied);
+    if (copied) window.setTimeout(() => setDiagnosticsCopied(false), 2500);
+  };
 
   return (
     <Page>
@@ -156,6 +166,28 @@ export function Devices({ requestClose }: DevicesProps) {
                 />
               )}
               <LocalBackup />
+              {isAndroidApp() && (
+                <Box direction="Column" gap="100">
+                  <Text size="L400">Android 诊断</Text>
+                  <SequenceCard
+                    className={SequenceCardStyle}
+                    variant="SurfaceVariant"
+                    direction="Column"
+                    gap="300"
+                  >
+                    <Text size="B300">
+                      如果杀后台后出现掉登录、设备未验证或加密备份未验证，请点击复制并把内容发给开发者。
+                    </Text>
+                    <Box>
+                      <Button variant="Secondary" onClick={copyAndroidDiagnostics}>
+                        <Text as="span" size="B400">
+                          {diagnosticsCopied ? '诊断信息已复制' : '复制 Android 诊断信息'}
+                        </Text>
+                      </Button>
+                    </Box>
+                  </SequenceCard>
+                </Box>
+              )}
             </Box>
           </PageContent>
         </Scroll>

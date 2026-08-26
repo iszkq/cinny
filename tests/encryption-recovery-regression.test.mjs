@@ -192,7 +192,7 @@ test('Android secure storage and database compatibility remain intact', async ()
   assert.match(secureStorageSource, /const isAndroidBuild = import\.meta\.env\.VITE_ANDROID_APP === 'true'/);
   assert.match(secureStorageSource, /if \(!nativeStorageLoaded\) \{/);
   assert.match(secureStorageSource, /const scopedStorageKey = secureStorageKey\(\)/);
-  assert.match(secureStorageSource, /hydrateScopedSecretStorageKeys\(\);\s*return;/);
+  assert.match(secureStorageSource, /hydrateScopedSecretStorageKeys\(\);[\s\S]*return;/);
   assert.match(sessionSource, /await persistAndroidSession/);
   assert.match(sessionSource, /removeAndroidPersistedSession/);
   assert.match(entrySource, /if \(isAndroidApp\(\)\) await hydrateAndroidSession\(\)/);
