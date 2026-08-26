@@ -141,26 +141,41 @@ export const hydrateAndroidSession = async () => {
     deviceId: localStorage.getItem('cinny_device_id'),
     userId: localStorage.getItem('cinny_user_id'),
     baseUrl: localStorage.getItem('cinny_hs_base_url'),
+    expiresInMs: Number(localStorage.getItem('cinny_expires_in_ms')) || undefined,
+    refreshToken: localStorage.getItem('cinny_refresh_token') || undefined,
   };
+  const encoded = secureValues.get(ACTIVE_SESSION_KEY);
+  if (typeof encoded === 'string') {
+    try {
+      const session = JSON.parse(encoded);
+      if (!isValidAndroidSession(session)) return;
+      // The native encrypted session is the Android source of truth. It is
+      // written before navigation/login completes and also after every token
+      // refresh, so a stale WebView value must never overwrite it after a
+      // renderer/process restart.
+      localStorage.setItem('cinny_access_token', session.accessToken);
+      localStorage.setItem('cinny_device_id', session.deviceId);
+      localStorage.setItem('cinny_user_id', session.userId);
+      localStorage.setItem('cinny_hs_base_url', session.baseUrl);
+      if (typeof session.expiresInMs === 'number') {
+        localStorage.setItem('cinny_expires_in_ms', String(session.expiresInMs));
+      } else {
+        localStorage.removeItem('cinny_expires_in_ms');
+      }
+      if (typeof session.refreshToken === 'string' && session.refreshToken.length > 0) {
+        localStorage.setItem('cinny_refresh_token', session.refreshToken);
+      } else {
+        localStorage.removeItem('cinny_refresh_token');
+      }
+      return;
+    } catch {
+      // Fall through to the one-time WebView migration below.
+    }
+  }
   if (isValidAndroidSession(webViewSession)) {
     // One-time migration for users upgrading from builds that only kept the
     // session in WebView storage.
     await persistAndroidSession(webViewSession);
-    return;
-  }
-  const encoded = secureValues.get(ACTIVE_SESSION_KEY);
-  if (typeof encoded !== 'string') return;
-  try {
-    const session = JSON.parse(encoded);
-    if (!isValidAndroidSession(session)) return;
-    // A current WebView session always wins. Native storage is disaster
-    // recovery only and must never overwrite a newer successful login.
-    localStorage.setItem('cinny_access_token', session.accessToken);
-    localStorage.setItem('cinny_device_id', session.deviceId);
-    localStorage.setItem('cinny_user_id', session.userId);
-    localStorage.setItem('cinny_hs_base_url', session.baseUrl);
-  } catch {
-    // Ignore an unreadable native session and show the normal login screen.
   }
 };
 
@@ -236,6 +251,15 @@ export const restoreAndroidBackupKey = async (crypto) => {
     const parsed = JSON.parse(encoded);
     const key = decodeKey(parsed?.key);
     if (!(key instanceof Uint8Array) || typeof parsed?.version !== 'string') return;
+    // A normal cold start reopens the same Rust Crypto store, which already
+    // contains this backup key. Re-storing it emits KeyBackupDecryptionKeyCached
+    // and causes the UI to download/decrypt the whole backup again. Native
+    // clients only import the durable copy when the local crypto store lacks it.
+    const [existingKey, existingVersion] = await Promise.all([
+      crypto.getSessionBackupPrivateKey(),
+      crypto.getActiveSessionBackupVersion(),
+    ]);
+    if (existingKey instanceof Uint8Array && existingVersion === parsed.version) return;
     // The Rust store can expose a stale active version during cold startup.
     // The secure value is version-scoped already; cache it first and let
     // checkKeyBackupAndEnable compare it with the server's current version.

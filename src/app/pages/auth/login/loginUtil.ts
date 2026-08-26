@@ -19,6 +19,7 @@ import {
   allowNewRustCryptoStore,
   hasPersistedRustCryptoStore,
 } from '../../../../client/rustCryptoStore';
+import { isAndroidApp } from '../../../utils/nativePlatform';
 
 export enum GetBaseUrlError {
   NotAllow = 'NotAllow',
@@ -125,12 +126,16 @@ export const login = async (
     });
   }
 
+  // Android must be able to renew a time-limited access token after process
+  // death. Requesting a refresh token is ignored by homeservers which issue
+  // non-expiring tokens, so desktop/web retain their existing behaviour.
+  const loginData: LoginRequest = isAndroidApp() ? { ...data, refresh_token: true } : data;
   const savedIdentity = getFallbackSessionIdentity();
   const mayReuseDeviceId =
     isFallbackSessionSoftLoggedOut() &&
     !!savedIdentity &&
     normalizeHomeserverUrl(savedIdentity.baseUrl) === normalizeHomeserverUrl(url) &&
-    data.device_id === undefined &&
+    loginData.device_id === undefined &&
     loginMatchesSavedUser(data, savedIdentity.userId);
   const canReuseDeviceId = mayReuseDeviceId && (await hasPersistedRustCryptoStore(savedIdentity));
   let reusedDeviceId = canReuseDeviceId;
@@ -139,8 +144,8 @@ export const login = async (
   // the old server-side device or its device keys may have been deleted while
   // the local Rust Crypto database still exists.
   const loginRequest: LoginRequest = canReuseDeviceId
-    ? { ...data, device_id: savedIdentity!.deviceId }
-    : data;
+    ? { ...loginData, device_id: savedIdentity!.deviceId }
+    : loginData;
 
   let mx = createClient({ baseUrl: url });
   let [err, res] = await to<LoginResponse, MatrixError>(mx.loginRequest(loginRequest));
@@ -150,7 +155,7 @@ export const login = async (
   // password is not reported as incorrect after device state was reset.
   if (err?.httpStatus === 403 && canReuseDeviceId) {
     mx = createClient({ baseUrl: url });
-    [err, res] = await to<LoginResponse, MatrixError>(mx.loginRequest(data));
+    [err, res] = await to<LoginResponse, MatrixError>(mx.loginRequest(loginData));
     reusedDeviceId = false;
   }
 
@@ -167,7 +172,7 @@ export const login = async (
     });
     await staleClient.logout().catch(() => undefined);
     mx = createClient({ baseUrl: url });
-    [err, res] = await to<LoginResponse, MatrixError>(mx.loginRequest(data));
+    [err, res] = await to<LoginResponse, MatrixError>(mx.loginRequest(loginData));
     reusedDeviceId = false;
   }
 
@@ -217,7 +222,9 @@ export const completeLogin = async (data: CustomLoginResponse, navigate: Navigat
     loginRes.access_token,
     loginRes.device_id,
     loginRes.user_id,
-    loginBaseUrl
+    loginBaseUrl,
+    loginRes.expires_in_ms,
+    loginRes.refresh_token
   );
   if (!data.reusedDeviceId) {
     allowNewRustCryptoStore({ userId: loginRes.user_id, deviceId: loginRes.device_id });

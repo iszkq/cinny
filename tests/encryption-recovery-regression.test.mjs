@@ -190,8 +190,17 @@ test('Android secure storage and database compatibility remain intact', async ()
   assert.match(initSource, /crypto\.isSecretStorageReady\(\)/);
   assert.match(initSource, /crypto\.bootstrapCrossSigning\(\{\}\)/);
   assert.match(initSource, /if \(!newlyIssuedDevice && !isAndroidApp\(\)\)/);
-  assert.match(initSource, /Android WebView\/IndexedDB can briefly report an empty database list/);
-  assert.match(initSource, /if \(isAndroidApp\(\)\) \{[\s\S]*addCandidate\(scopedPrefix\)/);
+  assert.match(initSource, /Android WebView can briefly report an empty IndexedDB list/);
+  assert.match(initSource, /const retryDelays = \[250, 500, 1_000, 2_000, 4_000\]/);
+  assert.match(initSource, /throw new MissingCryptoStoreError\(\)/);
+  assert.match(initSource, /if \(candidates\.length === 0 && !storeCreationAllowed\)/);
+  assert.match(secureStorageSource, /crypto\.getSessionBackupPrivateKey\(\)/);
+  assert.match(
+    secureStorageSource,
+    /existingKey instanceof Uint8Array && existingVersion === parsed\.version/
+  );
+  assert.match(sessionSource, /cinny_refresh_token/);
+  assert.match(initSource, /tokenRefreshFunction/);
   assert.match(
     initSource,
     /if \(!isAndroidApp\(\)\) \{\s*removeAndroidPersistedSession\(\);\s*removeFallbackAccessToken\(\);/

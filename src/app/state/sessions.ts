@@ -2,6 +2,7 @@ import {
   persistAndroidSession,
   removeAndroidPersistedSession,
 } from '../../client/secretStorageKeys';
+import { isAndroidApp } from '../utils/nativePlatform';
 
 // import { atom } from 'jotai';
 // import {
@@ -43,14 +44,35 @@ export async function setFallbackSession(
   accessToken: string,
   deviceId: string,
   userId: string,
-  baseUrl: string
+  baseUrl: string,
+  expiresInMs?: number,
+  refreshToken?: string
 ) {
   localStorage.setItem('cinny_access_token', accessToken);
   localStorage.setItem('cinny_device_id', deviceId);
   localStorage.setItem('cinny_user_id', userId);
   localStorage.setItem('cinny_hs_base_url', baseUrl);
+  if (isAndroidApp()) {
+    if (typeof expiresInMs === 'number') {
+      localStorage.setItem('cinny_expires_in_ms', String(expiresInMs));
+    } else {
+      localStorage.removeItem('cinny_expires_in_ms');
+    }
+    if (typeof refreshToken === 'string' && refreshToken.length > 0) {
+      localStorage.setItem('cinny_refresh_token', refreshToken);
+    } else {
+      localStorage.removeItem('cinny_refresh_token');
+    }
+  }
   localStorage.removeItem(FALLBACK_SOFT_LOGOUT_KEY);
-  await persistAndroidSession({ accessToken, deviceId, userId, baseUrl });
+  await persistAndroidSession({
+    accessToken,
+    deviceId,
+    userId,
+    baseUrl,
+    expiresInMs,
+    refreshToken,
+  });
 }
 export const removeFallbackSession = () => {
   void removeAndroidPersistedSession();
@@ -58,6 +80,10 @@ export const removeFallbackSession = () => {
   localStorage.removeItem('cinny_user_id');
   localStorage.removeItem('cinny_device_id');
   localStorage.removeItem('cinny_access_token');
+  if (isAndroidApp()) {
+    localStorage.removeItem('cinny_expires_in_ms');
+    localStorage.removeItem('cinny_refresh_token');
+  }
   localStorage.removeItem(FALLBACK_SOFT_LOGOUT_KEY);
 };
 export const removeFallbackAccessToken = () => {
@@ -99,6 +125,12 @@ export const getFallbackSession = (): Session | undefined => {
     const session: Session = {
       ...identity,
       accessToken,
+      expiresInMs: isAndroidApp()
+        ? Number(localStorage.getItem('cinny_expires_in_ms')) || undefined
+        : undefined,
+      refreshToken: isAndroidApp()
+        ? localStorage.getItem('cinny_refresh_token') ?? undefined
+        : undefined,
       fallbackSdkStores: true,
     };
 

@@ -177,6 +177,11 @@ const useLogoutListener = (mx?: MatrixClient) => {
       // reopen the existing device and Rust Crypto store. A generic expired or
       // revoked token must get a fresh device on the next login.
       const softLogout = error.httpStatus === 401 && error.data?.soft_logout === true;
+      // Android keeps credentials in encrypted native storage and normally
+      // refreshes expiring access tokens through matrix-js-sdk. A hard 401 is
+      // still honoured (the server revoked the session), but transient
+      // process/storage loss is no longer able to manufacture this event by
+      // deleting the local token first.
       await clearExpiredSessionAfterLogout(mx, softLogout);
       window.location.reload();
     };
@@ -267,6 +272,7 @@ export function ClientRoot({ children }: ClientRootProps) {
 
   useEffect(() => {
     if (
+      !isAndroidApp() &&
       loadState.status === AsyncStatus.Error &&
       (loadState.error instanceof MissingCryptoStoreError ||
         loadState.error instanceof InvalidCryptoDeviceError)
@@ -277,6 +283,25 @@ export function ClientRoot({ children }: ClientRootProps) {
       window.location.reload();
     }
   }, [loadState]);
+
+  useEffect(() => {
+    if (
+      !isAndroidApp() ||
+      loadState.status !== AsyncStatus.Error ||
+      !(loadState.error instanceof MissingCryptoStoreError)
+    ) {
+      return undefined;
+    }
+
+    // A killed Android renderer can make IndexedDB temporarily invisible
+    // while the WebView reopens its files. Retry the same session in the
+    // background; never route the user through login or create a replacement
+    // crypto device for this transient state.
+    const retryId = window.setTimeout(() => {
+      loadMatrix().catch(() => undefined);
+    }, 2_500);
+    return () => window.clearTimeout(retryId);
+  }, [loadState, loadMatrix]);
 
   useEffect(() => {
     if (mx && !mx.clientRunning) {

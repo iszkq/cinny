@@ -9,7 +9,8 @@ test('login retries a stale reused device once without masking valid credentials
   const source = await readSource('src/app/pages/auth/login/loginUtil.ts');
 
   assert.match(source, /err\?\.httpStatus === 403 && canReuseDeviceId/);
-  assert.match(source, /mx\.loginRequest\(data\)/);
+  assert.match(source, /const loginData: LoginRequest = isAndroidApp\(\)/);
+  assert.match(source, /mx\.loginRequest\(loginData\)/);
   assert.match(source, /reusedDeviceId = false/);
   assert.match(source, /error: err\.data\?\.error \?\? err\.message/);
 });

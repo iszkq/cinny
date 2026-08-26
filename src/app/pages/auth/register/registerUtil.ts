@@ -120,7 +120,14 @@ export const useRegisterComplete = (data?: CustomRegisterResponse) => {
       const deviceId = response.device_id;
 
       if (accessToken && deviceId) {
-        void setFallbackSession(accessToken, deviceId, userId, baseUrl).then(() => {
+        void setFallbackSession(
+          accessToken,
+          deviceId,
+          userId,
+          baseUrl,
+          response.expires_in_ms,
+          response.refresh_token
+        ).then(() => {
           allowNewRustCryptoStore({ userId, deviceId });
           const afterLoginRedirectPath = getAfterLoginRedirectPath();
           deleteAfterLoginRedirectPath();

@@ -15,6 +15,7 @@ import {
   restoreAndroidBackupKey,
   getAndroidSecureValue,
   setAndroidSecureValue,
+  persistAndroidSession,
   removeAndroidPersistedSession,
   clearSecretStorageKeys,
 } from './secretStorageKeys';
@@ -53,6 +54,8 @@ type Session = {
   accessToken: string;
   userId: string;
   deviceId: string;
+  expiresInMs?: number;
+  refreshToken?: string;
 };
 
 const MALFORMED_ENCRYPTED_EVENT_WARNING = 'missing field `algorithm`';
@@ -159,7 +162,6 @@ const invalidateCurrentCryptoDevice = async (mx: MatrixClient): Promise<void> =>
   );
   await Promise.allSettled([clearAndroidClientSnapshot(mx), mx.store.deleteAllData()]);
   pushSessionToSW();
-  await removeAndroidPersistedSession();
   removeFallbackAccessToken();
   clearFallbackSessionSoftLogout();
   markCryptoDeviceRecoveryNotice();
@@ -191,21 +193,23 @@ const initRustCryptoForSession = async (
   const scopedPrefix = getRustCryptoDatabasePrefix(session);
   const savedPrefix = getSavedRustCryptoDatabasePrefix(session);
   const storeCreationAllowed = isNewRustCryptoStoreAllowed(session);
-  // Enumerate IndexedDB only once. Some WebViews make this surprisingly
-  // expensive, and the old implementation performed the same full scan twice
-  // on every launch before Rust Crypto could even start.
-  const cryptoPrefixes = [
-    LEGACY_RUST_CRYPTO_DATABASE_PREFIX,
-    scopedPrefix,
-  ];
+  // Android WebView can briefly report an empty IndexedDB list while its
+  // renderer is reopening. Losing this store means losing the device's Olm
+  // identity, so an existing Android session must never create a replacement
+  // crypto account under the old device ID.
+  const cryptoPrefixes = [LEGACY_RUST_CRYPTO_DATABASE_PREFIX, scopedPrefix];
   let existingPrefixes = await findExistingRustCryptoDatabasePrefixes(cryptoPrefixes);
   // Android WebView/IndexedDB can briefly report an empty database list while
   // the renderer is being recreated. Never treat that transient state as a
   // revoked login; give the store a few bounded attempts to reappear first.
   if (isAndroidApp() && existingPrefixes.size === 0 && !storeCreationAllowed) {
-    for (let attempt = 0; attempt < 4 && existingPrefixes.size === 0; attempt += 1) {
-      await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 350));
+    const retryDelays = [250, 500, 1_000, 2_000, 4_000];
+    for (const delay of retryDelays) {
+      await new Promise<void>((resolve) => {
+        globalThis.setTimeout(resolve, delay);
+      });
       existingPrefixes = await findExistingRustCryptoDatabasePrefixes(cryptoPrefixes);
+      if (existingPrefixes.size > 0) break;
     }
   }
   const legacyExists = existingPrefixes.has(LEGACY_RUST_CRYPTO_DATABASE_PREFIX);
@@ -238,20 +242,16 @@ const initRustCryptoForSession = async (
     if (legacyExists) addCandidate(LEGACY_RUST_CRYPTO_DATABASE_PREFIX);
     if (scopedExists) addCandidate(scopedPrefix);
   }
+  if (candidates.length === 0 && !storeCreationAllowed) {
+    // Keep the encrypted native login session, but do not initialize an empty
+    // store: that would silently replace the same device ID's keys and make
+    // every device appear unverified. A retry/restart can reopen the original
+    // database without creating another Matrix device.
+    if (!isAndroidApp()) removeFallbackAccessToken();
+    throw new MissingCryptoStoreError();
+  }
   if (candidates.length === 0) {
-    if (!storeCreationAllowed) {
-      if (isAndroidApp()) {
-        // Keep Android's durable session. A missing IndexedDB view can be a
-        // renderer-restart race; creating the scoped store lets the Matrix
-        // client recover without forcing the user through login again.
-        addCandidate(scopedPrefix);
-      } else {
-        removeFallbackAccessToken();
-        throw new MissingCryptoStoreError();
-      }
-    } else {
-      addCandidate(scopedPrefix);
-    }
+    addCandidate(scopedPrefix);
   }
 
   // A legacy selection may belong to another login despite having the same
@@ -320,6 +320,42 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
   installWebMatrixLoggerFilter();
   await hydrateSecretStorageKeys();
 
+  // Android sessions can outlive the short-lived access token returned by a
+  // homeserver. Keep the refresh token in the native encrypted store and let
+  // matrix-js-sdk refresh it before requests are sent. Web/desktop keep their
+  // existing token lifecycle and do not use this path.
+  const tokenRefreshFunction =
+    isAndroidApp() && session.refreshToken
+      ? async (refreshToken: string) => {
+          const refreshClient = createClient({
+            baseUrl: session.baseUrl,
+            userId: session.userId,
+            deviceId: session.deviceId,
+          });
+          const response = await refreshClient.refreshToken(refreshToken);
+          const nextRefreshToken = response.refresh_token || refreshToken;
+          localStorage.setItem('cinny_access_token', response.access_token);
+          if (response.expires_in_ms !== undefined) {
+            localStorage.setItem('cinny_expires_in_ms', String(response.expires_in_ms));
+          }
+          localStorage.setItem('cinny_refresh_token', nextRefreshToken);
+          await persistAndroidSession({
+            ...session,
+            accessToken: response.access_token,
+            refreshToken: nextRefreshToken,
+            expiresInMs: response.expires_in_ms,
+          });
+          return {
+            accessToken: response.access_token,
+            refreshToken: nextRefreshToken,
+            expiry:
+              typeof response.expires_in_ms === 'number'
+                ? new Date(Date.now() + response.expires_in_ms)
+                : undefined,
+          };
+        }
+      : undefined;
+
   const indexedDBStore = new IndexedDBStore({
     indexedDB: global.indexedDB,
     localStorage: global.localStorage,
@@ -331,6 +367,8 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
   const mx = createClient({
     baseUrl: session.baseUrl,
     accessToken: session.accessToken,
+    refreshToken: session.refreshToken,
+    tokenRefreshFunction,
     userId: session.userId,
     store: indexedDBStore,
     cryptoStore: legacyCryptoStore,
@@ -458,6 +496,13 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
         androidNativeSnapshotDirty.add(mx);
         void persistClientStore(mx);
       }
+      // Keep an existing Android session durable even for homeservers which
+      // issue non-expiring access tokens and therefore never run the refresh
+      // callback. This is a no-op on web and desktop.
+      persistAndroidSession({
+        ...session,
+        accessToken: mx.getAccessToken() || session.accessToken,
+      }).catch(() => undefined);
     });
   }
   if (isAndroidApp()) {
@@ -785,6 +830,9 @@ export const clearExpiredSessionAfterLogout = async (mx?: MatrixClient, softLogo
   // device ID is allowed only after an explicit server-issued soft logout.
   // For every other invalid session, the identity is retained only to make the
   // sign-in screen convenient; login will request a fresh Matrix device.
+  // Expiring Android access tokens are refreshed by matrix-js-sdk before this
+  // point. Reaching SessionLoggedOut therefore means the server rejected both
+  // the access and refresh credentials (or explicitly revoked the session).
   await removeAndroidPersistedSession();
   removeFallbackAccessToken();
   if (softLogout) {
