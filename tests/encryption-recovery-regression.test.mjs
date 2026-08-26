@@ -156,6 +156,7 @@ test('backup restore after verification uses the existing client-scoped progress
 
 test('Android secure storage and database compatibility remain intact', async () => {
   const secureStorageSource = await readSource('src/client/secretStorageKeys.js');
+  const cryptoStoreSource = await readSource('src/client/rustCryptoStore.ts');
   const initSource = await readSource('src/client/initMatrix.ts');
   const sessionSource = await readSource('src/app/state/sessions.ts');
   const entrySource = await readSource('src/index.tsx');
@@ -192,6 +193,11 @@ test('Android secure storage and database compatibility remain intact', async ()
   assert.match(initSource, /if \(!newlyIssuedDevice && !isAndroidApp\(\)\)/);
   assert.match(initSource, /Android WebView can briefly report an empty IndexedDB list/);
   assert.match(initSource, /const retryDelays = \[250, 500, 1_000, 2_000, 4_000\]/);
+  assert.match(
+    cryptoStoreSource,
+    /if \(isAndroidApp\(\)\) return findExistingPrefixesByOpening\(prefixes\)/
+  );
+  assert.match(cryptoStoreSource, /request\.transaction\?\.abort\(\)/);
   assert.match(initSource, /throw new MissingCryptoStoreError\(\)/);
   assert.match(initSource, /if \(candidates\.length === 0 && !storeCreationAllowed\)/);
   assert.match(secureStorageSource, /crypto\.getSessionBackupPrivateKey\(\)/);

@@ -1,3 +1,5 @@
+import { isAndroidApp } from '../app/utils/nativePlatform';
+
 type RustCryptoSessionIdentity = {
   userId: string;
   deviceId: string;
@@ -80,10 +82,29 @@ const indexedDbDatabaseExists = (databaseName: string): Promise<boolean> =>
     request.onblocked = () => finish(false);
   });
 
+const findExistingPrefixesByOpening = async (prefixes: string[]): Promise<Set<string>> => {
+  const results = await Promise.all(
+    prefixes.map(
+      async (prefix) =>
+        [prefix, await indexedDbDatabaseExists(getRustCryptoDatabaseNames(prefix)[0])] as const
+    )
+  );
+  return new Set(results.filter(([, exists]) => exists).map(([prefix]) => prefix));
+};
+
 export const findExistingRustCryptoDatabasePrefixes = async (
   prefixes: string[]
 ): Promise<Set<string>> => {
   try {
+    // Android WebView's indexedDB.databases() can transiently return an empty
+    // list immediately after its renderer process is recreated, even though
+    // opening the existing database succeeds. Treating that list as
+    // authoritative made an ordinary swipe-away look like permanent crypto
+    // data loss. Probe the exact account/device databases directly on Android;
+    // aborting onupgradeneeded keeps this read-only when a database is truly
+    // absent, so we never create a new Olm identity under the old device ID.
+    if (isAndroidApp()) return findExistingPrefixesByOpening(prefixes);
+
     if (typeof global.indexedDB?.databases === 'function') {
       const databases = await global.indexedDB.databases();
       const existingNames = new Set(databases.map(({ name }) => name));
@@ -94,13 +115,7 @@ export const findExistingRustCryptoDatabasePrefixes = async (
       );
     }
 
-    const results = await Promise.all(
-      prefixes.map(
-        async (prefix) =>
-          [prefix, await indexedDbDatabaseExists(getRustCryptoDatabaseNames(prefix)[0])] as const
-      )
-    );
-    return new Set(results.filter(([, exists]) => exists).map(([prefix]) => prefix));
+    return findExistingPrefixesByOpening(prefixes);
   } catch {
     return new Set();
   }
