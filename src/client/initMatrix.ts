@@ -543,6 +543,11 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
       persistAndroidSession({
         ...session,
         accessToken: mx.getAccessToken() || session.accessToken,
+        // The SDK replaces its refresh token after a successful rotation.
+        // Persist the live value instead of the login-time closure value, or
+        // the next sync snapshot would overwrite Keystore with an expired
+        // refresh token and cause a delayed password-login loop.
+        refreshToken: mx.getRefreshToken() || session.refreshToken,
       }).catch(() => undefined);
     });
   }
