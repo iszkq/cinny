@@ -6,7 +6,17 @@ const secretStorageKeys = new Map();
 const secureValues = new Map();
 const STORAGE_PREFIX = 'cinny_android_secret_storage_keys:';
 const ACTIVE_SESSION_KEY = 'cinny_android_active_session_v1';
-const isAndroid = () => Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android';
+const NATIVE_STORAGE_RETRY_COUNT = 20;
+const NATIVE_STORAGE_RETRY_DELAY_MS = 250;
+// The APK is compiled with VITE_ANDROID_APP=true. After Android kills the
+// renderer process, Capacitor's runtime probe can briefly report `web` while
+// the bridge reconnects. Using that transient value as a storage gate skips
+// the native Keystore read and makes the login, cross-signing secrets and
+// backup key all appear lost. An APK build must always use Android storage;
+// the runtime probe remains only as a development fallback.
+const isAndroidBuild = import.meta.env.VITE_ANDROID_APP === 'true';
+const isAndroid = () =>
+  isAndroidBuild || (Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android');
 const storageKey = () => {
   if (!isAndroid() || typeof localStorage === 'undefined') return undefined;
   const userId = localStorage.getItem('cinny_user_id');
@@ -68,30 +78,43 @@ const localTrustedBackupKey = () => {
     : undefined;
 };
 
+const hydrateScopedSecretStorageKeys = () => {
+  const scopedStorageKey = secureStorageKey();
+  const encoded = scopedStorageKey ? secureValues.get(scopedStorageKey) : undefined;
+  if (typeof encoded !== 'string') return;
+  try {
+    const parsed = JSON.parse(encoded);
+    Object.entries(parsed).forEach(([keyId, value]) => {
+      const decoded = decodeKey(value);
+      if (decoded) secretStorageKeys.set(keyId, decoded);
+    });
+  } catch {
+    // Keep the native value intact. A later startup can retry parsing it.
+  }
+};
+
 const loadSecureKeys = async () => {
-  if (!isAndroid()) return;
-  for (let attempt = 0; attempt < 5; attempt += 1) {
+  if (!isAndroid()) return false;
+  for (let attempt = 0; attempt < NATIVE_STORAGE_RETRY_COUNT; attempt += 1) {
     try {
       const values = await AndroidSecureStorage.getAll();
       Object.entries(values || {}).forEach(([key, value]) => {
         if (typeof value === 'string') secureValues.set(key, value);
       });
-      const scopedStorageKey = secureStorageKey();
-      const encoded = scopedStorageKey ? values?.[scopedStorageKey] : undefined;
-      if (encoded) {
-        const parsed = JSON.parse(encoded);
-        Object.entries(parsed).forEach(([keyId, value]) => {
-          const decoded = decodeKey(value);
-          if (decoded) secretStorageKeys.set(keyId, decoded);
-        });
-      }
-      return;
+      // This works immediately when WebView storage still has the identity.
+      // hydrateAndroidSession repeats it after restoring a missing identity
+      // from the native session record.
+      hydrateScopedSecretStorageKeys();
+      return true;
     } catch {
       // Android Keystore can be temporarily unavailable while the WebView
       // process is recreated. Retry before crypto observes an empty map.
-      await new Promise((resolve) => setTimeout(resolve, 250));
+      if (attempt < NATIVE_STORAGE_RETRY_COUNT - 1) {
+        await new Promise((resolve) => setTimeout(resolve, NATIVE_STORAGE_RETRY_DELAY_MS));
+      }
     }
   }
+  return false;
 };
 
 const isValidAndroidSession = (session) =>
@@ -112,19 +135,25 @@ const isValidAndroidSession = (session) =>
  * removal or uninstall.
  */
 export const persistAndroidSession = async (session) => {
-  if (!isAndroid() || !isValidAndroidSession(session)) return;
+  if (!isAndroid() || !isValidAndroidSession(session)) return false;
   const value = JSON.stringify(session);
-  secureValues.set(ACTIVE_SESSION_KEY, value);
-  for (let attempt = 0; attempt < 5; attempt += 1) {
+  for (let attempt = 0; attempt < NATIVE_STORAGE_RETRY_COUNT; attempt += 1) {
     try {
       await AndroidSecureStorage.set({ key: ACTIVE_SESSION_KEY, value });
-      return;
+      // In-memory state represents only data confirmed committed by the
+      // native plugin. Otherwise a failed write looks durable until process
+      // death and then silently disappears.
+      secureValues.set(ACTIVE_SESSION_KEY, value);
+      return true;
     } catch {
       // Keystore access can briefly fail immediately after process recreation.
       // Keep retrying while localStorage remains the live in-process copy.
-      if (attempt < 4) await new Promise((resolve) => setTimeout(resolve, 250));
+      if (attempt < NATIVE_STORAGE_RETRY_COUNT - 1) {
+        await new Promise((resolve) => setTimeout(resolve, NATIVE_STORAGE_RETRY_DELAY_MS));
+      }
     }
   }
+  return false;
 };
 
 export const removeAndroidPersistedSession = async () => {
@@ -135,7 +164,12 @@ export const removeAndroidPersistedSession = async () => {
 
 export const hydrateAndroidSession = async () => {
   if (!isAndroid()) return;
-  await loadSecureKeys();
+  const nativeStorageLoaded = await loadSecureKeys();
+  if (!nativeStorageLoaded) {
+    // Never treat a temporarily unavailable Android bridge as an empty secure
+    // store and migrate stale WebView data over the native source of truth.
+    return;
+  }
   const webViewSession = {
     accessToken: localStorage.getItem('cinny_access_token'),
     deviceId: localStorage.getItem('cinny_device_id'),
@@ -167,6 +201,7 @@ export const hydrateAndroidSession = async () => {
       } else {
         localStorage.removeItem('cinny_refresh_token');
       }
+      hydrateScopedSecretStorageKeys();
       return;
     } catch {
       // Fall through to the one-time WebView migration below.
@@ -176,6 +211,7 @@ export const hydrateAndroidSession = async () => {
     // One-time migration for users upgrading from builds that only kept the
     // session in WebView storage.
     await persistAndroidSession(webViewSession);
+    hydrateScopedSecretStorageKeys();
   }
 };
 
@@ -188,12 +224,20 @@ export const setAndroidSecureValue = async (name, value) => {
   if (!isAndroid()) return;
   const key = secureValueKey(name);
   if (!key) return;
-  secureValues.set(key, value);
-  if (name === 'session-backup-trusted') {
-    const localKey = localTrustedBackupKey();
-    if (localKey) localStorage.setItem(localKey, value);
+  for (let attempt = 0; attempt < NATIVE_STORAGE_RETRY_COUNT; attempt += 1) {
+    try {
+      await AndroidSecureStorage.set({ key, value });
+      secureValues.set(key, value);
+      if (name === 'session-backup-trusted') {
+        const localKey = localTrustedBackupKey();
+        if (localKey) localStorage.setItem(localKey, value);
+      }
+      return;
+    } catch (error) {
+      if (attempt === NATIVE_STORAGE_RETRY_COUNT - 1) throw error;
+      await new Promise((resolve) => setTimeout(resolve, NATIVE_STORAGE_RETRY_DELAY_MS));
+    }
   }
-  await AndroidSecureStorage.set({ key, value });
 };
 
 export const getAndroidSecureValue = (name) => {
@@ -202,12 +246,11 @@ export const getAndroidSecureValue = (name) => {
   if (!key) return undefined;
   const secureValue = secureValues.get(key);
   if (secureValue !== undefined) return secureValue;
-  if (name === 'session-backup-trusted') {
-    const localKey = localTrustedBackupKey();
-    return localKey ? localStorage.getItem(localKey) ?? undefined : undefined;
-  }
   return undefined;
 };
+
+export const hasAndroidSecretStorageKey = () =>
+  isAndroid() && Array.from(secretStorageKeys.values()).some((key) => key instanceof Uint8Array);
 
 export const persistAndroidBackupKey = async (crypto, versionHint) => {
   if (!isAndroid() || !crypto) return;
@@ -312,14 +355,21 @@ const persistKeysSecurely = async () => {
   if (!isAndroid()) return;
   const key = secureStorageKey();
   if (!key) return;
-  try {
-    const encoded = {};
-    secretStorageKeys.forEach((value, keyId) => {
-      encoded[keyId] = encodeKey(value);
-    });
-    await AndroidSecureStorage.set({ key, value: JSON.stringify(encoded) });
-  } catch {
-    /* localStorage fallback remains available. */
+  const encoded = {};
+  secretStorageKeys.forEach((value, keyId) => {
+    encoded[keyId] = encodeKey(value);
+  });
+  const value = JSON.stringify(encoded);
+  for (let attempt = 0; attempt < NATIVE_STORAGE_RETRY_COUNT; attempt += 1) {
+    try {
+      await AndroidSecureStorage.set({ key, value });
+      secureValues.set(key, value);
+      return;
+    } catch {
+      if (attempt < NATIVE_STORAGE_RETRY_COUNT - 1) {
+        await new Promise((resolve) => setTimeout(resolve, NATIVE_STORAGE_RETRY_DELAY_MS));
+      }
+    }
   }
 };
 

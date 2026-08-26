@@ -16,6 +16,7 @@ import {
   persistAndroidSecretsBundle,
   restoreAndroidSecretsBundle,
   getAndroidSecureValue,
+  hasAndroidSecretStorageKey,
   setAndroidSecureValue,
   persistAndroidSession,
   removeAndroidPersistedSession,
@@ -613,12 +614,35 @@ export const startClient = async (mx: MatrixClient) => {
             // the user completed verification. This is encrypted by Android
             // Keystore and survives renderer/process death independently of
             // WebView IndexedDB.
-            const secretsRestored = await restoreAndroidSecretsBundle(crypto);
+            let secretsRestored = await restoreAndroidSecretsBundle(crypto);
+            if (!secretsRestored && hasAndroidSecretStorageKey()) {
+              // Some users may background the app immediately after the
+              // verification finishes, before exportSecretsBundle completes.
+              // The native Keystore already has the Secret Storage private
+              // key at that point. Only when the server confirms that the
+              // original cross-signing secrets are complete do we let the SDK
+              // import them. This preflight prevents bootstrapCrossSigning
+              // from ever creating a replacement identity during recovery.
+              const secretStorageStatus = await crypto.getSecretStorageStatus();
+              const requiredCrossSigningSecrets = [
+                'm.cross_signing.master',
+                'm.cross_signing.self_signing',
+                'm.cross_signing.user_signing',
+              ] as const;
+              const originalSecretsReady =
+                Boolean(secretStorageStatus.defaultKeyId) &&
+                requiredCrossSigningSecrets.every(
+                  (name) => secretStorageStatus.secretStorageKeyValidityMap[name] === true
+                );
+              if (originalSecretsReady) {
+                await crypto.bootstrapCrossSigning({});
+                secretsRestored = await persistAndroidSecretsBundle(crypto);
+              }
+            }
             if (!secretsRestored) {
-              // Never call bootstrapCrossSigning from recovery without the
-              // original private keys. The SDK is allowed to create a brand
-              // new cross-signing identity in that case, which makes every
-              // existing device appear unverified.
+              // Never call bootstrapCrossSigning from recovery without proof
+              // that the original private keys are accessible. The SDK is
+              // allowed to create a new identity otherwise.
               throw new Error('Android cross-signing secrets are not ready.');
             }
             // importSecretsBundle restores the original master/self-signing

@@ -175,13 +175,16 @@ test('Android secure storage and database compatibility remain intact', async ()
   assert.match(secureStorageSource, /hydrateAndroidSession/);
   assert.match(
     secureStorageSource,
-    /export const persistAndroidSession[\s\S]*attempt < 5[\s\S]*AndroidSecureStorage\.set/
+    /export const persistAndroidSession[\s\S]*NATIVE_STORAGE_RETRY_COUNT[\s\S]*AndroidSecureStorage\.set/
   );
-  assert.doesNotMatch(
+  assert.match(
     secureStorageSource,
-    /const loadSecureKeys = async \(\) => \{\s*if \(!isAndroid\(\) \|\| !secureStorageKey\(\)\) return;/
+    /const loadSecureKeys = async \(\) => \{\s*if \(!isAndroid\(\)\) return false;/
   );
+  assert.match(secureStorageSource, /const isAndroidBuild = import\.meta\.env\.VITE_ANDROID_APP === 'true'/);
+  assert.match(secureStorageSource, /if \(!nativeStorageLoaded\) \{/);
   assert.match(secureStorageSource, /const scopedStorageKey = secureStorageKey\(\)/);
+  assert.match(secureStorageSource, /hydrateScopedSecretStorageKeys\(\);\s*return;/);
   assert.match(sessionSource, /await persistAndroidSession/);
   assert.match(sessionSource, /removeAndroidPersistedSession/);
   assert.match(entrySource, /if \(isAndroidApp\(\)\) await hydrateAndroidSession\(\)/);
@@ -191,7 +194,8 @@ test('Android secure storage and database compatibility remain intact', async ()
   assert.match(initSource, /persistAndroidSecretsBundle\(crypto\)/);
   assert.match(initSource, /await crypto\.crossSignDevice\(deviceId\)/);
   assert.match(initSource, /verification\?\.crossSigningVerified !== true/);
-  assert.doesNotMatch(initSource, /await crypto\.bootstrapCrossSigning\(\{\}\)/);
+  assert.match(initSource, /if \(!secretsRestored && hasAndroidSecretStorageKey\(\)\)/);
+  assert.match(initSource, /secretStorageStatus\.secretStorageKeyValidityMap\[name\] === true/);
   assert.match(initSource, /if \(!newlyIssuedDevice && !isAndroidApp\(\)\)/);
   assert.match(initSource, /Android WebView can briefly report an empty IndexedDB list/);
   assert.match(initSource, /const retryDelays = \[250, 500, 1_000, 2_000, 4_000\]/);
@@ -219,6 +223,9 @@ test('Android secure storage and database compatibility remain intact', async ()
   assert.match(nativeSecureStorageSource, /KeyProperties\.PURPOSE_ENCRYPT/);
   assert.match(nativeSecureStorageSource, /KeyProperties\.BLOCK_MODE_GCM/);
   assert.doesNotMatch(nativeSecureStorageSource, /generator\.init\(256\)/);
+  assert.doesNotMatch(nativeSecureStorageSource, /cleanup\.remove\(entry\.getKey\(\)\)/);
+  assert.match(nativeSecureStorageSource, /decryptedEntryCount == 0/);
+  assert.match(nativeSecureStorageSource, /Unable to decrypt secure storage entries/);
 });
 
 test('the sidebar stays critical until both device and key backup are verified', async () => {

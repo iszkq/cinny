@@ -71,20 +71,30 @@ public class AndroidSecureStoragePlugin extends Plugin {
             JSObject result = new JSObject();
             SharedPreferences preferences = getContext().getSharedPreferences(PREFS, 0);
             Map<String, ?> values = preferences.getAll();
-            SharedPreferences.Editor cleanup = null;
+            int encryptedEntryCount = 0;
+            int decryptedEntryCount = 0;
+            Exception lastDecryptionError = null;
             for (Map.Entry<String, ?> entry : values.entrySet()) {
                 if (!(entry.getValue() instanceof String)) continue;
+                encryptedEntryCount += 1;
                 try {
                     result.put(entry.getKey(), decrypt((String) entry.getValue()));
+                    decryptedEntryCount += 1;
                 } catch (Exception corruptEntry) {
-                    // One stale/corrupt value must never hide every other
-                    // account's verification marker and backup key. Remove
-                    // only the unreadable entry and return all healthy values.
-                    if (cleanup == null) cleanup = preferences.edit();
-                    cleanup.remove(entry.getKey());
+                    // Never turn a temporary Keystore/decryption failure into
+                    // permanent loss of the login, cross-signing secrets or
+                    // key-backup private key. Leave the unreadable value
+                    // untouched. Other healthy values remain available, but
+                    // when every encrypted entry fails, reject the whole read
+                    // so JavaScript retries rather than accepting a false
+                    // empty store and overwriting native state.
+                    lastDecryptionError = corruptEntry;
                 }
             }
-            if (cleanup != null) cleanup.commit();
+            if (encryptedEntryCount > 0 && decryptedEntryCount == 0 && lastDecryptionError != null) {
+                call.reject("Unable to decrypt secure storage entries.", lastDecryptionError);
+                return;
+            }
             call.resolve(result);
         } catch (Exception error) {
             call.reject("Unable to read secure storage.", error);
