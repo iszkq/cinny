@@ -198,6 +198,8 @@ test('Android secure storage and database compatibility remain intact', async ()
     /if \(isAndroidApp\(\)\) return findExistingPrefixesByOpening\(prefixes\)/
   );
   assert.match(cryptoStoreSource, /request\.transaction\?\.abort\(\)/);
+  assert.match(cryptoStoreSource, /if \(isAndroidApp\(\)\) \{/);
+  assert.match(initSource, /Do not gate Android startup on an IndexedDB existence probe/);
   assert.match(initSource, /throw new MissingCryptoStoreError\(\)/);
   assert.match(initSource, /if \(candidates\.length === 0 && !storeCreationAllowed\)/);
   assert.match(secureStorageSource, /crypto\.getSessionBackupPrivateKey\(\)/);

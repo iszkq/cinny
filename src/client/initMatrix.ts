@@ -219,7 +219,21 @@ const initRustCryptoForSession = async (
     if (!candidates.includes(prefix)) candidates.push(prefix);
   };
 
-  if (savedPrefix) {
+  if (isAndroidApp()) {
+    // Do not gate Android startup on an IndexedDB existence probe. WebView can
+    // report a database as absent while the renderer is still reconnecting,
+    // and that produced the unrecoverable "database lost" loop after a swipe-
+    // away. Opening the saved prefix itself is the authoritative operation:
+    // an existing store keeps the same Olm identity, while a genuinely missing
+    // store can at least be recreated and recovered from the native backup
+    // keys instead of trapping the user on the splash screen.
+    if (savedPrefix) addCandidate(savedPrefix);
+    else if (storeCreationAllowed) addCandidate(scopedPrefix);
+    else addCandidate(legacyExists ? LEGACY_RUST_CRYPTO_DATABASE_PREFIX : scopedPrefix);
+    if (savedPrefix === LEGACY_RUST_CRYPTO_DATABASE_PREFIX && scopedExists) {
+      addCandidate(scopedPrefix);
+    }
+  } else if (savedPrefix) {
     const savedDatabaseExists =
       savedPrefix === LEGACY_RUST_CRYPTO_DATABASE_PREFIX ? legacyExists : scopedExists;
     const anotherDatabaseExists =
@@ -238,11 +252,13 @@ const initRustCryptoForSession = async (
   // message keys that are already stored locally. If it belongs to a previous
   // login/device, the SDK reports an account mismatch and we safely fall back
   // to the account-and-device-scoped database.
-  if (!savedPrefix || candidates.length === 0) {
+  if (!isAndroidApp() && (!savedPrefix || candidates.length === 0)) {
     if (legacyExists) addCandidate(LEGACY_RUST_CRYPTO_DATABASE_PREFIX);
     if (scopedExists) addCandidate(scopedPrefix);
   }
-  if (candidates.length === 0 && !storeCreationAllowed) {
+  // The strict missing-store branch remains for web/desktop only:
+  // if (candidates.length === 0 && !storeCreationAllowed)
+  if (!isAndroidApp() && candidates.length === 0 && !storeCreationAllowed) {
     // Keep the encrypted native login session, but do not initialize an empty
     // store: that would silently replace the same device ID's keys and make
     // every device appear unverified. A retry/restart can reopen the original

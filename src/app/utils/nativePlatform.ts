@@ -4,7 +4,13 @@ export const ANDROID_BACK_BUTTON_EVENT = 'cinny-android-back-button';
 
 export const isNativeApp = (): boolean => Capacitor.isNativePlatform();
 
-export const isAndroidApp = (): boolean => isNativeApp() && Capacitor.getPlatform() === 'android';
+// The Android bundle is built with VITE_ANDROID_APP=true. Capacitor's runtime
+// platform probe can briefly report `web` while the bridge is reconnecting
+// after the renderer process is killed; using the build flag keeps Android
+// persistence and crypto recovery enabled during that window as well.
+const isAndroidBuild = import.meta.env.VITE_ANDROID_APP === 'true';
+export const isAndroidApp = (): boolean =>
+  isAndroidBuild || (isNativeApp() && Capacitor.getPlatform() === 'android');
 
 let androidShellInitialized = false;
 

@@ -103,6 +103,7 @@ export const findExistingRustCryptoDatabasePrefixes = async (
     // data loss. Probe the exact account/device databases directly on Android;
     // aborting onupgradeneeded keeps this read-only when a database is truly
     // absent, so we never create a new Olm identity under the old device ID.
+    // Android path: if (isAndroidApp()) {
     if (isAndroidApp()) return findExistingPrefixesByOpening(prefixes);
 
     if (typeof global.indexedDB?.databases === 'function') {
