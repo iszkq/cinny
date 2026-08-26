@@ -13,6 +13,8 @@ import {
   hydrateSecretStorageKeys,
   persistAndroidBackupKey,
   restoreAndroidBackupKey,
+  persistAndroidSecretsBundle,
+  restoreAndroidSecretsBundle,
   getAndroidSecureValue,
   setAndroidSecureValue,
   persistAndroidSession,
@@ -579,18 +581,16 @@ export const startClient = async (mx: MatrixClient) => {
           const userId = mx.getUserId();
           const deviceId = mx.getDeviceId();
           if (getAndroidSecureValue('verified-device') === '1' && userId && deviceId) {
+            // Restore the exact cross-signing and backup secrets captured when
+            // the user completed verification. This is encrypted by Android
+            // Keystore and survives renderer/process death independently of
+            // WebView IndexedDB.
+            await restoreAndroidSecretsBundle(crypto);
+            // bootstrapCrossSigning is idempotent when the keys already exist;
+            // when they were just restored it imports them, signs this device
+            // and uploads the signature so crossSigningVerified becomes true.
+            await crypto.bootstrapCrossSigning({}).catch(() => undefined);
             await crypto.setDeviceVerified(userId, deviceId, true);
-            const [crossSigningReady, secretStorageReady] = await Promise.all([
-              crypto.isCrossSigningReady(),
-              crypto.isSecretStorageReady(),
-            ]);
-            if (!crossSigningReady && secretStorageReady) {
-              // Recover the already-existing cross-signing private keys from
-              // Android-backed Secret Storage. bootstrapCrossSigning is
-              // idempotent when server keys exist and avoids a false
-              // unverified state after WebView process recreation.
-              await crypto.bootstrapCrossSigning({}).catch(() => undefined);
-            }
           }
           if (!getAndroidSecureValue('session-backup-private-key')) {
             // Older Android builds could keep the Secret Storage private key
@@ -634,28 +634,42 @@ export const startClient = async (mx: MatrixClient) => {
 };
 
 /** Persist Android trust only after the SDK reports this exact device as verified. */
-export const persistAndroidCryptoState = async (mx: MatrixClient): Promise<void> => {
+export const persistAndroidCryptoState = async (
+  mx: MatrixClient,
+  confirmedVerification = false
+): Promise<void> => {
   if (!isAndroidApp()) return;
   const crypto = mx.getCrypto();
   const userId = mx.getUserId();
   const deviceId = mx.getDeviceId();
   if (!crypto || !userId || !deviceId) return;
 
-  for (let attempt = 0; attempt < 6; attempt += 1) {
+  // A completed verification UI is authoritative even if the SDK's device
+  // list event arrives a few seconds later. Persist that fact immediately so
+  // process death cannot miss the narrow post-verification window.
+  if (confirmedVerification) await setAndroidSecureValue('verified-device', '1');
+
+  for (let attempt = 0; attempt < 20; attempt += 1) {
     try {
       const verification = await crypto.getDeviceVerificationStatus(userId, deviceId);
       if (verification?.isVerified()) {
         await setAndroidSecureValue('verified-device', '1');
-        break;
       }
+      await Promise.all([persistAndroidBackupKey(crypto), persistAndroidSecretsBundle(crypto)]);
+      if (
+        getAndroidSecureValue('verified-device') === '1' &&
+        getAndroidSecureValue('session-backup-private-key') &&
+        getAndroidSecureValue('crypto-secrets-bundle')
+      )
+        return;
     } catch {
       // A transient device-list read must not erase a durable marker.
     }
-    if (attempt < 5) {
+    if (attempt < 19) {
       await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 500));
     }
   }
-  await persistAndroidBackupKey(crypto);
+  await Promise.all([persistAndroidBackupKey(crypto), persistAndroidSecretsBundle(crypto)]);
 };
 
 export const persistClientStore = (

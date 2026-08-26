@@ -278,6 +278,36 @@ export const restoreAndroidBackupKey = async (crypto) => {
   }
 };
 
+export const persistAndroidSecretsBundle = async (crypto) => {
+  if (!isAndroid() || typeof crypto?.exportSecretsBundle !== 'function') return false;
+  try {
+    const bundle = await crypto.exportSecretsBundle();
+    if (!bundle || typeof bundle !== 'object') return false;
+    await setAndroidSecureValue('crypto-secrets-bundle', JSON.stringify(bundle));
+    return true;
+  } catch {
+    // Cross-signing secrets can arrive shortly after interactive verification.
+    // The caller retries rather than persisting an incomplete bundle.
+    return false;
+  }
+};
+
+export const restoreAndroidSecretsBundle = async (crypto) => {
+  if (!isAndroid() || typeof crypto?.importSecretsBundle !== 'function') return false;
+  const encoded = getAndroidSecureValue('crypto-secrets-bundle');
+  if (!encoded) return false;
+  try {
+    const bundle = JSON.parse(encoded);
+    if (!bundle || typeof bundle !== 'object') return false;
+    await crypto.importSecretsBundle(bundle);
+    return true;
+  } catch {
+    // Public cross-signing data may not be available until the first network
+    // sync. The startup recovery task retries on the next healthy sync state.
+    return false;
+  }
+};
+
 const persistKeysSecurely = async () => {
   if (!isAndroid()) return;
   const key = secureStorageKey();
@@ -333,6 +363,7 @@ export async function clearSecretStorageKeys() {
       secureValueKey('verified-device'),
       secureValueKey('session-backup-private-key'),
       secureValueKey('session-backup-trusted'),
+      secureValueKey('crypto-secrets-bundle'),
     ].filter(Boolean);
     scopedKeys.forEach((scopedKey) => secureValues.delete(scopedKey));
     await Promise.all(

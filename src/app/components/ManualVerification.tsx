@@ -143,7 +143,7 @@ export function ManualVerificationTile({
       await crypto.bootstrapSecretStorage({});
 
       await crypto.loadSessionBackupPrivateKeyFromSecretStorage();
-      await persistAndroidCryptoState(mx);
+      await persistAndroidCryptoState(mx, true);
     },
     [mx, secretStorageKeyId]
   );

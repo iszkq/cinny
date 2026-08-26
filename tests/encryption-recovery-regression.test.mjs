@@ -187,8 +187,8 @@ test('Android secure storage and database compatibility remain intact', async ()
   assert.match(entrySource, /if \(isAndroidApp\(\)\) await hydrateAndroidSession\(\)/);
   assert.match(initSource, /persistAndroidCryptoState/);
   assert.match(initSource, /setAndroidSecureValue\('verified-device', '1'\)/);
-  assert.match(initSource, /crypto\.isCrossSigningReady\(\)/);
-  assert.match(initSource, /crypto\.isSecretStorageReady\(\)/);
+  assert.match(initSource, /restoreAndroidSecretsBundle\(crypto\)/);
+  assert.match(initSource, /persistAndroidSecretsBundle\(crypto\)/);
   assert.match(initSource, /crypto\.bootstrapCrossSigning\(\{\}\)/);
   assert.match(initSource, /if \(!newlyIssuedDevice && !isAndroidApp\(\)\)/);
   assert.match(initSource, /Android WebView can briefly report an empty IndexedDB list/);

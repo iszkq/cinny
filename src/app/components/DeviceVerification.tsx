@@ -309,7 +309,7 @@ export function DeviceVerification({ request, onExit }: DeviceVerificationProps)
   const phase = useVerificationRequestPhase(request);
 
   useEffect(() => {
-    if (phase === VerificationPhase.Done) void persistAndroidCryptoState(mx);
+    if (phase === VerificationPhase.Done) void persistAndroidCryptoState(mx, true);
   }, [mx, phase]);
 
   const handleCancel = useCallback(() => {

@@ -157,7 +157,7 @@ function SetupVerification({ onComplete }: SetupVerificationProps) {
         });
 
         await crypto.resetKeyBackup();
-        await persistAndroidCryptoState(mx);
+        await persistAndroidCryptoState(mx, true);
 
         onComplete(recoveryKeyData.encodedPrivateKey);
       },
