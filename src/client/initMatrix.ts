@@ -613,12 +613,26 @@ export const startClient = async (mx: MatrixClient) => {
             // the user completed verification. This is encrypted by Android
             // Keystore and survives renderer/process death independently of
             // WebView IndexedDB.
-            await restoreAndroidSecretsBundle(crypto);
-            // bootstrapCrossSigning is idempotent when the keys already exist;
-            // when they were just restored it imports them, signs this device
-            // and uploads the signature so crossSigningVerified becomes true.
-            await crypto.bootstrapCrossSigning({}).catch(() => undefined);
-            await crypto.setDeviceVerified(userId, deviceId, true);
+            const secretsRestored = await restoreAndroidSecretsBundle(crypto);
+            if (!secretsRestored) {
+              // Never call bootstrapCrossSigning from recovery without the
+              // original private keys. The SDK is allowed to create a brand
+              // new cross-signing identity in that case, which makes every
+              // existing device appear unverified.
+              throw new Error('Android cross-signing secrets are not ready.');
+            }
+            // importSecretsBundle restores the original master/self-signing
+            // keys but does not sign a newly reopened crypto store's device.
+            // Sign this same device ID with the restored self-signing key and
+            // upload the signature: this restores real cross-signing trust,
+            // rather than merely setting a local/UI verification flag.
+            await mx.downloadKeysForUsers([userId]);
+            await crypto.crossSignDevice(deviceId);
+            await mx.downloadKeysForUsers([userId]);
+            const verification = await crypto.getDeviceVerificationStatus(userId, deviceId);
+            if (verification?.crossSigningVerified !== true) {
+              throw new Error('Android device cross-signing trust is not ready.');
+            }
           }
           if (!getAndroidSecureValue('session-backup-private-key')) {
             // Older Android builds could keep the Secret Storage private key
@@ -672,21 +686,24 @@ export const persistAndroidCryptoState = async (
   const deviceId = mx.getDeviceId();
   if (!crypto || !userId || !deviceId) return;
 
-  // A completed verification UI is authoritative even if the SDK's device
-  // list event arrives a few seconds later. Persist that fact immediately so
-  // process death cannot miss the narrow post-verification window.
-  if (confirmedVerification) await setAndroidSecureValue('verified-device', '1');
-
   for (let attempt = 0; attempt < 20; attempt += 1) {
     try {
       const verification = await crypto.getDeviceVerificationStatus(userId, deviceId);
-      if (verification?.isVerified()) {
+      const [backupPersisted, secretsPersisted] = await Promise.all([
+        persistAndroidBackupKey(crypto).then(() =>
+          Boolean(getAndroidSecureValue('session-backup-private-key'))
+        ),
+        persistAndroidSecretsBundle(crypto),
+      ]);
+      // A durable verified marker is useful only together with the original
+      // cross-signing secrets. Writing the marker first created a dangerous
+      // half-state in which cold-start recovery could not prove the identity.
+      if ((verification?.crossSigningVerified || confirmedVerification) && secretsPersisted) {
         await setAndroidSecureValue('verified-device', '1');
       }
-      await Promise.all([persistAndroidBackupKey(crypto), persistAndroidSecretsBundle(crypto)]);
       if (
         getAndroidSecureValue('verified-device') === '1' &&
-        getAndroidSecureValue('session-backup-private-key') &&
+        backupPersisted &&
         getAndroidSecureValue('crypto-secrets-bundle')
       )
         return;

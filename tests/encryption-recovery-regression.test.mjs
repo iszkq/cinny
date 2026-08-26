@@ -189,7 +189,9 @@ test('Android secure storage and database compatibility remain intact', async ()
   assert.match(initSource, /setAndroidSecureValue\('verified-device', '1'\)/);
   assert.match(initSource, /restoreAndroidSecretsBundle\(crypto\)/);
   assert.match(initSource, /persistAndroidSecretsBundle\(crypto\)/);
-  assert.match(initSource, /crypto\.bootstrapCrossSigning\(\{\}\)/);
+  assert.match(initSource, /await crypto\.crossSignDevice\(deviceId\)/);
+  assert.match(initSource, /verification\?\.crossSigningVerified !== true/);
+  assert.doesNotMatch(initSource, /await crypto\.bootstrapCrossSigning\(\{\}\)/);
   assert.match(initSource, /if \(!newlyIssuedDevice && !isAndroidApp\(\)\)/);
   assert.match(initSource, /Android WebView can briefly report an empty IndexedDB list/);
   assert.match(initSource, /const retryDelays = \[250, 500, 1_000, 2_000, 4_000\]/);
