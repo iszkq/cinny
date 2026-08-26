@@ -4,6 +4,7 @@ import android.content.SharedPreferences;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
 import android.util.Base64;
+import android.util.Log;
 
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -22,6 +23,7 @@ import javax.crypto.spec.GCMParameterSpec;
 
 @CapacitorPlugin(name = "AndroidSecureStorage")
 public class AndroidSecureStoragePlugin extends Plugin {
+    private static final String TAG = "AndroidSecureStorage";
     private static final String PREFS = "cinny_secure_storage";
     private static final String KEY_ALIAS = "cinny_secret_storage_key_v1";
     private static final String ANDROID_KEYSTORE = "AndroidKeyStore";
@@ -92,11 +94,16 @@ public class AndroidSecureStoragePlugin extends Plugin {
                 }
             }
             if (encryptedEntryCount > 0 && decryptedEntryCount == 0 && lastDecryptionError != null) {
+                Log.e(TAG, "getAll failed: encryptedEntries=" + encryptedEntryCount,
+                    lastDecryptionError);
                 call.reject("Unable to decrypt secure storage entries.", lastDecryptionError);
                 return;
             }
+            Log.i(TAG, "getAll succeeded: encryptedEntries=" + encryptedEntryCount
+                + ", decryptedEntries=" + decryptedEntryCount);
             call.resolve(result);
         } catch (Exception error) {
+            Log.e(TAG, "getAll failed before decrypting entries.", error);
             call.reject("Unable to read secure storage.", error);
         }
     }
@@ -112,11 +119,16 @@ public class AndroidSecureStoragePlugin extends Plugin {
                 .putString(key, encrypt(value))
                 .commit();
             if (!committed) {
+                Log.e(TAG, "set failed to commit key: " + key);
                 call.reject("Unable to commit secure storage.");
                 return;
             }
+            Log.i(TAG, "set succeeded for key: " + key);
             call.resolve();
-        } catch (Exception error) { call.reject("Unable to write secure storage.", error); }
+        } catch (Exception error) {
+            Log.e(TAG, "set failed for key: " + key, error);
+            call.reject("Unable to write secure storage.", error);
+        }
     }
 
     @PluginMethod
@@ -124,7 +136,12 @@ public class AndroidSecureStoragePlugin extends Plugin {
         String key = call.getString("key");
         if (key == null) { call.reject("key is required"); return; }
         boolean committed = getContext().getSharedPreferences(PREFS, 0).edit().remove(key).commit();
-        if (!committed) { call.reject("Unable to commit secure storage removal."); return; }
+        if (!committed) {
+            Log.e(TAG, "remove failed to commit key: " + key);
+            call.reject("Unable to commit secure storage removal.");
+            return;
+        }
+        Log.i(TAG, "remove succeeded for key: " + key);
         call.resolve();
     }
 }
