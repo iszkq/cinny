@@ -4,6 +4,8 @@ import { ANDROID_FULL_BACKUP_RESTORE_COMPLETED_EVENT } from '../../client/initMa
 
 type DecryptionScheduler = {
   queued: Set<string>;
+  priorityRoomId?: string;
+  activeRoomId?: string;
   running: boolean;
   stopped: boolean;
   initialized: boolean;
@@ -34,10 +36,19 @@ const runQueue = async (mx: MatrixClient, scheduler: DecryptionScheduler) => {
   scheduler.running = true;
   try {
     while (!scheduler.stopped && scheduler.queued.size > 0) {
-      const roomId = scheduler.queued.values().next().value as string;
+      const roomId =
+        scheduler.priorityRoomId && scheduler.queued.has(scheduler.priorityRoomId)
+          ? scheduler.priorityRoomId
+          : (scheduler.queued.values().next().value as string);
+      if (scheduler.priorityRoomId === roomId) scheduler.priorityRoomId = undefined;
       scheduler.queued.delete(roomId);
-      const room = mx.getRoom(roomId);
-      if (room) await decryptRoom(mx, room);
+      scheduler.activeRoomId = roomId;
+      try {
+        const room = mx.getRoom(roomId);
+        if (room) await decryptRoom(mx, room);
+      } finally {
+        if (scheduler.activeRoomId === roomId) scheduler.activeRoomId = undefined;
+      }
       await yieldToBrowser();
     }
   } finally {
@@ -54,13 +65,21 @@ const queueAllRooms = (mx: MatrixClient, scheduler: DecryptionScheduler) => {
 };
 
 export const prioritizeRoomDecryption = (mx: MatrixClient, room: Room): void => {
-  void decryptRoom(mx, room);
   const scheduler = schedulers.get(mx);
   if (scheduler) {
+    // Put the visible room ahead of the global activity-sorted queue. Do not
+    // launch a second decryptRoom concurrently: that races the Rust Crypto
+    // backend and can make the foreground room compete with background work.
+    scheduler.priorityRoomId = room.roomId;
+    if (scheduler.activeRoomId === room.roomId) return;
     scheduler.queued.delete(room.roomId);
     scheduler.queued.add(room.roomId);
     void runQueue(mx, scheduler);
+    return;
   }
+  // The feature normally starts the scheduler before RoomTimeline mounts,
+  // but retain a safe fallback for isolated/test mounts.
+  void decryptRoom(mx, room);
 };
 
 export const startBackgroundRoomDecryption = (mx: MatrixClient): (() => void) => {

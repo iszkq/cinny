@@ -103,4 +103,6 @@ test('initial messages stay bounded and the visible encrypted room is prioritize
   const backgroundSource = await readSource('src/app/utils/backgroundDecryption.ts');
   assert.match(backgroundSource, /getTimelines\(\)/);
   assert.match(backgroundSource, /retryFailures: true/);
+  assert.match(backgroundSource, /priorityRoomId/);
+  assert.match(backgroundSource, /scheduler\.activeRoomId/);
 });
