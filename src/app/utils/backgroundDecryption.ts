@@ -1,5 +1,6 @@
 import { ClientEvent, MatrixClient, Room, SyncState } from 'matrix-js-sdk';
 import { decryptAllTimelineEvent } from './room';
+import { ANDROID_FULL_BACKUP_RESTORE_COMPLETED_EVENT } from '../../client/initMatrix';
 
 type DecryptionScheduler = {
   queued: Set<string>;
@@ -88,14 +89,31 @@ export const startBackgroundRoomDecryption = (mx: MatrixClient): (() => void) =>
     scheduler.queued.add(room.roomId);
     void runQueue(mx, scheduler);
   };
+  const handleAndroidBackupRestoreCompleted = () => {
+    // The initial pass can race the one-time full backup import. Requeue all
+    // encrypted rooms after the import so events which previously failed with
+    // an unknown Megolm session are retried without user interaction.
+    if (!scheduler.stopped) {
+      scheduler.queued.clear();
+      queueAllRooms(mx, scheduler);
+    }
+  };
   mx.on(ClientEvent.Sync, handleSync as any);
   mx.on(ClientEvent.Room, handleRoom);
+  window.addEventListener(
+    ANDROID_FULL_BACKUP_RESTORE_COMPLETED_EVENT,
+    handleAndroidBackupRestoreCompleted
+  );
   if (mx.getSyncState()) handleSync(mx.getSyncState()!);
   return () => {
     scheduler.stopped = true;
     scheduler.queued.clear();
     mx.removeListener(ClientEvent.Sync, handleSync as any);
     mx.removeListener(ClientEvent.Room, handleRoom);
+    window.removeEventListener(
+      ANDROID_FULL_BACKUP_RESTORE_COMPLETED_EVENT,
+      handleAndroidBackupRestoreCompleted
+    );
     schedulers.delete(mx);
   };
 };

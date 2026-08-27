@@ -78,6 +78,8 @@ const DEVICE_IDENTITY_QUERY_TIMEOUT_MS = 8_000;
 const DEVICE_IDENTITY_CONFIRM_DELAY_MS = 1_000;
 const ANDROID_FULL_BACKUP_RESTORE_DELAY_MS = 2_000;
 const ANDROID_FULL_BACKUP_RESTORE_MARKER = 'room-key-backup-restored';
+export const ANDROID_FULL_BACKUP_RESTORE_COMPLETED_EVENT =
+  'starfire:android-full-backup-restore-completed';
 
 type DeviceIdentityStatus = 'valid' | 'invalid' | 'inconclusive';
 
@@ -751,6 +753,15 @@ export const startClient = async (mx: MatrixClient) => {
                       imported: result.imported,
                       total: result.total,
                     });
+                    // The room decrypt scheduler may have run before the
+                    // backup import finished and recorded temporary Megolm
+                    // failures. Notify it to make one complete pass now that
+                    // Rust Crypto contains the historical sessions.
+                    window.dispatchEvent(
+                      new CustomEvent(ANDROID_FULL_BACKUP_RESTORE_COMPLETED_EVENT, {
+                        detail: { version: backupVersion },
+                      })
+                    );
                   } catch (error) {
                     androidFullBackupRestoreScheduled.delete(mx);
                     recordAndroidDiagnostic('crypto_full_backup_restore_failed', {
