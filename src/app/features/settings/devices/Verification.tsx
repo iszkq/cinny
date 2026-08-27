@@ -62,7 +62,7 @@ export function VerificationStatusBadge({
   if (otherUnverifiedCount > 0) {
     return (
       <Badge variant="Warning" fill="Solid" size="500">
-        <Text size="L400">{otherUnverifiedCount} 个未验证</Text>
+        <Text size="L400">{otherUnverifiedCount} 个其他设备未验证</Text>
       </Badge>
     );
   }
@@ -153,6 +153,62 @@ export function VerifyCurrentDeviceTile({
               fill="Soft"
               radii="Pill"
               onClick={handleCancelVerification}
+            >
+              <Icon size="100" src={Icons.Cross} />
+            </Chip>
+          }
+        />
+      )}
+    </>
+  );
+}
+
+type RecoveryKeyAccessTileProps = {
+  secretStorageKeyId: string;
+  secretStorageKeyContent: SecretStorageKeyContent;
+};
+export function RecoveryKeyAccessTile({
+  secretStorageKeyId,
+  secretStorageKeyContent,
+}: RecoveryKeyAccessTileProps) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <InfoCard
+        variant="Surface"
+        title="恢复密钥"
+        description="输入恢复密钥或恢复口令，重新连接加密备份并恢复历史消息密钥。"
+        after={
+          !open && (
+            <Button
+              size="300"
+              variant="Secondary"
+              fill="Soft"
+              radii="300"
+              outlined
+              onClick={() => setOpen(true)}
+            >
+              <Text as="span" size="B300">
+                输入恢复密钥
+              </Text>
+            </Button>
+          )
+        }
+      />
+      {open && (
+        <ManualVerificationTile
+          secretStorageKeyId={secretStorageKeyId}
+          secretStorageKeyContent={secretStorageKeyContent}
+          title="连接加密备份"
+          description="请输入恢复密钥；如果账户使用恢复口令，也可以在右侧切换。"
+          options={
+            <Chip
+              type="button"
+              variant="Secondary"
+              fill="Soft"
+              radii="Pill"
+              onClick={() => setOpen(false)}
             >
               <Icon size="100" src={Icons.Cross} />
             </Chip>

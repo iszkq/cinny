@@ -115,11 +115,15 @@ type ManualVerificationTileProps = {
   secretStorageKeyId: string;
   secretStorageKeyContent: SecretStorageKeyContent;
   options?: ReactNode;
+  title?: string;
+  description?: string;
 };
 export function ManualVerificationTile({
   secretStorageKeyId,
   secretStorageKeyContent,
   options,
+  title = '手动验证',
+  description,
 }: ManualVerificationTileProps) {
   const mx = useMatrixClient();
 
@@ -156,8 +160,8 @@ export function ManualVerificationTile({
   return (
     <Box direction="Column" gap="200">
       <SettingTile
-        title="手动验证"
-        description={hasPassphrase ? '请选择验证方式。' : '请输入恢复密钥。'}
+        title={title}
+        description={description ?? (hasPassphrase ? '请选择验证方式。' : '请输入恢复密钥。')}
         after={
           <Box alignItems="Center" gap="200">
             {hasPassphrase && (

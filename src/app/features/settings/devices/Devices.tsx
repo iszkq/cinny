@@ -12,6 +12,7 @@ import { OtherDevices } from './OtherDevices';
 import {
   DeviceVerificationOptions,
   EnableVerification,
+  RecoveryKeyAccessTile,
   VerificationStatusBadge,
   VerifyCurrentDeviceTile,
 } from './Verification';
@@ -143,6 +144,15 @@ export function Devices({ requestClose }: DevicesProps) {
                       defaultSecretStorageKeyId &&
                       defaultSecretStorageKeyContent && (
                         <VerifyCurrentDeviceTile
+                          secretStorageKeyId={defaultSecretStorageKeyId}
+                          secretStorageKeyContent={defaultSecretStorageKeyContent}
+                        />
+                      )}
+                    {crypto &&
+                      verificationStatus === VerificationStatus.Verified &&
+                      defaultSecretStorageKeyId &&
+                      defaultSecretStorageKeyContent && (
+                        <RecoveryKeyAccessTile
                           secretStorageKeyId={defaultSecretStorageKeyId}
                           secretStorageKeyContent={defaultSecretStorageKeyContent}
                         />

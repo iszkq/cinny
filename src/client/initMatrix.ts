@@ -67,6 +67,7 @@ const rustCryptoDatabasePrefixes = new WeakMap<MatrixClient, string>();
 const androidCryptoRestorePromises = new WeakMap<MatrixClient, Promise<void>>();
 const androidCryptoTrustRestoreTasks = new WeakMap<MatrixClient, Promise<void>>();
 const androidCryptoTrustRestored = new WeakSet<MatrixClient>();
+const androidFullBackupRestoreScheduled = new WeakSet<MatrixClient>();
 const androidStoreSaveTasks = new WeakMap<MatrixClient, Promise<void>>();
 const androidStoreLastPersistedAt = new WeakMap<MatrixClient, number>();
 const androidStoreAccountKeys = new WeakMap<MatrixClient, string>();
@@ -75,6 +76,8 @@ const ANDROID_NATIVE_SNAPSHOT_INTERVAL_MS = 10_000;
 const androidNativeSnapshotDirty = new WeakSet<MatrixClient>();
 const DEVICE_IDENTITY_QUERY_TIMEOUT_MS = 8_000;
 const DEVICE_IDENTITY_CONFIRM_DELAY_MS = 1_000;
+const ANDROID_FULL_BACKUP_RESTORE_DELAY_MS = 2_000;
+const ANDROID_FULL_BACKUP_RESTORE_MARKER = 'room-key-backup-restored';
 
 type DeviceIdentityStatus = 'valid' | 'invalid' | 'inconclusive';
 
@@ -202,20 +205,12 @@ const initRustCryptoForSession = async (
   // identity, so an existing Android session must never create a replacement
   // crypto account under the old device ID.
   const cryptoPrefixes = [LEGACY_RUST_CRYPTO_DATABASE_PREFIX, scopedPrefix];
-  let existingPrefixes = await findExistingRustCryptoDatabasePrefixes(cryptoPrefixes);
+  let existingPrefixes = isAndroidApp()
+    ? new Set<string>()
+    : await findExistingRustCryptoDatabasePrefixes(cryptoPrefixes);
   // Android WebView/IndexedDB can briefly report an empty database list while
   // the renderer is being recreated. Never treat that transient state as a
   // revoked login; give the store a few bounded attempts to reappear first.
-  if (isAndroidApp() && existingPrefixes.size === 0 && !storeCreationAllowed) {
-    const retryDelays = [250, 500, 1_000, 2_000, 4_000];
-    for (const delay of retryDelays) {
-      await new Promise<void>((resolve) => {
-        globalThis.setTimeout(resolve, delay);
-      });
-      existingPrefixes = await findExistingRustCryptoDatabasePrefixes(cryptoPrefixes);
-      if (existingPrefixes.size > 0) break;
-    }
-  }
   const legacyExists = existingPrefixes.has(LEGACY_RUST_CRYPTO_DATABASE_PREFIX);
   const scopedExists = existingPrefixes.has(scopedPrefix);
   const candidates: string[] = [];
@@ -382,29 +377,6 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
         }
       : undefined;
 
-  // A renderer may be recreated long after the access token's original
-  // lifetime. Refresh once before constructing the client so the first sync
-  // does not race an already-expired token and emit Session.logged_out. This
-  // is best-effort: offline startup continues with the persisted token and
-  // the SDK will retry on the first authenticated request.
-  let clientSession = session;
-  if (tokenRefreshFunction && session.refreshToken) {
-    const refreshed = await settleWithin(
-      tokenRefreshFunction(session.refreshToken),
-      DEVICE_IDENTITY_QUERY_TIMEOUT_MS
-    );
-    if (refreshed) {
-      clientSession = {
-        ...session,
-        accessToken: refreshed.accessToken,
-        refreshToken: refreshed.refreshToken,
-        expiresInMs: refreshed.expiry
-          ? Math.max(0, refreshed.expiry.getTime() - Date.now())
-          : session.expiresInMs,
-      };
-    }
-  }
-
   const indexedDBStore = new IndexedDBStore({
     indexedDB: global.indexedDB,
     localStorage: global.localStorage,
@@ -414,14 +386,14 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
   const legacyCryptoStore = new IndexedDBCryptoStore(global.indexedDB, 'crypto-store');
 
   const mx = createClient({
-    baseUrl: clientSession.baseUrl,
-    accessToken: clientSession.accessToken,
-    refreshToken: clientSession.refreshToken,
+    baseUrl: session.baseUrl,
+    accessToken: session.accessToken,
+    refreshToken: session.refreshToken,
     tokenRefreshFunction,
-    userId: clientSession.userId,
+    userId: session.userId,
     store: indexedDBStore,
     cryptoStore: legacyCryptoStore,
-    deviceId: clientSession.deviceId,
+    deviceId: session.deviceId,
     timelineSupport: true,
     cryptoCallbacks: cryptoCallbacks as any,
     verificationMethods: ['m.sas.v1'],
@@ -625,83 +597,109 @@ export const startClient = async (mx: MatrixClient) => {
             hasSecretsBundle: !!getAndroidSecureValue('crypto-secrets-bundle'),
           });
           if (verifiedMarker === '1' && userId && deviceId) {
-            // Refresh through Rust Crypto itself before importing the trusted
-            // bundle. MatrixClient.downloadKeysForUsers only returns the raw
-            // /keys/query response; it does not feed that response into the
-            // Rust identity store. Importing before Rust has the current
-            // public identity can therefore leave the private keys present
-            // while the identity (and thus this device) remains untrusted.
-            await crypto.userHasCrossSigningKeys(userId, true);
-            // Restore the exact cross-signing and backup secrets captured when
-            // the user completed verification. This is encrypted by Android
-            // Keystore and survives renderer/process death independently of
-            // WebView IndexedDB.
-            let secretsRestored = await restoreAndroidSecretsBundle(crypto);
-            recordAndroidDiagnostic('crypto_secrets_bundle_restore', { restored: secretsRestored });
-            if (!secretsRestored && hasAndroidSecretStorageKey()) {
-              // Some users may background the app immediately after the
-              // verification finishes, before exportSecretsBundle completes.
-              // The native Keystore already has the Secret Storage private
-              // key at that point. Only when the server confirms that the
-              // original cross-signing secrets are complete do we let the SDK
-              // import them. This preflight prevents bootstrapCrossSigning
-              // from ever creating a replacement identity during recovery.
-              const secretStorageStatus = await crypto.getSecretStorageStatus();
-              const requiredCrossSigningSecrets = [
-                'm.cross_signing.master',
-                'm.cross_signing.self_signing',
-                'm.cross_signing.user_signing',
-              ] as const;
-              const originalSecretsReady =
-                Boolean(secretStorageStatus.defaultKeyId) &&
-                requiredCrossSigningSecrets.every(
-                  (name) => secretStorageStatus.secretStorageKeyValidityMap[name] === true
-                );
-              if (originalSecretsReady) {
-                await crypto.bootstrapCrossSigning({});
-                secretsRestored = await persistAndroidSecretsBundle(crypto);
-              }
-            }
-            if (!secretsRestored) {
-              // Never call bootstrapCrossSigning from recovery without proof
-              // that the original private keys are accessible. The SDK is
-              // allowed to create a new identity otherwise.
-              throw new Error('Android cross-signing secrets are not ready.');
-            }
-            // importSecretsBundle restores the original master/self-signing
-            // keys but does not sign a newly reopened crypto store's device.
-            // Sign this same device ID with the restored self-signing key and
-            // upload the signature: this restores real cross-signing trust,
-            // rather than merely setting a local/UI verification flag.
-            await crypto.crossSignDevice(deviceId);
-            recordAndroidDiagnostic('crypto_device_cross_sign_completed');
-
-            // crossSignDevice uploads the signature, but the Rust store still
-            // needs a processed /keys/query response before its Device object
-            // reflects that signature. Retry the Rust-owned query briefly to
-            // cover homeserver propagation without repeatedly signing.
-            const refreshCrossSigningVerification = async (attempt: number): Promise<boolean> => {
+            // A healthy Rust store already has the original cross-signing
+            // private keys and local trust. Re-importing the bundle and
+            // re-signing the device on every launch causes needless device
+            // list churn and makes cached encrypted events flash as failures.
+            let crossSigningReady = await crypto.isCrossSigningReady().catch(() => false);
+            recordAndroidDiagnostic('crypto_cross_signing_ready', { ready: crossSigningReady });
+            if (!crossSigningReady) {
+              // Refresh through Rust Crypto itself before importing the trusted
+              // bundle. MatrixClient.downloadKeysForUsers only returns the raw
+              // response; this method feeds it into Rust's identity store.
               await crypto.userHasCrossSigningKeys(userId, true);
-              const [verification, identity] = await Promise.all([
-                crypto.getDeviceVerificationStatus(userId, deviceId),
-                crypto.getUserVerificationStatus(userId),
-              ]);
-              const verified = verification?.crossSigningVerified === true;
-              recordAndroidDiagnostic('crypto_verification_status', {
-                attempt,
-                signedByOwner: verification?.signedByOwner === true,
-                identityVerified: identity.isCrossSigningVerified(),
-                crossSigningVerified: verified,
+              // `isCrossSigningReady()` also requires the Rust identity to be
+              // loaded and marked verified. On a cold Android start the first
+              // check can run before the device-list query above has populated
+              // that identity, even though all private keys are already in the
+              // local store. Re-check before importing the secrets bundle; the
+              // previous one-shot check made every launch repeat the expensive
+              // restore/sign flow.
+              crossSigningReady = await crypto.isCrossSigningReady().catch(() => false);
+              recordAndroidDiagnostic('crypto_cross_signing_ready_after_keys', {
+                ready: crossSigningReady,
               });
-              if (verified || attempt >= 5) return verified;
-              await new Promise<void>((resolve) => {
-                globalThis.setTimeout(resolve, 500);
+            }
+            if (!crossSigningReady) {
+              // Restore the exact cross-signing and backup secrets captured
+              // when the user completed verification.
+              let secretsRestored = await restoreAndroidSecretsBundle(crypto);
+              recordAndroidDiagnostic('crypto_secrets_bundle_restore', {
+                restored: secretsRestored,
               });
-              return refreshCrossSigningVerification(attempt + 1);
-            };
-            const crossSigningVerified = await refreshCrossSigningVerification(1);
-            if (!crossSigningVerified) {
-              throw new Error('Android device cross-signing trust is not ready.');
+              if (!secretsRestored && hasAndroidSecretStorageKey()) {
+                // Some users may background the app immediately after the
+                // verification finishes, before exportSecretsBundle completes.
+                // The native Keystore already has the Secret Storage private
+                // key at that point. Only when the server confirms that the
+                // original cross-signing secrets are complete do we let the SDK
+                // import them. This preflight prevents bootstrapCrossSigning
+                // from ever creating a replacement identity during recovery.
+                const secretStorageStatus = await crypto.getSecretStorageStatus();
+                const requiredCrossSigningSecrets = [
+                  'm.cross_signing.master',
+                  'm.cross_signing.self_signing',
+                  'm.cross_signing.user_signing',
+                ] as const;
+                const originalSecretsReady =
+                  Boolean(secretStorageStatus.defaultKeyId) &&
+                  requiredCrossSigningSecrets.every(
+                    (name) => secretStorageStatus.secretStorageKeyValidityMap[name] === true
+                  );
+                if (originalSecretsReady) {
+                  await crypto.bootstrapCrossSigning({});
+                  secretsRestored = await persistAndroidSecretsBundle(crypto);
+                }
+              }
+              if (!secretsRestored) {
+                // Never create a replacement identity during recovery.
+                throw new Error('Android cross-signing secrets are not ready.');
+              }
+              // importSecretsBundle restores the original keys but does not
+              // sign a newly reopened crypto store's device.
+              await crypto.crossSignDevice(deviceId);
+              recordAndroidDiagnostic('crypto_device_cross_sign_completed');
+
+              // crossSignDevice uploads the signature, but Rust still needs a
+              // processed /keys/query response before its Device object reflects
+              // that signature. Retry briefly without repeatedly signing.
+              const refreshCrossSigningVerification = async (
+                attempt: number
+              ): Promise<{ crossSigningVerified: boolean; identityVerified: boolean }> => {
+                await crypto.userHasCrossSigningKeys(userId, true);
+                const [verification, identity] = await Promise.all([
+                  crypto.getDeviceVerificationStatus(userId, deviceId),
+                  crypto.getUserVerificationStatus(userId),
+                ]);
+                const verified = verification?.crossSigningVerified === true;
+                const identityVerified = identity.isCrossSigningVerified();
+                recordAndroidDiagnostic('crypto_verification_status', {
+                  attempt,
+                  signedByOwner: verification?.signedByOwner === true,
+                  localVerified: verification?.localVerified === true,
+                  identityVerified,
+                  crossSigningVerified: verified,
+                });
+                if (verified || attempt >= 5)
+                  return { crossSigningVerified: verified, identityVerified };
+                await new Promise<void>((resolve) => {
+                  globalThis.setTimeout(resolve, 500);
+                });
+                return refreshCrossSigningVerification(attempt + 1);
+              };
+              const verificationState = await refreshCrossSigningVerification(1);
+              if (!verificationState.crossSigningVerified && verificationState.identityVerified) {
+                // The durable marker is written only after the user completed
+                // verification with this exact device and secrets bundle. If a
+                // cold start races the homeserver device-list update, preserve
+                // that established trust locally instead of showing the user an
+                // unverified device while the server signature catches up.
+                await crypto.setDeviceVerified(userId, deviceId, true);
+                recordAndroidDiagnostic('crypto_local_trust_applied');
+              } else if (!verificationState.crossSigningVerified) {
+                throw new Error('Android device cross-signing trust is not ready.');
+              }
+              crossSigningReady = true;
             }
           }
           if (!getAndroidSecureValue('session-backup-private-key')) {
@@ -715,12 +713,53 @@ export const startClient = async (mx: MatrixClient) => {
           await crypto.checkKeyBackupAndEnable();
           const backupInfo = await crypto.getKeyBackupInfo();
           if (!backupInfo?.version) throw new Error('Encrypted backup information is not ready.');
+          const backupVersion = backupInfo.version;
           const backupTrust = await crypto.isKeyBackupTrusted(backupInfo);
           recordAndroidDiagnostic('backup_verification_status', {
             trusted: backupTrust?.matchesDecryptionKey === true,
           });
           if (backupTrust?.matchesDecryptionKey !== true) {
             throw new Error('Android backup decryption key is not attached yet.');
+          }
+          // A newly-created Android crypto store has the backup private key but
+          // not the historical Megolm sessions themselves. The SDK will then
+          // query /room_keys one session at a time whenever an old message is
+          // rendered, which is exactly the "unable to decrypt" flash seen on
+          // every launch. Restore the complete trusted backup once in the
+          // background and persist a version marker; this never blocks startup
+          // and subsequent launches keep the imported sessions in Rust's DB.
+          if (!androidFullBackupRestoreScheduled.has(mx)) {
+            androidFullBackupRestoreScheduled.add(mx);
+            const restoredMarker = getAndroidSecureValue(ANDROID_FULL_BACKUP_RESTORE_MARKER);
+            if (restoredMarker !== backupVersion) {
+              window.setTimeout(() => {
+                void (async () => {
+                  recordAndroidDiagnostic('crypto_full_backup_restore_started', {
+                    version: backupVersion,
+                  });
+                  try {
+                    const result = await crypto.restoreKeyBackup({});
+                    if (result.imported < result.total) {
+                      throw new Error(`Only restored ${result.imported} of ${result.total} room keys.`);
+                    }
+                    await setAndroidSecureValue(
+                      ANDROID_FULL_BACKUP_RESTORE_MARKER,
+                      backupVersion
+                    );
+                    recordAndroidDiagnostic('crypto_full_backup_restore_completed', {
+                      version: backupVersion,
+                      imported: result.imported,
+                      total: result.total,
+                    });
+                  } catch (error) {
+                    androidFullBackupRestoreScheduled.delete(mx);
+                    recordAndroidDiagnostic('crypto_full_backup_restore_failed', {
+                      error: error instanceof Error ? error.name : String(error).slice(0, 120),
+                    });
+                  }
+                })();
+              }, ANDROID_FULL_BACKUP_RESTORE_DELAY_MS);
+            }
           }
           await persistAndroidBackupKey(crypto);
           await persistAndroidCryptoState(mx);

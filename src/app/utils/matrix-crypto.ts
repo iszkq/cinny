@@ -1,4 +1,5 @@
 import { CryptoApi } from 'matrix-js-sdk/lib/crypto-api';
+import { isAndroidApp } from './nativePlatform';
 
 export const verifiedDevice = async (
   api: CryptoApi,
@@ -9,6 +10,6 @@ export const verifiedDevice = async (
 
   if (!status) return null;
 
-  const verified = status.crossSigningVerified;
+  const verified = status.crossSigningVerified || (isAndroidApp() && status.localVerified);
   return verified;
 };

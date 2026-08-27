@@ -130,17 +130,23 @@ test('device settings use the upstream Cinny device and verification flow', asyn
 
 test('upstream device verification uses SDK trust and verifier state', async () => {
   const verificationSource = await readSource('src/app/components/DeviceVerification.tsx');
+  const devicesVerificationSource = await readSource(
+    'src/app/features/settings/devices/Verification.tsx'
+  );
   const statusSource = await readSource('src/app/hooks/useDeviceVerificationStatus.ts');
   const cryptoSource = await readSource('src/app/utils/matrix-crypto.ts');
 
   assert.match(verificationSource, /request\.verifier/);
+  assert.match(devicesVerificationSource, /export function RecoveryKeyAccessTile/);
+  assert.match(devicesVerificationSource, /输入恢复密钥/);
   assert.match(verificationSource, /<SasVerification verifier=\{request\.verifier\}/);
   assert.match(verificationSource, /request\.cancel\(\)/);
   assert.match(statusSource, /verifiedDevice\(crypto, userId, deviceId\)/);
   assert.match(statusSource, /useDeviceListChange/);
   assert.doesNotMatch(statusSource, /getAndroidSecureValue|VerificationStatus\.Unavailable/);
   assert.match(cryptoSource, /status\.crossSigningVerified/);
-  assert.doesNotMatch(cryptoSource, /status\.localVerified|setDeviceVerified|crossSignDevice/);
+  assert.match(cryptoSource, /isAndroidApp\(\) && status\.localVerified/);
+  assert.match(cryptoSource, /status\.localVerified/);
 });
 
 test('backup restore after verification uses the existing client-scoped progress atom', async () => {
@@ -220,14 +226,18 @@ test('Android secure storage and database compatibility remain intact', async ()
   assert.match(initSource, /await crypto\.crossSignDevice\(deviceId\)/);
   assert.match(initSource, /verification\?\.crossSigningVerified === true/);
   assert.match(initSource, /identity\.isCrossSigningVerified\(\)/);
+  assert.match(initSource, /await crypto\.setDeviceVerified\(userId, deviceId, true\)/);
+  assert.match(initSource, /crypto_local_trust_applied/);
   assert.doesNotMatch(initSource, /await mx\.downloadKeysForUsers\(\[userId\]\)/);
   assert.match(initSource, /crypto_restore_preflight/);
   assert.match(initSource, /crypto_restore_failed/);
+  assert.match(initSource, /crypto_cross_signing_ready/);
+  assert.match(initSource, /isCrossSigningReady\(\)/);
   assert.match(initSource, /if \(!secretsRestored && hasAndroidSecretStorageKey\(\)\)/);
   assert.match(initSource, /secretStorageStatus\.secretStorageKeyValidityMap\[name\] === true/);
   assert.match(initSource, /if \(!newlyIssuedDevice && !isAndroidApp\(\)\)/);
-  assert.match(initSource, /Android WebView can briefly report an empty IndexedDB list/);
-  assert.match(initSource, /const retryDelays = \[250, 500, 1_000, 2_000, 4_000\]/);
+  assert.match(initSource, /Do not gate Android startup on an IndexedDB existence probe/);
+  assert.match(initSource, /let existingPrefixes = isAndroidApp\(\)/);
   assert.match(
     cryptoStoreSource,
     /if \(isAndroidApp\(\)\) return findExistingPrefixesByOpening\(prefixes\)/
