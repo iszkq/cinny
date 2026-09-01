@@ -11,6 +11,13 @@ const GLOBAL_SECRET_KEYS_KEY = 'cinny_android_secret_storage_keys_v1';
 const GLOBAL_CRYPTO_VALUE_PREFIX = 'cinny_android_crypto_value_v1:';
 const NATIVE_STORAGE_RETRY_COUNT = 20;
 const NATIVE_STORAGE_RETRY_DELAY_MS = 250;
+// A Capacitor call can remain pending when Android is recreating the WebView
+// bridge. Do not let that pending Promise hold the whole React tree on the
+// splash screen forever; the next bounded attempt can use the same native
+// source of truth once the bridge is ready again.
+const NATIVE_STORAGE_CALL_TIMEOUT_MS = 1_500;
+const NATIVE_STORAGE_LOAD_DEADLINE_MS = 4_000;
+const NATIVE_STORAGE_FAILURE_COOLDOWN_MS = 5_000;
 // The APK is compiled with VITE_ANDROID_APP=true. After Android kills the
 // renderer process, Capacitor's runtime probe can briefly report `web` while
 // the bridge reconnects. Using that transient value as a storage gate skips
@@ -100,11 +107,35 @@ const hydrateScopedSecretStorageKeys = () => {
   }
 };
 
-const loadSecureKeys = async () => {
+let secureStorageLoadPromise;
+let secureStorageLastFailureAt = 0;
+
+const withNativeStorageTimeout = (task, timeoutMs = NATIVE_STORAGE_CALL_TIMEOUT_MS) => {
+  let timer;
+  return Promise.race([
+    task,
+    new Promise((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error('Android secure storage call timed out.')),
+        timeoutMs
+      );
+    }),
+  ]).finally(() => {
+    if (timer !== undefined) clearTimeout(timer);
+  });
+};
+
+const loadSecureKeysOnce = async () => {
   if (!isAndroid()) return false;
+  const deadline = Date.now() + NATIVE_STORAGE_LOAD_DEADLINE_MS;
   for (let attempt = 0; attempt < NATIVE_STORAGE_RETRY_COUNT; attempt += 1) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) break;
     try {
-      const values = await AndroidSecureStorage.getAll();
+      const values = await withNativeStorageTimeout(
+        AndroidSecureStorage.getAll(),
+        Math.min(NATIVE_STORAGE_CALL_TIMEOUT_MS, remaining)
+      );
       Object.entries(values || {}).forEach(([key, value]) => {
         if (typeof value === 'string') secureValues.set(key, value);
       });
@@ -126,6 +157,32 @@ const loadSecureKeys = async () => {
     }
   }
   return false;
+};
+
+const loadSecureKeys = async () => {
+  if (!isAndroid()) return false;
+  // hydrateAndroidSession() runs before React mounts and initClient() asks for
+  // the same data again. Share that in-flight read so a transient bridge
+  // restart cannot multiply the startup delay.
+  if (
+    !secureStorageLoadPromise &&
+    secureStorageLastFailureAt > 0 &&
+    Date.now() - secureStorageLastFailureAt < NATIVE_STORAGE_FAILURE_COOLDOWN_MS
+  ) {
+    return false;
+  }
+  if (!secureStorageLoadPromise) {
+    secureStorageLoadPromise = loadSecureKeysOnce().then((loaded) => {
+      if (!loaded) {
+        secureStorageLastFailureAt = Date.now();
+        secureStorageLoadPromise = undefined;
+      } else {
+        secureStorageLastFailureAt = 0;
+      }
+      return loaded;
+    });
+  }
+  return secureStorageLoadPromise;
 };
 
 const isValidAndroidSession = (session) =>

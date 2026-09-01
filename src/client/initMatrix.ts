@@ -77,6 +77,11 @@ const androidNativeSnapshotDirty = new WeakSet<MatrixClient>();
 const DEVICE_IDENTITY_QUERY_TIMEOUT_MS = 8_000;
 const DEVICE_IDENTITY_CONFIRM_DELAY_MS = 1_000;
 const ANDROID_FULL_BACKUP_RESTORE_DELAY_MS = 2_000;
+// WebView/IndexedDB and Rust Crypto can both leave a JavaScript Promise
+// pending while Android is reopening a renderer. A pending startup stage used
+// to leave users on the splash screen indefinitely. Fail the stage explicitly
+// so ClientRoot can show its retry action instead.
+const ANDROID_STARTUP_STAGE_TIMEOUT_MS = 8_000;
 const ANDROID_FULL_BACKUP_RESTORE_MARKER = 'room-key-backup-restored';
 export const ANDROID_FULL_BACKUP_RESTORE_COMPLETED_EVENT =
   'starfire:android-full-backup-restore-completed';
@@ -113,6 +118,27 @@ const settleWithin = async <T>(task: Promise<T>, timeoutMs: number): Promise<T |
       task,
       new Promise<undefined>((resolve) => {
         timer = globalThis.setTimeout(() => resolve(undefined), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) globalThis.clearTimeout(timer);
+  }
+};
+
+const runWithStartupTimeout = async <T>(
+  task: Promise<T>,
+  stage: string,
+  timeoutMs = ANDROID_STARTUP_STAGE_TIMEOUT_MS
+): Promise<T> => {
+  let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      task,
+      new Promise<T>((_, reject) => {
+        timer = globalThis.setTimeout(
+          () => reject(new Error(`Android startup timed out while ${stage}.`)),
+          timeoutMs
+        );
       }),
     ]);
   } finally {
@@ -327,7 +353,12 @@ const requestPersistentAndroidStorage = async (): Promise<void> => {
   try {
     const storage = typeof navigator === 'undefined' ? undefined : navigator.storage;
     if (!storage?.persist) return;
-    if ((await storage.persisted?.()) !== true) await storage.persist();
+    const persisted = storage.persisted
+      ? await runWithStartupTimeout(storage.persisted(), 'checking persistent storage', 2_000)
+      : false;
+    if (persisted !== true) {
+      await runWithStartupTimeout(storage.persist(), 'requesting persistent storage', 2_000);
+    }
   } catch {
     // Durable storage is best effort and must never block login.
   }
@@ -406,7 +437,14 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
   // this prevents a newly-created WebView database from being evicted before
   // the first sync snapshot is written.
   if (isAndroidApp()) await requestPersistentAndroidStorage();
-  await indexedDBStore.startup();
+  if (isAndroidApp()) recordAndroidDiagnostic('sync_store_start_begin');
+  const syncStoreStartup = indexedDBStore.startup();
+  if (isAndroidApp()) {
+    await runWithStartupTimeout(syncStoreStartup, 'opening the sync store');
+  } else {
+    await syncStoreStartup;
+  }
+  if (isAndroidApp()) recordAndroidDiagnostic('sync_store_start_complete');
   if (isAndroidApp()) {
     const accountKey = getAndroidClientStoreAccountKey(
       session.baseUrl,
@@ -487,10 +525,11 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
       matrixLogger.error('Unable to inspect Android IndexedDB sync store.', error);
     }
   }
-  const { prefix: cryptoDatabasePrefix, newlyIssuedDevice } = await initRustCryptoForSession(
-    mx,
-    session
-  );
+  if (isAndroidApp()) recordAndroidDiagnostic('crypto_store_open_begin');
+  const cryptoStoreInit = initRustCryptoForSession(mx, session);
+  const { prefix: cryptoDatabasePrefix, newlyIssuedDevice } = isAndroidApp()
+    ? await runWithStartupTimeout(cryptoStoreInit, 'opening the crypto store')
+    : await cryptoStoreInit;
   rustCryptoDatabasePrefixes.set(mx, cryptoDatabasePrefix);
   recordAndroidDiagnostic('crypto_store_opened', { newlyIssuedDevice });
   // A normal app update preserves the access token and IndexedDB. Verify that
