@@ -371,12 +371,55 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
   });
   await hydrateSecretStorageKeys();
 
+  // matrix-js-sdk refreshes lazily when a normal HTTP request receives 401,
+  // but Rust Crypto performs /keys/query during startup and that path can
+  // surface "Token is not active" before the SDK's retry hook runs. Refresh
+  // proactively on Android so crypto bootstrap never races an expired access
+  // token. A temporary network failure keeps the existing token and lets the
+  // SDK's normal retry path handle it later.
+  let startupAccessToken = session.accessToken;
+  let startupRefreshToken = session.refreshToken;
+  if (isAndroidApp() && startupRefreshToken) {
+    recordAndroidDiagnostic('startup_token_refresh_begin');
+    try {
+      const refreshClient = createClient({
+        baseUrl: session.baseUrl,
+        userId: session.userId,
+        deviceId: session.deviceId,
+      });
+      const response = await runWithStartupTimeout(
+        refreshClient.refreshToken(startupRefreshToken),
+        'refreshing the Android access token',
+        10_000
+      );
+      startupAccessToken = response.access_token;
+      startupRefreshToken = response.refresh_token || startupRefreshToken;
+      localStorage.setItem('cinny_access_token', startupAccessToken);
+      if (response.expires_in_ms !== undefined) {
+        localStorage.setItem('cinny_expires_in_ms', String(response.expires_in_ms));
+      }
+      await persistAndroidSession({
+        ...session,
+        accessToken: startupAccessToken,
+        refreshToken: startupRefreshToken,
+        expiresInMs: response.expires_in_ms ?? session.expiresInMs,
+      });
+      recordAndroidDiagnostic('startup_token_refresh_success', {
+        hasRotatedRefreshToken: !!response.refresh_token,
+      });
+    } catch (error) {
+      recordAndroidDiagnostic('startup_token_refresh_failed', {
+        error: error instanceof Error ? error.name : String(error).slice(0, 120),
+      });
+    }
+  }
+
   // Android sessions can outlive the short-lived access token returned by a
   // homeserver. Keep the refresh token in the native encrypted store and let
   // matrix-js-sdk refresh it before requests are sent. Web/desktop keep their
   // existing token lifecycle and do not use this path.
   const tokenRefreshFunction =
-    isAndroidApp() && session.refreshToken
+    isAndroidApp() && startupRefreshToken
       ? async (refreshToken: string) => {
           const refreshClient = createClient({
             baseUrl: session.baseUrl,
@@ -420,8 +463,8 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
 
   const mx = createClient({
     baseUrl: session.baseUrl,
-    accessToken: session.accessToken,
-    refreshToken: session.refreshToken,
+    accessToken: startupAccessToken,
+    refreshToken: startupRefreshToken,
     tokenRefreshFunction,
     userId: session.userId,
     store: indexedDBStore,
