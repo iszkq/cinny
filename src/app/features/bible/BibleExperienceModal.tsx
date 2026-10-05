@@ -1629,12 +1629,15 @@ export function BibleExperienceModal({
         gap: toRem(16),
         minWidth: 0,
         minHeight: 0,
+        overflowY: 'auto',
+        overflowX: 'hidden',
         padding: `${toRem(18)} ${toRem(20)} ${toRem(20)}`,
         borderInlineStart: SOFT_LINE,
         background: 'rgba(248, 250, 252, 0.56)',
       };
   const toolPanelHeaderStyle: CSSProperties = {
     display: 'flex',
+    flexShrink: 0,
     flexWrap: 'wrap',
     gap: toRem(12),
     alignItems: 'center',
@@ -1649,10 +1652,12 @@ export function BibleExperienceModal({
       }
     : {
         display: 'grid',
+        // Scroll the panel instead of squeezing its controls into implicit auto rows.
+        gridAutoRows: 'max-content',
+        alignContent: 'start',
+        flexShrink: 0,
         gap: toRem(16),
         minWidth: 0,
-        minHeight: 0,
-        overflowY: 'auto',
         paddingRight: toRem(4),
       };
   const searchToolPanelContent = (
