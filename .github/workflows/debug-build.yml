@@ -58,6 +58,9 @@ jobs:
           cache: gradle
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # The legacy 'tools' package is no longer available in the SDK repository.
+          packages: 'platform-tools'
       - name: Install Android SDK packages
         run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
       - name: Install dependencies
