@@ -1,3 +1,5 @@
+import { requestNativeBack } from '../../utils/nativeBack';
+import { isNativeApp } from '../../utils/nativePlatform';
 import React, { MouseEventHandler, forwardRef, useState } from 'react';
 import FocusTrap from 'focus-trap-react';
 import {
@@ -461,7 +463,7 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
             <BackRouteHandler>
               {(onBack) => (
                 <Box shrink="No" alignItems="Center">
-                  <IconButton fill="None" onClick={onBack}>
+                  <IconButton fill="None" aria-label="返回" onClick={isNativeApp() ? requestNativeBack : onBack}>
                     <Icon src={Icons.ArrowLeft} />
                   </IconButton>
                 </Box>

@@ -1,3 +1,4 @@
+import { searchUsers } from '../../utils/searchUsers';
 import { IPublicRoomsChunkRoom, MatrixClient, RoomType } from 'matrix-js-sdk';
 import { isRoomAlias } from '../../utils/matrix';
 
@@ -89,9 +90,9 @@ export const searchHomeserverDirectory = async (
 
   if (shouldSearchUsers(scope)) {
     requests.push(
-      mx
-        .searchUserDirectory({ term: query, limit: DIRECTORY_RESULT_LIMIT })
-        .then(({ results }) => results.map((user) => ({ type: 'user' as const, user })))
+      searchUsers(mx, query, DIRECTORY_RESULT_LIMIT).then((results) =>
+        results.map((user) => ({ type: 'user' as const, user }))
+      )
     );
   }
 

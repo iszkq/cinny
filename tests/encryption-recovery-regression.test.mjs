@@ -82,7 +82,7 @@ test('an updated client replaces a retained session whose server crypto identity
   assert.match(clientSource, /if \(confirmedStatus !== 'invalid'\) return/);
   assert.match(
     clientSource,
-    /if \(!newlyIssuedDevice && !isAndroidApp\(\)\) await validateExistingCryptoDevice/
+    /if \(!newlyIssuedDevice && !isNativeApp\(\)\) await validateExistingCryptoDevice/
   );
   assert.match(
     clientSource,
@@ -119,7 +119,7 @@ test('device settings use the upstream Cinny device and verification flow', asyn
   assert.doesNotMatch(otherDevicesSource, /window\.open\(/);
   assert.match(
     verificationSource,
-    /crypto\.requestDeviceVerification\(mx\.getSafeUserId\(\), deviceId\)/
+    /requestIOSDeviceVerification\(mx, deviceId\)/
   );
   assert.match(setupSource, /await crypto\.bootstrapSecretStorage\(/);
   assert.match(setupSource, /await crypto\.bootstrapCrossSigning\(/);
@@ -235,9 +235,9 @@ test('Android secure storage and database compatibility remain intact', async ()
   assert.match(initSource, /isCrossSigningReady\(\)/);
   assert.match(initSource, /if \(!secretsRestored && hasAndroidSecretStorageKey\(\)\)/);
   assert.match(initSource, /secretStorageStatus\.secretStorageKeyValidityMap\[name\] === true/);
-  assert.match(initSource, /if \(!newlyIssuedDevice && !isAndroidApp\(\)\)/);
+  assert.match(initSource, /if \(!newlyIssuedDevice && !isNativeApp\(\)\)/);
   assert.match(initSource, /Do not gate Android startup on an IndexedDB existence probe/);
-  assert.match(initSource, /let existingPrefixes = isAndroidApp\(\)/);
+  assert.match(initSource, /let existingPrefixes =\s*isAndroidApp\(\)/);
   assert.match(
     cryptoStoreSource,
     /if \(isAndroidApp\(\)\) return findExistingPrefixesByOpening\(prefixes\)/
@@ -256,7 +256,7 @@ test('Android secure storage and database compatibility remain intact', async ()
   assert.match(initSource, /tokenRefreshFunction/);
   assert.match(
     initSource,
-    /if \(!isAndroidApp\(\)\) \{\s*removeAndroidPersistedSession\(\);\s*removeFallbackAccessToken\(\);/
+    /if \(!isNativeApp\(\)\) \{\s*removeAndroidPersistedSession\(\);\s*removeFallbackAccessToken\(\);/
   );
   assert.match(nativeSecureStorageSource, /new KeyGenParameterSpec\.Builder/);
   assert.match(nativeSecureStorageSource, /KeyProperties\.PURPOSE_ENCRYPT/);

@@ -1,8 +1,9 @@
+import { clearNativeSessionFailure } from '../../client/nativeSessionFailure';
 import {
   persistAndroidSession,
   removeAndroidPersistedSession,
 } from '../../client/secretStorageKeys';
-import { isAndroidApp } from '../utils/nativePlatform';
+import { isNativeApp } from '../utils/nativePlatform';
 
 // import { atom } from 'jotai';
 // import {
@@ -52,7 +53,7 @@ export async function setFallbackSession(
   localStorage.setItem('cinny_device_id', deviceId);
   localStorage.setItem('cinny_user_id', userId);
   localStorage.setItem('cinny_hs_base_url', baseUrl);
-  if (isAndroidApp()) {
+  if (isNativeApp()) {
     if (typeof expiresInMs === 'number') {
       localStorage.setItem('cinny_expires_in_ms', String(expiresInMs));
     } else {
@@ -65,6 +66,7 @@ export async function setFallbackSession(
     }
   }
   localStorage.removeItem(FALLBACK_SOFT_LOGOUT_KEY);
+  clearNativeSessionFailure();
   await persistAndroidSession({
     accessToken,
     deviceId,
@@ -80,7 +82,7 @@ export const removeFallbackSession = () => {
   localStorage.removeItem('cinny_user_id');
   localStorage.removeItem('cinny_device_id');
   localStorage.removeItem('cinny_access_token');
-  if (isAndroidApp()) {
+  if (isNativeApp()) {
     localStorage.removeItem('cinny_expires_in_ms');
     localStorage.removeItem('cinny_refresh_token');
   }
@@ -129,10 +131,10 @@ export const getFallbackSession = (): Session | undefined => {
     const session: Session = {
       ...identity,
       accessToken,
-      expiresInMs: isAndroidApp()
+      expiresInMs: isNativeApp()
         ? Number(localStorage.getItem('cinny_expires_in_ms')) || undefined
         : undefined,
-      refreshToken: isAndroidApp()
+      refreshToken: isNativeApp()
         ? localStorage.getItem('cinny_refresh_token') ?? undefined
         : undefined,
       fallbackSdkStores: true,

@@ -12,6 +12,9 @@ export enum ScreenSize {
 }
 
 export const getScreenSize = (width: number): ScreenSize => {
+  if (import.meta.env.VITE_ANDROID_APP === 'true' || import.meta.env.VITE_IOS_APP === 'true') {
+    return width > MOBILE_BREAKPOINT ? ScreenSize.Tablet : ScreenSize.Mobile;
+  }
   if (width > TABLET_BREAKPOINT) return ScreenSize.Desktop;
   if (width > MOBILE_BREAKPOINT) return ScreenSize.Tablet;
   return ScreenSize.Mobile;

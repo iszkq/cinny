@@ -1,0 +1,23 @@
+import { globalStyle } from '@vanilla-extract/css';
+import { color } from 'folds';
+import { Sidebar } from '../components/sidebar/Sidebar.css';
+import { NavItemBase, NavLink, NavItemContent } from '../components/nav/styles.css';
+import { PageHeader, PageNavHeader } from '../components/page/style.css';
+import { Root, DesktopShell } from '../pages/client/ClientLayout.css';
+const android = 'html[data-cinny-android-app="true"]';
+globalStyle(`${android} .calculator-private`, {fontSize:'calc(18px * var(--app-text-scale,1))'});
+globalStyle(`${android} .${Sidebar}`, {background:color.Background.Container,backdropFilter:'none',WebkitBackdropFilter:'none',boxShadow:'none'});
+globalStyle(`${android} .${Root}, ${android} .${DesktopShell}`, {background:color.Background.Container,backdropFilter:'none',WebkitBackdropFilter:'none',boxShadow:'none'});
+globalStyle(`${android} .${NavItemBase}`, {minHeight:64,fontSize:'calc(18px * var(--app-text-scale,1))',marginBottom:8,backgroundColor:color.Background.Container,border:'1px solid transparent',boxShadow:'none'});
+globalStyle(`${android} .${NavItemBase}[aria-selected="true"]`, {backgroundColor:color.Primary.Container,borderColor:color.Primary.ContainerLine,boxShadow:'none',transform:'none'});
+globalStyle(`${android} .${NavLink}`, {minHeight:64});
+globalStyle(`${android} .${NavItemContent}`, {padding:'12px 16px',fontSize:'calc(18px * var(--app-text-scale,1))',lineHeight:1.5});
+globalStyle(`${android} [data-room-avatar]`, {width:44,height:44,flexShrink:0});
+globalStyle(`${android} [data-room-name]`, {fontSize:'calc(18px * var(--app-text-scale,1))',lineHeight:1.5,fontWeight:500,color:color.Background.OnContainer});
+globalStyle(`${android} [data-chat-view] [data-message-body], ${android} [data-chat-view] [contenteditable="true"]`, {fontSize:'calc(18px * var(--app-text-scale,1))',lineHeight:1.65});
+globalStyle(`${android} [data-chat-view] button, ${android} [role="menuitem"], ${android} .${PageHeader({}).split(' ')[0]} button, ${android} .${PageNavHeader({}).split(' ')[0]} button`, {minWidth:48,minHeight:48});
+globalStyle(`${android} .${PageHeader({}).split(' ')[0]}, ${android} .${PageNavHeader({}).split(' ')[0]}`, {minHeight:64,height:'auto',gap:8,flexWrap:'wrap'});
+globalStyle(`${android} input, ${android} select`, {fontSize:'calc(18px * var(--app-text-scale,1))',minHeight:48});
+globalStyle(`${android} [data-full-space-page="true"] button`, {boxShadow:'none',backdropFilter:'none',WebkitBackdropFilter:'none'});
+
+globalStyle(`${android} [data-message-text]:not([data-jumbo-emoji="true"])`, {fontSize:'calc(18px * var(--app-text-scale,1))',lineHeight:1.65});

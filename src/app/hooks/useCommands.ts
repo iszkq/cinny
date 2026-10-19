@@ -12,6 +12,8 @@ import {
 import { RoomServerAclEventContent } from 'matrix-js-sdk/lib/types';
 import { useMemo } from 'react';
 import { useAtomValue } from 'jotai';
+import { aiSettingsAtom } from '../state/ai';
+import { runAISkill } from '../utils/ai';
 import {
   addRoomIdToMDirect,
   getDMRoomFor,
@@ -28,8 +30,6 @@ import { Membership, StateEvent } from '../../types/matrix/room';
 import { getStateEvent } from '../utils/room';
 import { splitWithSpace } from '../utils/common';
 import { createRoomEncryptionState } from '../components/create-room';
-import { aiSettingsAtom } from '../state/ai';
-import { runAISkill } from '../utils/ai';
 
 export const SHRUG = '¯\\_(ツ)_/¯';
 export const TABLEFLIP = '(╯°□°)╯︵ ┻━┻';
@@ -180,22 +180,22 @@ export const useCommands = (mx: MatrixClient, room: Room): CommandRecord => {
       aiSettings.skills.reduce<CommandRecord>((record, skill) => {
         record[skill.command] = {
           name: skill.command,
-          description: `AI \u6280\u80fd\uff1a${skill.name}`,
+          description: `AI 技能：${skill.name}`,
           exe: async (payload: string) => {
             try {
-              const result = await runAISkill(room, aiSettings, skill, payload);
+              const result = (await runAISkill(room, aiSettings, skill, payload)).trim();
+              if (!result) throw new Error('AI 返回了空回复');
+              const notice = '以上消息由 AI 生成。';
               await mx.sendMessage(room.roomId, {
                 msgtype: 'm.text',
-                body: result,
+                body: result.endsWith(notice) ? result : `${result}\n\n${notice}`,
+                'org.starfire.ai_generated': true,
               } as any);
             } catch (error) {
-              window.alert(
-                error instanceof Error ? error.message : 'AI \u8bf7\u6c42\u5931\u8d25\u3002'
-              );
+              window.alert(error instanceof Error ? error.message : 'AI 请求失败。');
             }
           },
         };
-
         return record;
       }, {}),
     [aiSettings, mx, room]
@@ -255,7 +255,8 @@ export const useCommands = (mx: MatrixClient, room: Room): CommandRecord => {
       },
       [Command.Join]: {
         name: Command.Join,
-        description: '\u52a0\u5165\u6307\u5b9a\u623f\u95f4\u3002\u4f8b\uff1a/join address1 address2',
+        description:
+          '\u52a0\u5165\u6307\u5b9a\u623f\u95f4\u3002\u4f8b\uff1a/join address1 address2',
         exe: async (payload) => {
           const rawIds = splitWithSpace(payload);
           const roomIdOrAliases = rawIds.filter(
@@ -375,7 +376,8 @@ export const useCommands = (mx: MatrixClient, room: Room): CommandRecord => {
       },
       [Command.UnIgnore]: {
         name: Command.UnIgnore,
-        description: '\u53d6\u6d88\u5ffd\u7565\u7528\u6237\u3002\u4f8b\uff1a/unignore userId1 userId2',
+        description:
+          '\u53d6\u6d88\u5ffd\u7565\u7528\u6237\u3002\u4f8b\uff1a/unignore userId1 userId2',
         exe: async (payload) => {
           const rawIds = splitWithSpace(payload);
           const userIds = rawIds.filter((id) => isUserId(id));
@@ -565,10 +567,9 @@ export const useCommands = (mx: MatrixClient, room: Room): CommandRecord => {
           await mx.sendStateEvent(room.roomId, StateEvent.RoomServerAcl as any, aclContent);
         },
       },
-      ...aiSkillCommands,
     }),
-    [aiSkillCommands, mx, room, navigateRoom]
+    [mx, room, navigateRoom]
   );
 
-  return commands;
+  return { ...aiSkillCommands, ...commands };
 };

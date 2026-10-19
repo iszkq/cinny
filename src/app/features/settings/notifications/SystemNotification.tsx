@@ -1,3 +1,4 @@
+import { AndroidNotificationSettings } from './AndroidNotificationSettings';
 import React, { useCallback, useEffect } from 'react';
 import { Box, Text, Switch, Button, color, Spinner } from 'folds';
 import { IPusherRequest } from 'matrix-js-sdk';
@@ -99,6 +100,10 @@ function EmailNotification() {
 }
 
 export function SystemNotification() {
+  return isAndroidApp() ? <AndroidNotificationSettings /> : <BrowserSystemNotification />;
+}
+
+function BrowserSystemNotification() {
   const notifPermission = usePermissionState('notifications', getNotificationState());
   const [showNotifications, setShowNotifications] = useSetting(settingsAtom, 'showNotifications');
   const [isNotificationSounds, setIsNotificationSounds] = useSetting(

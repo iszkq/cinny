@@ -16,7 +16,8 @@ export function HomeRouteRoomProvider({ children }: { children: ReactNode }) {
   const roomId = useSelectedRoom();
   const room = mx.getRoom(roomId);
 
-  if (!room || !rooms.includes(room.roomId)) {
+  const native = import.meta.env.VITE_ANDROID_APP === 'true' || import.meta.env.VITE_IOS_APP === 'true';
+  if (!room || (native ? room.getMyMembership() !== 'join' || room.isSpaceRoom() : !rooms.includes(room.roomId))) {
     return (
       <JoinBeforeNavigate
         roomIdOrAlias={roomIdOrAlias!}

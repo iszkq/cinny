@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod ai_http;
 mod desktop_media_cache;
 mod office_binary_exchange;
 
@@ -21,7 +22,7 @@ use std::{
     thread,
     time::Duration,
 };
-use tauri::{plugin::PermissionState, AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{plugin::PermissionState, AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_notification::NotificationExt;
 
 #[cfg(target_os = "windows")]
@@ -1169,6 +1170,26 @@ fn send_desktop_notification(
         .map_err(|error| format!("failed to show notification: {error}"))
 }
 
+static PIN_HIDDEN_WINDOWS: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
+#[tauri::command]
+fn set_pin_window_privacy(window: tauri::WebviewWindow, app: AppHandle, locked: bool) -> Result<(), String> {
+    if window.label() != "main" { return Err("Only the main window can change PIN privacy".into()); }
+    let mut hidden = PIN_HIDDEN_WINDOWS.lock().map_err(|_| "PIN window state unavailable")?;
+    if locked {
+        for (label, child) in app.webview_windows() {
+            if label != "main" && child.is_visible().unwrap_or(false) && child.hide().is_ok() {
+                if !hidden.contains(&label) { hidden.push(label); }
+            }
+        }
+    } else {
+        for label in hidden.drain(..) {
+            if let Some(child) = app.get_webview_window(&label) { let _ = child.show(); }
+        }
+    }
+    Ok(())
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
@@ -1180,6 +1201,31 @@ fn main() {
             let main_window = app
                 .get_webview_window("main")
                 .expect("main window is unavailable");
+
+            #[cfg(target_os = "windows")]
+            {
+                use tauri::{menu::{Menu, MenuItem}, tray::TrayIconBuilder};
+                let show = MenuItem::with_id(app, "show", "打开星火", true, None::<&str>)?;
+                let quit = MenuItem::with_id(app, "quit", "退出星火", true, None::<&str>)?;
+                let menu = Menu::with_items(app, &[&show, &quit])?;
+                let mut tray = TrayIconBuilder::with_id("starfire-main")
+                    .tooltip("星火")
+                    .menu(&menu)
+                    .on_menu_event(|app, event| match event.id.as_ref() {
+                        "show" => {
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.unminimize();
+                                let _ = window.set_focus();
+                                let _ = app.emit("starfire-background-hidden", false);
+                            }
+                        }
+                        "quit" => app.exit(0),
+                        _ => {}
+                    });
+                if let Some(icon) = app.default_window_icon() { tray = tray.icon(icon.clone()); }
+                tray.build(app)?;
+            }
 
             main_window.on_window_event(move |event| {
                 if matches!(event, tauri::WindowEvent::Destroyed) {
@@ -1199,6 +1245,8 @@ fn main() {
             office_binary_exchange::write_office_session_binary,
             office_binary_exchange::consume_office_session_binary,
             office_binary_exchange::clear_office_session_binaries,
+            ai_http::request_ai_http,
+            set_pin_window_privacy,
             open_external_url,
             open_external_url_window,
             get_desktop_updater_proxy,
@@ -1209,6 +1257,18 @@ fn main() {
             request_desktop_notification_permission,
             send_desktop_notification
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen { .. } = event {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                    let _ = app.emit("starfire-background-hidden", false);
+                }
+            }
+            #[cfg(not(target_os = "macos"))]
+            let _ = (app, event);
+        });
 }

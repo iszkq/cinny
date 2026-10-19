@@ -21,7 +21,7 @@ const CN = {
   title: 'AI \u52a9\u624b',
   provider: '\u63a5\u5165\u65b9\u5f0f',
   providerDesc:
-    '当前支持 AIHubMix，默认使用官方优选线路 api.inferera.com；网络故障时自动回退 aihubmix.com。',
+    '支持 AIHubMix、Ollama、LM Studio 和 OpenAI 兼容接口。本地 Ollama 无需 API Key；模型名称须与本机已下载的名称一致。',
   accountSyncHint:
     '\u4fdd\u5b58\u914d\u7f6e\u3001\u521b\u5efa\u6216\u5220\u9664 Skill \u540e\u4f1a\u81ea\u52a8\u5199\u5165\u5f53\u524d\u8d26\u53f7\u3002',
   apiKey: 'API Key',
@@ -85,13 +85,24 @@ export function AI({ requestClose }: AIProps) {
     const nextBaseUrl = baseUrlInput.trim() || DEFAULT_BASE_URL;
     const nextModelsUrl = modelsUrlInput.trim() || DEFAULT_MODELS_API_URL;
 
-    setSettings({
-      ...settings,
-      apiKey: nextApiKey,
-      baseUrl: nextBaseUrl,
-      modelsApiUrl: nextModelsUrl,
-    });
-    setStatusText('\u57fa\u7840 AI \u914d\u7f6e\u5df2\u4fdd\u5b58');
+    try {
+      setSettings({
+        ...settings,
+        apiKey: nextApiKey,
+        baseUrl: nextBaseUrl,
+        modelsApiUrl: nextModelsUrl,
+      });
+      setStatusText('\u57fa\u7840 AI \u914d\u7f6e\u5df2\u4fdd\u5b58');
+    } catch (error) {
+      setStatusText(`保存失败：${error instanceof Error ? error.message : '无法写入本机存储'}`);
+    }
+  };
+
+  const applyPreset = (base: string, models: string) => {
+    setBaseUrlInput(base);
+    setModelsUrlInput(models);
+    setApiKeyInput('');
+    setStatusText('已填入地址，请保存或拉取模型。切换服务后请选择该服务的默认模型。');
   };
 
   const handleFetchModels = () => {
@@ -190,9 +201,30 @@ export function AI({ requestClose }: AIProps) {
                   <Text size="T300" priority="300">
                     {CN.accountSyncHint}
                   </Text>
+                  <Box gap="200" wrap="Wrap">
+                    <Button
+                      onClick={() =>
+                        applyPreset('http://localhost:11434/v1', 'http://localhost:11434/v1/models')
+                      }
+                    >
+                      <Text>本地 Ollama</Text>
+                    </Button>
+                    <Button
+                      onClick={() =>
+                        applyPreset('http://localhost:1234/v1', 'http://localhost:1234/v1/models')
+                      }
+                    >
+                      <Text>LM Studio</Text>
+                    </Button>
+                    <Button onClick={() => applyPreset(DEFAULT_BASE_URL, DEFAULT_MODELS_API_URL)}>
+                      <Text>AIHubMix</Text>
+                    </Button>
+                  </Box>
                   <Box as="form" direction="Column" gap="300" onSubmit={handleSaveBaseConfig}>
                     <Input
                       name="apiKey"
+                      type="password"
+                      aria-label="API Key（本地 Ollama 可留空）"
                       value={apiKeyInput}
                       onChange={(evt) => setApiKeyInput(evt.currentTarget.value)}
                       placeholder={CN.apiKey}
@@ -201,6 +233,7 @@ export function AI({ requestClose }: AIProps) {
                     />
                     <Input
                       name="baseUrl"
+                      aria-label="聊天接口 Base URL"
                       value={baseUrlInput}
                       onChange={(evt) => setBaseUrlInput(evt.currentTarget.value)}
                       placeholder={CN.apiBaseUrl}
@@ -209,6 +242,7 @@ export function AI({ requestClose }: AIProps) {
                     />
                     <Input
                       name="modelsUrl"
+                      aria-label="模型列表 URL"
                       value={modelsUrlInput}
                       onChange={(evt) => setModelsUrlInput(evt.currentTarget.value)}
                       placeholder={CN.modelsApiUrl}

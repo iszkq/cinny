@@ -1,3 +1,5 @@
+import { isIOSApp } from '../utils/nativePlatform';
+import { iosVerificationError, refreshIOSVerificationAfterDone } from '../utils/iosVerification';
 import React, { MouseEventHandler, ReactNode, useCallback, useState } from 'react';
 import {
   Box,
@@ -129,7 +131,7 @@ export function ManualVerificationTile({
 
   const hasPassphrase = !!secretStorageKeyContent.passphrase;
   const [method, setMethod] = useState(
-    hasPassphrase
+    hasPassphrase && !isIOSApp()
       ? ManualVerificationMethod.RecoveryPassphrase
       : ManualVerificationMethod.RecoveryKey
   );
@@ -141,6 +143,11 @@ export function ManualVerificationTile({
         throw new Error('加密模块不可用。');
       }
 
+      if (isIOSApp() && !(await crypto.userHasCrossSigningKeys(mx.getSafeUserId(), true))) {
+        throw new Error(
+          '未能确认服务器上的原有身份密钥，已停止恢复以避免创建新身份。请保持原设备登录，连接恢复后重试。'
+        );
+      }
       storePrivateKey(secretStorageKeyId, recoveryKey);
 
       await crypto.bootstrapCrossSigning({});
@@ -148,6 +155,7 @@ export function ManualVerificationTile({
 
       await crypto.loadSessionBackupPrivateKeyFromSecretStorage();
       await persistAndroidCryptoState(mx, true);
+      if (isIOSApp()) await refreshIOSVerificationAfterDone(mx);
     },
     [mx, secretStorageKeyId]
   );
@@ -195,7 +203,9 @@ export function ManualVerificationTile({
             )}
           {verifyState.status === AsyncStatus.Error && (
             <Text size="T200" style={{ color: color.Critical.Main }}>
-              <b>{verifyState.error.message}</b>
+              <b>
+                {isIOSApp() ? iosVerificationError(verifyState.error) : verifyState.error.message}
+              </b>
             </Text>
           )}
         </Box>

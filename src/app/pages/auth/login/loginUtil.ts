@@ -19,7 +19,7 @@ import {
   allowNewRustCryptoStore,
   hasPersistedRustCryptoStore,
 } from '../../../../client/rustCryptoStore';
-import { isAndroidApp } from '../../../utils/nativePlatform';
+import { isNativeApp } from '../../../utils/nativePlatform';
 
 export enum GetBaseUrlError {
   NotAllow = 'NotAllow',
@@ -129,7 +129,7 @@ export const login = async (
   // Android must be able to renew a time-limited access token after process
   // death. Requesting a refresh token is ignored by homeservers which issue
   // non-expiring tokens, so desktop/web retain their existing behaviour.
-  const loginData: LoginRequest = isAndroidApp() ? { ...data, refresh_token: true } : data;
+  const loginData: LoginRequest = isNativeApp() ? { ...data, refresh_token: true } : data;
   const savedIdentity = getFallbackSessionIdentity();
   const mayReuseDeviceId =
     isFallbackSessionSoftLoggedOut() &&

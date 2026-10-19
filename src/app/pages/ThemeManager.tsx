@@ -25,6 +25,7 @@ export function UnAuthRouteThemeManager() {
   const systemThemeKind = useSystemThemeKind();
 
   useEffect(() => {
+    document.body.dataset.appTheme = systemThemeKind;
     document.body.className = '';
     document.body.classList.add(configClass, varsClass);
     clearAppearanceVariables();
@@ -52,6 +53,7 @@ export function AuthRouteThemeManager({ children }: { children: ReactNode }) {
   const [incomingBubbleOpacity] = useSetting(settingsAtom, 'incomingBubbleOpacity');
 
   useEffect(() => {
+    document.body.dataset.appTheme = activeTheme.kind;
     document.body.className = '';
     document.body.classList.add(configClass, varsClass);
     document.body.classList.add(...activeTheme.classNames);

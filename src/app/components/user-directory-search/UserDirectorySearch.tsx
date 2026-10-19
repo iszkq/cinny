@@ -1,3 +1,4 @@
+import { searchUsers } from '../../utils/searchUsers';
 import { Avatar, Box, config, Menu, MenuItem, Scroll, Spinner, Text, toRem } from 'folds';
 import React, { useEffect, useRef, useState } from 'react';
 import { MatrixClient } from 'matrix-js-sdk';
@@ -17,36 +18,45 @@ export const useUserDirectorySearch = (
   mx: MatrixClient,
   query: string,
   limit = 50
-): { users: UserDirectoryResult[]; loading: boolean } => {
+): { users: UserDirectoryResult[]; loading: boolean; error?: string } => {
   const requestRef = useRef(0);
   const [users, setUsers] = useState<UserDirectoryResult[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string>();
 
   useEffect(() => {
     const term = query.trim();
     const requestId = ++requestRef.current;
-    if (!term || term.match(/^@[^:]+:[^:]+$/)) {
+    setError(undefined);
+    setUsers([]);
+    if (!term) {
       setUsers([]);
       setLoading(false);
       return undefined;
     }
+    setLoading(true);
     const timer = window.setTimeout(() => {
-      setLoading(true);
-      mx.searchUserDirectory({ term: term.startsWith('@') ? term.slice(1) : term, limit })
-        .then(({ results }) => {
+      searchUsers(mx, term, limit)
+        .then((results) => {
           if (requestRef.current === requestId) setUsers(results);
         })
-        .catch(() => {
-          if (requestRef.current === requestId) setUsers([]);
+        .catch((cause) => {
+          if (requestRef.current === requestId) {
+            setUsers([]);
+            setError(cause.message);
+          }
         })
         .finally(() => {
           if (requestRef.current === requestId) setLoading(false);
         });
     }, 150);
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      requestRef.current += 1;
+    };
   }, [limit, mx, query]);
 
-  return { users, loading };
+  return { users, loading, error };
 };
 
 type UserDirectorySearchMenuProps = {

@@ -8,8 +8,8 @@ const __dirname = path.dirname(__filename);
 
 const version = process.argv[2];
 
-if (!version) {
-  console.error('Version argument missing');
+if (!version || !/^\d+\.\d+\.\d+$/.test(version)) {
+  console.error('Version must use major.minor.patch format');
   process.exit(1);
 }
 
@@ -50,6 +50,12 @@ execSync(`npm version ${version} --no-git-tag-version`, {
 console.log(`Updated package.json and package-lock.json -> ${version}`);
 
 updateFile(
+  'src-tauri/Cargo.lock',
+  (content) => content.replace(/(name = "cinny-desktop"\r?\nversion = ")[^"]+"/, `$1${version}"`),
+  `Updated src-tauri/Cargo.lock -> ${version}`
+);
+
+updateFile(
   'src-tauri/Cargo.toml',
   (content) => content.replace(/^version = "\d+\.\d+\.\d+"$/m, `version = "${version}"`),
   `Updated src-tauri/Cargo.toml -> ${version}`
@@ -65,9 +71,28 @@ updateFile(
   'android/app/build.gradle',
   (content) =>
     content
-      .replace(/^\s*versionCode\s+\d+$/m, `        versionCode ${androidVersionCode}`)
-      .replace(/^\s*versionName\s+"[^"]+"$/m, `        versionName "${version}"`),
+      .replace(
+        /^(\s*versionCode = \(project\.findProperty\("calculatorVersionCode"\) \?: )\d+/m,
+        `$1${androidVersionCode}`
+      )
+      .replace(
+        /^[ \t]*versionCode[ \t]+\d+[ \t]*\r?$/m,
+        `        versionCode ${androidVersionCode}`
+      )
+      .replace(/^[ \t]*versionName[ \t]+"[^"]+"[ \t]*\r?$/m, `        versionName "${version}"`),
   `Updated android/app/build.gradle -> ${version} (${androidVersionCode})`
+);
+
+updateFile(
+  'ios/App/App.xcodeproj/project.pbxproj',
+  (content) => content.replace(/MARKETING_VERSION = [^;]+;/g, `MARKETING_VERSION = ${version};`),
+  `Updated iOS MARKETING_VERSION -> ${version}`
+);
+
+updateFile(
+  'README.md',
+  (content) => content.replace(/当前版本：`[^`]+`/, `当前版本：\`${version}\``),
+  `Updated README.md -> ${version}`
 );
 
 [

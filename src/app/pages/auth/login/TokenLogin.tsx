@@ -17,18 +17,17 @@ import { APP_WEB_DEVICE_NAME } from '../../../constants/branding';
 import { useAutoDiscoveryInfo } from '../../../hooks/useAutoDiscoveryInfo';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { AccountPinDialog } from '../../../components/pin-lock';
-import {
-  markAccountPinVerified,
-  resolveAccountPinLoginRequirement,
-} from '../../../utils/pinLock';
+import { markAccountPinVerified, resetPinAfterAuthenticatedLogin } from '../../../utils/pinLock';
 import { completeLogin, CustomLoginResponse, LoginError, login } from './loginUtil';
 
 const copy = {
   title: '\u4ee4\u724c\u767b\u5f55',
   forbidden: '\u767b\u5f55\u4ee4\u724c\u65e0\u6548\u3002',
   userDeactivated: '\u8be5\u8d26\u6237\u5df2\u88ab\u505c\u7528\u3002',
-  invalidRequest: '\u767b\u5f55\u5931\u8d25\uff0c\u8bf7\u6c42\u4e2d\u7684\u90e8\u5206\u6570\u636e\u65e0\u6548\u3002',
-  rateLimited: '\u767b\u5f55\u5931\u8d25\uff0c\u8bf7\u6c42\u8fc7\u4e8e\u9891\u7e41\uff0c\u8bf7\u7a0d\u540e\u518d\u8bd5\u3002',
+  invalidRequest:
+    '\u767b\u5f55\u5931\u8d25\uff0c\u8bf7\u6c42\u4e2d\u7684\u90e8\u5206\u6570\u636e\u65e0\u6548\u3002',
+  rateLimited:
+    '\u767b\u5f55\u5931\u8d25\uff0c\u8bf7\u6c42\u8fc7\u4e8e\u9891\u7e41\uff0c\u8bf7\u7a0d\u540e\u518d\u8bd5\u3002',
   unknown: '\u767b\u5f55\u5931\u8d25\uff0c\u539f\u56e0\u672a\u77e5\u3002',
   pinTitle: '\u9a8c\u8bc1 PIN \u5e76\u767b\u5f55',
   pinDescription:
@@ -77,8 +76,7 @@ export function TokenLogin({ token }: TokenLoginProps) {
     MatrixError,
     Parameters<typeof login>
   >(useCallback(login, []));
-  const loginSuccessData =
-    loginState.status === AsyncStatus.Success ? loginState.data : undefined;
+  const loginSuccessData = loginState.status === AsyncStatus.Success ? loginState.data : undefined;
 
   useEffect(() => {
     startLogin(baseUrl, {
@@ -103,11 +101,7 @@ export function TokenLogin({ token }: TokenLoginProps) {
     let disposed = false;
     setResolvingPinRequirement(true);
 
-    resolveAccountPinLoginRequirement(
-      loginSuccessData.baseUrl,
-      loginSuccessData.response.user_id,
-      loginSuccessData.response.access_token
-    )
+    resetPinAfterAuthenticatedLogin(loginSuccessData.baseUrl, loginSuccessData.response.user_id)
       .then((requirement) => {
         if (disposed) {
           return;
@@ -181,10 +175,7 @@ export function TokenLogin({ token }: TokenLoginProps) {
           submitLabel={copy.continueLogin}
           onCancel={() => setPinProtectedLogin(undefined)}
           onSuccess={() => {
-            markAccountPinVerified(
-              pinProtectedLogin.baseUrl,
-              pinProtectedLogin.response.user_id
-            );
+            markAccountPinVerified(pinProtectedLogin.baseUrl, pinProtectedLogin.response.user_id);
             completeLogin(pinProtectedLogin, navigate);
           }}
         />

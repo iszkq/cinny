@@ -1,3 +1,5 @@
+import { isIOSApp } from '../utils/nativePlatform';
+import { normalizeIOSRecoveryKey, iosVerificationError } from '../utils/iosVerification';
 import React, { FormEventHandler, useCallback } from 'react';
 import { Box, Text, Button, Spinner, color } from 'folds';
 import { decodeRecoveryKey, deriveRecoveryKeyFromPassphrase } from 'matrix-js-sdk/lib/crypto-api';
@@ -109,7 +111,9 @@ export function SecretStorageRecoveryPassphrase({
       </Box>
       {driveKeyState.status === AsyncStatus.Error && (
         <Text size="T200" style={{ color: color.Critical.Main }}>
-          <b>{driveKeyState.error.message}</b>
+          <b>
+            {isIOSApp() ? iosVerificationError(driveKeyState.error) : driveKeyState.error.message}
+          </b>
         </Text>
       )}
     </Box>
@@ -132,12 +136,27 @@ export function SecretStorageRecoveryKey({
   const [driveKeyState, submitRecoveryKey] = useAsyncCallback<Uint8Array, Error, [string]>(
     useCallback(
       async (recoveryKey) => {
-        const decodedRecoveryKey = decodeRecoveryKey(recoveryKey);
+        let decodedRecoveryKey: Uint8Array;
+        try {
+          decodedRecoveryKey = decodeRecoveryKey(
+            isIOSApp() ? normalizeIOSRecoveryKey(recoveryKey) : recoveryKey
+          );
+        } catch (error) {
+          if (isIOSApp())
+            throw new Error(
+              '恢复密钥的格式或校验码不正确。请使用原始恢复密钥；登录密码和计算器 PIN 不能代替它。'
+            );
+          throw error;
+        }
 
         const match = await mx.secretStorage.checkKey(decodedRecoveryKey, keyContent as any);
 
         if (!match) {
-          throw new Error('恢复密钥不正确。');
+          throw new Error(
+            isIOSApp()
+              ? '密钥格式有效，但与当前账号的密钥配置不匹配。它可能属于旧备份或其他账号。没有重置任何密钥。'
+              : '恢复密钥不正确。'
+          );
         }
 
         return decodedRecoveryKey;
@@ -175,6 +194,9 @@ export function SecretStorageRecoveryKey({
           <Text size="L400">恢复密钥</Text>
           <PasswordInput
             name="recoveryKeyInput"
+            autoCapitalize={isIOSApp() ? 'none' : undefined}
+            autoCorrect={isIOSApp() ? 'off' : undefined}
+            spellCheck={isIOSApp() ? false : undefined}
             size="400"
             variant="Secondary"
             radii="300"
@@ -201,7 +223,9 @@ export function SecretStorageRecoveryKey({
       </Box>
       {driveKeyState.status === AsyncStatus.Error && (
         <Text size="T200" style={{ color: color.Critical.Main }}>
-          <b>{driveKeyState.error.message}</b>
+          <b>
+            {isIOSApp() ? iosVerificationError(driveKeyState.error) : driveKeyState.error.message}
+          </b>
         </Text>
       )}
     </Box>

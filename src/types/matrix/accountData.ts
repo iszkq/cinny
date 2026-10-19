@@ -141,6 +141,7 @@ export type CinnyAISettingsContent = {
   apiKey?: string;
   baseUrl?: string;
   modelsApiUrl?: string;
+  defaultModel?: string;
   skills?: CinnyAISettingsSkillContent[];
 };
 

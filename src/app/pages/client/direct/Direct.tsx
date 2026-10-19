@@ -1,3 +1,4 @@
+import { NATIVE_CHAT_EDITION, NativeDirectChats } from '../../../components/native-chat/NativeChatList';
 import React, {
   MouseEventHandler,
   forwardRef,
@@ -207,7 +208,9 @@ function DirectEmpty() {
 
 const DEFAULT_CATEGORY_ID = makeNavCategoryId('direct', 'direct');
 const ROOM_NAV_CATEGORY_SCOPE = 'direct';
-export function Direct() {
+export function Direct() { return NATIVE_CHAT_EDITION ? <NativeDirectChats /> : <DesktopDirect />; }
+
+function DesktopDirect() {
   const mx = useMatrixClient();
   useNavToActivePathMapper('direct');
   const scrollRef = useRef<HTMLDivElement>(null);

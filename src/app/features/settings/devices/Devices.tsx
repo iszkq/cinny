@@ -11,6 +11,8 @@ import { DeviceLogoutBtn, DeviceKeyDetails, DeviceTile, DeviceTilePlaceholder } 
 import { OtherDevices } from './OtherDevices';
 import {
   DeviceVerificationOptions,
+  AndroidOwnDeviceVerification,
+  IOSOwnDeviceVerification,
   EnableVerification,
   RecoveryKeyAccessTile,
   VerificationStatusBadge,
@@ -28,7 +30,7 @@ import {
 import { useCrossSigningActive } from '../../../hooks/useCrossSigning';
 import { BackupRestoreTile } from '../../../components/BackupRestore';
 import { copyToClipboard } from '../../../utils/dom';
-import { isAndroidApp } from '../../../utils/nativePlatform';
+import { isAndroidApp, isNativeApp } from '../../../utils/nativePlatform';
 import { getAndroidDiagnosticsReport } from '../../../../client/androidDiagnostics';
 
 function DevicesPlaceholder() {
@@ -47,7 +49,7 @@ export function Devices({ requestClose }: DevicesProps) {
   const mx = useMatrixClient();
   const crypto = mx.getCrypto();
   const crossSigningActive = useCrossSigningActive();
-  const [devices, refreshDeviceList] = useDeviceList();
+  const [devices, refreshDeviceList, deviceListState] = useDeviceList();
 
   const [currentDevice, otherDevices] = useSplitCurrentDevice(devices);
   const verificationStatus = useDeviceVerificationStatus(
@@ -111,10 +113,15 @@ export function Devices({ requestClose }: DevicesProps) {
                         <EnableVerification visible={!crossSigningActive} />
                         {crossSigningActive && (
                           <Box gap="200" alignItems="Center">
-                            <VerificationStatusBadge
-                              verificationStatus={verificationStatus}
-                              otherUnverifiedCount={unverifiedDeviceCount}
-                            />
+                            {deviceListState.failed &&
+                            verificationStatus === VerificationStatus.Unknown ? (
+                              <Text>连接待恢复</Text>
+                            ) : (
+                              <VerificationStatusBadge
+                                verificationStatus={verificationStatus}
+                                otherUnverifiedCount={unverifiedDeviceCount}
+                              />
+                            )}
                             <DeviceVerificationOptions />
                           </Box>
                         )}
@@ -123,6 +130,8 @@ export function Devices({ requestClose }: DevicesProps) {
                   />
                 </SequenceCard>
               </Box>
+              {crypto &&
+                (isAndroidApp() ? <AndroidOwnDeviceVerification /> : <IOSOwnDeviceVerification />)}
               <Box direction="Column" gap="100">
                 <Text size="L400">当前设备</Text>
                 {currentDevice ? (
@@ -161,24 +170,36 @@ export function Devices({ requestClose }: DevicesProps) {
                       <BackupRestoreTile crypto={crypto} />
                     )}
                   </SequenceCard>
+                ) : deviceListState.failed ? (
+                  <Text>设备信息暂未加载。</Text>
                 ) : (
                   <DeviceTilePlaceholder />
                 )}
               </Box>
-              {devices === undefined && <DevicesPlaceholder />}
+              {deviceListState.failed ? (
+                <Box direction="Column" gap="200">
+                  <Text role="alert">设备列表暂时加载失败，请重试。当前登录与本机密钥已保留。</Text>
+                  <Button
+                    disabled={deviceListState.loading}
+                    onClick={() => void refreshDeviceList()}
+                  >
+                    <Text>{deviceListState.loading ? '正在重试…' : '重新加载设备'}</Text>
+                  </Button>
+                </Box>
+              ) : (
+                devices === undefined && <DevicesPlaceholder />
+              )}
               {otherDevices && (
                 <OtherDevices
                   devices={otherDevices}
                   refreshDeviceList={refreshDeviceList}
-                  showVerification={
-                    crossSigningActive && verificationStatus === VerificationStatus.Verified
-                  }
+                  showVerification={Boolean(crypto)}
                 />
               )}
               <LocalBackup />
-              {isAndroidApp() && (
+              {isNativeApp() && (
                 <Box direction="Column" gap="100">
-                  <Text size="L400">Android 诊断</Text>
+                  <Text size="L400">{isAndroidApp() ? 'Android 诊断' : '苹果连接诊断'}</Text>
                   <SequenceCard
                     className={SequenceCardStyle}
                     variant="SurfaceVariant"
@@ -191,7 +212,11 @@ export function Devices({ requestClose }: DevicesProps) {
                     <Box>
                       <Button variant="Secondary" onClick={copyAndroidDiagnostics}>
                         <Text as="span" size="B400">
-                          {diagnosticsCopied ? '诊断信息已复制' : '复制 Android 诊断信息'}
+                          {diagnosticsCopied
+                            ? '诊断信息已复制'
+                            : isAndroidApp()
+                            ? '复制 Android 诊断信息'
+                            : '复制苹果诊断信息'}
                         </Text>
                       </Button>
                     </Box>

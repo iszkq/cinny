@@ -1,3 +1,10 @@
+import { AppTextSizeFeature } from './app/features/settings/general/AppTextSize';
+import {
+  canAutomaticallyRecoverResources,
+  isResourceLoadError,
+} from './app/utils/resourceRecovery';
+import { recordAndroidDiagnostic } from './client/androidDiagnostics';
+import { CalculatorGate } from './app/components/calculator/CalculatorGate';
 /* eslint-disable import/first */
 import './polyfills';
 import React, { Suspense, lazy } from 'react';
@@ -10,6 +17,7 @@ import { configClass, varsClass } from 'folds';
 enableMapSet();
 
 import './index.css';
+import './app/styles/AndroidAccessible.css';
 
 import { trimTrailingSlash } from './app/utils/common';
 // import i18n (needs to be bundled ;))
@@ -22,7 +30,7 @@ import { isNativeImagePreviewWindow } from './app/utils/nativeImagePreview';
 import { isNativeBibleWindow } from './app/utils/nativeBibleWindow';
 import { isNativeOfficeWindow } from './app/utils/nativeOfficeWindow';
 import { initializePWAInstall } from './app/utils/pwaInstall';
-import { initializeAndroidAppShell, isAndroidApp } from './app/utils/nativePlatform';
+import { initializeAndroidAppShell, isAndroidApp, isNativeApp } from './app/utils/nativePlatform';
 import { hydrateAndroidSession } from './client/secretStorageKeys';
 import { DownloadPage } from './app/pages/download';
 
@@ -32,13 +40,6 @@ const RESOURCE_RECOVERY_KEY = 'cinny-resource-recovery-attempt';
 const RESOURCE_RECOVERY_COOLDOWN = 60_000;
 const STARTUP_RECOVERY_DELAY_MS = 15_000;
 let resourceReloadScheduled = false;
-
-const isResourceLoadError = (error: unknown): boolean => {
-  const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
-  return /dynamically imported module|importing a module script failed|loading chunk|chunkloaderror|failed to fetch.*module|module script|module.*(?:load|fetch)|unable to preload css|preload.*css|css.*(?:load|fetch)|模块.*加载|网络错误/i.test(
-    message
-  );
-};
 
 const clearBrowserResourceCaches = async () => {
   const clearCacheStorage = async () => {
@@ -102,7 +103,7 @@ const reloadWithFreshResources = async () => {
 
 const recoverResourceLoad = async <T,>(error: unknown): Promise<T> => {
   if (
-    !isResourceLoadError(error) ||
+    !canAutomaticallyRecoverResources(error, isNativeApp()) ||
     resourceReloadScheduled ||
     recentlyAttemptedResourceRecovery()
   ) {
@@ -126,7 +127,7 @@ const loadLazyModule = async <T,>(loader: () => Promise<T>): Promise<T> => {
 };
 
 const recoverUnhandledResourceLoad = (error: unknown) => {
-  if (!isResourceLoadError(error)) return;
+  if (!canAutomaticallyRecoverResources(error, isNativeApp())) return;
   recoverResourceLoad(error).catch(() => undefined);
 };
 
@@ -134,7 +135,7 @@ window.addEventListener('vite:preloadError', (event) => {
   const preloadEvent = event as Event & { payload?: unknown };
   const error = preloadEvent.payload ?? new Error('Unable to preload application module.');
   if (
-    !isResourceLoadError(error) ||
+    !canAutomaticallyRecoverResources(error, isNativeApp()) ||
     resourceReloadScheduled ||
     recentlyAttemptedResourceRecovery()
   ) {
@@ -148,6 +149,15 @@ window.addEventListener('vite:preloadError', (event) => {
 });
 
 window.addEventListener('unhandledrejection', (event) => {
+  if (isNativeApp()) {
+    if (
+      /网络错误|network.?error|failed to fetch|load failed/i.test(String(event.reason)) ||
+      isResourceLoadError(event.reason)
+    ) {
+      recordAndroidDiagnostic('calculator_resource_reload_prevented');
+    }
+    return;
+  }
   if (!isResourceLoadError(event.reason)) return;
   event.preventDefault();
   recoverUnhandledResourceLoad(event.reason);
@@ -306,8 +316,18 @@ class RootErrorBoundary extends React.Component<RootErrorBoundaryProps, RootErro
           textAlign: 'center',
         }}
       >
-        <strong>页面资源加载失败</strong>
-        <span>浏览器可能缓存了旧版本文件，请重新加载最新资源。</span>
+        <strong>{isResourceLoadError(error) ? '页面资源加载失败' : '应用启动失败'}</strong>
+        <span>
+          {isNativeApp()
+            ? '请重新打开应用。如果仍然失败，请将下方错误信息反馈给我们。'
+            : '请重新加载页面。如果仍然失败，请将下方错误信息反馈给我们。'}
+        </span>
+        <details>
+          <summary>错误信息</summary>
+          <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+            {error instanceof Error ? `${error.name}: ${error.message}` : String(error)}
+          </pre>
+        </details>
         <button type="button" onClick={reloadWithFreshResources}>
           清理缓存并重新加载
         </button>
@@ -332,7 +352,7 @@ if (isDesktopUpdaterSupported() && !desktopSubWindow) {
 }
 
 // Register Service Worker
-if (!desktopSubWindow && !isAndroidApp() && 'serviceWorker' in navigator) {
+if (!desktopSubWindow && !isNativeApp() && !isAndroidApp() && 'serviceWorker' in navigator) {
   const swUrl =
     import.meta.env.MODE === 'production'
       ? `${trimTrailingSlash(import.meta.env.BASE_URL)}/sw.js`
@@ -412,7 +432,19 @@ const mountApp = async () => {
   }
 
   const root = createRoot(rootContainer);
-  root.render(<RootErrorBoundary>{renderRootApp()}</RootErrorBoundary>);
+  const application = <RootErrorBoundary>{renderRootApp()}</RootErrorBoundary>;
+  root.render(
+    <>
+      {(webDownloadPage || nativeImagePreviewWindow || nativeBibleWindow || nativeOfficeWindow) && (
+        <AppTextSizeFeature />
+      )}
+      {import.meta.env.VITE_IOS_APP === 'true' || import.meta.env.VITE_ANDROID_APP === 'true' ? (
+        <CalculatorGate>{application}</CalculatorGate>
+      ) : (
+        application
+      )}
+    </>
+  );
 };
 
 void mountApp();

@@ -1,3 +1,4 @@
+import { useCloseSpaceSelection } from '../spaceSelection';
 import React, {
   MouseEventHandler,
   ReactNode,
@@ -758,12 +759,15 @@ export function SpaceTabs({ scrollRef }: SpaceTabsProps) {
     )
   );
 
+  const closeSelection = useCloseSpaceSelection();
   const selectedSpaceId = useSelectedSpace();
 
   const handleSpaceClick: MouseEventHandler<HTMLButtonElement> = (evt) => {
     const target = evt.currentTarget;
     const targetSpaceId = target.getAttribute('data-id');
     if (!targetSpaceId) return;
+    closeSelection?.();
+    if (closeSelection && selectedSpaceId === targetSpaceId) return;
 
     const spacePath = getSpacePath(getCanonicalAliasOrRoomId(mx, targetSpaceId));
     if (!desktopLayout) {

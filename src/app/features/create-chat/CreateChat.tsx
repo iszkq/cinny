@@ -28,7 +28,12 @@ export function CreateChat({ defaultUserId }: CreateChatProps) {
   const [encryption, setEncryption] = useState(true);
   const [invalidUserId, setInvalidUserId] = useState(false);
   const [userId, setUserId] = useState(defaultUserId ?? '');
-  const { users: searchedUsers, loading: searchingUsers } = useUserDirectorySearch(mx, userId);
+  const [selectedUserId, setSelectedUserId] = useState<string>();
+  const {
+    users: searchedUsers,
+    loading: searchingUsers,
+    error: searchError,
+  } = useUserDirectorySearch(mx, userId);
   const directoryUsers = useMemo(
     () => searchedUsers.filter((user) => user.user_id !== mx.getUserId()),
     [mx, searchedUsers]
@@ -86,15 +91,16 @@ export function CreateChat({ defaultUserId }: CreateChatProps) {
   return (
     <Box as="form" onSubmit={handleSubmit} grow="Yes" direction="Column" gap="500">
       <Box direction="Column" gap="100">
-        <Text size="L400">{'\u7528\u6237 ID'}</Text>
+        <Text size="L400">{'搜索用户'}</Text>
         <div style={{ position: 'relative' }}>
           <Input
             value={userId}
             onChange={(evt) => {
               setUserId(evt.currentTarget.value);
+              setSelectedUserId(undefined);
               setInvalidUserId(false);
             }}
-            placeholder="@username:server"
+            placeholder="输入昵称、用户名或 @用户名:服务器"
             name="userIdInput"
             variant="SurfaceVariant"
             size="500"
@@ -104,14 +110,36 @@ export function CreateChat({ defaultUserId }: CreateChatProps) {
             autoComplete="off"
             disabled={disabled}
           />
-          <UserDirectorySearchMenu
-            mx={mx}
-            users={directoryUsers}
-            query={userId}
-            loading={searchingUsers}
-            onSelect={setUserId}
-          />
+          {selectedUserId !== userId && (
+            <UserDirectorySearchMenu
+              mx={mx}
+              users={directoryUsers}
+              query={userId}
+              loading={searchingUsers}
+              onSelect={(id) => {
+                setUserId(id);
+                setSelectedUserId(id);
+              }}
+            />
+          )}
         </div>
+        <Text size="T200" priority="300">
+          输入昵称或用户名搜索，点击结果选择用户；也可以直接填写完整用户 ID。
+        </Text>
+        {searchError && (
+          <Text size="T200" role="alert">
+            {searchError}
+          </Text>
+        )}
+        {userId.trim() &&
+          !searchingUsers &&
+          !searchError &&
+          directoryUsers.length === 0 &&
+          !isUserId(userId.trim()) && (
+            <Text size="T200" role="status">
+              未找到用户。跨服务器用户请填写完整 ID，例如 @名字:服务器域名。
+            </Text>
+          )}
         {invalidUserId && (
           <Box style={{ color: color.Critical.Main }} alignItems="Center" gap="100">
             <Icon src={Icons.Warning} filled size="50" />

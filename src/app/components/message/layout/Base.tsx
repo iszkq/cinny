@@ -33,6 +33,8 @@ export const MessageTextBody = as<'div', css.MessageTextBodyVariants & { notice?
     <Text
       as={asComp}
       size="T400"
+      data-message-text
+      data-jumbo-emoji={jumboEmoji}
       priority={notice ? '300' : '400'}
       className={classNames(css.MessageTextBody({ preWrap, jumboEmoji, emote }), className)}
       {...props}

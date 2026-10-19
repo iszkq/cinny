@@ -2,7 +2,10 @@ import { Capacitor } from '@capacitor/core';
 
 export const ANDROID_BACK_BUTTON_EVENT = 'cinny-android-back-button';
 
-export const isNativeApp = (): boolean => Capacitor.isNativePlatform();
+export const isNativeApp = (): boolean =>
+  import.meta.env.VITE_IOS_APP === 'true' ||
+  import.meta.env.VITE_ANDROID_APP === 'true' ||
+  Capacitor.isNativePlatform();
 
 // The Android bundle is built with VITE_ANDROID_APP=true. Capacitor's runtime
 // platform probe can briefly report `web` while the bridge is reconnecting
@@ -11,6 +14,10 @@ export const isNativeApp = (): boolean => Capacitor.isNativePlatform();
 const isAndroidBuild = import.meta.env.VITE_ANDROID_APP === 'true';
 export const isAndroidApp = (): boolean =>
   isAndroidBuild || (isNativeApp() && Capacitor.getPlatform() === 'android');
+
+export const isIOSApp = (): boolean =>
+  import.meta.env.VITE_IOS_APP === 'true' ||
+  (Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'ios');
 
 let androidShellInitialized = false;
 

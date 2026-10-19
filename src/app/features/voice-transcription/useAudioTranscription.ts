@@ -532,6 +532,7 @@ export const canTranscribeAudioInBrowser = (): boolean => {
     apiKey: '',
     baseUrl: '',
     modelsApiUrl: '',
+    defaultModel: '',
     models: [],
     skills: [],
   }).supported;

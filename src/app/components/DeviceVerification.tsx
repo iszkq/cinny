@@ -1,3 +1,12 @@
+import { iosVerificationError, refreshIOSVerificationAfterDone } from '../utils/iosVerification';
+import {
+  AndroidVerificationMethods,
+  AndroidQrVerification,
+} from './verification/AndroidVerification';
+import { verificationFailure } from './verification/methods';
+import { isNativeApp, isIOSApp } from '../utils/nativePlatform';
+import { useRef } from 'react';
+import { useNativeBack } from '../hooks/useNativeBack';
 import {
   ShowSasCallbacks,
   VerificationPhase,
@@ -152,10 +161,30 @@ function VerificationAccept({ onAccept }: VerificationAcceptProps) {
   return (
     <Box direction="Column" gap="400">
       <Text>点击“接受”开始验证。</Text>
+      {acceptState.status === AsyncStatus.Error && (
+        <Text
+          role="alert"
+          style={
+            isIOSApp()
+              ? { whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', userSelect: 'text' }
+              : undefined
+          }
+        >
+          {isIOSApp()
+            ? iosVerificationError(acceptState.error)
+            : verificationFailure(acceptState.error)}
+        </Text>
+      )}
       <Button
         variant="Primary"
         fill="Solid"
-        onClick={accept}
+        onClick={
+          isIOSApp()
+            ? () => {
+                void accept().catch(() => undefined);
+              }
+            : accept
+        }
         before={accepting && <Spinner size="100" variant="Primary" fill="Solid" />}
         disabled={accepting}
       >
@@ -190,6 +219,10 @@ function AutoVerificationStart({ onStart }: VerificationStartProps) {
 }
 
 function CompareEmoji({ sasData }: { sasData: ShowSasCallbacks }) {
+  const [format, setFormat] = useState<'emoji' | 'decimal'>(
+    sasData.sas.emoji?.length ? 'emoji' : 'decimal'
+  );
+  const decimal = isNativeApp() && format === 'decimal';
   const [confirmState, confirm] = useAsyncCallback(useCallback(() => sasData.confirm(), [sasData]));
 
   const confirming =
@@ -197,7 +230,18 @@ function CompareEmoji({ sasData }: { sasData: ShowSasCallbacks }) {
 
   return (
     <Box direction="Column" gap="400">
-      <Text>请确认两台设备显示的表情符号及顺序完全一致：</Text>
+      <Text>
+        {decimal
+          ? '请确认两台设备显示的三组数字及顺序完全一致：'
+          : '请确认两台设备显示的表情符号及顺序完全一致：'}
+      </Text>
+      {isNativeApp() && sasData.sas.emoji && sasData.sas.decimal && (
+        <div className="verification-methods">
+          <button type="button" onClick={() => setFormat(format === 'emoji' ? 'decimal' : 'emoji')}>
+            {decimal ? '改用表情符号对比' : '改用数字对比'}
+          </button>
+        </div>
+      )}
       <Box
         className={ContainerColor({ variant: 'SurfaceVariant' })}
         style={{
@@ -208,20 +252,34 @@ function CompareEmoji({ sasData }: { sasData: ShowSasCallbacks }) {
         wrap="Wrap"
         justifyContent="Center"
       >
-        {sasData.sas.emoji?.map(([emoji, name], index) => (
-          <Box
-            // eslint-disable-next-line react/no-array-index-key
-            key={`${emoji}${name}${index}`}
-            direction="Column"
-            gap="100"
-            justifyContent="Center"
-            alignItems="Center"
-          >
-            <Text size="H1">{emoji}</Text>
-            <Text size="T200">{translateSasEmojiName(name)}</Text>
-          </Box>
-        ))}
+        {decimal && (
+          <div className="verification-decimal" aria-label="数字验证码">
+            {sasData.sas.decimal?.map((value, index) => (
+              <span key={`${index}-${value}`}>{value}</span>
+            ))}
+          </div>
+        )}
+        {!decimal &&
+          sasData.sas.emoji?.map(([emoji, name], index) => (
+            <Box
+              // eslint-disable-next-line react/no-array-index-key
+              key={`${emoji}${name}${index}`}
+              direction="Column"
+              gap="100"
+              justifyContent="Center"
+              alignItems="Center"
+            >
+              <Text size="H1">{emoji}</Text>
+              <Text size="T200">{translateSasEmojiName(name)}</Text>
+            </Box>
+          ))}
       </Box>
+      {confirmState.status === AsyncStatus.Error && (
+        <Text role="alert">{verificationFailure(confirmState.error)}</Text>
+      )}
+      {confirmState.status === AsyncStatus.Success && (
+        <Text role="status">已确认，正在等待另一台设备确认…</Text>
+      )}
       <Box direction="Column" gap="200">
         <Button
           variant="Primary"
@@ -250,15 +308,32 @@ type SasVerificationProps = {
   onCancel: () => void;
 };
 function SasVerification({ verifier, onCancel }: SasVerificationProps) {
-  const [sasData, setSasData] = useState<ShowSasCallbacks>();
+  const [sasData, setSasData] = useState<ShowSasCallbacks | undefined>(() =>
+    isNativeApp() ? verifier.getShowSasCallbacks() ?? undefined : undefined
+  );
+  const [error, setError] = useState('');
 
   useVerifierShowSas(verifier, setSasData);
-  useVerifierCancel(verifier, onCancel);
+  useVerifierCancel(
+    verifier,
+    useCallback(() => {
+      if (isNativeApp()) setError('验证已取消或超时，请重新发起验证。');
+      else onCancel();
+    }, [onCancel])
+  );
 
   useEffect(() => {
-    verifier.verify();
+    let alive = true;
+    if (isNativeApp()) setSasData(verifier.getShowSasCallbacks() ?? undefined);
+    verifier.verify().catch((reason) => {
+      if (alive) setError(verificationFailure(reason));
+    });
+    return () => {
+      alive = false;
+    };
   }, [verifier]);
 
+  if (error) return <Text role="alert">{error}</Text>;
   if (sasData) {
     return <CompareEmoji sasData={sasData} />;
   }
@@ -292,7 +367,7 @@ type VerificationCanceledProps = {
 function VerificationCanceled({ onClose }: VerificationCanceledProps) {
   return (
     <Box direction="Column" gap="400">
-      <Text>验证已取消。</Text>
+      <Text>验证已取消或超时，请重新发起验证；也可以换一种验证方式。</Text>
       <Button variant="Secondary" fill="Soft" onClick={onClose}>
         <Text size="B400">关闭</Text>
       </Button>
@@ -306,18 +381,29 @@ type DeviceVerificationProps = {
 };
 export function DeviceVerification({ request, onExit }: DeviceVerificationProps) {
   const mx = useMatrixClient();
+  const android = isNativeApp();
+  const refreshedRequest = useRef<VerificationRequest>();
+  const dialogRef = useRef<HTMLDivElement>(null);
   const phase = useVerificationRequestPhase(request);
 
   useEffect(() => {
-    if (phase === VerificationPhase.Done) void persistAndroidCryptoState(mx, true);
-  }, [mx, phase]);
+    if (phase === VerificationPhase.Done) {
+      void persistAndroidCryptoState(mx, true);
+      if (refreshedRequest.current !== request) {
+        refreshedRequest.current = request;
+        void refreshIOSVerificationAfterDone(mx);
+      }
+    }
+  }, [mx, phase, request]);
 
   const handleCancel = useCallback(() => {
     if (request.phase !== VerificationPhase.Done && request.phase !== VerificationPhase.Cancelled) {
-      request.cancel();
+      void request.cancel().catch(() => undefined);
     }
     onExit();
   }, [request, onExit]);
+
+  useNativeBack(dialogRef, handleCancel, android);
 
   const handleAccept = useCallback(() => request.accept(), [request]);
   const handleStart = useCallback(async () => {
@@ -334,12 +420,24 @@ export function DeviceVerification({ request, onExit }: DeviceVerificationProps)
             escapeDeactivates: false,
           }}
         >
-          <Dialog variant="Surface">
+          <Dialog
+            variant="Surface"
+            ref={dialogRef}
+            style={
+              android
+                ? {
+                    maxHeight: 'calc(var(--app-height,100vh) - 32px)',
+                    overflowY: 'auto',
+                    width: 'min(440px,calc(100vw - 24px))',
+                  }
+                : undefined
+            }
+          >
             <Header style={DialogHeaderStyles} variant="Surface" size="500">
               <Box grow="Yes">
                 <Text size="H4">设备验证</Text>
               </Box>
-              <IconButton size="300" radii="300" onClick={handleCancel}>
+              <IconButton size="300" radii="300" onClick={handleCancel} aria-label="关闭设备验证">
                 <Icon src={Icons.Cross} />
               </IconButton>
             </Header>
@@ -351,14 +449,20 @@ export function DeviceVerification({ request, onExit }: DeviceVerificationProps)
                   <VerificationAccept onAccept={handleAccept} />
                 ))}
               {phase === VerificationPhase.Ready &&
-                (request.initiatedByMe ? (
+                (android ? (
+                  <AndroidVerificationMethods request={request} />
+                ) : request.initiatedByMe ? (
                   <AutoVerificationStart onStart={handleStart} />
                 ) : (
                   <VerificationWaitStart />
                 ))}
               {phase === VerificationPhase.Started &&
                 (request.verifier ? (
-                  <SasVerification verifier={request.verifier} onCancel={handleCancel} />
+                  android && request.chosenMethod !== VerificationMethod.Sas ? (
+                    <AndroidQrVerification verifier={request.verifier} />
+                  ) : (
+                    <SasVerification verifier={request.verifier} onCancel={handleCancel} />
+                  )
                 ) : (
                   <VerificationUnexpected
                     message="验证已经开始，但验证器不可用。"

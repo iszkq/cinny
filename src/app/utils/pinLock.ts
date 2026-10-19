@@ -1,4 +1,4 @@
-import { AccountDataEvent, CinnyAccountPinPolicyContent } from '../../types/matrix/accountData';
+import { normalizePinIdleMinutes, PinIdleMinutes } from './idleLock';
 import { isDesktopUpdaterSupported } from './desktopUpdater';
 import { isNativeApp } from './nativePlatform';
 import { mobileOrTablet } from './user-agent';
@@ -18,20 +18,14 @@ type ScreenLockState = {
   accountKey?: string;
 };
 
-type AccountPinPolicyState = {
-  enabled: boolean;
-  updatedAt: number;
-  config?: AccountPinConfig;
-};
-
 export type AccountPinLoginRequirement = 'none' | 'prompt';
 
 const ACCOUNT_PIN_CONFIGS_KEY = 'starfire-account-pin-configs';
+const PIN_IDLE_KEY = 'starfire-pin-idle-minutes';
 const SCREEN_LOCK_STATE_KEY = 'starfire-screen-lock-state';
 const PIN_LOCK_CHANGE_EVENT = 'starfire-pin-lock-change';
 const PIN_LOCK_ITERATIONS = 150000;
 const PIN_CODE_REGEX = /^\d{4,12}$/;
-const ACCOUNT_PIN_POLICY_VERSION = 1;
 let recentlyVerifiedAccountKey: string | undefined;
 
 const safeLocalStorage = (): Storage | undefined => {
@@ -86,15 +80,6 @@ const normalizeBaseUrl = (baseUrl: string): string => {
     return baseUrl.trim().toLowerCase();
   }
 };
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null;
-
-const isFiniteNumber = (value: unknown): value is number =>
-  typeof value === 'number' && Number.isFinite(value);
-
-const isNonEmptyString = (value: unknown): value is string =>
-  typeof value === 'string' && value.length > 0;
 
 const ensurePinCode = (pin: string) => {
   const normalizedPin = pin.trim();
@@ -187,6 +172,17 @@ const isSamePinConfig = (left?: AccountPinConfig, right?: AccountPinConfig): boo
 export const getAccountPinKey = (baseUrl: string, userId: string): string =>
   `${normalizeBaseUrl(baseUrl)}::${userId.trim().toLowerCase()}`;
 
+export const getPinIdleMinutes = (baseUrl: string, userId: string): PinIdleMinutes =>
+  normalizePinIdleMinutes(
+    readJson<Record<string, unknown>>(PIN_IDLE_KEY, {})[getAccountPinKey(baseUrl, userId)]
+  );
+
+export const setPinIdleMinutes = (baseUrl: string, userId: string, minutes: number) => {
+  const settings = readJson<Record<string, unknown>>(PIN_IDLE_KEY, {});
+  settings[getAccountPinKey(baseUrl, userId)] = normalizePinIdleMinutes(minutes);
+  writeJson(PIN_IDLE_KEY, settings);
+};
+
 export const getAccountPinLabel = (baseUrl: string, userId: string): string =>
   `${userId} @ ${normalizeBaseUrl(baseUrl)}`;
 
@@ -205,120 +201,6 @@ export const isDesktopPinLockSupported = (): boolean =>
   isDesktopUpdaterSupported() && supportsPinLock();
 
 export const isPinCodeFormatValid = (pin: string): boolean => PIN_CODE_REGEX.test(pin.trim());
-
-const buildAccountPinPolicyUrl = (baseUrl: string, userId: string): string => {
-  const origin = normalizeBaseUrl(baseUrl);
-  const encodedUserId = encodeURIComponent(userId.trim());
-  const encodedType = encodeURIComponent(AccountDataEvent.CinnyAccountPinPolicy);
-
-  return `${origin}/_matrix/client/v3/user/${encodedUserId}/account_data/${encodedType}`;
-};
-
-const getAccountPinPolicyState = (
-  content?: CinnyAccountPinPolicyContent | unknown
-): AccountPinPolicyState => {
-  if (!isRecord(content)) {
-    return { enabled: false, updatedAt: 0 };
-  }
-
-  const updatedAt = isFiniteNumber(content.updatedAt) ? content.updatedAt : 0;
-  const config: AccountPinConfig | undefined =
-    isNonEmptyString(content.salt) &&
-    isNonEmptyString(content.hash) &&
-    isFiniteNumber(content.iterations) &&
-    content.iterations > 0
-      ? {
-          version: 1,
-          salt: content.salt,
-          hash: content.hash,
-          iterations: content.iterations,
-          updatedAt,
-        }
-      : undefined;
-
-  return {
-    enabled: content.enabled === true,
-    updatedAt,
-    config,
-  };
-};
-
-export const createAccountPinPolicyContent = (
-  policy: AccountPinPolicyState
-): CinnyAccountPinPolicyContent => {
-  const content: CinnyAccountPinPolicyContent = {
-    version: ACCOUNT_PIN_POLICY_VERSION,
-    enabled: policy.enabled,
-    updatedAt: policy.updatedAt,
-  };
-
-  if (policy.enabled && policy.config) {
-    content.salt = policy.config.salt;
-    content.hash = policy.config.hash;
-    content.iterations = policy.config.iterations;
-  }
-
-  return content;
-};
-
-export const createEnabledAccountPinPolicyContent = (
-  config: AccountPinConfig
-): CinnyAccountPinPolicyContent =>
-  createAccountPinPolicyContent({
-    enabled: true,
-    updatedAt: config.updatedAt,
-    config,
-  });
-
-export const createDisabledAccountPinPolicyContent = (
-  updatedAt = Date.now()
-): CinnyAccountPinPolicyContent =>
-  createAccountPinPolicyContent({
-    enabled: false,
-    updatedAt,
-  });
-
-const fetchAccountPinPolicyContent = async (
-  baseUrl: string,
-  userId: string,
-  accessToken: string
-): Promise<CinnyAccountPinPolicyContent | undefined> => {
-  const response = await fetch(buildAccountPinPolicyUrl(baseUrl, userId), {
-    method: 'GET',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
-  });
-
-  if (response.status === 404) {
-    return undefined;
-  }
-  if (!response.ok) {
-    throw new Error('\u65e0\u6cd5\u83b7\u53d6 PIN \u7b56\u7565\u3002');
-  }
-
-  return (await response.json()) as CinnyAccountPinPolicyContent;
-};
-
-const saveAccountPinPolicyContent = async (
-  baseUrl: string,
-  userId: string,
-  accessToken: string,
-  policy: AccountPinPolicyState
-) => {
-  const response = await fetch(buildAccountPinPolicyUrl(baseUrl, userId), {
-    method: 'PUT',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(createAccountPinPolicyContent(policy)),
-  });
-
-  if (!response.ok) {
-    throw new Error('\u65e0\u6cd5\u4fdd\u5b58 PIN \u7b56\u7565\u3002');
-  }
-};
 
 export const hasAccountPin = (baseUrl: string, userId: string): boolean =>
   !!getConfigByAccountKey(getAccountPinKey(baseUrl, userId));
@@ -417,147 +299,12 @@ export const disableAccountPin = async (
   clearLocalAccountPin(baseUrl, userId);
 };
 
-export const isAccountPinPolicyEnabled = (
-  content?: CinnyAccountPinPolicyContent | unknown
-): boolean => getAccountPinPolicyState(content).enabled;
-
-export const getAccountPinPolicyConfig = (
-  content?: CinnyAccountPinPolicyContent | unknown
-): AccountPinConfig | undefined => getAccountPinPolicyState(content).config;
-
-export const enableAccountPinPolicy = async (
-  baseUrl: string,
-  userId: string,
-  accessToken: string,
-  updatedAt: number,
-  config?: AccountPinConfig
-) => {
-  await saveAccountPinPolicyContent(baseUrl, userId, accessToken, {
-    enabled: true,
-    updatedAt,
-    config,
-  });
-};
-
-export const disableAccountPinPolicy = async (
-  baseUrl: string,
-  userId: string,
-  accessToken: string
-) => {
-  await saveAccountPinPolicyContent(baseUrl, userId, accessToken, {
-    enabled: false,
-    updatedAt: Date.now(),
-  });
-};
-
-export const applyAccountPinPolicyContent = (
-  baseUrl: string,
-  userId: string,
-  content?: CinnyAccountPinPolicyContent | unknown
-): boolean => {
-  const localConfig = getConfigByAccountKey(getAccountPinKey(baseUrl, userId));
-  const remotePolicy = getAccountPinPolicyState(content);
-
-  if (remotePolicy.enabled && remotePolicy.config) {
-    if (!localConfig || remotePolicy.updatedAt >= localConfig.updatedAt) {
-      cacheAccountPinConfig(baseUrl, userId, remotePolicy.config);
-    }
-    return true;
-  }
-
-  if (!remotePolicy.enabled && localConfig) {
-    clearLocalAccountPin(baseUrl, userId);
-  }
-
-  return remotePolicy.enabled;
-};
-
-export const syncAccountPinPolicy = async (
-  baseUrl: string,
-  userId: string,
-  accessToken: string
-): Promise<boolean> => {
-  const localConfig = getConfigByAccountKey(getAccountPinKey(baseUrl, userId));
-  const remoteContent = await fetchAccountPinPolicyContent(baseUrl, userId, accessToken);
-  const remotePolicy = getAccountPinPolicyState(remoteContent);
-
-  if (!remotePolicy.enabled) {
-    if (localConfig) {
-      clearLocalAccountPin(baseUrl, userId);
-    }
-    return false;
-  }
-
-  if (remotePolicy.config) {
-    if (!localConfig || remotePolicy.updatedAt >= localConfig.updatedAt) {
-      cacheAccountPinConfig(baseUrl, userId, remotePolicy.config);
-      return true;
-    }
-
-    if (!isSamePinConfig(localConfig, remotePolicy.config)) {
-      await enableAccountPinPolicy(
-        baseUrl,
-        userId,
-        accessToken,
-        localConfig.updatedAt,
-        localConfig
-      );
-    }
-
-    return true;
-  }
-
-  if (localConfig) {
-    await enableAccountPinPolicy(baseUrl, userId, accessToken, localConfig.updatedAt, localConfig);
-  }
-
-  return true;
-};
-
+// PIN protection belongs to this installation, never to server account data.
 export const resolveAccountPinLoginRequirement = async (
   baseUrl: string,
-  userId: string,
-  accessToken: string
-): Promise<AccountPinLoginRequirement> => {
-  if (!supportsPinLock()) {
-    return 'none';
-  }
-
-  const localConfig = getConfigByAccountKey(getAccountPinKey(baseUrl, userId));
-
-  try {
-    const remoteContent = await fetchAccountPinPolicyContent(baseUrl, userId, accessToken);
-    const remotePolicy = getAccountPinPolicyState(remoteContent);
-
-    if (remotePolicy.enabled) {
-      if (remotePolicy.config) {
-        cacheAccountPinConfig(baseUrl, userId, remotePolicy.config);
-        return 'prompt';
-      }
-
-      if (localConfig) {
-        await enableAccountPinPolicy(
-          baseUrl,
-          userId,
-          accessToken,
-          localConfig.updatedAt,
-          localConfig
-        );
-        return 'prompt';
-      }
-
-      return 'none';
-    }
-
-    if (localConfig) {
-      clearLocalAccountPin(baseUrl, userId);
-    }
-
-    return 'none';
-  } catch {
-    return localConfig ? 'prompt' : 'none';
-  }
-};
+  userId: string
+): Promise<AccountPinLoginRequirement> =>
+  supportsPinLock() && hasAccountPin(baseUrl, userId) ? 'prompt' : 'none';
 
 export const markAccountPinVerified = (baseUrl: string, userId: string) => {
   recentlyVerifiedAccountKey = getAccountPinKey(baseUrl, userId);
@@ -624,7 +371,11 @@ export const subscribePinLockChange = (listener: () => void): (() => void) => {
 
   const handleCustomChange = () => listener();
   const handleStorageChange = (evt: StorageEvent) => {
-    if (evt.key === ACCOUNT_PIN_CONFIGS_KEY || evt.key === SCREEN_LOCK_STATE_KEY) {
+    if (
+      evt.key === ACCOUNT_PIN_CONFIGS_KEY ||
+      evt.key === SCREEN_LOCK_STATE_KEY ||
+      evt.key === PIN_IDLE_KEY
+    ) {
       listener();
     }
   };
@@ -654,4 +405,13 @@ export const restorePinLockStorage = (entries: [string, string][]) => {
     storage.setItem(key, value);
   });
   emitPinLockChange();
+};
+
+// Call only after the homeserver has successfully authenticated a fresh login.
+export const resetPinAfterAuthenticatedLogin = async (
+  baseUrl: string,
+  userId: string
+): Promise<AccountPinLoginRequirement> => {
+  clearLocalAccountPin(baseUrl, userId);
+  return 'none';
 };

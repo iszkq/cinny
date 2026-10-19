@@ -1,4 +1,4 @@
-import { createVar, style } from '@vanilla-extract/css';
+import { createVar, style, globalStyle } from '@vanilla-extract/css';
 import { recipe, RecipeVariants } from '@vanilla-extract/recipes';
 import { color, config, DefaultReset, Disabled, FocusOutline, toRem } from 'folds';
 import { ContainerColor } from '../../styles/ContainerColor.css';
@@ -282,3 +282,59 @@ export const SidebarFolderDropTarget = recipe({
   },
 });
 export type SidebarFolderDropTargetVariants = RecipeVariants<typeof SidebarFolderDropTarget>;
+
+globalStyle(`${Sidebar}[data-labels="true"] > *`, { minWidth: 0 });
+globalStyle(`${Sidebar}[data-labels="true"] [data-sidebar-item]`, {
+  width: 'calc(100% - 16px)',
+  minWidth: 0,
+});
+export const ResizeHandle = style({
+  position: 'absolute',
+  right: 0,
+  top: 0,
+  bottom: 0,
+  width: 6,
+  cursor: 'col-resize',
+  touchAction: 'none',
+  zIndex: 5,
+  selectors: { '&:hover, &:focus-visible': { background: color.Primary.Main } },
+});
+
+globalStyle(`${Sidebar}[data-labels="true"] [data-sidebar-item] > button`, {
+  boxShadow: 'none',
+  borderColor: 'transparent',
+  background: 'transparent',
+});
+globalStyle(`${Sidebar}[data-labels="true"] [data-sidebar-item][data-active="true"] > button`, {
+  background: color.Primary.Container,
+  color: color.Primary.OnContainer,
+  borderColor: color.Primary.ContainerLine,
+  boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+});
+globalStyle(`${Sidebar}[data-labels="true"] [data-sidebar-item] > button:hover`, {
+  background: color.Background.ContainerHover,
+});
+globalStyle(`${Sidebar}[data-labels="true"] [data-sidebar-item]::before`, { display: 'none' });
+
+globalStyle(`${Sidebar}[data-labels="true"] [data-folder-state="Open"]`, {
+  width: 'calc(100% - 16px)',
+  alignSelf: 'center',
+});
+
+export const LabelAvatar = style({ isolation: 'isolate' });
+globalStyle(`${LabelAvatar} *`, {
+  maxWidth: '100%',
+  fontSize: 13,
+  lineHeight: '18px',
+  whiteSpace: 'nowrap',
+});
+globalStyle(`${LabelAvatar} span`, { fontSize: 14, lineHeight: '20px' });
+
+// Native space selection is a full page with readable avatars and names.
+globalStyle(`${Sidebar}[data-full-space-page="true"] [data-sidebar-item]`, {width:'calc(100% - 32px)', margin:'2px 16px'});
+globalStyle(`${Sidebar}[data-full-space-page="true"] [data-sidebar-item] > button`, {minHeight:64, gap:16, padding:'8px 12px'});
+globalStyle(`${Sidebar}[data-full-space-page="true"] [data-sidebar-item][data-active="true"] > button::after`, {content:'"当前"',fontSize:14, marginLeft:'auto', flexShrink:0});
+globalStyle(`${Sidebar}[data-full-space-page="true"] ${LabelAvatar}`, {width:46,height:46});
+globalStyle(`${Sidebar}[data-full-space-page="true"] ${LabelAvatar} img`, {width:'100%',height:'100%',objectFit:'cover'});
+
+globalStyle(`${Sidebar}[data-full-space-page="true"] button`, {minHeight:48});

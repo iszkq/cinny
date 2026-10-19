@@ -1,0 +1,10 @@
+{
+  "upstream": "18.4.0",
+  "commit": "16a138b7b0d3c761675e5086747553ce79877f0b",
+  "abi": "legacy-js-heap",
+  "sha256": {
+    "matrix_sdk_crypto_wasm_bg.wasm": "6a098029dfd398dd0609610f0e076c3ba77a3d60776a56837eeeb98b1fae6da4",
+    "matrix_sdk_crypto_wasm_bg.js": "51aa8fc4537263a0f07f1e4561e0d49422b536e7f22d1d007ce319631f5f1b41",
+    "matrix_sdk_crypto_wasm_bg.cjs": "0ac7c5c42597872dfe8c513bf6e35d2604b4e9246ca4182d9a57d0e782f1351b"
+  }
+}

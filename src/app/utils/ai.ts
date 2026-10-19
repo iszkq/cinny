@@ -1,3 +1,4 @@
+import { requestAI } from './aiTransport';
 import { MatrixEvent, MsgType, Room } from 'matrix-js-sdk';
 import { AIModel, AISettings, AISkill } from '../state/ai';
 import { trimTrailingSlash } from './common';
@@ -258,12 +259,7 @@ const fetchAihubmixModelsFromEndpoint = async (
 ): Promise<AihubmixModelsAttempt> => {
   let response: Response;
   try {
-    response = await fetch(endpoint, {
-      headers: {
-        Accept: 'application/json',
-        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-      },
-    });
+    response = await requestAI(endpoint, apiKey);
   } catch (error) {
     return {
       retryableError: `${endpoint}: ${
@@ -889,42 +885,34 @@ export const runAISkill = async (
   room: Room,
   settings: AISettings,
   skill: AISkill,
-  payload: string
+  payload: string,
+  signal?: AbortSignal
 ): Promise<string> => {
-  if (!settings.apiKey.trim()) {
-    throw new Error('Please configure your AIHubMix API key first.');
-  }
-
   if (!payload.trim()) {
     throw new Error('Please describe what you want the assistant to do.');
   }
 
   const endpoint = `${trimTrailingSlash(settings.baseUrl)}/chat/completions`;
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${settings.apiKey.trim()}`,
-    },
-    body: JSON.stringify({
+  const response = await requestAI(
+    endpoint,
+    settings.apiKey,
+    JSON.stringify({
       model: skill.model,
+      stream: false,
       messages: [
-        {
-          role: 'system',
-          content: skill.systemPrompt,
-        },
-        {
-          role: 'user',
-          content: buildSkillPrompt(room, skill, payload),
-        },
+        { role: 'system', content: skill.systemPrompt },
+        { role: 'user', content: buildSkillPrompt(room, skill, payload) },
       ],
     }),
-  });
+    signal
+  );
 
   if (!response.ok) {
     throw new Error(`AI request failed: ${response.status}`);
   }
 
   const data = (await response.json()) as OpenAIChatResponse;
-  return extractChatText(data);
+  const text = extractChatText(data);
+  if (!text.trim()) throw new Error('AI 返回了空回复，请检查模型设置。');
+  return text;
 };

@@ -47,7 +47,7 @@ import { PasswordInput } from '../../../components/password-input';
 import { FieldError } from '../FiledError';
 import { getResetPasswordPath } from '../../pathUtils';
 import { stopPropagation } from '../../../utils/keyboard';
-import { markAccountPinVerified, resolveAccountPinLoginRequirement } from '../../../utils/pinLock';
+import { markAccountPinVerified, resetPinAfterAuthenticatedLogin } from '../../../utils/pinLock';
 import { AccountPinDialog } from '../../../components/pin-lock';
 import { openExternalUrl } from '../../../utils/desktop';
 import { useAccountManagementActions } from '../../../hooks/useAccountManagement';
@@ -216,11 +216,7 @@ export function PasswordLoginForm({ defaultUsername, defaultEmail }: PasswordLog
     let disposed = false;
     setResolvingPinRequirement(true);
 
-    resolveAccountPinLoginRequirement(
-      loginSuccessData.baseUrl,
-      loginSuccessData.response.user_id,
-      loginSuccessData.response.access_token
-    )
+    resetPinAfterAuthenticatedLogin(loginSuccessData.baseUrl, loginSuccessData.response.user_id)
       .then((requirement) => {
         if (disposed) {
           return;

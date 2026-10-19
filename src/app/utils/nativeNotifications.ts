@@ -16,6 +16,7 @@ type NativeNotificationOptions = {
 interface NativeNotificationsPlugin {
   checkPermissions(): Promise<NativeNotificationPermissionResult>;
   requestPermissions(): Promise<NativeNotificationPermissionResult>;
+  openSettings(): Promise<void>;
   show(options: NativeNotificationOptions): Promise<void>;
 }
 
@@ -37,7 +38,12 @@ export const requestNativeNotificationPermission = async (): Promise<PermissionS
   if (!isAndroidApp()) return 'denied';
 
   const result = await NativeNotifications.requestPermissions();
+  window.dispatchEvent(new Event('native-notification-permission-change'));
   return normalizePermission(result.notifications);
+};
+
+export const openNativeNotificationSettings = async () => {
+  if (isAndroidApp()) await NativeNotifications.openSettings();
 };
 
 export const showNativeNotification = async (options: NativeNotificationOptions): Promise<void> => {

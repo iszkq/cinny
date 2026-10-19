@@ -18,17 +18,33 @@ export const useDeviceListChange = (
 
 const DEVICES_QUERY_KEY = ['devices'];
 
-export function useDeviceList(): [undefined | IMyDevice[], () => Promise<void>] {
+export function useDeviceList(): [
+  undefined | IMyDevice[],
+  () => Promise<void>,
+  { failed: boolean; loading: boolean }
+] {
   const mx = useMatrixClient();
 
   const fetchDevices = useCallback(async () => {
-    const data = await mx.getDevices();
+    const data = await mx.http.authedRequest<{ devices: IMyDevice[] }>(
+      'GET' as import('matrix-js-sdk/lib/http-api').Method,
+      '/devices',
+      undefined,
+      undefined,
+      { localTimeoutMs: 15000 }
+    );
     return data.devices ?? [];
   }, [mx]);
 
-  const { data: deviceList, refetch } = useQuery({
-    queryKey: DEVICES_QUERY_KEY,
+  const {
+    data: deviceList,
+    refetch,
+    isError,
+    isFetching,
+  } = useQuery({
+    queryKey: [...DEVICES_QUERY_KEY, mx.getUserId(), mx.getDeviceId(), mx.getHomeserverUrl()],
     queryFn: fetchDevices,
+    retry: false,
     staleTime: 0,
     gcTime: Infinity,
     refetchOnMount: 'always',
@@ -50,7 +66,7 @@ export function useDeviceList(): [undefined | IMyDevice[], () => Promise<void>] 
     )
   );
 
-  return [deviceList ?? undefined, refreshDeviceList];
+  return [deviceList ?? undefined, refreshDeviceList, { failed: isError, loading: isFetching }];
 }
 
 export const useDeviceIds = (devices: IMyDevice[] | undefined): string[] => {

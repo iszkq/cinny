@@ -1,3 +1,4 @@
+import { ANDROID_VERIFICATION_METHODS } from '../app/components/verification/methods';
 import {
   createClient,
   MatrixClient,
@@ -34,7 +35,8 @@ import {
   markFallbackSessionSoftLoggedOut,
   removeFallbackAccessToken,
 } from '../app/state/sessions';
-import { isAndroidApp } from '../app/utils/nativePlatform';
+import { isAndroidApp, isIOSApp, isNativeApp } from '../app/utils/nativePlatform';
+import { createNativeTokenRefresh } from './nativeTokenRefresh';
 import { CryptoEvent } from 'matrix-js-sdk/lib/crypto-api/CryptoEvent';
 import {
   getAndroidClientStoreAccountKey,
@@ -52,6 +54,7 @@ import {
   saveRustCryptoDatabasePrefix,
 } from './rustCryptoStore';
 import { recordAndroidDiagnostic } from './androidDiagnostics';
+import { createStartupLogger } from './startupLogger';
 
 type Session = {
   baseUrl: string;
@@ -136,7 +139,7 @@ const runWithStartupTimeout = async <T>(
       task,
       new Promise<T>((_, reject) => {
         timer = globalThis.setTimeout(
-          () => reject(new Error(`Android startup timed out while ${stage}.`)),
+          () => reject(new Error(`Client startup timed out while ${stage}.`)),
           timeoutMs
         );
       }),
@@ -233,9 +236,12 @@ const initRustCryptoForSession = async (
   // identity, so an existing Android session must never create a replacement
   // crypto account under the old device ID.
   const cryptoPrefixes = [LEGACY_RUST_CRYPTO_DATABASE_PREFIX, scopedPrefix];
-  let existingPrefixes = isAndroidApp()
-    ? new Set<string>()
-    : await findExistingRustCryptoDatabasePrefixes(cryptoPrefixes);
+  recordAndroidDiagnostic('crypto_database_probe_begin');
+  let existingPrefixes =
+    isAndroidApp() || (isIOSApp() && storeCreationAllowed)
+      ? new Set<string>()
+      : await findExistingRustCryptoDatabasePrefixes(cryptoPrefixes);
+  recordAndroidDiagnostic('crypto_database_probe_complete', { count: existingPrefixes.size });
   // Android WebView/IndexedDB can briefly report an empty database list while
   // the renderer is being recreated. Never treat that transient state as a
   // revoked login; give the store a few bounded attempts to reappear first.
@@ -290,7 +296,7 @@ const initRustCryptoForSession = async (
     // store: that would silently replace the same device ID's keys and make
     // every device appear unverified. A retry/restart can reopen the original
     // database without creating another Matrix device.
-    if (!isAndroidApp()) removeFallbackAccessToken();
+    if (!isNativeApp()) removeFallbackAccessToken();
     throw new MissingCryptoStoreError();
   }
   if (candidates.length === 0) {
@@ -308,7 +314,19 @@ const initRustCryptoForSession = async (
 
   for (const prefix of candidates) {
     try {
+      recordAndroidDiagnostic('crypto_engine_begin', {
+        legacy: prefix === LEGACY_RUST_CRYPTO_DATABASE_PREFIX,
+      });
+      if (isIOSApp()) {
+        const { installIOSCryptoCallDiagnostics } = await import('./iosCryptoDiagnostics');
+        installIOSCryptoCallDiagnostics();
+        recordAndroidDiagnostic('ios_crypto_backend', {
+          legacyABI: import.meta.env.VITE_IOS_APP === 'true',
+          version: '18.4.0',
+        });
+      }
       await mx.initRustCrypto({ cryptoDatabasePrefix: prefix });
+      recordAndroidDiagnostic('crypto_engine_complete');
       saveRustCryptoDatabasePrefix(session, prefix);
       clearNewRustCryptoStoreAllowance(session);
       return { prefix, newlyIssuedDevice: storeCreationAllowed };
@@ -319,7 +337,7 @@ const initRustCryptoForSession = async (
     }
   }
 
-  if (!isAndroidApp()) {
+  if (!isNativeApp()) {
     removeAndroidPersistedSession();
     removeFallbackAccessToken();
   }
@@ -364,95 +382,44 @@ const requestPersistentAndroidStorage = async (): Promise<void> => {
   }
 };
 
-export const initClient = async (session: Session): Promise<MatrixClient> => {
+const pendingNativeClients = new Map<string, Promise<MatrixClient>>();
+export const initClient = (session: Session): Promise<MatrixClient> => {
+  if (!isNativeApp()) return initClientInternal(session);
+  const key = JSON.stringify([session.baseUrl, session.userId, session.deviceId]);
+  const existing = pendingNativeClients.get(key);
+  if (existing) return existing;
+  const task = initClientInternal(session);
+  pendingNativeClients.set(key, task);
+  const cleanup = () => {
+    if (pendingNativeClients.get(key) === task) pendingNativeClients.delete(key);
+  };
+  task.then(cleanup, cleanup);
+  return task;
+};
+
+const initClientInternal = async (session: Session): Promise<MatrixClient> => {
   installWebMatrixLoggerFilter();
   recordAndroidDiagnostic('client_init_begin', {
     hasRefreshToken: !!session.refreshToken,
   });
   await hydrateSecretStorageKeys();
 
-  // matrix-js-sdk refreshes lazily when a normal HTTP request receives 401,
-  // but Rust Crypto performs /keys/query during startup and that path can
-  // surface "Token is not active" before the SDK's retry hook runs. Refresh
-  // proactively on Android so crypto bootstrap never races an expired access
-  // token. A temporary network failure keeps the existing token and lets the
-  // SDK's normal retry path handle it later.
-  let startupAccessToken = session.accessToken;
-  let startupRefreshToken = session.refreshToken;
-  if (isAndroidApp() && startupRefreshToken) {
-    recordAndroidDiagnostic('startup_token_refresh_begin');
-    try {
-      const refreshClient = createClient({
-        baseUrl: session.baseUrl,
-        userId: session.userId,
-        deviceId: session.deviceId,
-      });
-      const response = await runWithStartupTimeout(
-        refreshClient.refreshToken(startupRefreshToken),
-        'refreshing the Android access token',
-        10_000
-      );
-      startupAccessToken = response.access_token;
-      startupRefreshToken = response.refresh_token || startupRefreshToken;
-      localStorage.setItem('cinny_access_token', startupAccessToken);
-      if (response.expires_in_ms !== undefined) {
-        localStorage.setItem('cinny_expires_in_ms', String(response.expires_in_ms));
-      }
-      await persistAndroidSession({
-        ...session,
-        accessToken: startupAccessToken,
-        refreshToken: startupRefreshToken,
-        expiresInMs: response.expires_in_ms ?? session.expiresInMs,
-      });
-      recordAndroidDiagnostic('startup_token_refresh_success', {
-        hasRotatedRefreshToken: !!response.refresh_token,
-      });
-    } catch (error) {
-      recordAndroidDiagnostic('startup_token_refresh_failed', {
-        error: error instanceof Error ? error.name : String(error).slice(0, 120),
-      });
-    }
-  }
-
-  // Android sessions can outlive the short-lived access token returned by a
-  // homeserver. Keep the refresh token in the native encrypted store and let
-  // matrix-js-sdk refresh it before requests are sent. Web/desktop keep their
-  // existing token lifecycle and do not use this path.
+  // Open local stores without waiting for the network. The SDK serializes
+  // renewal on M_UNKNOWN_TOKEN and retries failed requests with the new token.
   const tokenRefreshFunction =
-    isAndroidApp() && startupRefreshToken
-      ? async (refreshToken: string) => {
-          const refreshClient = createClient({
-            baseUrl: session.baseUrl,
-            userId: session.userId,
-            deviceId: session.deviceId,
-          });
-          const response = await refreshClient.refreshToken(refreshToken);
-          const nextRefreshToken = response.refresh_token || refreshToken;
-          localStorage.setItem('cinny_access_token', response.access_token);
-          if (response.expires_in_ms !== undefined) {
-            localStorage.setItem('cinny_expires_in_ms', String(response.expires_in_ms));
-          }
-          localStorage.setItem('cinny_refresh_token', nextRefreshToken);
-          await persistAndroidSession({
-            ...session,
-            accessToken: response.access_token,
-            refreshToken: nextRefreshToken,
-            expiresInMs: response.expires_in_ms,
-          });
-          recordAndroidDiagnostic('access_token_refreshed', {
-            hasRotatedRefreshToken: !!response.refresh_token,
-          });
-          return {
-            accessToken: response.access_token,
-            refreshToken: nextRefreshToken,
-            expiry:
-              typeof response.expires_in_ms === 'number'
-                ? new Date(Date.now() + response.expires_in_ms)
-                : undefined,
-          };
-        }
+    isNativeApp() && session.refreshToken
+      ? createNativeTokenRefresh(
+          session,
+          (token) =>
+            createClient({
+              baseUrl: session.baseUrl,
+              localTimeoutMs: 15_000,
+            }).refreshToken(token),
+          persistAndroidSession
+        )
       : undefined;
 
+  recordAndroidDiagnostic('opening_local_stores');
   const indexedDBStore = new IndexedDBStore({
     indexedDB: global.indexedDB,
     localStorage: global.localStorage,
@@ -461,18 +428,31 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
 
   const legacyCryptoStore = new IndexedDBCryptoStore(global.indexedDB, 'crypto-store');
 
+  const iosFetch = isIOSApp()
+    ? (await import('./iosMatrixFetch')).createIOSMatrixFetch()
+    : undefined;
   const mx = createClient({
+    fetchFn: iosFetch,
     baseUrl: session.baseUrl,
-    accessToken: startupAccessToken,
-    refreshToken: startupRefreshToken,
+    accessToken: session.accessToken,
+    refreshToken: session.refreshToken,
     tokenRefreshFunction,
+    localTimeoutMs: isNativeApp() ? 20_000 : undefined,
     userId: session.userId,
     store: indexedDBStore,
-    cryptoStore: legacyCryptoStore,
+    // A completed Rust store and a newly-issued device never need the old
+    // global libolm store. Attaching it makes SDK startup inspect/migrate an
+    // unrelated account and can wait indefinitely for migration network calls.
+    cryptoStore:
+      isNativeApp() &&
+      (getSavedRustCryptoDatabasePrefix(session) || isNewRustCryptoStoreAllowed(session))
+        ? undefined
+        : legacyCryptoStore,
+    logger: isNativeApp() ? createStartupLogger(matrixLogger) : undefined,
     deviceId: session.deviceId,
     timelineSupport: true,
     cryptoCallbacks: cryptoCallbacks as any,
-    verificationMethods: ['m.sas.v1'],
+    verificationMethods: isNativeApp() ? ANDROID_VERIFICATION_METHODS : ['m.sas.v1'],
   });
 
   // Open the Matrix stores only after Android has requested durable storage.
@@ -482,7 +462,7 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
   if (isAndroidApp()) await requestPersistentAndroidStorage();
   if (isAndroidApp()) recordAndroidDiagnostic('sync_store_start_begin');
   const syncStoreStartup = indexedDBStore.startup();
-  if (isAndroidApp()) {
+  if (isNativeApp()) {
     await runWithStartupTimeout(syncStoreStartup, 'opening the sync store');
   } else {
     await syncStoreStartup;
@@ -568,11 +548,11 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
       matrixLogger.error('Unable to inspect Android IndexedDB sync store.', error);
     }
   }
-  if (isAndroidApp()) recordAndroidDiagnostic('crypto_store_open_begin');
+  recordAndroidDiagnostic('crypto_store_open_begin');
   const cryptoStoreInit = initRustCryptoForSession(mx, session);
-  const { prefix: cryptoDatabasePrefix, newlyIssuedDevice } = isAndroidApp()
-    ? await runWithStartupTimeout(cryptoStoreInit, 'opening the crypto store')
-    : await cryptoStoreInit;
+  // Rust initialization has no cancellation API. A Promise.race timeout
+  // leaves its database handles and migration task alive; do not start another.
+  const { prefix: cryptoDatabasePrefix, newlyIssuedDevice } = await cryptoStoreInit;
   rustCryptoDatabasePrefixes.set(mx, cryptoDatabasePrefix);
   recordAndroidDiagnostic('crypto_store_opened', { newlyIssuedDevice });
   // A normal app update preserves the access token and IndexedDB. Verify that
@@ -583,7 +563,7 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
   // explicit server logout end the session. Android /devices and /keys/query
   // can be temporarily incomplete during process recreation; treating two
   // such responses as destructive proof caused intermittent sign-outs.
-  if (!newlyIssuedDevice && !isAndroidApp()) await validateExistingCryptoDevice(mx, session);
+  if (!newlyIssuedDevice && !isNativeApp()) await validateExistingCryptoDevice(mx, session);
   if (isAndroidApp()) {
     // Attach before startClient so a cache-prepared sync is checkpointed even
     // when React has not mounted its later UI listeners yet.
@@ -602,18 +582,9 @@ export const initClient = async (session: Session): Promise<MatrixClient> => {
         androidNativeSnapshotDirty.add(mx);
         void persistClientStore(mx);
       }
-      // Keep an existing Android session durable even for homeservers which
-      // issue non-expiring access tokens and therefore never run the refresh
-      // callback. This is a no-op on web and desktop.
-      persistAndroidSession({
-        ...session,
-        accessToken: mx.getAccessToken() || session.accessToken,
-        // The SDK replaces its refresh token after a successful rotation.
-        // Persist the live value instead of the login-time closure value, or
-        // the next sync snapshot would overwrite Keystore with an expired
-        // refresh token and cause a delayed password-login loop.
-        refreshToken: mx.getRefreshToken() || session.refreshToken,
-      }).catch(() => undefined);
+      // Credentials are committed only by login and the refresh callback.
+      // Saving here races refresh: the SDK still exposes the old token while
+      // the callback is awaiting native storage, overwriting the rotated pair.
     });
   }
   if (isAndroidApp()) {
@@ -824,12 +795,11 @@ export const startClient = async (mx: MatrixClient) => {
                   try {
                     const result = await crypto.restoreKeyBackup({});
                     if (result.imported < result.total) {
-                      throw new Error(`Only restored ${result.imported} of ${result.total} room keys.`);
+                      throw new Error(
+                        `Only restored ${result.imported} of ${result.total} room keys.`
+                      );
                     }
-                    await setAndroidSecureValue(
-                      ANDROID_FULL_BACKUP_RESTORE_MARKER,
-                      backupVersion
-                    );
+                    await setAndroidSecureValue(ANDROID_FULL_BACKUP_RESTORE_MARKER, backupVersion);
                     recordAndroidDiagnostic('crypto_full_backup_restore_completed', {
                       version: backupVersion,
                       imported: result.imported,

@@ -27,3 +27,9 @@ export const desktopPageNavWidthAtom: DesktopPageNavWidthAtom = atomWithLocalSto
     setLocalStorageItem(key, value);
   }
 );
+
+export const desktopSidebarWidthAtom = atomWithLocalStorage<number>(
+  'desktopPrimarySidebarWidth',
+  (key) => getLocalStorageItem<number>(key, 184),
+  (key, value) => setLocalStorageItem(key, value)
+);

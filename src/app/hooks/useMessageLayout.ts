@@ -19,7 +19,7 @@ export const useMessageLayoutItems = (): MessageLayoutItem[] =>
       },
       {
         layout: MessageLayout.Bubble,
-        name: '气泡',
+        name: '左右聊天（自己在右）',
       },
     ],
     []

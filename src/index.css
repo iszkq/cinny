@@ -9,10 +9,10 @@
   --tc-link: hsl(213deg 100% 45%);
   --app-height: 100vh;
   --app-width: 100vw;
-  --safe-area-top: env(safe-area-inset-top, 0px);
-  --safe-area-right: env(safe-area-inset-right, 0px);
-  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
-  --safe-area-left: env(safe-area-inset-left, 0px);
+  --safe-area-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+  --safe-area-right: var(--safe-area-inset-right, env(safe-area-inset-right, 0px));
+  --safe-area-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+  --safe-area-left: var(--safe-area-inset-left, env(safe-area-inset-left, 0px));
 
   /* user mxid colors */
   --mx-uc-1: hsl(208, 100%, 45%);
@@ -56,12 +56,12 @@ body {
   margin: 0;
   padding: 0;
   position: fixed;
-  inset: 0;
+  inset: var(--app-top, 0px) 0 auto;
   width: 100%;
   height: var(--app-height, 100dvh);
   min-height: var(--app-height, 100dvh);
   font-family: var(--font-secondary);
-  font-size: 16px;
+  font-size: calc(16px * var(--app-text-scale, 1));
   font-weight: 400;
   overflow: hidden;
   overscroll-behavior: none;
@@ -155,7 +155,7 @@ textarea {
 input,
 textarea,
 select {
-  font-size: 16px;
+  font-size: calc(16px * var(--app-text-scale, 1));
   touch-action: manipulation;
 }
 
@@ -184,4 +184,13 @@ audio:not([controls]) {
 html[data-cinny-android-app='true'] * {
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
+}
+
+/* Message long-press owns the gesture; partial selection lives in its separate dialog. */
+@media (hover: none) and (pointer: coarse) {
+  [data-message-touch-actions], [data-message-touch-actions] * {
+    -webkit-user-select: none !important;
+    user-select: none !important;
+    -webkit-touch-callout: none;
+  }
 }

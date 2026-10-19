@@ -39,6 +39,7 @@ export type AISettings = {
   apiKey: string;
   baseUrl: string;
   modelsApiUrl: string;
+  defaultModel: string;
   models: AIModel[];
   skills: AISkill[];
 };
@@ -48,6 +49,7 @@ const defaultAISettings: AISettings = {
   apiKey: '',
   baseUrl: AIHUBMIX_PREFERRED_BASE_URL,
   modelsApiUrl: AIHUBMIX_PREFERRED_MODELS_API_URL,
+  defaultModel: '',
   models: [],
   skills: [],
 };
@@ -115,7 +117,7 @@ const normalizeAIModel = (model: AIModel): AIModel | undefined => {
 
 type AISettingsSyncShape = Pick<
   AISettings,
-  'provider' | 'apiKey' | 'baseUrl' | 'modelsApiUrl' | 'skills'
+  'provider' | 'apiKey' | 'baseUrl' | 'modelsApiUrl' | 'defaultModel' | 'skills'
 >;
 
 const getAISettingsSyncShape = (
@@ -132,6 +134,7 @@ const getAISettingsSyncShape = (
   return {
     provider: 'aihubmix',
     apiKey: getTrimmedString(settings.apiKey) ?? '',
+    defaultModel: getTrimmedString(settings.defaultModel) ?? '',
     baseUrl,
     modelsApiUrl: normalizedModelsApiUrl,
     skills: Array.isArray(settings.skills)
@@ -199,7 +202,7 @@ const baseAISettings = atom<AISettings>(getAISettings());
 export const aiSettingsAtom = atom<AISettings, [AISettings], undefined>(
   (get) => get(baseAISettings),
   (get, set, update) => {
-    set(baseAISettings, update);
     setAISettings(update);
+    set(baseAISettings, update);
   }
 );

@@ -10,11 +10,11 @@
   ],
   "allowCustomHomeservers": true,
   "audioTranscription": {
-    "defaultAihubmixApiKey": "sk-ORD4wbVuj5ThPB0x52633eCc417c43A39b94D49123A7F719",
+    "defaultAihubmixApiKey": "",
     "baseUrl": "https://api.inferera.com/v1"
   },
   "imageOcr": {
-    "defaultAihubmixApiKey": "sk-ORD4wbVuj5ThPB0x52633eCc417c43A39b94D49123A7F719",
+    "defaultAihubmixApiKey": "",
     "baseUrl": "https://api.inferera.com/v1",
     "model": "glm-ocr"
   },
@@ -31,7 +31,6 @@
     "timeoutSeconds": 60,
     "monthlyFreeMinutes": 10000
   },
-
   "featuredCommunities": {
     "openAsDefault": false,
     "spaces": [
@@ -51,9 +50,13 @@
       "#PrivSec.dev:arcticfoxes.net",
       "#disroot:aria-net.org"
     ],
-    "servers": ["matrixrooms.info", "matrix.org", "mozilla.org", "unredacted.org"]
+    "servers": [
+      "matrixrooms.info",
+      "matrix.org",
+      "mozilla.org",
+      "unredacted.org"
+    ]
   },
-
   "hashRouter": {
     "enabled": false,
     "basename": "/"

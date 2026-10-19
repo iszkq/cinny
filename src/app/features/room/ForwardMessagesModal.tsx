@@ -92,6 +92,22 @@ export function ForwardMessagesModal({
   const scrollRef = useRef<HTMLDivElement>(null);
   const [selectedRoomIds, setSelectedRoomIds] = useState<string[]>([]);
 
+  const [spaceId, setSpaceId] = useState('');
+  const spaces = mx
+    .getRooms()
+    .filter((room) => room.isSpaceRoom() && room.getMyMembership() === 'join');
+  const spaceRooms = new Set<string>();
+  const collect = (id: string) => {
+    if (spaceRooms.has(id)) return;
+    spaceRooms.add(id);
+    mx.getRoom(id)
+      ?.currentState.getStateEvents('m.space.child')
+      .forEach((event) => {
+        if (Array.isArray(event.getContent().via)) collect(event.getStateKey()!);
+      });
+  };
+  if (spaceId) collect(spaceId);
+
   const allRoomsSet = useAllJoinedRoomsSet();
   const getRoom = useGetRoom(allRoomsSet);
 
@@ -113,12 +129,14 @@ export function ForwardMessagesModal({
   const queryHighlightRegex = searchResult?.query
     ? makeHighlightRegex(searchResult.query.split(' '))
     : undefined;
-  const visibleItems = searchResult ? searchResult.items : items;
+  const visibleItems = (searchResult ? searchResult.items : items).filter(
+    (id) => !spaceId || spaceRooms.has(id)
+  );
 
   const virtualizer = useVirtualizer({
     count: visibleItems.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => 32,
+    estimateSize: () => 64,
     overscan: 5,
   });
   const vItems = virtualizer.getVirtualItems();
@@ -181,8 +199,14 @@ export function ForwardMessagesModal({
         data-room-id={roomId}
         onClick={handleRoomClick}
         aria-pressed={selected}
-        after={selected ? <Icon src={Icons.Check} size="100" /> : undefined}
+        disabled={forwardState.status === AsyncStatus.Loading}
+        after={
+          <span aria-hidden="true" style={{ fontSize: 24 }}>
+            {selected ? '☑' : '☐'}
+          </span>
+        }
         radii="300"
+        style={{ minHeight: 64 }}
       >
         <Box alignItems="Center" gap="300" grow="Yes">
           <Avatar size="300">
@@ -204,7 +228,15 @@ export function ForwardMessagesModal({
               {queryHighlightRegex ? highlightText(queryHighlightRegex, [roomName]) : roomName}
             </Text>
             <Text size="T200" priority="300" truncate>
-              {direct ? CN.directLabel : CN.roomLabel}
+              {direct
+                ? CN.directLabel
+                : spaces
+                    .filter(
+                      (space) =>
+                        space.currentState.getStateEvents('m.space.child', roomId)?.getContent().via
+                    )
+                    .map((space) => space.name)
+                    .join(' / ') || CN.roomLabel}
             </Text>
           </Box>
         </Box>
@@ -255,6 +287,22 @@ export function ForwardMessagesModal({
                       direction="Column"
                       style={{ position: 'sticky', top: config.space.S300, zIndex: 1 }}
                     >
+                      <label>
+                        选择空间
+                        <select
+                          aria-label="选择转发目标空间"
+                          value={spaceId}
+                          onChange={(evt) => setSpaceId(evt.target.value)}
+                          style={{ display: 'block', width: '100%', fontSize: 18, minHeight: 48 }}
+                        >
+                          <option value="">全部空间与私聊</option>
+                          {spaces.map((space) => (
+                            <option key={space.roomId} value={space.roomId}>
+                              {space.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
                       <Input
                         onChange={handleSearchChange}
                         before={<Icon size="200" src={Icons.Search} />}
@@ -303,6 +351,46 @@ export function ForwardMessagesModal({
                     </Menu>
                   </Box>
                 </Scroll>
+              </Box>
+              <Box
+                direction="Column"
+                gap="100"
+                style={{ padding: 12, maxHeight: 120, overflowY: 'auto' }}
+              >
+                <Text size="B300">
+                  已选目标（{selectedRoomIds.length}）· 可跨空间多选，点击取消勾选
+                </Text>
+                {selectedRoomIds.map((id) => (
+                  <MenuItem
+                    key={id}
+                    as="button"
+                    aria-pressed
+                    disabled={forwardState.status === AsyncStatus.Loading}
+                    onClick={() =>
+                      setSelectedRoomIds((current) => current.filter((value) => value !== id))
+                    }
+                    after={<Icon src={Icons.Check} />}
+                  >
+                    <Box direction="Column">
+                      <Text>{getRoom(id)?.name ?? id}</Text>
+                      <Text size="T200" priority="300">
+                        {spaces
+                          .filter(
+                            (space) =>
+                              space.currentState.getStateEvents('m.space.child', id)?.getContent()
+                                .via
+                          )
+                          .map((space) => space.name)
+                          .join(' / ') || (mDirects.has(id) ? CN.directLabel : id)}
+                      </Text>
+                    </Box>
+                  </MenuItem>
+                ))}
+                {forwardState.status === AsyncStatus.Error && (
+                  <Text role="alert">
+                    部分消息可能已发送。转发中断，请检查目标房间后重试，避免重复发送。
+                  </Text>
+                )}
               </Box>
               <Box
                 alignItems="Center"

@@ -1223,6 +1223,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       );
 
       if (hasContentChange) {
+        if (mobileEmojiBoard) dispatchRoomComposerViewportChange(roomId);
         if (sendTypingNotifications) {
           sendTypingStatus(!isEmptyEditor(editor));
         }
@@ -1237,6 +1238,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     }, [
       autocompleteQuery,
       editor,
+      mobileEmojiBoard,
+      roomId,
       scheduleAutocompleteQueryUpdate,
       sendTypingNotifications,
       sendTypingStatus,
@@ -2331,6 +2334,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         )}
         <CustomEditor
           editableName="RoomInput"
+          maxHeight={mobileEmojiBoard ? 'min(50vh, calc(var(--app-height, 100dvh) * 0.3))' : undefined}
           editor={editor}
           placeholder="发送消息..."
           onFocus={() => {

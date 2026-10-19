@@ -20,6 +20,9 @@ export const PresenceVisibility = SetPresence;
 export type PresenceVisibility = SetPresence;
 
 export interface Settings {
+  appTextSize: number;
+  roomNameFontSize: number;
+  spaceNameFontSize: number;
   themeId?: string;
   useSystemTheme: boolean;
   lightThemeId?: string;
@@ -66,6 +69,7 @@ export interface Settings {
 }
 
 export const defaultSettings: Settings = {
+  appTextSize: 100,
   themeId: undefined,
   useSystemTheme: true,
   lightThemeId: undefined,
@@ -92,6 +96,8 @@ export const defaultSettings: Settings = {
   isPeopleDrawer: true,
   memberSortFilterIndex: 0,
   enterForNewline: false,
+  roomNameFontSize: 16,
+  spaceNameFontSize: 16,
   messageLayout: MessageLayout.Bubble,
   messageSpacing: '400',
   hideMembershipEvents: false,
@@ -138,29 +144,22 @@ export const getSettings = () => {
   const settings = localStorage.getItem(SETTINGS_STORAGE_KEY);
   if (settings === null) return defaultSettings;
 
-  const {
-    hideActivity,
-    ...storedSettings
-  } = JSON.parse(settings) as Partial<Settings> & { hideActivity?: boolean };
+  const { hideActivity, ...storedSettings } = JSON.parse(settings) as Partial<Settings> & {
+    hideActivity?: boolean;
+  };
 
   return {
     ...defaultSettings,
     ...storedSettings,
     presenceVisibility:
       storedSettings.presenceVisibility ??
-      (hideActivity === true
-        ? PresenceVisibility.Offline
-        : defaultSettings.presenceVisibility),
+      (hideActivity === true ? PresenceVisibility.Offline : defaultSettings.presenceVisibility),
     sendTypingNotifications:
       storedSettings.sendTypingNotifications ??
-      (typeof hideActivity === 'boolean'
-        ? !hideActivity
-        : defaultSettings.sendTypingNotifications),
+      (typeof hideActivity === 'boolean' ? !hideActivity : defaultSettings.sendTypingNotifications),
     sendReadReceipts:
       storedSettings.sendReadReceipts ??
-      (typeof hideActivity === 'boolean'
-        ? !hideActivity
-        : defaultSettings.sendReadReceipts),
+      (typeof hideActivity === 'boolean' ? !hideActivity : defaultSettings.sendReadReceipts),
   };
 };
 

@@ -1,3 +1,4 @@
+import { useRoomPreview } from '../../components/native-chat/useRoomPreview';
 import React, {
   MouseEventHandler,
   forwardRef,
@@ -240,6 +241,16 @@ const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
         </Box>
         <Line variant="Surface" size="300" />
         <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
+          <MenuItem
+            onClick={handleToggleFavorite}
+            size="300"
+            radii="300"
+            after={<Icon size="100" src={Icons.Star} filled={favorite} />}
+          >
+            <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
+              {favorite ? '取消收藏' : '收藏'}
+            </Text>
+          </MenuItem>
           <PopOut
             anchor={categoryMenuAnchor}
             position="Right"
@@ -258,18 +269,6 @@ const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
                   pointerEvents: 'auto',
                 }}
               >
-                <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
-                  <MenuItem
-                    onClick={handleToggleFavorite}
-                    size="300"
-                    after={<Icon size="100" src={favorite ? Icons.Check : Icons.Star} />}
-                    radii="300"
-                  >
-                    <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-                      {'\u6536\u85cf'}
-                    </Text>
-                  </MenuItem>
-                </Box>
                 {customCategories.length > 0 && (
                   <>
                     <Line variant="Surface" size="300" />
@@ -420,6 +419,8 @@ export function RoomNavItem({
   notificationMode,
   linkPath,
 }: RoomNavItemProps) {
+  const native = import.meta.env.VITE_ANDROID_APP === 'true' || import.meta.env.VITE_IOS_APP === 'true';
+  const preview = useRoomPreview(room,native);
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
   const [hover, setHover] = useState(false);
@@ -447,7 +448,7 @@ export function RoomNavItem({
     setMenuAnchor(evt.currentTarget.getBoundingClientRect());
   };
 
-  const optionsVisible = hover || !!menuAnchor;
+  const optionsVisible = native ? !!menuAnchor : hover || !!menuAnchor;
   const callSession = useCallSession(room);
   const callMembers = useCallMembers(callSession);
   const startCall = useCallStart(direct);
@@ -478,6 +479,7 @@ export function RoomNavItem({
       radii="400"
       highlight={unread !== undefined}
       aria-selected={selected}
+      data-native-room-row={native}
       data-hover={!!menuAnchor}
       onContextMenu={handleContextMenu}
       {...hoverProps}
@@ -486,7 +488,7 @@ export function RoomNavItem({
       <NavLink to={linkPath} onClick={room.isCallRoom() ? handleStartCall : undefined}>
         <NavItemContent>
           <Box as="span" grow="Yes" alignItems="Center" gap="200">
-            <Avatar size="200" radii="400">
+            <Avatar data-room-avatar size="200" radii="400">
               {showAvatar ? (
                 <RoomAvatar
                   roomId={room.roomId}
@@ -515,8 +517,12 @@ export function RoomNavItem({
                 />
               )}
             </Avatar>
+            {native ? <>
+              <span className="native-room-copy"><span data-room-name className="native-room-name">{roomName}</span><span className="native-room-preview">{typingMember.length > 0 ? '正在输入…' : preview.text}</span></span>
+              <span className="native-room-meta"><time>{preview.time}</time>{unread && <span className="native-room-unread">{unread.total > 99 ? '99+' : unread.total || '•'}</span>}</span>
+            </> : <>
             <Box as="span" grow="Yes">
-              <Text priority={unread ? '500' : '300'} as="span" size="Inherit" truncate>
+              <Text data-room-name priority={unread ? '500' : '300'} as="span" size="Inherit" truncate>
                 {roomName}
               </Text>
             </Box>
@@ -537,6 +543,7 @@ export function RoomNavItem({
                 aria-label={notificationMode}
               />
             )}
+            </>}
             {room.isCallRoom() && callMembers.length > 0 && (
               <Badge variant="Critical" fill="Solid" size="400">
                 <Text as="span" size="L400" truncate>

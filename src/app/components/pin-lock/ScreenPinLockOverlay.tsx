@@ -1,23 +1,21 @@
-import React, { ReactNode, useCallback, useState } from 'react';
+import { DeviceLogoutBtn } from '../../features/settings/devices/DeviceTile';
+import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
+import { usePinIdleLock } from '../../hooks/usePinIdleLock';
+import React, { ReactNode, useCallback, useEffect, useState } from 'react';
 import { Box, Text } from 'folds';
 import { APP_DISPLAY_NAME, APP_LOGO_URL } from '../../constants/branding';
-import { useAccountData } from '../../hooks/useAccountData';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { usePinLockSnapshot } from '../../hooks/usePinLockSnapshot';
 import { getFallbackSession } from '../../state/sessions';
 import {
-  cacheAccountPinConfig,
   clearScreenLock,
   consumeRecentAccountPinVerification,
   getAccountPinConfig,
+  getPinIdleMinutes,
   getAccountPinKey,
-  getAccountPinLabel,
-  getAccountPinPolicyConfig,
-  isAccountPinPolicyEnabled,
   isAccountScreenLocked,
   supportsPinLock,
 } from '../../utils/pinLock';
-import { AccountDataEvent, CinnyAccountPinPolicyContent } from '../../../types/matrix/accountData';
 import { SplashScreen } from '../splash-screen';
 import { AccountPinForm } from './AccountPinDialog';
 import * as css from './style.css';
@@ -43,18 +41,11 @@ type ScreenPinLockGateProps = {
 type ScreenPinLockPageProps = {
   title: string;
   description: string;
-  accountLabel: string;
   eyebrow: string;
   children: ReactNode;
 };
 
-function ScreenPinLockPage({
-  title,
-  description,
-  accountLabel,
-  eyebrow,
-  children,
-}: ScreenPinLockPageProps) {
+function ScreenPinLockPage({ title, description, eyebrow, children }: ScreenPinLockPageProps) {
   return (
     <SplashScreen>
       <Box className={css.ScreenShell} grow="Yes" alignItems="Center" justifyContent="Center">
@@ -74,12 +65,14 @@ function ScreenPinLockPage({
               <Text size="T300" priority="300">
                 {description}
               </Text>
-              <Text className={css.AccountLabel} size="T200" priority="400">
-                {accountLabel}
-              </Text>
             </Box>
           </Box>
           {children}
+          <Text size="T200">
+            忘记 PIN？退出后重新登录，即可重新设置本机
+            PIN。加密设备验证仍需另一台已验证设备或恢复密钥；未备份的本机加密密钥可能随退出丢失。
+          </Text>
+          <DeviceLogoutBtn />
         </Box>
       </Box>
     </SplashScreen>
@@ -89,7 +82,6 @@ function ScreenPinLockPage({
 export function ScreenPinLockGate({ children }: ScreenPinLockGateProps) {
   const mx = useMatrixClient();
   const session = getFallbackSession();
-  const policyEvent = useAccountData(AccountDataEvent.CinnyAccountPinPolicy);
   const { screenLockState } = usePinLockSnapshot();
 
   const userId = mx.getUserId();
@@ -106,31 +98,45 @@ export function ScreenPinLockGate({ children }: ScreenPinLockGateProps) {
   });
 
   const accountKey = baseUrl && userId ? getAccountPinKey(baseUrl, userId) : undefined;
-  const policyContent = policyEvent?.getContent<CinnyAccountPinPolicyContent>();
-  const policyEnabled = isAccountPinPolicyEnabled(policyContent);
-  const remotePinConfig = getAccountPinPolicyConfig(policyContent);
   const localPinConfig = baseUrl && userId ? getAccountPinConfig(baseUrl, userId) : undefined;
+
+  const privacyLocked =
+    pinLockSupported &&
+    Boolean(localPinConfig) &&
+    (verifiedAccountKey !== accountKey ||
+      Boolean(baseUrl && userId && isAccountScreenLocked(baseUrl, userId)));
+  useEffect(() => {
+    if (isDesktopUpdaterSupported()) {
+      void import('@tauri-apps/api/core')
+        .then(({ invoke }) => invoke('set_pin_window_privacy', { locked: privacyLocked }))
+        .catch(() => undefined);
+    }
+  }, [privacyLocked]);
 
   const handleVerifySuccess = useCallback(() => {
     if (!accountKey || !baseUrl || !userId) return;
 
-    if (remotePinConfig) {
-      cacheAccountPinConfig(baseUrl, userId, remotePinConfig);
-    }
-
     setVerifiedAccountKey(accountKey);
     clearScreenLock();
-  }, [accountKey, baseUrl, remotePinConfig, userId]);
+  }, [accountKey, baseUrl, userId]);
+
+  usePinIdleLock(
+    baseUrl,
+    userId,
+    Boolean(
+      pinLockSupported &&
+        localPinConfig &&
+        verifiedAccountKey === accountKey &&
+        !screenLockState.locked
+    ),
+    baseUrl && userId ? getPinIdleMinutes(baseUrl, userId) : 5
+  );
 
   if (!pinLockSupported || !userId || !baseUrl || !accountKey) {
     return children;
   }
 
-  const accountLabel = getAccountPinLabel(baseUrl, userId);
-  let activePinConfig = localPinConfig;
-  if (policyEvent) {
-    activePinConfig = policyEnabled ? remotePinConfig ?? localPinConfig : undefined;
-  }
+  const activePinConfig = localPinConfig;
   const manuallyLocked =
     Boolean(activePinConfig) && screenLockState.locked && isAccountScreenLocked(baseUrl, userId);
   const entryVerificationRequired =
@@ -141,8 +147,7 @@ export function ScreenPinLockGate({ children }: ScreenPinLockGateProps) {
       <ScreenPinLockPage
         title={copy.entryTitle}
         description={copy.entryDescription}
-        accountLabel={accountLabel}
-        eyebrow={policyEnabled ? copy.entryEyebrow : copy.fallbackEntryEyebrow}
+        eyebrow={copy.fallbackEntryEyebrow}
       >
         <AccountPinForm
           baseUrl={baseUrl}
@@ -161,7 +166,6 @@ export function ScreenPinLockGate({ children }: ScreenPinLockGateProps) {
       <ScreenPinLockPage
         title={copy.lockTitle}
         description={copy.lockDescription}
-        accountLabel={accountLabel}
         eyebrow={copy.lockEyebrow}
       >
         <AccountPinForm

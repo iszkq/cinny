@@ -107,6 +107,7 @@ export function RoomView({ eventId }: { eventId?: string }) {
 
   return (
     <Page
+      data-chat-view
       ref={roomViewRef}
       style={{
         minHeight: 0,

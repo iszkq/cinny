@@ -1,0 +1,4 @@
+# These reviewed generated artifacts are covered by integrity.json.
+vendor/ios-matrix-sdk-crypto-wasm/pkg/*.js text eol=lf
+vendor/ios-matrix-sdk-crypto-wasm/pkg/*.cjs text eol=lf
+vendor/ios-matrix-sdk-crypto-wasm/pkg/*.wasm binary

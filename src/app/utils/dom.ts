@@ -1,3 +1,5 @@
+import { isIOSApp } from './nativePlatform';
+import { NativeClipboard } from './nativeClipboard';
 export const targetFromEvent = (evt: Event, selector: string): Element | undefined => {
   const targets = evt.composedPath() as Element[];
   return targets.find((target) => target.matches?.(selector));
@@ -298,6 +300,15 @@ const copyToClipboardLegacy = (text: string): boolean => {
 };
 
 export const copyToClipboard = async (text: string): Promise<boolean> => {
+  if (isIOSApp()) {
+    try {
+      const result = await NativeClipboard.writeText({ text });
+      if (result.verified) return true;
+    } catch {
+      /* Browser preview has no native plugin; keep web fallbacks. */
+    }
+  }
+
   if (navigator.clipboard?.writeText) {
     try {
       await navigator.clipboard.writeText(text);

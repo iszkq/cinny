@@ -1,3 +1,5 @@
+import { AppTextSizeSettings } from './AppTextSize';
+import { NavigationFontSettings } from './NavigationFontSettings';
 import React, {
   ChangeEventHandler,
   FormEventHandler,
@@ -410,6 +412,8 @@ function Appearance() {
       </SequenceCard>
 
       <AppearanceCustomizer />
+      <AppTextSizeSettings />
+      <NavigationFontSettings />
 
       <SequenceCard className={SequenceCardStyle} variant="SurfaceVariant" direction="Column">
         <SettingTile

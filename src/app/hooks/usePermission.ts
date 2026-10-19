@@ -32,11 +32,13 @@ export function usePermissionState(name: PermissionName, initialValue: Permissio
       };
 
       window.addEventListener('focus', handleFocus);
+      window.addEventListener('native-notification-permission-change', handleFocus);
       document.addEventListener('visibilitychange', handleVisibilityChange);
 
       return () => {
         cancelled = true;
         window.removeEventListener('focus', handleFocus);
+        window.removeEventListener('native-notification-permission-change', handleFocus);
         document.removeEventListener('visibilitychange', handleVisibilityChange);
       };
     }

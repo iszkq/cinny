@@ -1,3 +1,4 @@
+import { AndroidNotificationPrompt } from '../../features/settings/notifications/AndroidNotificationSettings';
 import React, { useCallback, useEffect, useState } from 'react';
 import { Box, Header, Scroll, Spinner, Text, color } from 'folds';
 import {
@@ -150,6 +151,7 @@ export function AuthLayout() {
 
   return (
     <Scroll variant="Background" visibility="Hover" size="300" hideTrack>
+      <AndroidNotificationPrompt />
       <Box
         className={classNames(css.AuthLayout, PatternsCss.BackgroundDotPattern)}
         direction="Column"

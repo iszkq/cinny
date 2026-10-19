@@ -38,7 +38,7 @@ export function SettingsTab({ requestOpenSettings }: SettingsTabProps) {
 
   return (
     <SidebarItem active={settings}>
-      <SidebarItemTooltip tooltip="用户设置">
+      <SidebarItemTooltip tooltip={`${displayName} · 设置`}>
         {(triggerRef) => (
           <SidebarAvatar as="button" ref={triggerRef} onClick={openSettings}>
             <UserAvatar

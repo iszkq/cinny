@@ -1,4 +1,6 @@
-import React, { MouseEventHandler, useCallback, useState } from 'react';
+import { requestIOSDeviceVerification, iosVerificationError } from '../../../utils/iosVerification';
+import { isNativeApp } from '../../../utils/nativePlatform';
+import React, { MouseEventHandler, useCallback, useState, useRef, useEffect } from 'react';
 import {
   Badge,
   Box,
@@ -117,7 +119,7 @@ export function VerifyCurrentDeviceTile({
         title="未验证"
         description={
           <>
-            请从其他设备发起验证，或使用恢复密钥手动验证。{' '}
+            选择另一台设备发起验证，或使用恢复密钥。{' '}
             <Text as="a" size="T200" onClick={() => setLearnMore(!learnMore)}>
               <b>{learnMore ? '收起说明' : '了解更多'}</b>
             </Text>
@@ -134,7 +136,7 @@ export function VerifyCurrentDeviceTile({
               onClick={() => setManualVerification(true)}
             >
               <Text as="span" size="B300">
-                手动验证
+                {isNativeApp() ? '恢复密钥／口令' : '手动验证'}
               </Text>
             </Button>
           )
@@ -231,9 +233,9 @@ export function VerifyOtherDeviceTile({ crypto, deviceId }: VerifyOtherDeviceTil
 
   const requestVerification = useAsync<VerificationRequest, Error, []>(
     useCallback(() => {
-      const requestPromise = crypto.requestDeviceVerification(mx.getSafeUserId(), deviceId);
+      const requestPromise = requestIOSDeviceVerification(mx, deviceId);
       return requestPromise;
-    }, [mx, crypto, deviceId]),
+    }, [mx, deviceId]),
     setRequestState
   );
 
@@ -404,5 +406,121 @@ export function DeviceVerificationOptions() {
         </Overlay>
       )}
     </>
+  );
+}
+
+export function AndroidOwnDeviceVerification() {
+  const mx = useMatrixClient();
+  const [request, setRequest] = useState<VerificationRequest>();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const begin = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      const crypto = mx.getCrypto();
+      if (!crypto) throw new Error('加密模块尚未就绪，请稍后重试。');
+      setRequest(await crypto.requestOwnUserVerification());
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '无法发起设备验证，请检查网络后重试。');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <InfoCard
+      variant="Warning"
+      title="用另一台设备验证"
+      description="打开另一台已验证、登录相同账号的设备并接受请求，即可扫码或对比表情／数字。没有其他设备时仍可使用恢复密钥。"
+      after={
+        <Button disabled={busy} onClick={() => void begin()}>
+          <Text>{busy ? '正在发送请求…' : '扫码／表情／数字验证'}</Text>
+        </Button>
+      }
+    >
+      {error && <Text role="alert">{error}</Text>}
+      {request && <DeviceVerification request={request} onExit={() => setRequest(undefined)} />}
+    </InfoCard>
+  );
+}
+
+export function IOSOwnDeviceVerification() {
+  const mx = useMatrixClient();
+  const [devices, setDevices] = useState<{ device_id: string; display_name?: string }[]>();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [request, setRequest] = useState<VerificationRequest>();
+  const pending = useRef(false);
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
+  const load = async () => {
+    if (pending.current) return;
+    pending.current = true;
+    setBusy(true);
+    setError('');
+    try {
+      const response = await mx.getDevices();
+      if (alive.current)
+        setDevices(response.devices.filter((device) => device.device_id !== mx.getDeviceId()));
+    } catch (reason) {
+      if (alive.current) setError(iosVerificationError(reason));
+    } finally {
+      pending.current = false;
+      if (alive.current) setBusy(false);
+    }
+  };
+  const begin = async (deviceId: string) => {
+    if (pending.current) return;
+    pending.current = true;
+    setBusy(true);
+    setError('');
+    try {
+      const next = await requestIOSDeviceVerification(mx, deviceId);
+      if (alive.current) setRequest(next);
+      else await next.cancel().catch(() => undefined);
+    } catch (reason) {
+      if (alive.current) setError(iosVerificationError(reason));
+    } finally {
+      pending.current = false;
+      if (alive.current) setBusy(false);
+    }
+  };
+  return (
+    <InfoCard
+      variant="Warning"
+      title="用另一台设备验证"
+      description="先选择登录同一账号的另一台已验证设备，再在该设备接受请求并扫码或对比表情／数字。"
+      after={
+        <Button disabled={busy} onClick={() => void load()}>
+          <Text>{busy ? '正在连接…' : devices ? '刷新设备列表' : '选择另一台设备验证'}</Text>
+        </Button>
+      }
+    >
+      {error && (
+        <Text
+          role="alert"
+          style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', userSelect: 'text' }}
+        >
+          {error}
+        </Text>
+      )}
+      {devices?.length === 0 && (
+        <Text>没有找到其他登录设备。请保持原来已验证的 Element 设备登录后刷新列表。</Text>
+      )}
+      {devices?.map((device) => (
+        <Button key={device.device_id} disabled={busy} onClick={() => void begin(device.device_id)}>
+          <Text>
+            {device.display_name || '未命名设备'} · {device.device_id}
+          </Text>
+        </Button>
+      ))}
+      {request && <DeviceVerification request={request} onExit={() => setRequest(undefined)} />}
+    </InfoCard>
   );
 }

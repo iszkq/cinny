@@ -1,3 +1,5 @@
+import { NativeRouteBack } from '../components/native-navigation/NativeRouteBack';
+import { GlobalImageViewer } from '../components/image-viewer';
 import React from 'react';
 import {
   Outlet,
@@ -93,7 +95,7 @@ export const createRouter = (clientConfig: ClientConfig, screenSize: ScreenSize)
   const compact = isCompactScreenSize(screenSize);
 
   const routes = createRoutesFromElements(
-    <Route>
+    <Route element={<><NativeRouteBack /><Outlet /></>}>
       <Route
         index
         loader={() => {
@@ -144,6 +146,7 @@ export const createRouter = (clientConfig: ClientConfig, screenSize: ScreenSize)
                   <ClientBindAtoms>
                     <ClientNonUIFeatures>
                       <ScreenPinLockGate>
+                        <GlobalImageViewer />
                         <CallEmbedProvider>
                           <AgoraVoiceProvider>
                             <ClientLayout

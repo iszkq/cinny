@@ -1,3 +1,12 @@
+import { useNavigate } from 'react-router-dom';
+import { getLoginPath } from '../pathUtils';
+import { removeAndroidPersistedSession } from '../../../client/secretStorageKeys';
+import {
+  readNativeSessionFailure,
+  markNativeSessionFailure,
+  clearNativeSessionFailure,
+} from '../../../client/nativeSessionFailure';
+import { recordAndroidDiagnostic } from '../../../client/androidDiagnostics';
 import {
   Box,
   Button,
@@ -47,9 +56,14 @@ import { useSyncState } from '../../hooks/useSyncState';
 import { stopPropagation } from '../../utils/keyboard';
 import { SyncStatus } from './SyncStatus';
 import { AuthMetadataProvider } from '../../hooks/useAuthMetadata';
-import { getFallbackSession } from '../../state/sessions';
+import {
+  getFallbackSession,
+  removeFallbackAccessToken,
+  markFallbackSessionSoftLoggedOut,
+  clearFallbackSessionSoftLogout,
+} from '../../state/sessions';
 import { AutoDiscovery } from './AutoDiscovery';
-import { isAndroidApp, isNativeApp } from '../../utils/nativePlatform';
+import { isAndroidApp, isNativeApp, isIOSApp } from '../../utils/nativePlatform';
 import { MobileSettingsProvider } from './MobileSettings';
 import { copyToClipboard } from '../../utils/dom';
 import { getAndroidDiagnosticsReport } from '../../../client/androidDiagnostics';
@@ -172,18 +186,32 @@ function ClientRootOptions({ mx }: { mx?: MatrixClient }) {
   );
 }
 
-const useLogoutListener = (mx?: MatrixClient) => {
+const useLogoutListener = (
+  mx: MatrixClient | undefined,
+  onNativeFailure: (softLogout: boolean) => void
+) => {
   useEffect(() => {
+    let handled = false;
     const handleLogout: HttpApiEventHandlerMap[HttpApiEvent.SessionLoggedOut] = async (error) => {
-      // Match Element's lifecycle boundary: only an explicit soft logout may
-      // reopen the existing device and Rust Crypto store. A generic expired or
-      // revoked token must get a fresh device on the next login.
       const softLogout = error.httpStatus === 401 && error.data?.soft_logout === true;
-      // Android keeps credentials in encrypted native storage and normally
-      // refreshes expiring access tokens through matrix-js-sdk. A hard 401 is
-      // still honoured (the server revoked the session), but transient
-      // process/storage loss is no longer able to manufacture this event by
-      // deleting the local token first.
+      if (isNativeApp()) {
+        if (handled) return;
+        handled = true;
+        // Keep local stores and credentials for an explicit recovery attempt.
+        // Reloading here rehydrates the same rejected native token indefinitely.
+        mx?.stopClient();
+        const session = getFallbackSession();
+        if (session) markNativeSessionFailure(session, softLogout);
+        recordAndroidDiagnostic('session_recovery_required', {
+          softLogout,
+          status: error.httpStatus ?? 0,
+          code: error.errcode ?? 'unknown',
+          hasRefreshToken: !!mx?.getRefreshToken(),
+        });
+        onNativeFailure(softLogout);
+        return;
+      }
+      recordAndroidDiagnostic('calculator_session_reload', { softLogout });
       await clearExpiredSessionAfterLogout(mx, softLogout);
       window.location.reload();
     };
@@ -192,7 +220,7 @@ const useLogoutListener = (mx?: MatrixClient) => {
     return () => {
       mx?.removeListener(HttpApiEvent.SessionLoggedOut, handleLogout);
     };
-  }, [mx]);
+  }, [mx, onNativeFailure]);
 };
 
 type ClientRootProps = {
@@ -202,8 +230,17 @@ export function ClientRoot({ children }: ClientRootProps) {
   // Prefer the upstream behavior of waiting for the first successful sync.
   // A bounded fallback below still lets the user enter if optional startup
   // data is malformed while the background sync recovers.
+  const navigate = useNavigate();
+  const [sessionFailure, setSessionFailure] = useState(() =>
+    isNativeApp() ? readNativeSessionFailure(getFallbackSession()) : undefined
+  );
+  const handleNativeFailure = useCallback((softLogout: boolean) => {
+    setSessionFailure({ softLogout });
+    setLoading(false);
+  }, []);
   const [loading, setLoading] = useState(true);
   const [diagnosticsCopied, setDiagnosticsCopied] = useState(false);
+  const [slowStartup, setSlowStartup] = useState(false);
   const lastStorePersistedAtRef = useRef(0);
   const { baseUrl, userId } = getFallbackSession() ?? {};
 
@@ -216,12 +253,27 @@ export function ClientRoot({ children }: ClientRootProps) {
       return initClient(session);
     }, [])
   );
+  useEffect(() => {
+    setSlowStartup(false);
+    if (!isNativeApp() || loadState.status !== AsyncStatus.Loading) return undefined;
+    const timer = window.setTimeout(() => {
+      setSlowStartup(true);
+      recordAndroidDiagnostic('startup_still_pending');
+    }, 20_000);
+    return () => window.clearTimeout(timer);
+  }, [loadState.status]);
+
   const mx = loadState.status === AsyncStatus.Success ? loadState.data : undefined;
   const [startState, startMatrix] = useAsyncCallback<void, Error, [MatrixClient]>(
     useCallback((m) => startClient(m), [])
   );
 
-  useLogoutListener(mx);
+  useEffect(() => {
+    recordAndroidDiagnostic('client_root_mounted');
+    return () => recordAndroidDiagnostic('client_root_unmounted');
+  }, []);
+
+  useLogoutListener(mx, handleNativeFailure);
 
   useEffect(() => {
     if (!mx) return undefined;
@@ -230,9 +282,19 @@ export function ClientRoot({ children }: ClientRootProps) {
       lastStorePersistedAtRef.current = Date.now();
       persistClientStore(mx, isAndroidApp());
     };
+    let lastResumeRetry = 0;
+    const reconnectIOS = () => {
+      if (!isIOSApp() || !mx.clientRunning || Date.now() - lastResumeRetry < 2000) return;
+      lastResumeRetry = Date.now();
+      recordAndroidDiagnostic('ios_connection_retry', { online: navigator.onLine });
+      mx.retryImmediately();
+    };
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') persist();
+      else reconnectIOS();
     };
+    window.addEventListener('online', reconnectIOS);
+    window.addEventListener('calculator-native-resume', reconnectIOS);
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('pagehide', persist);
@@ -245,6 +307,7 @@ export function ClientRoot({ children }: ClientRootProps) {
           const pauseListener = await App.addListener('pause', persist);
           const stateListener = await App.addListener('appStateChange', ({ isActive }) => {
             if (!isActive) persist();
+            else reconnectIOS();
           });
           if (disposed) {
             pauseListener.remove().catch(() => undefined);
@@ -261,6 +324,8 @@ export function ClientRoot({ children }: ClientRootProps) {
 
     return () => {
       disposed = true;
+      window.removeEventListener('online', reconnectIOS);
+      window.removeEventListener('calculator-native-resume', reconnectIOS);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('pagehide', persist);
       removeNativePauseListener?.();
@@ -268,14 +333,14 @@ export function ClientRoot({ children }: ClientRootProps) {
   }, [mx]);
 
   useEffect(() => {
-    if (loadState.status === AsyncStatus.Idle) {
+    if (!sessionFailure && loadState.status === AsyncStatus.Idle) {
       loadMatrix().catch(() => undefined);
     }
-  }, [loadState, loadMatrix]);
+  }, [loadState, loadMatrix, sessionFailure]);
 
   useEffect(() => {
     if (
-      !isAndroidApp() &&
+      !isNativeApp() &&
       loadState.status === AsyncStatus.Error &&
       (loadState.error instanceof MissingCryptoStoreError ||
         loadState.error instanceof InvalidCryptoDeviceError)
@@ -288,29 +353,10 @@ export function ClientRoot({ children }: ClientRootProps) {
   }, [loadState]);
 
   useEffect(() => {
-    if (
-      !isAndroidApp() ||
-      loadState.status !== AsyncStatus.Error ||
-      !(loadState.error instanceof MissingCryptoStoreError)
-    ) {
-      return undefined;
-    }
-
-    // A killed Android renderer can make IndexedDB temporarily invisible
-    // while the WebView reopens its files. Retry the same session in the
-    // background; never route the user through login or create a replacement
-    // crypto device for this transient state.
-    const retryId = window.setTimeout(() => {
-      loadMatrix().catch(() => undefined);
-    }, 2_500);
-    return () => window.clearTimeout(retryId);
-  }, [loadState, loadMatrix]);
-
-  useEffect(() => {
-    if (mx && !mx.clientRunning) {
+    if (!sessionFailure && mx && !mx.clientRunning) {
       startMatrix(mx).catch(() => undefined);
     }
-  }, [mx, startMatrix]);
+  }, [mx, startMatrix, sessionFailure]);
 
   useEffect(() => {
     if (mx && loading && mx.getRooms().length > 0) {
@@ -338,7 +384,19 @@ export function ClientRoot({ children }: ClientRootProps) {
   useSyncState(
     mx,
     useCallback(
-      (state) => {
+      (state, _previous, data) => {
+        if (isIOSApp() && (state === SyncState.Error || state === SyncState.Reconnecting)) {
+          const error = data?.error as
+            | { name?: string; errcode?: string; httpStatus?: number }
+            | undefined;
+          recordAndroidDiagnostic('ios_sync_issue', {
+            state,
+            name: error?.name ?? 'unknown',
+            code: error?.errcode ?? 'network',
+            status: error?.httpStatus ?? 0,
+            online: navigator.onLine,
+          });
+        }
         if (
           state === SyncState.Prepared ||
           state === SyncState.Syncing ||
@@ -366,10 +424,67 @@ export function ClientRoot({ children }: ClientRootProps) {
   // cached client; destructive security setup is gated on a real sync state.
   const clientReady = !startupFailed && !!mx && !loading;
 
+  if (sessionFailure && (!clientReady || mx?.getRooms().length === 0)) {
+    return (
+      <SplashScreen>
+        <Box
+          direction="Column"
+          grow="Yes"
+          alignItems="Center"
+          justifyContent="Center"
+          gap="400"
+          style={{ padding: 24 }}
+        >
+          <Text size="H4">登录会话已失效</Text>
+          <Text>服务器拒绝了当前登录凭据，已停止自动刷新。本机消息缓存与密钥已保留。</Text>
+          <Button
+            onClick={() => {
+              clearNativeSessionFailure();
+              setSessionFailure(undefined);
+              setLoading(true);
+              loadMatrix().catch(() => undefined);
+            }}
+          >
+            <Text>尝试恢复连接</Text>
+          </Button>
+          <Button
+            onClick={async () => {
+              mx?.stopClient();
+              await removeAndroidPersistedSession();
+              removeFallbackAccessToken();
+              if (sessionFailure.softLogout) markFallbackSessionSoftLoggedOut();
+              else clearFallbackSessionSoftLogout();
+              navigate(getLoginPath(baseUrl), { replace: true });
+            }}
+          >
+            <Text>重新登录</Text>
+          </Button>
+        </Box>
+      </SplashScreen>
+    );
+  }
+
   return (
     <AutoDiscovery userId={userId!} baseUrl={baseUrl!}>
       <SpecVersions baseUrl={baseUrl!}>
-        {mx && <SyncStatus mx={mx} />}
+        {sessionFailure && clientReady && (
+          <Box direction="Column" gap="200" style={{ padding: 12 }}>
+            <Text>登录已失效，当前显示本机缓存。请重新登录以接收新消息。</Text>
+            <Button
+              onClick={async () => {
+                mx?.stopClient();
+                await removeAndroidPersistedSession();
+                removeFallbackAccessToken();
+                if (sessionFailure.softLogout) markFallbackSessionSoftLoggedOut();
+                else clearFallbackSessionSoftLogout();
+                navigate(getLoginPath(baseUrl), { replace: true });
+              }}
+            >
+              <Text>重新登录</Text>
+            </Button>
+          </Box>
+        )}
+        {mx && !sessionFailure && <SyncStatus mx={mx} />}
         {!clientReady && <ClientRootOptions mx={mx} />}
         {startupFailed ? (
           <SplashScreen>
@@ -388,7 +503,7 @@ export function ClientRoot({ children }: ClientRootProps) {
                   {startState.status === AsyncStatus.Error && (
                     <Text>{`客户端启动失败：${startState.error.message}`}</Text>
                   )}
-                  {isAndroidApp() && (
+                  {isNativeApp() && (
                     <Button
                       variant="Secondary"
                       onClick={async () => {
@@ -398,7 +513,7 @@ export function ClientRoot({ children }: ClientRootProps) {
                       }}
                     >
                       <Text as="span" size="B400">
-                        {diagnosticsCopied ? '诊断信息已复制' : '复制 Android 诊断信息'}
+                        {diagnosticsCopied ? '诊断信息已复制' : '复制诊断信息'}
                       </Text>
                     </Button>
                   )}
@@ -423,7 +538,35 @@ export function ClientRoot({ children }: ClientRootProps) {
             </Box>
           </SplashScreen>
         ) : !clientReady ? (
-          <ClientRootLoading />
+          slowStartup ? (
+            <SplashScreen>
+              <Box
+                direction="Column"
+                gap="400"
+                alignItems="Center"
+                justifyContent="Center"
+                grow="Yes"
+                style={{ padding: 24 }}
+              >
+                <Text size="H4">正在准备本机加密数据</Text>
+                <Text>
+                  准备时间较长，完成后会自动进入聊天。请勿反复重试；本机消息和密钥没有清除。
+                </Text>
+                <Button
+                  onClick={async () => {
+                    setDiagnosticsCopied(await copyToClipboard(getAndroidDiagnosticsReport()));
+                  }}
+                >
+                  <Text>{diagnosticsCopied ? '诊断信息已复制' : '复制诊断信息'}</Text>
+                </Button>
+                <Button onClick={() => window.location.reload()}>
+                  <Text>重新打开页面</Text>
+                </Button>
+              </Box>
+            </SplashScreen>
+          ) : (
+            <ClientRootLoading />
+          )
         ) : clientReady ? (
           <MatrixClientProvider value={mx}>
             <ServerConfigsLoader>

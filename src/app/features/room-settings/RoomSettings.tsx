@@ -146,11 +146,7 @@ export function RoomSettings({ initialPage, requestClose }: RoomSettingsProps) {
                       <NavButton type="button" onClick={() => setActivePage(item.page)}>
                         <NavItemContent>
                           <Box as="span" grow="Yes" alignItems="Center" gap="200">
-                            <Icon
-                              src={item.icon}
-                              size="100"
-                              filled={activePage === item.page}
-                            />
+                            <Icon src={item.icon} size="100" filled={activePage === item.page} />
                             <Box as="span" grow="Yes">
                               <Text size="Inherit" as="span" truncate>
                                 {item.name}

@@ -3,6 +3,13 @@ import { DefaultReset, color, config, toRem } from 'folds';
 
 export const MessageBase = style({
   position: 'relative',
+  '@media': {
+    '(hover: none) and (pointer: coarse)': {
+      userSelect: 'none',
+      WebkitUserSelect: 'none',
+      WebkitTouchCallout: 'none',
+    },
+  },
 });
 export const MessageBaseBubbleCollapsed = style({
   paddingTop: 0,

@@ -1,4 +1,4 @@
-import React, { ReactNode, createContext, useCallback, useContext, useMemo, useState } from 'react';
+import React, { ReactNode, createContext, useCallback, useContext, useMemo, useState, useEffect } from 'react';
 import { Modal500 } from '../../components/Modal500';
 import { Settings, SettingsPages } from '../../features/settings';
 
@@ -18,6 +18,8 @@ export function MobileSettingsProvider({ children }: MobileSettingsProviderProps
     setInitialPage(page);
     setOpen(true);
   }, []);
+  useEffect(() => {document.documentElement.dataset.nativeSettingsReady='true';return()=>{delete document.documentElement.dataset.nativeSettingsReady;};},[]);
+  useEffect(() => {const show=()=>requestOpen();window.addEventListener('calculator-open-settings',show);return()=>window.removeEventListener('calculator-open-settings',show);},[requestOpen]);
   const requestClose = useCallback(() => setOpen(false), []);
   const contextValue = useMemo(() => requestOpen, [requestOpen]);
 

@@ -1,3 +1,7 @@
+import { useMessageLongPress } from '../../../hooks/useMessageLongPress';
+import { emojis } from '../../../plugins/emoji';
+import { MessageTextActions } from './MessageTextActions';
+import { ForwardMessagesModal } from '../ForwardMessagesModal';
 import {
   Avatar,
   Box,
@@ -280,13 +284,28 @@ type MessageQuickReactionsProps = {
 export const MessageQuickReactions = as<'div', MessageQuickReactionsProps>(
   ({ onReaction, ...props }, ref) => {
     const mx = useMatrixClient();
-    const recentEmojis = useRecentEmoji(mx, 4);
+    const recent = useRecentEmoji(mx, 12);
+    const defaults = ['👍', '❤️', '😂', '🙏', '👌', '😊', '🎉', '👏', '😮', '😢', '🔥', '💯'];
+    const recentEmojis = [
+      ...recent,
+      ...defaults
+        .map((unicode) => emojis.find((item) => item.unicode === unicode))
+        .filter((item): item is NonNullable<typeof item> => !!item),
+    ]
+      .filter(
+        (item, index, list) => list.findIndex((other) => other.unicode === item.unicode) === index
+      )
+      .slice(0, 12);
 
     if (recentEmojis.length === 0) return <span />;
     return (
       <>
         <Box
-          style={{ padding: config.space.S200 }}
+          style={{
+            padding: config.space.S200,
+            display: 'grid',
+            gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+          }}
           alignItems="Center"
           justifyContent="Center"
           gap="200"
@@ -512,11 +531,12 @@ export const MessageCopyTextItem = as<
   'button',
   {
     mEvent: MatrixEvent;
+    selectedText?: string;
     onClose?: () => void;
   }
->(({ mEvent, onClose, ...props }, ref) => {
+>(({ mEvent, selectedText, onClose, ...props }, ref) => {
   const handleCopy = async () => {
-    const text = getMessageCopyText(mEvent);
+    const text = selectedText ?? getMessageCopyText(mEvent);
     if (!text) return;
     const copied = await copyToClipboard(text);
     if (copied) onClose?.();
@@ -532,7 +552,7 @@ export const MessageCopyTextItem = as<
       ref={ref}
     >
       <Text className={css.MessageMenuItemText} as="span" size="T300" truncate>
-        复制消息
+        {selectedText ? '复制选中文字' : '复制消息文本'}
       </Text>
     </MenuItem>
   );
@@ -598,7 +618,7 @@ export const MessageForwardItem = as<
     ref={ref}
   >
     <Text className={css.MessageMenuItemText} as="span" size="T300" truncate>
-      {selected ? '\u53d6\u6d88\u8f6c\u53d1\u9009\u62e9' : '\u52a0\u5165\u8f6c\u53d1\u5217\u8868'}
+      {selected ? '\u53d6\u6d88\u8f6c\u53d1\u9009\u62e9' : '选择多条转发'}
     </Text>
   </MenuItem>
 ));
@@ -1501,6 +1521,7 @@ export const Message = as<'div', MessageProps>(
     const { hoverProps } = useHover({ onHoverChange: setHover });
     const { focusWithinProps } = useFocusWithin({ onFocusWithinChange: setHover });
     const [menuAnchor, setMenuAnchor] = useState<RectCords>();
+    const [menuSelectedText, setMenuSelectedText] = useState('');
     const [emojiBoardAnchor, setEmojiBoardAnchor] = useState<RectCords>();
     const [emojiBoardTab, setEmojiBoardTab] = useState(EmojiBoardTab.Emoji);
     const cloudReactionPreparingRef = useRef(false);
@@ -1650,17 +1671,48 @@ export const Message = as<'div', MessageProps>(
       </Box>
     );
 
+    const [textActionsOpen, setTextActionsOpen] = useState(false);
+    const [singleForwardOpen, setSingleForwardOpen] = useState(false);
+    const menuOwner = useRef({});
+    const openMessageMenu = (anchor: RectCords) => {
+      window.dispatchEvent(
+        new CustomEvent('cinny-message-menu-open', { detail: menuOwner.current })
+      );
+      setMenuAnchor(anchor);
+    };
+    const longPress = useMessageLongPress((point) => {
+      setMenuSelectedText('');
+      window.getSelection()?.removeAllRanges();
+      openMessageMenu({ ...point, width: 0, height: 0 });
+    }, edit);
+    useEffect(() => {
+      const closeOther = (event: Event) => {
+        if ((event as CustomEvent).detail !== menuOwner.current) setMenuAnchor(undefined);
+      };
+      window.addEventListener('cinny-message-menu-open', closeOther);
+      return () => window.removeEventListener('cinny-message-menu-open', closeOther);
+    }, []);
+
     const handleToggleForwardSelection = useCallback(() => {
       if (!forwardSource || !onToggleForwardSelection) return;
       onToggleForwardSelection(forwardSource);
     }, [forwardSource, onToggleForwardSelection]);
 
     const handleContextMenu: MouseEventHandler<HTMLDivElement> = (evt) => {
-      if (evt.altKey || !window.getSelection()?.isCollapsed || edit) return;
-      const tag = (evt.target as any).tagName;
-      if (typeof tag === 'string' && tag.toLowerCase() === 'a') return;
+      if (evt.altKey || edit) return;
+      if (longPress.isTouchContext()) {
+        evt.preventDefault();
+        evt.stopPropagation();
+        return;
+      }
+      longPress.cancel();
+      const selection = window.getSelection()?.toString() ?? '';
+      if (!selection && (evt.target as HTMLElement).closest('a')) return;
       evt.preventDefault();
-      setMenuAnchor({
+      evt.stopPropagation();
+      setMenuSelectedText(selection);
+      window.getSelection()?.removeAllRanges();
+      openMessageMenu({
         x: evt.clientX,
         y: evt.clientY,
         width: 0,
@@ -1669,11 +1721,14 @@ export const Message = as<'div', MessageProps>(
     };
 
     const handleOpenMenu: MouseEventHandler<HTMLButtonElement> = (evt) => {
+      setMenuSelectedText('');
+      window.getSelection()?.removeAllRanges();
       const target = evt.currentTarget.parentElement?.parentElement ?? evt.currentTarget;
-      setMenuAnchor(target.getBoundingClientRect());
+      openMessageMenu(target.getBoundingClientRect());
     };
 
     const closeMenu = () => {
+      longPress.cancel();
       setMenuAnchor(undefined);
     };
 
@@ -1735,6 +1790,7 @@ export const Message = as<'div', MessageProps>(
 
     return (
       <MessageBase
+        data-message-touch-actions
         className={classNames(css.MessageBase, className, {
           [css.MessageBaseBubbleCollapsed]: messageLayout === MessageLayout.Bubble && collapse,
         })}
@@ -1747,7 +1803,22 @@ export const Message = as<'div', MessageProps>(
         {...hoverProps}
         {...focusWithinProps}
         ref={ref}
+        onPointerDown={longPress.onPointerDown}
+        onClickCapture={longPress.onClickCapture}
       >
+        {textActionsOpen && (
+          <MessageTextActions
+            text={getMessageCopyText(mEvent) ?? ''}
+            requestClose={() => setTextActionsOpen(false)}
+          />
+        )}
+        {singleForwardOpen && forwardSource && (
+          <ForwardMessagesModal
+            messages={[forwardSource]}
+            requestClose={() => setSingleForwardOpen(false)}
+            onComplete={() => setSingleForwardOpen(false)}
+          />
+        )}
         {!edit && (hover || !!menuAnchor || !!emojiBoardAnchor) && (
           <div className={css.MessageOptionsBase}>
             <Menu className={css.MessageOptionsBar} variant="SurfaceVariant">
@@ -1892,7 +1963,15 @@ export const Message = as<'div', MessageProps>(
                         escapeDeactivates: stopPropagation,
                       }}
                     >
-                      <Menu>
+                      <Menu
+                        style={{
+                          maxHeight: 'min(680px, calc(var(--app-height, 100dvh) - 80px))',
+                          overflowY: 'auto',
+                          userSelect: 'none',
+                          WebkitUserSelect: 'none',
+                          WebkitTouchCallout: 'none',
+                        }}
+                      >
                         {canSendReaction && (
                           <MessageQuickReactions
                             onReaction={(key, shortcode) => {
@@ -1915,7 +1994,7 @@ export const Message = as<'div', MessageProps>(
                                 size="T300"
                                 truncate
                               >
-                                {'添加表情回复'}
+                                {'更多表情（完整表情库）'}
                               </Text>
                             </MenuItem>
                           )}
@@ -2002,6 +2081,24 @@ export const Message = as<'div', MessageProps>(
                             />
                           )}
                           {forwardSource && (
+                            <MenuItem
+                              onClick={() => {
+                                closeMenu();
+                                setTimeout(() => setSingleForwardOpen(true), 100);
+                              }}
+                            >
+                              <Text>转发</Text>
+                            </MenuItem>
+                          )}
+                          <MenuItem
+                            onClick={() => {
+                              closeMenu();
+                              setTimeout(() => setTextActionsOpen(true), 100);
+                            }}
+                          >
+                            <Text>选择部分文本／识别号码</Text>
+                          </MenuItem>
+                          {forwardSource && (
                             <MessageForwardItem
                               selected={!!forwardSelected}
                               onToggle={handleToggleForwardSelection}
@@ -2012,6 +2109,13 @@ export const Message = as<'div', MessageProps>(
                             <MessageFavoriteItem room={room} mEvent={mEvent} onClose={closeMenu} />
                           )}
                           <MessageSaveEmojiItem mEvent={mEvent} onClose={closeMenu} />
+                          {menuSelectedText && (
+                            <MessageCopyTextItem
+                              mEvent={mEvent}
+                              selectedText={menuSelectedText}
+                              onClose={closeMenu}
+                            />
+                          )}
                           <MessageCopyTextItem mEvent={mEvent} onClose={closeMenu} />
                           {canPinEvent && (
                             <MessagePinItem room={room} mEvent={mEvent} onClose={closeMenu} />
@@ -2123,13 +2227,16 @@ export const Event = as<'div', EventProps>(
     const { hoverProps } = useHover({ onHoverChange: setHover });
     const { focusWithinProps } = useFocusWithin({ onFocusWithinChange: setHover });
     const [menuAnchor, setMenuAnchor] = useState<RectCords>();
+    const [menuSelectedText, setMenuSelectedText] = useState('');
     const stateEvent = typeof mEvent.getStateKey() === 'string';
 
     const handleContextMenu: MouseEventHandler<HTMLDivElement> = (evt) => {
-      if (evt.altKey || !window.getSelection()?.isCollapsed) return;
-      const tag = (evt.target as any).tagName;
-      if (typeof tag === 'string' && tag.toLowerCase() === 'a') return;
+      if (evt.altKey) return;
+      const selection = window.getSelection()?.toString() ?? '';
+      if (!selection && (evt.target as HTMLElement).closest('a')) return;
       evt.preventDefault();
+      evt.stopPropagation();
+      setMenuSelectedText(selection);
       setMenuAnchor({
         x: evt.clientX,
         y: evt.clientY,
@@ -2139,6 +2246,7 @@ export const Event = as<'div', EventProps>(
     };
 
     const handleOpenMenu: MouseEventHandler<HTMLButtonElement> = (evt) => {
+      setMenuSelectedText('');
       const target = evt.currentTarget.parentElement?.parentElement ?? evt.currentTarget;
       setMenuAnchor(target.getBoundingClientRect());
     };
@@ -2193,6 +2301,13 @@ export const Event = as<'div', EventProps>(
                             <MessageSourceCodeItem
                               room={room}
                               mEvent={mEvent}
+                              onClose={closeMenu}
+                            />
+                          )}
+                          {menuSelectedText && (
+                            <MessageCopyTextItem
+                              mEvent={mEvent}
+                              selectedText={menuSelectedText}
                               onClose={closeMenu}
                             />
                           )}

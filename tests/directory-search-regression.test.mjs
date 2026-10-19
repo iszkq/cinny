@@ -8,7 +8,7 @@ const readSource = (relativePath) =>
 test('sidebar search queries both Matrix homeserver directories', async () => {
   const source = await readSource('src/app/features/search/directorySearch.ts');
 
-  assert.match(source, /searchUserDirectory\(\{ term: query, limit:/);
+  assert.match(source, /searchUsers\(mx, query, DIRECTORY_RESULT_LIMIT\)/);
   assert.match(source, /\.publicRooms\(\{/);
   assert.match(source, /generic_search_term: query/);
   assert.match(source, /room_types: getRoomTypes\(scope\)/);

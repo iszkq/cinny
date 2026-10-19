@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { observeIOSPendingVerification } from '../utils/iosVerification';
+import { useCallback, useEffect, useSyncExternalStore } from 'react';
 import {
   CryptoEvent,
   CryptoEventHandlerMap,
@@ -18,10 +19,7 @@ export const useVerificationRequestReceived = (
   const mx = useMatrixClient();
 
   useEffect(() => {
-    mx.on(CryptoEvent.VerificationRequestReceived, onRequest);
-    return () => {
-      mx.removeListener(CryptoEvent.VerificationRequestReceived, onRequest);
-    };
+    return observeIOSPendingVerification(mx, onRequest);
   }, [mx, onRequest]);
 };
 
@@ -38,16 +36,19 @@ export const useVerificationRequestChange = (
 };
 
 export const useVerificationRequestPhase = (request: VerificationRequest): VerificationPhase => {
-  const [phase, setPhase] = useState(() => request.phase);
-
-  useVerificationRequestChange(
-    request,
-    useCallback(() => {
-      setPhase(request.phase);
-    }, [request])
+  return useSyncExternalStore(
+    useCallback(
+      (changed: () => void) => {
+        request.on(VerificationRequestEvent.Change, changed);
+        return () => {
+          request.removeListener(VerificationRequestEvent.Change, changed);
+        };
+      },
+      [request]
+    ),
+    () => request.phase,
+    () => request.phase
   );
-
-  return phase;
 };
 
 export const useVerifierCancel = (

@@ -1,3 +1,4 @@
+import { NATIVE_CHAT_EDITION, NativeHomeChats } from '../../../components/native-chat/NativeChatList';
 import React, {
   MouseEventHandler,
   forwardRef,
@@ -78,6 +79,7 @@ import { isDesktopLikeScreenSize, useScreenSizeContext } from '../../../hooks/us
 import { desktopPageNavCollapsedAtom } from '../../../state/desktopPageNav';
 import { useClientSyncReady } from '../../../hooks/useClientSyncReady';
 import { ClientNavSyncLoading } from '../ClientSyncLoading';
+import { searchModalAtom } from '../../../state/searchModal';
 
 type HomeMenuProps = {
   requestClose: () => void;
@@ -114,6 +116,7 @@ const HomeMenu = forwardRef<HTMLDivElement, HomeMenuProps>(({ requestClose }, re
 });
 
 function HomeHeader() {
+  const setSearchOpen = useSetAtom(searchModalAtom);
   const screenSize = useScreenSizeContext();
   const desktop = isDesktopLikeScreenSize(screenSize);
   const setDesktopPageNavCollapsed = useSetAtom(desktopPageNavCollapsedAtom);
@@ -153,7 +156,17 @@ function HomeHeader() {
               {'\u9996\u9875'}
             </Text>
           </Box>
-          <Box>
+          <Box shrink="No" alignItems="Center" gap="100">
+            <IconButton
+              aria-label="搜索用户和房间"
+              title="搜索用户和房间"
+              variant="Primary"
+              fill="Soft"
+              radii="300"
+              onClick={() => setSearchOpen(true)}
+            >
+              <Icon src={Icons.Search} size="200" />
+            </IconButton>
             <IconButton aria-pressed={!!menuAnchor} fill="None" onClick={handleOpenMenu}>
               <Icon src={Icons.VerticalDots} size="200" />
             </IconButton>
@@ -228,7 +241,9 @@ function HomeEmpty() {
 
 const DEFAULT_CATEGORY_ID = makeNavCategoryId('home', 'room');
 const ROOM_NAV_CATEGORY_SCOPE = 'home';
-export function Home() {
+export function Home() { return NATIVE_CHAT_EDITION ? <NativeHomeChats /> : <DesktopHome />; }
+
+function DesktopHome() {
   const mx = useMatrixClient();
   useNavToActivePathMapper('home');
   const scrollRef = useRef<HTMLDivElement>(null);

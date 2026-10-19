@@ -4,12 +4,13 @@
 
 星火是基于上游 [Cinny](https://github.com/cinnyapp/cinny) 深度定制的中文 Matrix 客户端。在保留 Cinny 轻量、现代界面的基础上，项目补充了中文体验、消息与会话管理、AI 工具、Office 文档协作、音视频会议和跨平台客户端能力。
 
-当前版本：`1.9.6`
+当前版本：`2.0.1`
 
-支持 Web / PWA、Windows 桌面端（Tauri 2）和 Android（Capacitor 8）。三端共用同一套 React 代码；iPhone 和 iPad 可使用响应式 Web / PWA 版本。
+支持 Web / PWA、Windows / macOS 桌面端（Tauri 2）和 Android / iOS（Capacitor 8）。各端共用 React 代码；计算器伪装入口仅在 Android / iOS 原生构建中启用，Web / PWA 和桌面端保留星火入口。
 
-- 项目源码：[github.com/iszkq/cinny](https://github.com/iszkq/cinny)
-- 版本发布：[GitHub Releases](https://github.com/iszkq/cinny/releases)
+- 项目源码：[kongtai123/starfire](https://github.com/kongtai123/starfire)
+- 定制版来源：[iszkq/cinny](https://github.com/iszkq/cinny)
+- 版本发布：[GitHub Releases](https://github.com/kongtai123/starfire/releases)
 - 上游项目：[cinnyapp/cinny](https://github.com/cinnyapp/cinny)
 
 ## 功能概览
@@ -64,9 +65,13 @@
 | --- | --- | --- |
 | Web / PWA | Vite 静态应用 | 完整聊天、PWA 安装、响应式移动布局 |
 | Windows | Tauri 2 + NSIS | 自动更新、系统通知、任务栏未读角标、独立媒体 / 圣经 / Office 窗口、本地缓存与 PIN 锁屏 |
-| Android | Capacitor 8 | 原生 APK、系统通知、媒体缓存、安全存储、同步快照、应用内更新与移动端适配 |
+| macOS | Tauri 2 + DMG | Apple Silicon / Intel 构建、系统权限和桌面窗口适配 |
+| Android | Capacitor 8 | 计算器入口与隐私锁、原生 APK、系统通知、媒体缓存、安全存储、同步快照、应用内更新与移动端适配 |
+| iOS | Capacitor 8，iOS 16+ | 计算器入口与隐私锁、原生网络适配、加密兼容、设备验证与恢复 |
 
-当前仓库没有原生 iOS 工程；iPhone / iPad 使用 Web / PWA 版本。
+原生构建说明见 [Android](ANDROID_BUILD.md)、[iOS](IOS_BUILD.md) 和 [macOS](MACOS_BUILD.md)。iOS 构建需要 Mac 和完整 Xcode；macOS 分发签名、公证及自动更新配置见 macOS 构建文档。
+
+2.0.1 移植基于 [kongtai123/starfire](https://github.com/kongtai123/starfire) 的 1.9.21 源码（`cd56827ea7b92f8d2b9043c8ac31bfb57464525e`），纳入移动端会话续期、加密初始化、网络恢复和设备验证改进。保留现有 AI 助手与 Skill，排除聊天智能体、自动回复及其桌面后台驻留逻辑。上述旧版本构建文档中的测试与打包记录属于来源版本记录；2.0.1 的本地验证单独记录于 [移植说明](PORTING_2.0.1.md)。
 
 ## 快速开始
 
@@ -113,6 +118,10 @@ npm run desktop:build:nsis
 ```
 
 桌面端更新器从本仓库的 GitHub Releases 获取签名安装包和 `latest.json`。
+
+### macOS 桌面端
+
+在 Mac 上运行 `npm ci` 后执行 `npm run desktop:build:mac`，生成当前 CPU 架构的 `.app` 和 `.dmg`。通用架构、签名与安装说明见 [MACOS_BUILD.md](./MACOS_BUILD.md)。
 
 ### Android
 
@@ -182,3 +191,7 @@ npm run lint
 ## 许可证与致谢
 
 本项目基于 Cinny 继续开发，遵循 [AGPL-3.0-only](./LICENSE) 许可证。感谢 Cinny、Matrix 生态及所有依赖项目的贡献者。
+
+## 本仓库发布范围
+
+本仓库发布星火普通版源码，包含 Web、Android、iOS、macOS 和 Windows 的相关代码，不包含提示词特别版。基于本地 1.9.21 源码整理；保留原作者署名及 AGPL-3.0-only 许可证。AI 服务的预填密钥已清空，使用前需自行配置。

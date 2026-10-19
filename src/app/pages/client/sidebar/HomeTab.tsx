@@ -99,7 +99,7 @@ export function HomeTab() {
 
   return (
     <SidebarItem active={homeSelected}>
-    <SidebarItemTooltip tooltip="首页">
+    <SidebarItemTooltip tooltip={(import.meta.env.VITE_ANDROID_APP === 'true' || import.meta.env.VITE_IOS_APP === 'true') ? "所有聊天" : "首页"}>
         {(triggerRef) => (
           <SidebarAvatar
             as="button"

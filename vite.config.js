@@ -10,7 +10,9 @@ import { VitePWA } from 'vite-plugin-pwa';
 import fs from 'fs';
 import path from 'path';
 import buildConfig from './build.config';
+import { calculatorEntry } from './scripts/ios-calculator-entry.mjs';
 
+const iosAppBuild = process.env.VITE_IOS_APP === 'true';
 const androidAppBuild = process.env.VITE_ANDROID_APP === 'true';
 const deploymentRevision =
   process.env.VITE_DEPLOYMENT_ID ??
@@ -25,6 +27,7 @@ const androidBibleDisabledModule = path
 
 const copyFiles = {
   targets: [
+    {src:'public/webview-update.html',dest:''},
     {
       src: 'node_modules/@element-hq/element-call-embedded/dist/*',
       dest: 'public/element-call',
@@ -93,7 +96,9 @@ function serverMatrixSdkCryptoWasm(wasmFilePath) {
         if (req.url === wasmFilePath) {
           const resolvedPath = path.join(
             path.resolve(),
-            '/node_modules/@matrix-org/matrix-sdk-crypto-wasm/pkg/matrix_sdk_crypto_wasm_bg.wasm'
+            iosAppBuild
+              ? '/vendor/ios-matrix-sdk-crypto-wasm/pkg/matrix_sdk_crypto_wasm_bg.wasm'
+              : '/node_modules/@matrix-org/matrix-sdk-crypto-wasm/pkg/matrix_sdk_crypto_wasm_bg.wasm'
           );
 
           if (fs.existsSync(resolvedPath)) {
@@ -119,7 +124,9 @@ export default defineConfig({
   publicDir: false,
   base: buildConfig.base,
   define: {
-    __APP_VERSION__: JSON.stringify(process.env.npm_package_version ?? '4.12.0'),
+    __APP_VERSION__: JSON.stringify(
+      JSON.parse(fs.readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version
+    ),
   },
   server: {
     port: 8080,
@@ -131,6 +138,10 @@ export default defineConfig({
   },
   resolve: {
     alias: [
+      ...(iosAppBuild ? [{
+        find: /^@matrix-org\/matrix-sdk-crypto-wasm$/,
+        replacement: path.resolve('vendor/ios-matrix-sdk-crypto-wasm/index.mjs'),
+      }] : []),
       { find: 'crypto', replacement: 'crypto-browserify' },
       { find: 'stream', replacement: 'stream-browserify' },
       { find: 'timers', replacement: 'timers-browserify' },
@@ -149,6 +160,18 @@ export default defineConfig({
     ],
   },
   plugins: [
+    {
+      name: 'ios16-compatibility',
+      transformIndexHtml: (html) => (iosAppBuild || androidAppBuild) ? calculatorEntry(html,{android:androidAppBuild}) : html,
+      transform(code, id) {
+        // The SDK only tests whether this expression matches; consuming the
+        // boundary preserves its capture group and avoids Safari 16 lookbehind.
+        if (id.replaceAll('\\', '/').endsWith('/matrix-js-sdk/lib/pushprocessor.js')) {
+          return code.replaceAll('(?<=^|', '(?:^|');
+        }
+        return null;
+      },
+    },
     serverMatrixSdkCryptoWasm('/node_modules/.vite/deps/pkg/matrix_sdk_crypto_wasm_bg.wasm'),
     topLevelAwait({
       // The export name of top-level await promise for each chunk module
@@ -190,6 +213,7 @@ export default defineConfig({
     },
   },
   build: {
+    target: iosAppBuild ? 'safari16' : androidAppBuild ? 'chrome109' : undefined,
     outDir: 'dist',
     sourcemap: false,
     manifest: true,

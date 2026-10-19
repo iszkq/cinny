@@ -1,3 +1,4 @@
+import { OutsideUrlRegExp } from '../../utils/regexContext';
 import { findAndReplace } from '../../utils/findAndReplace';
 import { ESC_BLOCK_SEQ, UN_ESC_BLOCK_SEQ } from './block/rules';
 import { EscapeRule, CAP_INLINE_SEQ } from './inline/rules';
@@ -27,7 +28,7 @@ export const unescapeMarkdownInlineSequences = (text: string): string =>
  * @returns The plain-text with markdown escape sequences added (e.g., `"some \*italic\*"`)
  */
 export const escapeMarkdownInlineSequences = (text: string): string => {
-  const regex = new RegExp(`(${CAP_INLINE_SEQ})`, 'g');
+  const regex = new OutsideUrlRegExp(`(${CAP_INLINE_SEQ})`);
   const parts = findAndReplace(
     text,
     regex,

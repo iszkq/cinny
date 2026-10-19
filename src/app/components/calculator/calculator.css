@@ -1,0 +1,30 @@
+html[data-calculator-locked='true'], html[data-calculator-locked='true'] body { background:#17191e!important; }
+html[data-calculator-locked='true'] #portalContainer,
+html[data-calculator-locked='true'] .calculator-private { display:none!important; }
+.calculator-shell[hidden], .calculator-private[hidden] { display:none; }
+.calculator-shell { position:fixed; inset:0; z-index:2147483646; background:#17191e; color:#fff; display:flex; align-items:center; justify-content:center; padding:max(18px,env(safe-area-inset-top)) 20px max(24px,env(safe-area-inset-bottom)); font-family:-apple-system,BlinkMacSystemFont,sans-serif; touch-action:manipulation; }
+.calculator-face { width:100%; max-width:430px; display:flex; flex-direction:column; justify-content:flex-end; height:100%; max-height:820px; }
+.calculator-title { color:#999da8; font-size:calc(16px * var(--app-text-scale,1)); padding:12px 6px; }
+.calculator-display { display:flex; align-items:flex-end; justify-content:flex-end; flex:1; min-height:80px; max-height:240px; padding:28px 4px; font-size:clamp(32px,9vw,64px); font-weight:300; white-space:nowrap; overflow:hidden; font-variant-numeric:tabular-nums; }
+.calculator-keypad { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
+.calculator-keypad button { text-align:center; display:flex; align-items:center; justify-content:center; padding:0; appearance:none; border:0; border-radius:25px; color:#fff; background:#30333b; height:clamp(48px,10vh,82px); font:400 calc(30px * var(--app-text-scale,1))/1 -apple-system,BlinkMacSystemFont,sans-serif; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+.calculator-keypad button:active { filter:brightness(1.45); transform:scale(.97); }
+.calculator-keypad .calculator-operator { background:#ef9638; color:#17191e; }
+.calculator-keypad .calculator-function { background:#aeb2bb; color:#17191e; font-size:calc(25px * var(--app-text-scale,1)); }
+.calculator-private { height:100%; }
+.calculator-private-tools { position:fixed; top:max(8px,env(safe-area-inset-top)); right:12px; z-index:9999; display:flex; gap:6px; }
+.calculator-private-tools button { background:#30333b; color:white; padding:8px 12px; border:1px solid #676d7b; border-radius:20px; cursor:pointer; }
+.calculator-settings-overlay { position:fixed; inset:0; z-index:10000; background:#17191ef0; overflow:auto; padding:max(24px,env(safe-area-inset-top)) 16px max(24px,env(safe-area-inset-bottom)); }
+.calculator-settings { color:#20242d; background:#f5f6f8; border-radius:22px; padding:24px; max-width:480px; margin:0 auto; display:flex; flex-direction:column; gap:16px; }
+.calculator-settings header { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+.calculator-settings h2 { font-size:calc(22px * var(--app-text-scale,1)); margin:0; }
+.calculator-settings p { font-size:calc(14px * var(--app-text-scale,1)); line-height:1.6; margin:0; }
+.calculator-settings label { display:flex; flex-direction:column; gap:8px; font-size:calc(15px * var(--app-text-scale,1)); }
+.calculator-settings input,.calculator-settings select { appearance:auto; width:100%; min-height:44px; padding:10px; background:#fff; color:#20242d; border:1px solid #c8cbd2; border-radius:10px; font-size:calc(16px * var(--app-text-scale,1)); }
+.calculator-settings button { padding:10px 16px; background:#e4e6eb; color:#20242d; border:0; border-radius:10px; cursor:pointer; }
+.calculator-settings .calculator-save { background:#ef9638; font-weight:600; min-height:46px; }
+@media (orientation:landscape) and (max-height:500px) { .calculator-face { max-width:650px; } .calculator-display { min-height:32px; padding:4px; font-size:calc(32px * var(--app-text-scale,1)); } .calculator-title{display:none;} .calculator-keypad {gap:6px;} .calculator-keypad button {height:36px;font-size:calc(23px * var(--app-text-scale,1));border-radius:14px;} }
+
+.calculator-recovery { z-index:2147483647; }
+/* The calculator keeps its original appearance at every application text size. */
+.calculator-shell { --app-text-scale:1; font-size:16px; }

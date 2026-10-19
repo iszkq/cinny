@@ -1,3 +1,5 @@
+import { RecognizedMessageText } from '../features/room/message/MessageTextActions';
+import { OutsideUrlRegExp } from '../utils/regexContext';
 /* eslint-disable jsx-a11y/alt-text */
 import React, {
   ComponentPropsWithoutRef,
@@ -31,7 +33,7 @@ import {
   mxcUrlToHttp,
 } from '../utils/matrix';
 import { getMemberDisplayName } from '../utils/room';
-import { EMOJI_PATTERN, sanitizeForRegex, URL_NEG_LB } from '../utils/regex';
+import { EMOJI_PATTERN, sanitizeForRegex } from '../utils/regex';
 import { getHexcodeForEmoji, getShortcodeFor } from './emoji';
 import { findAndReplace } from '../utils/findAndReplace';
 import {
@@ -48,7 +50,7 @@ import { isAndroidApp } from '../utils/nativePlatform';
 
 const ReactPrism = lazy(() => import('./react-prism/ReactPrism'));
 
-const EMOJI_REG_G = new RegExp(`${URL_NEG_LB}(${EMOJI_PATTERN})`, 'g');
+const EMOJI_REG_G = new OutsideUrlRegExp(`(${EMOJI_PATTERN})`);
 
 export const LINKIFY_OPTS: LinkifyOpts = {
   attributes: {
@@ -567,9 +569,10 @@ export const getReactCustomHtmlParser = (
       }
 
       if (domNode instanceof DOMText) {
-        const linkify =
-          !(domNode.parent && 'name' in domNode.parent && domNode.parent.name === 'code') &&
-          !(domNode.parent && 'name' in domNode.parent && domNode.parent.name === 'a');
+        let linkify = true;
+        for (let parent = domNode.parent; parent; parent = parent.parent) {
+          if ('name' in parent && ['code', 'pre', 'a'].includes(parent.name)) linkify = false;
+        }
 
         let jsx = scaleSystemEmoji(domNode.data);
 
@@ -578,7 +581,18 @@ export const getReactCustomHtmlParser = (
         }
 
         if (linkify) {
-          return <Linkify options={params.linkifyOpts}>{jsx}</Linkify>;
+          return (
+            <Linkify options={params.linkifyOpts}>
+              <RecognizedMessageText
+                text={domNode.data}
+                renderText={(value) =>
+                  params.highlightRegex
+                    ? highlightText(params.highlightRegex, scaleSystemEmoji(value))
+                    : scaleSystemEmoji(value)
+                }
+              />
+            </Linkify>
+          );
         }
         return jsx;
       }

@@ -2,7 +2,7 @@ import React, { CSSProperties, ReactNode, useCallback, useState } from 'react';
 import { Box, Button, Chip, Icon, Icons, Text, toRem } from 'folds';
 import { IContent, MatrixEvent } from 'matrix-js-sdk';
 import { JUMBO_EMOJI_REG, URL_REG } from '../../utils/regex';
-import { isAndroidApp } from '../../utils/nativePlatform';
+import { isAndroidApp, isIOSApp } from '../../utils/nativePlatform';
 import { trimReplyFromBody } from '../../utils/room';
 import { MessageTextBody } from './layout';
 import {
@@ -62,6 +62,8 @@ type MBadEncryptedProps = {
 export function MBadEncrypted({ mEvent }: MBadEncryptedProps) {
   const mx = useMatrixClient();
   const [copyState, setCopyState] = useState<'idle' | 'loading' | 'copied' | 'error'>('idle');
+  const [diagnosticText, setDiagnosticText] = useState('');
+  const [diagnosticFallback, setDiagnosticFallback] = useState(false);
   const failureReason = mEvent?.decryptionFailureReason ?? null;
 
   const copyDiagnostic = async () => {
@@ -70,7 +72,9 @@ export function MBadEncrypted({ mEvent }: MBadEncryptedProps) {
     recordDecryptionDiagnostic(mx, mEvent, 'failure_observed');
     try {
       const report = await createDecryptionDiagnosticReport(mx, mEvent);
+      if (isIOSApp()) setDiagnosticText(report);
       const copied = await copyToClipboard(report);
+      setDiagnosticFallback(isIOSApp() && !copied);
       setCopyState(copied ? 'copied' : 'error');
     } catch {
       setCopyState('error');
@@ -83,6 +87,15 @@ export function MBadEncrypted({ mEvent }: MBadEncryptedProps) {
       <Text>
         <MessageBadEncryptedContent />
       </Text>
+      {isIOSApp() && diagnosticText && diagnosticFallback && (
+        <textarea
+          aria-label="解密诊断文本"
+          readOnly
+          value={diagnosticText}
+          onFocus={(event) => event.currentTarget.select()}
+          style={{ width: '100%', minHeight: 140, fontSize: 16 }}
+        />
+      )}
       {mEvent && (
         <Box alignItems="Center" gap="100" wrap="Wrap">
           <Text size="T200" priority="300">
@@ -101,7 +114,9 @@ export function MBadEncrypted({ mEvent }: MBadEncryptedProps) {
                 : copyState === 'copied'
                 ? '诊断已复制'
                 : copyState === 'error'
-                ? '复制失败，请重试'
+                ? isIOSApp()
+                  ? '长按下方诊断文本复制'
+                  : '复制失败，请重试'
                 : '复制解密诊断'}
             </Text>
           </Button>

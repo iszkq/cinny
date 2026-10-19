@@ -1,0 +1,7 @@
+.verification-methods { display:flex; flex-direction:column; gap:14px; font-size:18px; line-height:1.5; }
+.verification-methods button,.verification-file { min-height:52px; padding:12px 16px; border-radius:12px; border:1px solid var(--native-line,#66707a); background:var(--native-surface,#252b31); color:var(--native-text,#fff); text-align:center; font-size:18px; line-height:1.4; }
+.verification-methods button:disabled { opacity:.6; }
+.verification-methods p[role='alert'] { color:#ef887d; overflow-wrap:anywhere; }
+.verification-file { display:flex; flex-direction:column; gap:8px; }
+.verification-file input { max-width:100%; font-size:16px; }
+.verification-decimal { display:flex; flex-wrap:wrap; justify-content:center; gap:16px; font-size:30px; font-weight:650; font-variant-numeric:tabular-nums; }

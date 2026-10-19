@@ -14,11 +14,21 @@ type BubbleLayoutProps = {
 
 export const BubbleLayout = as<'div', BubbleLayoutProps>(
   ({ hideBubble, before, header, after, footer, tone = 'neutral', children, ...props }, ref) => (
-    <Box gap="300" {...props} ref={ref}>
+    <Box
+      gap="300"
+      {...props}
+      ref={ref}
+      style={{ ...props.style, flexDirection: tone === 'self' ? 'row-reverse' : 'row' }}
+    >
       <Box className={css.BubbleBefore} shrink="No">
         {before}
       </Box>
-      <Box className={css.MessageContent} grow="Yes" direction="Column">
+      <Box
+        className={css.MessageContent}
+        grow="Yes"
+        direction="Column"
+        style={{ alignItems: tone === 'self' ? 'flex-end' : 'flex-start' }}
+      >
         {header}
         {hideBubble ? (
           <>
@@ -27,7 +37,10 @@ export const BubbleLayout = as<'div', BubbleLayoutProps>(
           </>
         ) : (
           <>
-            <Box className={css.BubbleStack}>
+            <Box
+              className={css.BubbleStack}
+              style={{ width: 'fit-content', maxWidth: 'min(100%, 720px)' }}
+            >
               <Box className={css.BubbleRow}>
                 <Box className={css.BubbleMain}>
                   <Box>
@@ -35,9 +48,10 @@ export const BubbleLayout = as<'div', BubbleLayoutProps>(
                       className={classNames(
                         css.BubbleContent,
                         css.BubbleTone[tone],
-                        before ? css.BubbleContentArrowLeft : undefined
+                        before && tone !== 'self' ? css.BubbleContentArrowLeft : undefined
                       )}
                       direction="Column"
+                      data-message-body
                     >
                       {children}
                     </Box>

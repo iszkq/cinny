@@ -1,4 +1,4 @@
-import { isAndroidApp } from '../app/utils/nativePlatform';
+import { isAndroidApp, isNativeApp } from '../app/utils/nativePlatform';
 
 type RustCryptoSessionIdentity = {
   userId: string;
@@ -72,7 +72,9 @@ const indexedDbDatabaseExists = (databaseName: string): Promise<boolean> =>
       // Opening a missing database would create it. Abort that transaction so
       // this compatibility probe remains read-only.
       request.transaction?.abort();
-      finish(false);
+      if (!isNativeApp() || isAndroidApp()) finish(false);
+      // iOS must finish the aborted transaction before Rust opens/upgrades
+      // this same database. Resolving in onupgradeneeded raced that cleanup.
     };
     request.onsuccess = () => {
       request.result.close();
@@ -105,6 +107,7 @@ export const findExistingRustCryptoDatabasePrefixes = async (
     // absent, so we never create a new Olm identity under the old device ID.
     // Android path: if (isAndroidApp()) {
     if (isAndroidApp()) return findExistingPrefixesByOpening(prefixes);
+    if (isNativeApp()) return findExistingPrefixesByOpening(prefixes);
 
     if (typeof global.indexedDB?.databases === 'function') {
       const databases = await global.indexedDB.databases();

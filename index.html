@@ -213,15 +213,17 @@
       (() => {
         const applyViewportSize = () => {
           const viewport = window.visualViewport;
-          // iOS pans the visual viewport when a focused input is above the
-          // keyboard. The application shell stays anchored at layout y=0, so
-          // its size must include that offset or the panned viewport exposes a
-          // large blank area below the app.
-          const viewportTop = Math.max(0, viewport?.offsetTop ?? 0);
-          const viewportLeft = Math.max(0, viewport?.offsetLeft ?? 0);
-          const appHeight = Math.round((viewport?.height ?? window.innerHeight) + viewportTop);
-          const appWidth = Math.round((viewport?.width ?? window.innerWidth) + viewportLeft);
+          // Keep the fixed shell inside the *visible* rectangle while WebKit
+          // pans to an editor. Adding offsetTop to height puts the composer
+          // below the keyboard; moving the shell preserves both visible edges.
+          const editable = document.activeElement?.matches('input,textarea,[contenteditable="true"],[contenteditable=""]');
+          const appTop = editable ? Math.max(0, viewport?.offsetTop ?? 0) : 0;
+          const appHeight = Math.round(editable
+            ? Math.min(window.innerHeight, viewport?.height ?? window.innerHeight)
+            : window.innerHeight);
+          const appWidth = Math.round(window.innerWidth);
 
+          document.documentElement.style.setProperty('--app-top', `${appTop}px`);
           document.documentElement.style.setProperty('--app-height', `${appHeight}px`);
           document.documentElement.style.setProperty('--app-width', `${appWidth}px`);
         };
@@ -230,6 +232,13 @@
         window.addEventListener('resize', applyViewportSize, { passive: true });
         window.addEventListener('orientationchange', applyViewportSize, { passive: true });
         window.addEventListener('pageshow', applyViewportSize, { passive: true });
+        document.addEventListener('focusin', applyViewportSize);
+        document.addEventListener('focusout', () => {
+          [0, 100, 350, 700].forEach((delay) => setTimeout(() => {
+            applyViewportSize();
+            if (!document.activeElement?.matches('input,textarea,[contenteditable="true"]')) window.scrollTo(0, 0);
+          }, delay));
+        });
         window.visualViewport?.addEventListener('resize', applyViewportSize, { passive: true });
         window.visualViewport?.addEventListener('scroll', applyViewportSize, { passive: true });
       })();

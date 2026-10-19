@@ -1,6 +1,7 @@
+import { isIOSApp } from '../../utils/nativePlatform';
 import { MatrixClient, SyncState } from 'matrix-js-sdk';
 import React, { useCallback, useEffect, useState } from 'react';
-import { Box, config, Line, Text } from 'folds';
+import { Box, Button, config, Line, Text } from 'folds';
 import { useSyncState } from '../../hooks/useSyncState';
 import { ContainerColor } from '../../styles/ContainerColor.css';
 
@@ -81,6 +82,17 @@ export function SyncStatus({ mx }: SyncStatusProps) {
     setVisibleStateData(stateData);
     return undefined;
   }, [connectionIssueSince, stateData]);
+
+  if (isIOSApp() && isVisibleConnectionIssue(visibleStateData)) {
+    return (
+      <Box direction="Column" gap="100" style={{ padding: 8 }} shrink="No">
+        <Text size="B300">连接暂时中断，正在自动重连。已加载的聊天仍可查看。</Text>
+        <Button size="300" onClick={() => mx.retryImmediately()}>
+          <Text>立即重连</Text>
+        </Button>
+      </Box>
+    );
+  }
 
   if (
     visibleStateData.current === SyncState.Reconnecting &&

@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from 'react';
+import { SecurityPage } from './general/SecurityPage';
+import React, { useMemo, useState, useRef } from 'react';
 import {
   Avatar,
   Box,
@@ -14,6 +15,7 @@ import {
   Text,
 } from 'folds';
 import FocusTrap from 'focus-trap-react';
+import { useNativeBack } from '../../hooks/useNativeBack';
 import { General } from './general';
 import { PageNav, PageNavContent, PageNavHeader, PageRoot } from '../../components/page';
 import { isDesktopLikeScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
@@ -44,6 +46,7 @@ export enum SettingsPages {
   AIPage,
   DeveloperToolsPage,
   AboutPage,
+  SecurityPage,
 }
 
 type SettingsMenuItem = {
@@ -55,6 +58,7 @@ type SettingsMenuItem = {
 const useSettingsMenuItems = (): SettingsMenuItem[] =>
   useMemo(
     () => [
+      { page: SettingsPages.SecurityPage, name: '安全', icon: Icons.Lock },
       {
         page: SettingsPages.GeneralPage,
         name: '\u5e38\u89c4',
@@ -129,7 +133,10 @@ export function Settings({ initialPage, requestClose }: SettingsProps) {
     requestClose();
   };
 
+  const backRef = useRef<HTMLDivElement>(null);
+  useNativeBack(backRef, activePage === undefined ? requestClose : handlePageRequestClose, compact);
   return (
+    <div ref={backRef} style={{display:'flex',width:'100%',height:'100%',minHeight:0}}>
     <PageRoot
       nav={
         compact && activePage !== undefined ? undefined : (
@@ -247,6 +254,10 @@ export function Settings({ initialPage, requestClose }: SettingsProps) {
         <DeveloperTools requestClose={handlePageRequestClose} />
       )}
       {activePage === SettingsPages.AboutPage && <About requestClose={handlePageRequestClose} />}
+      {activePage === SettingsPages.SecurityPage && (
+        <SecurityPage requestClose={handlePageRequestClose} />
+      )}
     </PageRoot>
+    </div>
   );
 }

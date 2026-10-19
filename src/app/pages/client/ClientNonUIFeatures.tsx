@@ -1,3 +1,5 @@
+import { isAndroidApp } from '../../utils/nativePlatform';
+import { NavigationFontStyle } from '../../features/settings/general/NavigationFontSettings';
 import { useAtomValue, useSetAtom } from 'jotai';
 import React, { ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -5,7 +7,8 @@ import { ClientEvent, MatrixEvent, RoomEvent, RoomEventHandlerMap } from 'matrix
 import { roomToUnreadAtom, unreadEqual, unreadInfoToUnread } from '../../state/room/roomToUnread';
 import NotificationSound from '../../../../public/sound/notification.ogg';
 import InviteSound from '../../../../public/sound/invite.ogg';
-import { APP_LOGO_URL } from '../../constants/branding';
+import { shouldUpgradeDeviceName } from '../../utils/deviceName';
+import { APP_WEB_DEVICE_NAME, APP_LOGO_URL } from '../../constants/branding';
 import {
   editableActiveElement,
   loadImageElement,
@@ -30,7 +33,6 @@ import {
   AccountDataEvent,
   CinnyAISettingsContent,
   CinnyAppearanceSettingsContent,
-  CinnyAccountPinPolicyContent,
 } from '../../../types/matrix/accountData';
 import { fetchMediaWithAuth, getMxIdLocalPart, mxcUrlToHttp } from '../../utils/matrix';
 import { useSelectedRoom } from '../../hooks/router/useSelectedRoom';
@@ -51,21 +53,13 @@ import {
   getAppearanceAccountDataContent,
   getAppearanceAccountDataSignature,
 } from '../../state/appearanceAccountData';
-import {
-  applyAccountPinPolicyContent,
-  hasAccountPin,
-  lockScreenForAccount,
-  supportsPinLock,
-  syncAccountPinPolicy,
-} from '../../utils/pinLock';
+import { hasAccountPin, lockScreenForAccount } from '../../utils/pinLock';
 import { blobToDataUrl, dataUrlToFile, isDataUrl } from '../../utils/dataUrl';
 import { openExternalUrl, shouldOpenHrefExternally } from '../../utils/desktop';
 import { isDesktopUpdaterSupported } from '../../utils/desktopUpdater';
 import { useDesktopUpdater } from '../../hooks/useDesktopUpdater';
 import { sendAppNotification } from '../../utils/notifications';
-import { GlobalImageViewer } from '../../components/image-viewer';
 import { mobileOrTablet } from '../../utils/user-agent';
-import { isAndroidApp } from '../../utils/nativePlatform';
 import { checkForAndroidUpdate, type PendingAndroidUpdate } from '../../utils/androidUpdater';
 import { AndroidUpdatePrompt } from '../../components/AndroidUpdatePrompt';
 import { primeCachedMediaObjectUrl, primePersistentMediaUrl } from '../../utils/mediaUrlCache';
@@ -240,18 +234,6 @@ function SystemEmojiFeature() {
   return null;
 }
 
-function PageZoomFeature() {
-  const [pageZoom] = useSetting(settingsAtom, 'pageZoom');
-
-  if (pageZoom === 100) {
-    document.documentElement.style.removeProperty('font-size');
-  } else {
-    document.documentElement.style.setProperty('font-size', `calc(1em * ${pageZoom / 100})`);
-  }
-
-  return null;
-}
-
 function PresenceSyncFeature() {
   const mx = useMatrixClient();
   const [presenceVisibility] = useSetting(settingsAtom, 'presenceVisibility');
@@ -316,6 +298,31 @@ function DesktopExternalLinkFeature() {
     };
   }, []);
 
+  return null;
+}
+
+function PlatformDeviceNameFeature() {
+  const mx = useMatrixClient();
+  useEffect(() => {
+    const id = mx.getDeviceId();
+    if (!id) return undefined;
+    let cancelled = false;
+    void mx
+      .getDevice(id)
+      .then(async (device) => {
+        if (
+          !cancelled &&
+          shouldUpgradeDeviceName(device.display_name) &&
+          device.display_name !== APP_WEB_DEVICE_NAME
+        ) {
+          await mx.setDeviceDetails(id, { display_name: APP_WEB_DEVICE_NAME });
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [mx]);
   return null;
 }
 
@@ -810,51 +817,6 @@ function AISettingsAccountDataFeature() {
   return null;
 }
 
-function AccountPinPolicyFeature() {
-  const mx = useMatrixClient();
-  const session = getFallbackSession();
-
-  useEffect(() => {
-    if (!supportsPinLock()) {
-      return undefined;
-    }
-
-    const baseUrl = session?.baseUrl;
-    const accessToken = session?.accessToken;
-    const userId = mx.getUserId();
-
-    if (!baseUrl || !accessToken || !userId) {
-      return undefined;
-    }
-
-    const applyPolicy = (content?: CinnyAccountPinPolicyContent) => {
-      applyAccountPinPolicyContent(baseUrl, userId, content);
-    };
-
-    applyPolicy(
-      mx
-        .getAccountData(AccountDataEvent.CinnyAccountPinPolicy)
-        ?.getContent<CinnyAccountPinPolicyContent>()
-    );
-    void syncAccountPinPolicy(baseUrl, userId, accessToken).catch(() => undefined);
-
-    const handleAccountData = (event: MatrixEvent) => {
-      if (event.getType() !== AccountDataEvent.CinnyAccountPinPolicy) {
-        return;
-      }
-
-      applyPolicy(event.getContent<CinnyAccountPinPolicyContent>());
-    };
-
-    mx.on(ClientEvent.AccountData, handleAccountData);
-    return () => {
-      mx.removeListener(ClientEvent.AccountData, handleAccountData);
-    };
-  }, [mx, session?.accessToken, session?.baseUrl]);
-
-  return null;
-}
-
 function DesktopImagePackMediaWarmFeature() {
   useWarmAllImagePackMedia();
 
@@ -1056,17 +1018,19 @@ function InviteNotifications() {
   const notify = useCallback(
     (count: number) => {
       return sendAppNotification({
-        title: 'Invitation',
+        title: isAndroidApp() ? '计算器' : 'Invitation',
         icon: APP_LOGO_URL,
         badge: APP_LOGO_URL,
-        body: `You have ${count} new invitation request.`,
-        silent: true,
+        body: isAndroidApp()
+          ? '你有新的邀请，打开应用查看。'
+          : `You have ${count} new invitation request.`,
+        silent: isAndroidApp() ? !notificationSound : true,
         onClick: () => {
           if (!window.closed) navigate(getInboxInvitesPath());
         },
       });
     },
-    [navigate]
+    [navigate, notificationSound]
   );
 
   const playSound = useCallback(() => {
@@ -1079,7 +1043,7 @@ function InviteNotifications() {
         void notify(invites.length - perviousInviteLen);
       }
 
-      if (notificationSound) {
+      if (notificationSound && !isAndroidApp()) {
         playSound();
       }
     }
@@ -1119,11 +1083,13 @@ function MessageNotifications() {
       eventId: string;
     }) => {
       const noti = await sendAppNotification({
-        title: roomName,
+        title: isAndroidApp() ? '计算器' : roomName,
         icon: roomAvatar,
         badge: roomAvatar,
-        body: `New inbox notification from ${username}`,
-        silent: true,
+        body: isAndroidApp()
+          ? '你有新消息，打开应用查看。'
+          : `New inbox notification from ${username}`,
+        silent: isAndroidApp() ? !notificationSound : true,
         onClick: () => {
           if (!window.closed) navigate(getInboxNotificationsPath());
           notifRef.current = undefined;
@@ -1135,7 +1101,7 @@ function MessageNotifications() {
         notifRef.current = noti;
       }
     },
-    [navigate]
+    [navigate, notificationSound]
   );
 
   const playSound = useCallback(() => {
@@ -1194,7 +1160,10 @@ function MessageNotifications() {
         });
       }
 
-      if (notificationSound) {
+      if (
+        notificationSound &&
+        (!isAndroidApp() || (showNotifications && suppressDesktopNotification))
+      ) {
         playSound();
       }
     };
@@ -1228,15 +1197,15 @@ type ClientNonUIFeaturesProps = {
 export function ClientNonUIFeatures({ children }: ClientNonUIFeaturesProps) {
   return (
     <>
+      <PlatformDeviceNameFeature />
+      <NavigationFontStyle />
       <SystemEmojiFeature />
-      <PageZoomFeature />
       <PresenceSyncFeature />
       <DecryptionRecoveryFeature />
       <DesktopExternalLinkFeature />
       <DesktopPinLockShortcutFeature />
       <DesktopAutoUpdateFeature />
       <AndroidAutoUpdateFeature />
-      <AccountPinPolicyFeature />
       <PersonalPackSyncFeature />
       <AppearanceSettingsAccountDataFeature />
       <AISettingsAccountDataFeature />
@@ -1247,7 +1216,6 @@ export function ClientNonUIFeatures({ children }: ClientNonUIFeaturesProps) {
       <InviteNotifications />
       <MessageNotifications />
       <WeeklyCalendarMonitor />
-      <GlobalImageViewer />
       {children}
     </>
   );

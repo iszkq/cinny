@@ -1,3 +1,4 @@
+import { NATIVE_CHAT_EDITION, NativeSpaceChats } from '../../../components/native-chat/NativeChatList';
 import React, {
   MouseEventHandler,
   forwardRef,
@@ -408,7 +409,9 @@ export function SpaceTombstone({ roomId, replacementRoomId }: SpaceTombstoneProp
   );
 }
 
-export function Space() {
+export function Space() { return NATIVE_CHAT_EDITION ? <NativeSpaceChats /> : <DesktopSpace />; }
+
+function DesktopSpace() {
   const mx = useMatrixClient();
   const space = useSpace();
   useNavToActivePathMapper(space.roomId);

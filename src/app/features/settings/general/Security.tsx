@@ -1,6 +1,6 @@
+import { CalculatorSettings } from '../../../components/calculator/CalculatorSettings';
 import React, { FormEventHandler, useMemo, useState } from 'react';
 import { Box, Button, Input, Switch, Text, color } from 'folds';
-import { useAccountData } from '../../../hooks/useAccountData';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { getFallbackSession } from '../../../state/sessions';
 import { SequenceCard } from '../../../components/sequence-card';
@@ -13,20 +13,16 @@ import {
   PinLockDialogShell,
 } from '../../../components/pin-lock';
 import {
-  createDisabledAccountPinPolicyContent,
-  createEnabledAccountPinPolicyContent,
+  clearLocalAccountPin,
   changeAccountPin,
   getAccountPinKey,
+  getPinIdleMinutes,
+  setPinIdleMinutes,
   getAccountPinLabel,
-  isAccountPinPolicyEnabled,
   isPinCodeFormatValid,
   lockScreenForAccount,
   supportsPinLock,
 } from '../../../utils/pinLock';
-import {
-  AccountDataEvent,
-  CinnyAccountPinPolicyContent,
-} from '../../../../types/matrix/accountData';
 import * as pinCss from '../../../components/pin-lock/style.css';
 
 type SecurityProps = {
@@ -38,12 +34,10 @@ type PinDialogMode = 'setup' | 'change' | 'disable' | undefined;
 type ChangePinDialogProps = {
   baseUrl: string;
   userId: string;
-  syncPolicy: boolean;
   requestClose: () => void;
 };
 
-function ChangePinDialog({ baseUrl, userId, syncPolicy, requestClose }: ChangePinDialogProps) {
-  const mx = useMatrixClient();
+function ChangePinDialog({ baseUrl, userId, requestClose }: ChangePinDialogProps) {
   const [currentPin, setCurrentPin] = useState('');
   const [nextPin, setNextPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
@@ -67,14 +61,7 @@ function ChangePinDialog({ baseUrl, userId, syncPolicy, requestClose }: ChangePi
     setError(undefined);
 
     try {
-      const config = await changeAccountPin(baseUrl, userId, currentPin, nextPin);
-
-      if (syncPolicy) {
-        await mx.setAccountData(
-          AccountDataEvent.CinnyAccountPinPolicy,
-          createEnabledAccountPinPolicyContent(config)
-        );
-      }
+      await changeAccountPin(baseUrl, userId, currentPin, nextPin);
 
       requestClose();
     } catch (err) {
@@ -87,7 +74,7 @@ function ChangePinDialog({ baseUrl, userId, syncPolicy, requestClose }: ChangePi
   return (
     <PinLockDialogShell
       title="修改本机 PIN"
-      description="修改后，这台设备上的锁屏和下次登录验证都会使用新的 PIN。账号级策略本身仍然保持开启。"
+      description="修改后，只有这台设备上的锁屏和下次登录验证使用新的 PIN，其他设备不受影响。"
       accountLabel={getAccountPinLabel(baseUrl, userId)}
       requestClose={requestClose}
       embedded
@@ -168,22 +155,18 @@ function ChangePinDialog({ baseUrl, userId, syncPolicy, requestClose }: ChangePi
 export function Security({ requestClose }: SecurityProps) {
   const mx = useMatrixClient();
   const session = getFallbackSession();
-  const policyEvent = useAccountData(AccountDataEvent.CinnyAccountPinPolicy);
   const { protectedAccountKeys } = usePinLockSnapshot();
   const [dialogMode, setDialogMode] = useState<PinDialogMode>();
 
   const userId = mx.getUserId();
   const baseUrl = session?.baseUrl;
   const pinSupported = supportsPinLock();
-  const policyEnabled = isAccountPinPolicyEnabled(
-    policyEvent?.getContent<CinnyAccountPinPolicyContent>()
-  );
   const accountKey = baseUrl && userId ? getAccountPinKey(baseUrl, userId) : undefined;
   const localPinEnabled = useMemo(
     () => !!accountKey && protectedAccountKeys.includes(accountKey),
     [accountKey, protectedAccountKeys]
   );
-  const accountPinEnabled = policyEnabled || localPinEnabled;
+  const accountPinEnabled = localPinEnabled;
 
   if (!pinSupported || !userId || !baseUrl) {
     return null;
@@ -191,6 +174,7 @@ export function Security({ requestClose }: SecurityProps) {
 
   return (
     <Box direction="Column" gap="100">
+      {(import.meta.env.VITE_IOS_APP === 'true' || import.meta.env.VITE_ANDROID_APP === 'true') && <CalculatorSettings />}
       <Text size="L400">账户安全</Text>
       <SequenceCard
         className={SequenceCardStyle}
@@ -203,9 +187,9 @@ export function Security({ requestClose }: SecurityProps) {
           description={
             pinSupported ? (
               accountPinEnabled ? (
-                '当前账号已开启账号级 PIN 策略。其他新设备登录同一账号时，也必须先设置本机 PIN 才能进入。'
+                '当前设备已开启 PIN 保护。其他设备可以独立设置，不受本机 PIN 影响。'
               ) : (
-                '开启后，这个账号在每台设备上都需要先设置各自的本机 PIN。PIN 码本身只保存在本地，不会同步到服务器。'
+                '开启后仅保护当前设备。PIN 校验摘要只保存在本机，不会同步到服务器。'
               )
             ) : (
               <Text as="span" size="T200" style={{ color: color.Critical.Main }}>
@@ -227,7 +211,7 @@ export function Security({ requestClose }: SecurityProps) {
           description={
             localPinEnabled
               ? '这台设备已经保存了本机 PIN，可以用于解锁锁屏和下次登录验证。'
-              : '这台设备还没有保存本机 PIN。开启账号级 PIN 策略后，会先要求为当前设备创建本机 PIN。'
+              : '这台设备尚未设置 PIN，可在此独立开启本机保护。'
           }
           after={
             <Text size="T200" priority="300">
@@ -254,6 +238,23 @@ export function Security({ requestClose }: SecurityProps) {
         )}
         {localPinEnabled && (
           <SettingTile
+            title="无操作后自动锁定"
+            description="保持账号登录；达到所选时间后隐藏聊天，输入 PIN 恢复。切换到后台、最小化和电脑休眠也计入时间。"
+            after={
+              <select
+                aria-label="自动锁定时间"
+                value={getPinIdleMinutes(baseUrl, userId)}
+                onChange={(event) => setPinIdleMinutes(baseUrl, userId, Number(event.target.value))}
+              >
+                <option value={1}>1 分钟</option>
+                <option value={5}>5 分钟</option>
+                <option value={10}>10 分钟</option>
+              </select>
+            }
+          />
+        )}
+        {localPinEnabled && (
+          <SettingTile
             title="立即锁屏"
             description="锁屏后会完全切换到 PIN 锁定页面，后面的聊天内容不会继续显示。"
             after={
@@ -275,13 +276,13 @@ export function Security({ requestClose }: SecurityProps) {
         <Box className={pinCss.NoticeCard} direction="Column" gap="100">
           <Text size="L400">说明</Text>
           <Text size="T300" priority="300">
-            账号级策略会跟随账号同步，用来告诉其他设备“这个账号需要本机 PIN”。
+            PIN 只保护当前设备；开启、修改或关闭都不会影响其他设备。
           </Text>
           <Text size="T300" priority="300">
-            真正的 PIN 码和加密摘要只保存在当前设备，不会上传，也不会在设备之间同步。
+            本版本仅在当前设备保存 PIN 校验摘要，不保存明文 PIN，也不会上传或同步。
           </Text>
           <Text size="T300" priority="300">
-            如果忘记 PIN，只能通过清空这台设备的本地数据来重置，本地会话和缓存也会一起被移除。
+            如果忘记 PIN，可退出后重新登录，再验证设备并设置新的本机 PIN。设备验证需另一台已验证设备或恢复密钥；未备份的本机加密密钥可能随退出丢失。
           </Text>
         </Box>
       </SequenceCard>
@@ -290,16 +291,12 @@ export function Security({ requestClose }: SecurityProps) {
         <LocalPinSetupDialog
           baseUrl={baseUrl}
           userId={userId}
-          title="开启账号级 PIN 保护"
-          description="先为当前设备创建本机 PIN。保存完成后，这个账号在其他新设备登录时也会先要求设置各自的本机 PIN。"
+          title="开启本机 PIN 保护"
+          description="为当前设备设置独立 PIN，不会改变其他设备的设置。"
           submitLabel="开启 PIN 保护"
           onCancel={() => setDialogMode(undefined)}
           embedded
-          onSuccess={async (config) => {
-            await mx.setAccountData(
-              AccountDataEvent.CinnyAccountPinPolicy,
-              createEnabledAccountPinPolicyContent(config)
-            );
+          onSuccess={() => {
             setDialogMode(undefined);
           }}
         />
@@ -308,7 +305,6 @@ export function Security({ requestClose }: SecurityProps) {
         <ChangePinDialog
           baseUrl={baseUrl}
           userId={userId}
-          syncPolicy={accountPinEnabled}
           requestClose={() => setDialogMode(undefined)}
         />
       )}
@@ -317,15 +313,12 @@ export function Security({ requestClose }: SecurityProps) {
           baseUrl={baseUrl}
           userId={userId}
           title="关闭 PIN 保护"
-          description="输入当前设备的 PIN 后，会关闭这个账号的账号级 PIN 策略，并清除当前设备保存的本机 PIN。"
+          description="验证当前设备的 PIN 后，仅关闭本机 PIN 保护，其他设备不受影响。"
           submitLabel="关闭 PIN 保护"
           embedded
           onCancel={() => setDialogMode(undefined)}
-          onSuccess={async () => {
-            await mx.setAccountData(
-              AccountDataEvent.CinnyAccountPinPolicy,
-              createDisabledAccountPinPolicyContent()
-            );
+          onSuccess={() => {
+            clearLocalAccountPin(baseUrl, userId);
             setDialogMode(undefined);
           }}
         />

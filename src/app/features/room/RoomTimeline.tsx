@@ -1317,11 +1317,13 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     window.addEventListener(ROOM_COMPOSER_VIEWPORT_CHANGE, handleComposerViewportChange);
     window.addEventListener('resize', handleViewportResize, { passive: true });
     viewport?.addEventListener('resize', handleViewportResize, { passive: true });
+    viewport?.addEventListener('scroll', handleViewportResize, { passive: true });
 
     return () => {
       window.removeEventListener(ROOM_COMPOSER_VIEWPORT_CHANGE, handleComposerViewportChange);
       window.removeEventListener('resize', handleViewportResize);
       viewport?.removeEventListener('resize', handleViewportResize);
+      viewport?.removeEventListener('scroll', handleViewportResize);
       pendingFrames.forEach((frame) => window.cancelAnimationFrame(frame));
       pendingTimers.forEach((timer) => window.clearTimeout(timer));
     };
@@ -2843,13 +2845,13 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             <Text size="L400">{`\u5df2\u9009\u62e9 ${selectedForwardCount} \u6761\u6d88\u606f`}</Text>
           </Chip>
           <Chip
-            variant="Success"
+            style={{ minHeight: 52, padding: '12px 28px', fontSize: 18 }}
+            variant="Primary"
             radii="Pill"
-            outlined
             before={<Icon size="50" src={Icons.ArrowGoRight} />}
             onClick={() => setForwardDialog(true)}
           >
-            <Text size="L400">{'\u9009\u62e9\u8f6c\u53d1\u76ee\u6807'}</Text>
+            <Text size="L400">{'提交转发'}</Text>
           </Chip>
           <Chip
             variant="SurfaceVariant"
