@@ -2,6 +2,11 @@ name: Build iOS IPA
 
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Existing version tag to rebuild and attach the IPA to (optional).'
+        required: false
+        type: string
   push:
     tags:
       - 'v*'
@@ -18,23 +23,35 @@ jobs:
       NODE_OPTIONS: '--max_old_space_size=6144'
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ inputs.release_tag || github.ref }}
       - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f
         with:
           node-version-file: .node-version
           cache: npm
       - name: Install dependencies
         run: npm ci
+      - name: Validate requested release version
+        if: inputs.release_tag != ''
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: node -e 'const fs=require("fs");if(process.env.RELEASE_TAG!=="v"+JSON.parse(fs.readFileSync("package.json")).version)throw new Error("Release tag does not match package version");'
       - name: Build unsigned iOS 16 IPA
         run: npm run ios:build
+      - name: Stage IPA in workspace
+        run: |
+          mkdir -p artifacts/ios
+          cp ../安装包/*.ipa artifacts/ios/
       - uses: actions/upload-artifact@v4
         with:
           name: Starfire-iOS-unsigned
-          path: ../安装包/*.ipa
+          path: artifacts/ios/*.ipa
           if-no-files-found: error
           retention-days: 30
       - name: Attach unsigned IPA to release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
         uses: softprops/action-gh-release@6cbd405e2c4e67a21c47fa9e383d020e4e28b836
         with:
-          files: ../安装包/*.ipa
+          tag_name: ${{ inputs.release_tag || github.ref_name }}
+          files: artifacts/ios/*.ipa
           fail_on_unmatched_files: true
