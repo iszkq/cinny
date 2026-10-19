@@ -7,6 +7,7 @@ Windows 和 Web 的应用源码固定到移植前的 **1.9.10**，提交
 - Windows：独立检出到 `windows-client/`，保留旧 UI、样式、依赖和 Rust 实现；仅安装包版本元数据更新为 2.0.1。
 - Web：独立检出到 `web-client/`，保留旧版基础、版本号 1.9.10 和锁文件；准备脚本应用 `scripts/patches/web-pin-lock.patch`，加入网页版 PIN 入口、首次设置提示、5 分钟闲置锁屏及主动重新登录重设 PIN。
 - Web 另应用 `scripts/patches/web-settings-compat.patch`，兼容旧 PIN 和聊天背景设置，并保留启动失败退出时的本地设置。
+- Web 再应用 `scripts/patches/web-background-recovery.patch`：启动时先读取服务器账号设置再允许写回，读取失败保持待同步；已保存背景优先从媒体缓存恢复，下载失败定时重试，联网或返回网页也会重试。此补丁不改变其他端。
 - 所有端恢复原有语音转文字和图片识别默认配置；Web / Windows 准备脚本从根目录 `config.json` 同步这两项配置。
 - macOS / iOS / Android：继续从根目录的移植源码构建，不使用上述旧检出。
 

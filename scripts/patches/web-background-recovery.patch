@@ -1,0 +1,531 @@
+diff --git a/src/app/features/settings/general/AppearanceCustomizer.tsx b/src/app/features/settings/general/AppearanceCustomizer.tsx
+index ee21a1b..255b60d 100644
+--- a/src/app/features/settings/general/AppearanceCustomizer.tsx
++++ b/src/app/features/settings/general/AppearanceCustomizer.tsx
+@@ -570,7 +570,11 @@ export function AppearanceCustomizer() {
+       <div className={css.SwatchHeader}>
+         <Text size="T300">{'\u804a\u5929\u80cc\u666f'}</Text>
+         <span className={css.SwatchMeta}>
+-          {chatBackgroundDataUrl ? '\u5df2\u542f\u7528' : '\u672a\u8bbe\u7f6e'}
++          {chatBackgroundDataUrl
++            ? '\u5df2\u542f\u7528'
++            : settings.chatBackgroundMediaMxc
++            ? '已保存，等待加载'
++            : '\u672a\u8bbe\u7f6e'}
+         </span>
+       </div>
+
+@@ -601,7 +605,7 @@ export function AppearanceCustomizer() {
+           radii="300"
+           before={<Icon size="50" src={Icons.Cross} />}
+           onClick={handleRemoveBackground}
+-          disabled={!chatBackgroundDataUrl || backgroundLoading}
++          disabled={(!chatBackgroundDataUrl && !settings.chatBackgroundMediaMxc) || backgroundLoading}
+         >
+           <Text size="B300">{'\u79fb\u9664\u80cc\u666f'}</Text>
+         </Button>
+@@ -617,6 +621,8 @@ export function AppearanceCustomizer() {
+         <span className={css.BackgroundPreviewBadge}>
+           {chatBackgroundDataUrl
+             ? '\u804a\u5929\u80cc\u666f\u9884\u89c8'
++            : settings.chatBackgroundMediaMxc
++            ? '已保存的背景正在恢复，联网或返回网页后会自动重试'
+             : '\u672a\u8bbe\u7f6e\u804a\u5929\u80cc\u666f'}
+         </span>
+       </div>
+diff --git a/src/app/pages/client/ClientNonUIFeatures.tsx b/src/app/pages/client/ClientNonUIFeatures.tsx
+index dbdc144..9560086 100644
+--- a/src/app/pages/client/ClientNonUIFeatures.tsx
++++ b/src/app/pages/client/ClientNonUIFeatures.tsx
+@@ -1,7 +1,7 @@
+ import { useAtomValue, useSetAtom } from 'jotai';
+ import React, { ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+ import { useNavigate } from 'react-router-dom';
+-import { ClientEvent, MatrixEvent, RoomEvent, RoomEventHandlerMap } from 'matrix-js-sdk';
++import { ClientEvent, MatrixEvent, Method, RoomEvent, RoomEventHandlerMap } from 'matrix-js-sdk';
+ import { roomToUnreadAtom, unreadEqual, unreadInfoToUnread } from '../../state/room/roomToUnread';
+ import NotificationSound from '../../../../public/sound/notification.ogg';
+ import InviteSound from '../../../../public/sound/invite.ogg';
+@@ -69,7 +69,12 @@ import { mobileOrTablet } from '../../utils/user-agent';
+ import { isAndroidApp } from '../../utils/nativePlatform';
+ import { checkForAndroidUpdate, type PendingAndroidUpdate } from '../../utils/androidUpdater';
+ import { AndroidUpdatePrompt } from '../../components/AndroidUpdatePrompt';
+-import { primeCachedMediaObjectUrl, primePersistentMediaUrl } from '../../utils/mediaUrlCache';
++import {
++  cacheUploadedMediaBlob,
++  getPersistedMediaBlob,
++  primeCachedMediaObjectUrl,
++  primePersistentMediaUrl,
++} from '../../utils/mediaUrlCache';
+ import { WeeklyCalendarMonitor } from '../../features/weekly-calendar/WeeklyCalendarMonitor';
+ import { startDecryptionRecovery } from '../../utils/decryptionRecovery';
+ import { startBackgroundRoomDecryption } from '../../utils/backgroundDecryption';
+@@ -508,6 +513,7 @@ function AppearanceSettingsAccountDataFeature() {
+   const useAuthentication = useMediaAuthentication();
+   const settings = useAtomValue(settingsAtom);
+   const setSettings = useSetAtom(settingsAtom);
++  const [accountDataReady, setAccountDataReady] = useState(false);
+
+   const settingsRef = useRef(settings);
+   const hydratedRef = useRef(false);
+@@ -542,12 +548,15 @@ function AppearanceSettingsAccountDataFeature() {
+         return;
+       }
+
+-      const response = await fetchMediaWithAuth(mediaUrl).catch(() => undefined);
+-      if (!response?.ok) {
+-        return;
++      let blob = await getPersistedMediaBlob(mediaUrl).catch(() => undefined);
++      if (!blob) {
++        const response = await fetchMediaWithAuth(mediaUrl).catch(() => undefined);
++        if (!response?.ok) return;
++        blob = await response.blob();
++        void cacheUploadedMediaBlob(mediaUrl, blob, false).catch(() => undefined);
+       }
+
+-      const dataUrl = await blobToDataUrl(await response.blob());
++      const dataUrl = await blobToDataUrl(blob);
+
+       if (
+         backgroundFetchTokenRef.current !== fetchToken ||
+@@ -557,16 +566,27 @@ function AppearanceSettingsAccountDataFeature() {
+         return;
+       }
+
+-      setSettings({
++      const nextSettings = {
+         ...settingsRef.current,
+         chatBackgroundDataUrl: dataUrl,
+-      });
++      };
++      settingsRef.current = nextSettings;
++      setSettings(nextSettings);
+     },
+     [mx, setSettings, useAuthentication]
+   );
+
+   useEffect(() => {
++    let disposed = false;
++    let lookupPending = false;
++    let revision = 0;
++    let retryTimer: number | undefined;
++    hydratedRef.current = false;
++    setAccountDataReady(false);
++
+     const applyAccountData = (content?: CinnyAppearanceSettingsContent) => {
++      hydratedRef.current = true;
++      setAccountDataReady(true);
+       if (!content) {
+         remoteSignatureRef.current = undefined;
+         applyingRemoteSignatureRef.current = undefined;
+@@ -608,34 +628,102 @@ function AppearanceSettingsAccountDataFeature() {
+         applyingRemoteSignatureRef.current = undefined;
+         hydratedRef.current = true;
+       }
+-
+-      if (remoteBackgroundMxc && (backgroundChanged || !currentSettings.chatBackgroundDataUrl)) {
+-        void hydrateBackgroundDataUrl(remoteBackgroundMxc).catch(() => undefined);
+-      }
+     };
+
+-    applyAccountData(
+-      mx
+-        .getAccountData(AccountDataEvent.CinnyAppearanceSettings)
+-        ?.getContent<CinnyAppearanceSettingsContent>()
+-    );
+-
+     const handleAccountData = (event: MatrixEvent) => {
+       if (event.getType() !== AccountDataEvent.CinnyAppearanceSettings) {
+         return;
+       }
+
++      revision += 1;
+       applyAccountData(event.getContent<CinnyAppearanceSettingsContent>());
+     };
+
++    // Cached rooms can render before /sync delivers account data. An absent
++    // cached event is not evidence that the server has no saved background.
++    const loadAccountData = async () => {
++      if (lookupPending || disposed) return;
++      lookupPending = true;
++      window.clearTimeout(retryTimer);
++      const requestedRevision = revision;
++      try {
++        const userId = mx.getUserId();
++        if (!userId) throw new Error('No active account');
++        const content = await mx.http
++          .authedRequest<CinnyAppearanceSettingsContent>(
++            Method.Get,
++            `/user/${encodeURIComponent(userId)}/account_data/${
++              AccountDataEvent.CinnyAppearanceSettings
++            }`
++          )
++          .catch((error: unknown) => {
++            if ((error as { errcode?: string })?.errcode === 'M_NOT_FOUND') return undefined;
++            throw error;
++          });
++        if (!disposed && revision === requestedRevision) applyAccountData(content);
++      } catch {
++        // Stay unhydrated on network errors: publishing an empty local value
++        // here could erase the original image saved by another client.
++        if (!disposed && !hydratedRef.current) {
++          retryTimer = window.setTimeout(() => void loadAccountData(), 30_000);
++        }
++      } finally {
++        lookupPending = false;
++      }
++    };
++    const retryLookup = () => {
++      if (!hydratedRef.current) void loadAccountData();
++    };
+     mx.on(ClientEvent.AccountData, handleAccountData);
++    window.addEventListener('online', retryLookup);
++    window.addEventListener('focus', retryLookup);
++    void loadAccountData();
+     return () => {
++      disposed = true;
++      backgroundFetchTokenRef.current += 1;
++      window.clearTimeout(retryTimer);
++      window.removeEventListener('online', retryLookup);
++      window.removeEventListener('focus', retryLookup);
+       mx.removeListener(ClientEvent.AccountData, handleAccountData);
+     };
+-  }, [hydrateBackgroundDataUrl, mx, setSettings]);
++  }, [mx, setSettings]);
+
+   useEffect(() => {
+-    if (!hydratedRef.current || applyingRemoteSignatureRef.current) {
++    const backgroundMxc = settings.chatBackgroundMediaMxc;
++    if (!backgroundMxc || settings.chatBackgroundDataUrl) return undefined;
++    let disposed = false;
++    let pending = false;
++    let retryTimer: number | undefined;
++    const retry = async () => {
++      if (disposed || pending) return;
++      pending = true;
++      window.clearTimeout(retryTimer);
++      try {
++        await hydrateBackgroundDataUrl(backgroundMxc);
++      } catch {
++        // Preserve the saved MXC and retry transient media/cache failures.
++      } finally {
++        pending = false;
++        if (!disposed && !settingsRef.current.chatBackgroundDataUrl) {
++          retryTimer = window.setTimeout(() => void retry(), 30_000);
++        }
++      }
++    };
++    const retryOnActivity = () => void retry();
++    window.addEventListener('online', retryOnActivity);
++    window.addEventListener('focus', retryOnActivity);
++    void retry();
++    return () => {
++      disposed = true;
++      backgroundFetchTokenRef.current += 1;
++      window.clearTimeout(retryTimer);
++      window.removeEventListener('online', retryOnActivity);
++      window.removeEventListener('focus', retryOnActivity);
++    };
++  }, [hydrateBackgroundDataUrl, settings.chatBackgroundMediaMxc, settings.chatBackgroundDataUrl]);
++
++  useEffect(() => {
++    if (!accountDataReady || !hydratedRef.current || applyingRemoteSignatureRef.current) {
+       return undefined;
+     }
+
+@@ -692,6 +780,8 @@ function AppearanceSettingsAccountDataFeature() {
+       const latestSignature = getAppearanceAccountDataSignature(latestSettings);
+
+       if (
++        !hydratedRef.current ||
++        applyingRemoteSignatureRef.current ||
+         !latestSignature ||
+         latestSignature === remoteSignatureRef.current ||
+         latestSignature === pendingSaveSignatureRef.current ||
+@@ -725,7 +815,7 @@ function AppearanceSettingsAccountDataFeature() {
+     return () => {
+       window.clearTimeout(saveTimer);
+     };
+-  }, [mx, settings, setSettings]);
++  }, [accountDataReady, mx, settings, setSettings]);
+
+   return null;
+ }
+diff --git a/tests/web-pin-lock.test.mjs b/tests/web-pin-lock.test.mjs
+index 461b9c9..8d7a180 100644
+--- a/tests/web-pin-lock.test.mjs
++++ b/tests/web-pin-lock.test.mjs
+@@ -429,7 +429,12 @@ test('migration waits for lookup, fails closed on network errors, and supports r
+   assert.equal(h.pin.hasAccountPin(baseUrl, userId), false);
+ });
+
+-function appearanceHarness(initial, remote, mediaFetch = async () => ({ ok: false })) {
++function appearanceHarness(
++  initial,
++  remote,
++  mediaFetch = async () => ({ ok: false }),
++  options = {}
++) {
+   const h = harness();
+   const settingsModule = compile(
+     'state/settings.ts',
+@@ -450,11 +455,23 @@ function appearanceHarness(initial, remote, mediaFetch = async () => ({ ok: fals
+   const runtime = hookRuntime();
+   const saves = [];
+   const timers = new Map();
++  const windowListeners = new Map();
++  const clientListeners = new Map();
++  const cachedWrites = [];
+   let timerId = 0;
+   const mx = {
+     getAccountData: () => remote && { getContent: () => remote },
+-    on: () => {},
+-    removeListener: () => {},
++    getUserId: () => userId,
++    http: {
++      authedRequest:
++        options.lookup ??
++        (async () => {
++          if (remote) return remote;
++          throw { errcode: 'M_NOT_FOUND' };
++        }),
++    },
++    on: (name, callback) => clientListeners.set(name, callback),
++    removeListener: (name) => clientListeners.delete(name),
+     setAccountData: async (type, content) => {
+       saves.push(content);
+     },
+@@ -470,14 +487,22 @@ function appearanceHarness(initial, remote, mediaFetch = async () => ({ ok: fals
+     useSetAtom: () => setSettings,
+     AccountDataEvent: { CinnyAppearanceSettings: 'appearance' },
+     ClientEvent: { AccountData: 'accountData' },
++    Method: { Get: 'GET' },
+     mxcUrlToHttp: (client, mxc) => `https://example.org/${mxc}`,
+     fetchMediaWithAuth: mediaFetch,
++    getPersistedMediaBlob: async () => options.cachedBlob,
++    cacheUploadedMediaBlob: async (url, blob) => cachedWrites.push({ url, blob }),
+     blobToDataUrl: async () => 'data:image/png;base64,cmVtb3Rl',
+     isDataUrl: (value) => value.startsWith('data:'),
+     dataUrlToFile: async () => ({}),
+     APPEARANCE_BACKGROUND_FILE_NAME: 'background.webp',
+     APPEARANCE_ACCOUNT_DATA_SAVE_DEBOUNCE_MS: 450,
+     window: {
++      addEventListener: (name, callback) => {
++        if (!windowListeners.has(name)) windowListeners.set(name, new Set());
++        windowListeners.get(name).add(callback);
++      },
++      removeEventListener: (name, callback) => windowListeners.get(name)?.delete(callback),
+       setTimeout: (callback) => {
+         timers.set(++timerId, callback);
+         return timerId;
+@@ -502,7 +527,28 @@ function appearanceHarness(initial, remote, mediaFetch = async () => ({ ok: fals
+     runtime.render(() => context.AppearanceSettingsAccountDataFeature());
+     runtime.flush();
+   };
+-  return { render, settings: () => current, appearance, saves, timers };
++  const settle = async () => {
++    for (let i = 0; i < 4; i += 1) {
++      render();
++      await flushAsync();
++    }
++  };
++  return {
++    render,
++    settle,
++    settings: () => current,
++    appearance,
++    saves,
++    timers,
++    cachedWrites,
++    update: setSettings,
++    emitWindow: (name) => windowListeners.get(name)?.forEach((callback) => callback()),
++    emitRemote: (content) =>
++      clientListeners.get('accountData')?.({
++        getType: () => 'appearance',
++        getContent: () => content,
++      }),
++  };
+ }
+
+ test('legacy appearance data without a background field preserves uploaded and local-only images', async () => {
+@@ -514,9 +560,12 @@ test('legacy appearance data without a background field preserves uploaded and l
+     { chatBackgroundDataUrl: 'data:image/png;base64,bG9jYWw=' },
+   ]) {
+     const h = appearanceHarness(initial, { version: 1, themeId: 'remote-theme' });
+-    h.render();
++    await h.settle();
+     assert.equal(h.settings().chatBackgroundDataUrl, initial.chatBackgroundDataUrl);
+-    assert.equal(h.settings().chatBackgroundMediaMxc, initial.chatBackgroundMediaMxc);
++    assert.equal(
++      h.settings().chatBackgroundMediaMxc,
++      initial.chatBackgroundMediaMxc ?? 'mxc://example.org/uploaded'
++    );
+     h.render();
+     await flushAsync();
+     h.render();
+@@ -527,12 +576,12 @@ test('legacy appearance data without a background field preserves uploaded and l
+   }
+ });
+
+-test('explicit remote deletion still removes the background and serializes a deletion marker', () => {
++test('explicit remote deletion still removes the background and serializes a deletion marker', async () => {
+   const h = appearanceHarness(
+     { chatBackgroundDataUrl: 'data:image/png;base64,bG9jYWw=' },
+     { version: 1, chatBackgroundMediaMxc: null }
+   );
+-  h.render();
++  await h.settle();
+   assert.equal(h.settings().chatBackgroundDataUrl, undefined);
+   assert.equal(h.settings().chatBackgroundMediaMxc, undefined);
+   const serialized = JSON.parse(
+@@ -547,12 +596,148 @@ test('a downloaded background is hydrated against the latest settings even befor
+     { version: 1, chatBackgroundMediaMxc: 'mxc://example.org/remote' },
+     async () => ({ ok: true, blob: async () => ({}) })
+   );
+-  h.render();
+-  await flushAsync();
++  await h.settle();
+   assert.equal(h.settings().chatBackgroundMediaMxc, 'mxc://example.org/remote');
+   assert.equal(h.settings().chatBackgroundDataUrl, 'data:image/png;base64,cmVtb3Rl');
+ });
+
++test('startup waits for authoritative appearance data before publishing local settings', async () => {
++  let finish;
++  const h = appearanceHarness(
++    { themeId: 'previous-theme' },
++    undefined,
++    async () => ({ ok: true, blob: async () => ({}) }),
++    {
++      lookup: () =>
++        new Promise((resolve) => {
++          finish = resolve;
++        }),
++    }
++  );
++  await h.settle();
++  for (const callback of h.timers.values()) callback();
++  assert.equal(h.saves.length, 0);
++  finish({ version: 1, chatBackgroundMediaMxc: 'mxc://example.org/original' });
++  await h.settle();
++  assert.equal(h.settings().chatBackgroundDataUrl, 'data:image/png;base64,cmVtb3Rl');
++  for (const callback of h.timers.values()) callback();
++  assert.equal(
++    h.saves.some((content) => content.chatBackgroundMediaMxc === null),
++    false
++  );
++});
++
++test('offline account lookup cannot clear saved background and retries on reconnect', async () => {
++  let online = false;
++  const h = appearanceHarness(
++    { themeId: 'previous-theme' },
++    undefined,
++    async () => ({ ok: true, blob: async () => ({}) }),
++    {
++      lookup: async () => {
++        if (!online) throw new Error('offline');
++        return { version: 1, chatBackgroundMediaMxc: 'mxc://example.org/original' };
++      },
++    }
++  );
++  await h.settle();
++  for (const callback of [...h.timers.values()]) callback();
++  await h.settle();
++  assert.equal(h.saves.length, 0);
++  online = true;
++  h.emitWindow('online');
++  await h.settle();
++  assert.equal(h.settings().chatBackgroundMediaMxc, 'mxc://example.org/original');
++  assert.ok(h.settings().chatBackgroundDataUrl);
++});
++
++test('confirmed missing remote settings still allow local images to upload and sync', async () => {
++  const h = appearanceHarness({ chatBackgroundDataUrl: 'data:image/png;base64,bG9jYWw=' });
++  await h.settle();
++  for (const callback of [...h.timers.values()]) callback();
++  await flushAsync();
++  assert.equal(h.saves.at(-1).chatBackgroundMediaMxc, 'mxc://example.org/uploaded');
++});
++
++test('failed background download retries on timer, focus, and reconnect without losing its MXC', async () => {
++  for (const trigger of ['timer', 'focus', 'online']) {
++    let success = false;
++    let requests = 0;
++    const h = appearanceHarness(
++      {},
++      { chatBackgroundMediaMxc: 'mxc://example.org/original' },
++      async () => {
++        requests += 1;
++        return { ok: success, blob: async () => ({}) };
++      }
++    );
++    await h.settle();
++    assert.equal(requests, 1);
++    assert.equal(h.settings().chatBackgroundMediaMxc, 'mxc://example.org/original');
++    success = true;
++    if (trigger === 'timer') {
++      for (const callback of [...h.timers.values()]) callback();
++    } else h.emitWindow(trigger);
++    await h.settle();
++    assert.equal(requests, 2);
++    assert.ok(h.settings().chatBackgroundDataUrl);
++    assert.equal(h.cachedWrites.length, 1);
++  }
++});
++
++test('background can be recovered offline from the account media cache', async () => {
++  const h = appearanceHarness(
++    {},
++    { chatBackgroundMediaMxc: 'mxc://example.org/original' },
++    async () => {
++      assert.fail('cached image must not need the network');
++    },
++    { cachedBlob: {} }
++  );
++  await h.settle();
++  assert.ok(h.settings().chatBackgroundDataUrl);
++});
++
++test('a stale startup lookup cannot replace newer sync data', async () => {
++  let finish;
++  const h = appearanceHarness({}, undefined, undefined, {
++    lookup: () =>
++      new Promise((resolve) => {
++        finish = resolve;
++      }),
++  });
++  h.render();
++  h.emitRemote({ themeId: 'new-theme', chatBackgroundMediaMxc: 'mxc://example.org/new' });
++  finish({ themeId: 'old-theme', chatBackgroundMediaMxc: null });
++  await h.settle();
++  assert.equal(h.settings().themeId, 'new-theme');
++  assert.equal(h.settings().chatBackgroundMediaMxc, 'mxc://example.org/new');
++});
++
++test('a late download cannot resurrect a removed image or replace a newly selected image', async () => {
++  for (const replacement of [undefined, 'data:image/png;base64,bmV3']) {
++    let finish;
++    const h = appearanceHarness(
++      {},
++      { chatBackgroundMediaMxc: 'mxc://example.org/original' },
++      () =>
++        new Promise((resolve) => {
++          finish = resolve;
++        })
++    );
++    await h.settle();
++    h.update({
++      ...h.settings(),
++      chatBackgroundMediaMxc: undefined,
++      chatBackgroundDataUrl: replacement,
++    });
++    h.render();
++    finish({ ok: true, blob: async () => ({}) });
++    await h.settle();
++    assert.equal(h.settings().chatBackgroundDataUrl, replacement);
++  }
++});
++
+ test('startup logout preserves PIN and settings; explicit clear-all still deletes them', async () => {
+   const h = harness();
+   const init = readFileSync(new URL('../src/client/initMatrix.ts', import.meta.url), 'utf8');
