@@ -8,10 +8,13 @@
     "node": ">=22.0.0"
   },
   "scripts": {
-    "start": "vite",
+    "start": "node scripts/run-client.mjs start",
+    "start:native": "node scripts/run-client.mjs start --native",
     "prebuild": "npm run validate",
-    "build": "vite build && node scripts/verify-build-assets.mjs",
-    "preview": "vite preview",
+    "build": "node scripts/run-client.mjs build",
+    "prebuild:native": "npm run validate",
+    "build:native": "node scripts/run-client.mjs build --native",
+    "preview": "node scripts/run-client.mjs preview",
     "android:add": "cap add android",
     "android:sync": "node scripts/sync-native.mjs android",
     "android:open": "cap open android",

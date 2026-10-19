@@ -34,7 +34,7 @@ node scripts/prepare-windows-client.mjs windows-client
 
 准备脚本只接受未修改的基准检出，分别执行一次。网页准备过程会应用上述 PIN 补丁，普通退出或重新登录保留 PIN；只有在锁屏页主动选择“忘记 PIN，重新登录重设”，并在 30 分钟内成功登录同一账号时，才会清除旧 PIN 并提示重设。PIN 校验摘要按账号保存在当前浏览器中，不同步到其他设备。PIN 使用 Web Crypto，网页应通过 HTTPS 或 localhost 访问。在相应子目录执行 `npm ci`，再执行
 `npm run build`（网页）或 `npm run desktop:build:nsis`（Windows）。Windows 需 Rust / MSVC 构建环境。
-根目录的 `npm run build` 用于移植版源码验证；发布网页和 Windows 必须使用上述独立检出或工作流。
+根目录的 `npm start`、`npm run build` 和 `npm run preview` 现在统一使用上述旧版网页及 PIN 补丁，避免误用移植版的新 UI；首次运行自动准备 `web-client/`。`npm run build` 同时将静态文件复制到根目录 `dist/`。根目录移植版源码仍供原生客户端使用，通过 `npm run start:native` / `npm run build:native` 启动和构建；Tauri 使用明确的原生入口，移动端根据已有平台标记选择原生入口。Windows 发布继续使用独立旧检出。
 
 覆盖发布后，由于版本号仍是 2.0.1，已装原 2.0.1 的 Windows 客户端需要手动下载并安装替换包。
 

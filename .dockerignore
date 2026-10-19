@@ -1,2 +1,5 @@
 node_modules/
 .git/
+web-client/
+.release-repo/
+.local-validation/

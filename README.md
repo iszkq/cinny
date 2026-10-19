@@ -89,6 +89,10 @@ npm ci
 npm start
 ```
 
+网页版固定使用 1.9.10 的完整旧版 UI，并保留 PIN 设置、5 分钟闲置锁屏和主动重新登录重设 PIN。上述命令会自动准备 `web-client/` 并启动旧版网页；首次运行需要 Git 和网络访问，以获取固定版本及安装依赖。
+
+根目录的 `src/` 用于原生客户端。原生调试使用 `npm run start:native`，Tauri 和移动端构建继续使用原有原生源码，不使用网页版旧 UI。
+
 ### 检查与构建
 
 ```bash
@@ -102,7 +106,7 @@ npm run lint
 npm run build
 ```
 
-生产文件输出到 `dist/`。
+网页版生产文件输出到 `dist/`（同时保存在 `web-client/dist/`），`npm run preview` 预览同一旧版网页。原生前端单独构建使用 `npm run build:native`。
 
 ### Windows 桌面端
 
