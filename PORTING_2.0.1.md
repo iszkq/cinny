@@ -49,3 +49,7 @@
 - [iOS 16+ IPA](https://github.com/iszkq/cinny/actions/runs/39211253075)：未签名。首次原生编译成功后，上传步骤因父目录模式被 artifact action 拒绝；提交 `ed54c4a225c5625c92455ae5876cf0939a1439d0` 修正流程，并检出原 `v2.0.1` 标签源码重新构建上传成功，未移动标签。
 
 安装包本地副本位于 `.local-validation/2.0.1/packages/`，SHA256 已与 GitHub Release 记录核对一致。构建成功不等同于 Apple 真机功能验证。
+
+## Windows 与 Web 回滚完成
+
+根据要求，Windows / Web 已恢复至移植前 1.9.10 源码。[Windows 重建工作流](https://github.com/iszkq/cinny/actions/runs/39214069233)成功并替换 v2.0.1 的 EXE、签名和更新清单；[网页部署](https://github.com/iszkq/cinny/actions/runs/39214073374)及 [1Panel 静态包](https://github.com/iszkq/cinny/actions/runs/39214076987)成功。macOS、iOS、Android 发布附件的 ID 和哈希保持不变。具体基准、校验与后续构建方式见 [WINDOWS_WEB_BUILD.md](WINDOWS_WEB_BUILD.md)。

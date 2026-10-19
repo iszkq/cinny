@@ -37,3 +37,13 @@ node scripts/prepare-windows-client.mjs windows-client
 根目录的 `npm run build` 用于移植版源码验证；发布网页和 Windows 必须使用上述独立检出或工作流。
 
 覆盖发布后，由于版本号仍是 2.0.1，已装原 2.0.1 的 Windows 客户端需要手动下载并安装替换包。
+
+## 本次执行结果（2026-10-19）
+
+- 修复源码提交：`f6a5c43abf01eb9ec56878913fd9801c9422d4a7`，已推送 `dev`；原 `v2.0.1` 标签未移动。
+- [Windows 构建](https://github.com/iszkq/cinny/actions/runs/39214069233)成功，旧版的类型检查、关键 ESLint、101 项测试及原生编译通过，现有 v2.0.1 EXE / `.sig` / `latest.json` 已替换。
+- EXE 大小 23,833,311 字节，SHA256：`dd0f487bf26acc5fd2c973f4c78b680ddff61a5cdbc0fa7dd7ab93fc37b3d040`。下载文件与 Release 摘要一致，已使用应用内公钥核验 Minisign / Ed25519 签名；清单版本、安装包 URL 和签名均匹配。
+- [GitHub Pages](https://github.com/iszkq/cinny/actions/runs/39214073374)恢复部署成功；线上脚本和浏览器登录界面均显示 v1.9.10。[访问网页](https://iszkq.github.io/cinny/)。未执行账号登录后的聊天功能验证。
+- [1Panel 静态包](https://github.com/iszkq/cinny/actions/runs/39214076987)构建成功，产物 `1panel-static` 已下载并核验旧版本和密钥清除；本地旧版 Web 生产构建验证 246 个资源引用通过。
+- Netlify 工作流构建通过，但仓库未配置 Netlify 凭据，部署步骤跳过；实际网页恢复部署由 GitHub Pages 完成。
+- macOS DMG、iOS IPA、Android APK 的 Release 资产 ID 及 SHA256 均与替换前一致，未重新上传这些附件。
