@@ -1,0 +1,992 @@
+diff --git a/src/app/components/LogoutDialog.tsx b/src/app/components/LogoutDialog.tsx
+index dce7587..84b9a47 100644
+--- a/src/app/components/LogoutDialog.tsx
++++ b/src/app/components/LogoutDialog.tsx
+@@ -12,9 +12,10 @@ import {
+ 
+ type LogoutDialogProps = {
+   handleClose: () => void;
++  onBeforeLogout?: () => void;
+ };
+ export const LogoutDialog = forwardRef<HTMLDivElement, LogoutDialogProps>(
+-  ({ handleClose }, ref) => {
++  ({ handleClose, onBeforeLogout }, ref) => {
+     const mx = useMatrixClient();
+     const hasEncryptedRoom = !!mx.getRooms().find((room) => room.hasEncryptionStateEvent());
+     const crossSigningActive = useCrossSigningActive();
+@@ -26,8 +27,9 @@ export const LogoutDialog = forwardRef<HTMLDivElement, LogoutDialogProps>(
+ 
+     const [logoutState, logout] = useAsyncCallback<void, Error, []>(
+       useCallback(async () => {
++        onBeforeLogout?.();
+         await logoutClient(mx);
+-      }, [mx])
++      }, [mx, onBeforeLogout])
+     );
+ 
+     const ongoingLogout = logoutState.status === AsyncStatus.Loading;
+diff --git a/src/app/components/pin-lock/ScreenPinLockOverlay.tsx b/src/app/components/pin-lock/ScreenPinLockOverlay.tsx
+index f2d0249..aef92c0 100644
+--- a/src/app/components/pin-lock/ScreenPinLockOverlay.tsx
++++ b/src/app/components/pin-lock/ScreenPinLockOverlay.tsx
+@@ -1,9 +1,11 @@
+ import React, { ReactNode, useCallback, useState } from 'react';
+ import { Box, Text } from 'folds';
+ import { APP_DISPLAY_NAME, APP_LOGO_URL } from '../../constants/branding';
++import { DeviceLogoutBtn } from '../../features/settings/devices/DeviceTile';
+ import { useAccountData } from '../../hooks/useAccountData';
+ import { useMatrixClient } from '../../hooks/useMatrixClient';
+ import { usePinLockSnapshot } from '../../hooks/usePinLockSnapshot';
++import { usePinIdleLock } from '../../hooks/usePinIdleLock';
+ import { getFallbackSession } from '../../state/sessions';
+ import {
+   cacheAccountPinConfig,
+@@ -15,11 +17,14 @@ import {
+   getAccountPinPolicyConfig,
+   isAccountPinPolicyEnabled,
+   isAccountScreenLocked,
++  isWebPinLockSupported,
++  requestAccountPinReset,
+   supportsPinLock,
+ } from '../../utils/pinLock';
+ import { AccountDataEvent, CinnyAccountPinPolicyContent } from '../../../types/matrix/accountData';
+ import { SplashScreen } from '../splash-screen';
+ import { AccountPinForm } from './AccountPinDialog';
++import { LocalPinSetupDialog } from './LocalPinSetupDialog';
+ import * as css from './style.css';
+ 
+ const copy = {
+@@ -41,6 +46,8 @@ type ScreenPinLockGateProps = {
+ };
+ 
+ type ScreenPinLockPageProps = {
++  baseUrl: string;
++  userId: string;
+   title: string;
+   description: string;
+   accountLabel: string;
+@@ -49,6 +56,8 @@ type ScreenPinLockPageProps = {
+ };
+ 
+ function ScreenPinLockPage({
++  baseUrl,
++  userId,
+   title,
+   description,
+   accountLabel,
+@@ -80,6 +89,20 @@ function ScreenPinLockPage({
+             </Box>
+           </Box>
+           {children}
++          {isWebPinLockSupported() && (
++            <>
++              <Text size="T200">
++                普通退出或重新登录会保留原 PIN。忘记 PIN
++                时，请选择“重新登录重设”，通过账号认证后设置新
++                PIN。加密设备验证仍需另一台已验证设备或恢复密钥；未备份的本机加密密钥可能随退出丢失。
++              </Text>
++              <DeviceLogoutBtn />
++              <DeviceLogoutBtn
++                label="忘记 PIN，重新登录重设"
++                onBeforeLogout={() => requestAccountPinReset(baseUrl, userId)}
++              />
++            </>
++          )}
+         </Box>
+       </Box>
+     </SplashScreen>
+@@ -110,26 +133,57 @@ export function ScreenPinLockGate({ children }: ScreenPinLockGateProps) {
+   const policyEnabled = isAccountPinPolicyEnabled(policyContent);
+   const remotePinConfig = getAccountPinPolicyConfig(policyContent);
+   const localPinConfig = baseUrl && userId ? getAccountPinConfig(baseUrl, userId) : undefined;
++  const webPinRequired = isWebPinLockSupported();
++  const activePinConfig = webPinRequired
++    ? localPinConfig
++    : policyEvent
++    ? policyEnabled
++      ? remotePinConfig ?? localPinConfig
++      : undefined
++    : localPinConfig;
++
++  usePinIdleLock(
++    baseUrl,
++    userId,
++    Boolean(
++      webPinRequired &&
++        activePinConfig &&
++        verifiedAccountKey === accountKey &&
++        !(baseUrl && userId && isAccountScreenLocked(baseUrl, userId))
++    ),
++    5
++  );
+ 
+   const handleVerifySuccess = useCallback(() => {
+     if (!accountKey || !baseUrl || !userId) return;
+ 
+-    if (remotePinConfig) {
++    if (!webPinRequired && remotePinConfig) {
+       cacheAccountPinConfig(baseUrl, userId, remotePinConfig);
+     }
+ 
+     setVerifiedAccountKey(accountKey);
+     clearScreenLock();
+-  }, [accountKey, baseUrl, remotePinConfig, userId]);
++  }, [accountKey, baseUrl, remotePinConfig, userId, webPinRequired]);
+ 
+   if (!pinLockSupported || !userId || !baseUrl || !accountKey) {
+     return children;
+   }
+ 
+   const accountLabel = getAccountPinLabel(baseUrl, userId);
+-  let activePinConfig = localPinConfig;
+-  if (policyEvent) {
+-    activePinConfig = policyEnabled ? remotePinConfig ?? localPinConfig : undefined;
++  if (webPinRequired && !activePinConfig) {
++    return (
++      <SplashScreen>
++        <LocalPinSetupDialog
++          key={accountKey}
++          baseUrl={baseUrl}
++          userId={userId}
++          title="设置 PIN 码"
++          description="请为当前浏览器中的账号设置 PIN 码。连续 5 分钟没有操作后，网页会自动锁定，输入 PIN 码即可继续使用。"
++          submitLabel="保存并进入"
++          onSuccess={handleVerifySuccess}
++        />
++      </SplashScreen>
++    );
+   }
+   const manuallyLocked =
+     Boolean(activePinConfig) && screenLockState.locked && isAccountScreenLocked(baseUrl, userId);
+@@ -139,6 +193,8 @@ export function ScreenPinLockGate({ children }: ScreenPinLockGateProps) {
+   if (entryVerificationRequired && activePinConfig) {
+     return (
+       <ScreenPinLockPage
++        baseUrl={baseUrl}
++        userId={userId}
+         title={copy.entryTitle}
+         description={copy.entryDescription}
+         accountLabel={accountLabel}
+@@ -159,6 +215,8 @@ export function ScreenPinLockGate({ children }: ScreenPinLockGateProps) {
+   if (manuallyLocked && activePinConfig) {
+     return (
+       <ScreenPinLockPage
++        baseUrl={baseUrl}
++        userId={userId}
+         title={copy.lockTitle}
+         description={copy.lockDescription}
+         accountLabel={accountLabel}
+diff --git a/src/app/features/settings/Settings.tsx b/src/app/features/settings/Settings.tsx
+index 48ee476..68299e4 100644
+--- a/src/app/features/settings/Settings.tsx
++++ b/src/app/features/settings/Settings.tsx
+@@ -15,6 +15,7 @@ import {
+ } from 'folds';
+ import FocusTrap from 'focus-trap-react';
+ import { General } from './general';
++import { SecurityPage } from './general/SecurityPage';
+ import { PageNav, PageNavContent, PageNavHeader, PageRoot } from '../../components/page';
+ import { isDesktopLikeScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
+ import { Account } from './account';
+@@ -44,6 +45,7 @@ export enum SettingsPages {
+   AIPage,
+   DeveloperToolsPage,
+   AboutPage,
++  SecurityPage,
+ }
+ 
+ type SettingsMenuItem = {
+@@ -55,6 +57,7 @@ type SettingsMenuItem = {
+ const useSettingsMenuItems = (): SettingsMenuItem[] =>
+   useMemo(
+     () => [
++      { page: SettingsPages.SecurityPage, name: '安全 / PIN 码', icon: Icons.Lock },
+       {
+         page: SettingsPages.GeneralPage,
+         name: '\u5e38\u89c4',
+@@ -247,6 +250,9 @@ export function Settings({ initialPage, requestClose }: SettingsProps) {
+         <DeveloperTools requestClose={handlePageRequestClose} />
+       )}
+       {activePage === SettingsPages.AboutPage && <About requestClose={handlePageRequestClose} />}
++      {activePage === SettingsPages.SecurityPage && (
++        <SecurityPage requestClose={handlePageRequestClose} />
++      )}
+     </PageRoot>
+   );
+ }
+diff --git a/src/app/features/settings/devices/DeviceTile.tsx b/src/app/features/settings/devices/DeviceTile.tsx
+index 5f2a15b..466aaa9 100644
+--- a/src/app/features/settings/devices/DeviceTile.tsx
++++ b/src/app/features/settings/devices/DeviceTile.tsx
+@@ -195,7 +195,10 @@ function DeviceRename({ device, onCancel, onRename, refreshDeviceList }: DeviceR
+   );
+ }
+ 
+-export function DeviceLogoutBtn() {
++export function DeviceLogoutBtn({
++  label = '退出登录',
++  onBeforeLogout,
++}: { label?: string; onBeforeLogout?: () => void } = {}) {
+   const [prompt, setPrompt] = useState(false);
+ 
+   const handleClose = () => setPrompt(false);
+@@ -203,7 +206,7 @@ export function DeviceLogoutBtn() {
+   return (
+     <>
+       <Chip variant="Secondary" fill="Soft" radii="Pill" onClick={() => setPrompt(true)}>
+-        <Text size="B300">退出登录</Text>
++        <Text size="B300">{label}</Text>
+       </Chip>
+       {prompt && (
+         <Overlay open backdrop={<OverlayBackdrop />}>
+@@ -215,7 +218,7 @@ export function DeviceLogoutBtn() {
+                 escapeDeactivates: stopPropagation,
+               }}
+             >
+-              <LogoutDialog handleClose={handleClose} />
++              <LogoutDialog handleClose={handleClose} onBeforeLogout={onBeforeLogout} />
+             </FocusTrap>
+           </OverlayCenter>
+         </Overlay>
+diff --git a/src/app/features/settings/general/Security.tsx b/src/app/features/settings/general/Security.tsx
+index 6109d65..74d5ff1 100644
+--- a/src/app/features/settings/general/Security.tsx
++++ b/src/app/features/settings/general/Security.tsx
+@@ -15,11 +15,13 @@ import {
+ import {
+   createDisabledAccountPinPolicyContent,
+   createEnabledAccountPinPolicyContent,
++  clearLocalAccountPin,
+   changeAccountPin,
+   getAccountPinKey,
+   getAccountPinLabel,
+   isAccountPinPolicyEnabled,
+   isPinCodeFormatValid,
++  isWebPinLockSupported,
+   lockScreenForAccount,
+   supportsPinLock,
+ } from '../../../utils/pinLock';
+@@ -69,7 +71,7 @@ function ChangePinDialog({ baseUrl, userId, syncPolicy, requestClose }: ChangePi
+     try {
+       const config = await changeAccountPin(baseUrl, userId, currentPin, nextPin);
+ 
+-      if (syncPolicy) {
++      if (syncPolicy && !isWebPinLockSupported()) {
+         await mx.setAccountData(
+           AccountDataEvent.CinnyAccountPinPolicy,
+           createEnabledAccountPinPolicyContent(config)
+@@ -87,7 +89,7 @@ function ChangePinDialog({ baseUrl, userId, syncPolicy, requestClose }: ChangePi
+   return (
+     <PinLockDialogShell
+       title="修改本机 PIN"
+-      description="修改后，这台设备上的锁屏和下次登录验证都会使用新的 PIN。账号级策略本身仍然保持开启。"
++      description="修改当前设备使用的 PIN，供锁屏和下次进入时验证。"
+       accountLabel={getAccountPinLabel(baseUrl, userId)}
+       requestClose={requestClose}
+       embedded
+@@ -175,6 +177,7 @@ export function Security({ requestClose }: SecurityProps) {
+   const userId = mx.getUserId();
+   const baseUrl = session?.baseUrl;
+   const pinSupported = supportsPinLock();
++  const webPinRequired = isWebPinLockSupported();
+   const policyEnabled = isAccountPinPolicyEnabled(
+     policyEvent?.getContent<CinnyAccountPinPolicyContent>()
+   );
+@@ -183,7 +186,7 @@ export function Security({ requestClose }: SecurityProps) {
+     () => !!accountKey && protectedAccountKeys.includes(accountKey),
+     [accountKey, protectedAccountKeys]
+   );
+-  const accountPinEnabled = policyEnabled || localPinEnabled;
++  const accountPinEnabled = webPinRequired ? localPinEnabled : policyEnabled || localPinEnabled;
+ 
+   if (!pinSupported || !userId || !baseUrl) {
+     return null;
+@@ -203,7 +206,11 @@ export function Security({ requestClose }: SecurityProps) {
+           description={
+             pinSupported ? (
+               accountPinEnabled ? (
+-                '当前账号已开启账号级 PIN 策略。其他新设备登录同一账号时，也必须先设置本机 PIN 才能进入。'
++                webPinRequired ? (
++                  '网页版已开启 PIN 保护，连续 5 分钟没有操作后自动锁定。可在下方修改 PIN 或立即锁屏。'
++                ) : (
++                  '当前账号已开启账号级 PIN 策略。其他新设备登录同一账号时，也必须先设置本机 PIN 才能进入。'
++                )
+               ) : (
+                 '开启后，这个账号在每台设备上都需要先设置各自的本机 PIN。PIN 码本身只保存在本地，不会同步到服务器。'
+               )
+@@ -217,7 +224,7 @@ export function Security({ requestClose }: SecurityProps) {
+             <Switch
+               variant="Primary"
+               value={accountPinEnabled}
+-              disabled={!pinSupported}
++              disabled={!pinSupported || (webPinRequired && accountPinEnabled)}
+               onChange={() => setDialogMode(accountPinEnabled ? 'disable' : 'setup')}
+             />
+           }
+@@ -227,7 +234,7 @@ export function Security({ requestClose }: SecurityProps) {
+           description={
+             localPinEnabled
+               ? '这台设备已经保存了本机 PIN，可以用于解锁锁屏和下次登录验证。'
+-              : '这台设备还没有保存本机 PIN。开启账号级 PIN 策略后，会先要求为当前设备创建本机 PIN。'
++              : '这台设备尚未设置 PIN，请先创建本机 PIN。'
+           }
+           after={
+             <Text size="T200" priority="300">
+@@ -252,6 +259,13 @@ export function Security({ requestClose }: SecurityProps) {
+             }
+           />
+         )}
++        {webPinRequired && localPinEnabled && (
++          <SettingTile
++            title="无操作后自动锁定"
++            description="连续 5 分钟没有操作后隐藏聊天，输入 PIN 恢复。切换到后台和电脑休眠也计入时间。"
++            after={<Text size="T200">5 分钟</Text>}
++          />
++        )}
+         {localPinEnabled && (
+           <SettingTile
+             title="立即锁屏"
+@@ -275,13 +289,17 @@ export function Security({ requestClose }: SecurityProps) {
+         <Box className={pinCss.NoticeCard} direction="Column" gap="100">
+           <Text size="L400">说明</Text>
+           <Text size="T300" priority="300">
+-            账号级策略会跟随账号同步，用来告诉其他设备“这个账号需要本机 PIN”。
++            {webPinRequired
++              ? '网页版 PIN 只保护当前浏览器中的账号。'
++              : '账号级策略会跟随账号同步，用来告诉其他设备“这个账号需要本机 PIN”。'}
+           </Text>
+           <Text size="T300" priority="300">
+             真正的 PIN 码和加密摘要只保存在当前设备，不会上传，也不会在设备之间同步。
+           </Text>
+           <Text size="T300" priority="300">
+-            如果忘记 PIN，只能通过清空这台设备的本地数据来重置，本地会话和缓存也会一起被移除。
++            {webPinRequired
++              ? '普通重新登录保留原 PIN。忘记 PIN 时，请在锁屏页选择“忘记 PIN，重新登录重设”，通过账号认证后设置新 PIN。设备验证仍需另一台已验证设备或恢复密钥；未备份的本机加密密钥可能随退出丢失。'
++              : '如果忘记 PIN，只能通过清空这台设备的本地数据来重置，本地会话和缓存也会一起被移除。'}
+           </Text>
+         </Box>
+       </SequenceCard>
+@@ -290,16 +308,17 @@ export function Security({ requestClose }: SecurityProps) {
+         <LocalPinSetupDialog
+           baseUrl={baseUrl}
+           userId={userId}
+-          title="开启账号级 PIN 保护"
+-          description="先为当前设备创建本机 PIN。保存完成后，这个账号在其他新设备登录时也会先要求设置各自的本机 PIN。"
++          title={webPinRequired ? '设置 PIN 码' : '开启账号级 PIN 保护'}
++          description="先为当前设备创建本机 PIN。"
+           submitLabel="开启 PIN 保护"
+           onCancel={() => setDialogMode(undefined)}
+           embedded
+           onSuccess={async (config) => {
+-            await mx.setAccountData(
+-              AccountDataEvent.CinnyAccountPinPolicy,
+-              createEnabledAccountPinPolicyContent(config)
+-            );
++            if (!webPinRequired)
++              await mx.setAccountData(
++                AccountDataEvent.CinnyAccountPinPolicy,
++                createEnabledAccountPinPolicyContent(config)
++              );
+             setDialogMode(undefined);
+           }}
+         />
+@@ -322,10 +341,12 @@ export function Security({ requestClose }: SecurityProps) {
+           embedded
+           onCancel={() => setDialogMode(undefined)}
+           onSuccess={async () => {
+-            await mx.setAccountData(
+-              AccountDataEvent.CinnyAccountPinPolicy,
+-              createDisabledAccountPinPolicyContent()
+-            );
++            if (webPinRequired) clearLocalAccountPin(baseUrl, userId);
++            else
++              await mx.setAccountData(
++                AccountDataEvent.CinnyAccountPinPolicy,
++                createDisabledAccountPinPolicyContent()
++              );
+             setDialogMode(undefined);
+           }}
+         />
+diff --git a/src/app/features/settings/general/SecurityPage.tsx b/src/app/features/settings/general/SecurityPage.tsx
+new file mode 100644
+index 0000000..2b92831
+--- /dev/null
++++ b/src/app/features/settings/general/SecurityPage.tsx
+@@ -0,0 +1,23 @@
++import React from 'react';
++import { Box, Icon, IconButton, Icons, Scroll, Text } from 'folds';
++import { Page, PageContent, PageHeader } from '../../../components/page';
++import { Security } from './Security';
++export function SecurityPage({ requestClose }: { requestClose: () => void }) {
++  return (
++    <Page>
++      <PageHeader>
++        <Box grow="Yes">
++          <Text size="H3">安全</Text>
++        </Box>
++        <IconButton onClick={requestClose}>
++          <Icon src={Icons.Cross} />
++        </IconButton>
++      </PageHeader>
++      <Scroll hideTrack>
++        <PageContent>
++          <Security requestClose={requestClose} />
++        </PageContent>
++      </Scroll>
++    </Page>
++  );
++}
+diff --git a/src/app/hooks/usePinIdleLock.ts b/src/app/hooks/usePinIdleLock.ts
+new file mode 100644
+index 0000000..80044d8
+--- /dev/null
++++ b/src/app/hooks/usePinIdleLock.ts
+@@ -0,0 +1,34 @@
++import { useEffect } from 'react';
++import { createIdleLock } from '../utils/idleLock';
++import { lockScreenForAccount } from '../utils/pinLock';
++
++export function usePinIdleLock(
++  baseUrl: string | undefined,
++  userId: string | null,
++  active: boolean,
++  minutes: number
++) {
++  useEffect(() => {
++    if (!baseUrl || !userId || !active) return undefined;
++    const timer = createIdleLock(minutes, () => lockScreenForAccount(baseUrl, userId));
++    const activity = () => {
++      if (document.visibilityState === 'visible' && document.hasFocus()) timer.activity();
++    };
++    const check = () => {
++      timer.check();
++    };
++    const events = ['pointerdown', 'pointermove', 'keydown', 'touchstart', 'wheel'];
++    events.forEach((name) =>
++      window.addEventListener(name, activity, { passive: true, capture: true })
++    );
++    window.addEventListener('focus', check, true);
++    document.addEventListener('visibilitychange', check);
++    const interval = window.setInterval(check, 1000);
++    return () => {
++      events.forEach((name) => window.removeEventListener(name, activity, true));
++      window.removeEventListener('focus', check, true);
++      document.removeEventListener('visibilitychange', check);
++      window.clearInterval(interval);
++    };
++  }, [baseUrl, userId, active, minutes]);
++}
+diff --git a/src/app/pages/auth/login/PasswordLoginForm.tsx b/src/app/pages/auth/login/PasswordLoginForm.tsx
+index fa13630..a770c45 100644
+--- a/src/app/pages/auth/login/PasswordLoginForm.tsx
++++ b/src/app/pages/auth/login/PasswordLoginForm.tsx
+@@ -47,7 +47,7 @@ import { PasswordInput } from '../../../components/password-input';
+ import { FieldError } from '../FiledError';
+ import { getResetPasswordPath } from '../../pathUtils';
+ import { stopPropagation } from '../../../utils/keyboard';
+-import { markAccountPinVerified, resolveAccountPinLoginRequirement } from '../../../utils/pinLock';
++import { markAccountPinVerified, resetPinAfterAuthenticatedLogin } from '../../../utils/pinLock';
+ import { AccountPinDialog } from '../../../components/pin-lock';
+ import { openExternalUrl } from '../../../utils/desktop';
+ import { useAccountManagementActions } from '../../../hooks/useAccountManagement';
+@@ -216,7 +216,7 @@ export function PasswordLoginForm({ defaultUsername, defaultEmail }: PasswordLog
+     let disposed = false;
+     setResolvingPinRequirement(true);
+ 
+-    resolveAccountPinLoginRequirement(
++    resetPinAfterAuthenticatedLogin(
+       loginSuccessData.baseUrl,
+       loginSuccessData.response.user_id,
+       loginSuccessData.response.access_token
+diff --git a/src/app/pages/auth/login/TokenLogin.tsx b/src/app/pages/auth/login/TokenLogin.tsx
+index 46369de..368ce51 100644
+--- a/src/app/pages/auth/login/TokenLogin.tsx
++++ b/src/app/pages/auth/login/TokenLogin.tsx
+@@ -17,18 +17,17 @@ import { APP_WEB_DEVICE_NAME } from '../../../constants/branding';
+ import { useAutoDiscoveryInfo } from '../../../hooks/useAutoDiscoveryInfo';
+ import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
+ import { AccountPinDialog } from '../../../components/pin-lock';
+-import {
+-  markAccountPinVerified,
+-  resolveAccountPinLoginRequirement,
+-} from '../../../utils/pinLock';
++import { markAccountPinVerified, resetPinAfterAuthenticatedLogin } from '../../../utils/pinLock';
+ import { completeLogin, CustomLoginResponse, LoginError, login } from './loginUtil';
+ 
+ const copy = {
+   title: '\u4ee4\u724c\u767b\u5f55',
+   forbidden: '\u767b\u5f55\u4ee4\u724c\u65e0\u6548\u3002',
+   userDeactivated: '\u8be5\u8d26\u6237\u5df2\u88ab\u505c\u7528\u3002',
+-  invalidRequest: '\u767b\u5f55\u5931\u8d25\uff0c\u8bf7\u6c42\u4e2d\u7684\u90e8\u5206\u6570\u636e\u65e0\u6548\u3002',
+-  rateLimited: '\u767b\u5f55\u5931\u8d25\uff0c\u8bf7\u6c42\u8fc7\u4e8e\u9891\u7e41\uff0c\u8bf7\u7a0d\u540e\u518d\u8bd5\u3002',
++  invalidRequest:
++    '\u767b\u5f55\u5931\u8d25\uff0c\u8bf7\u6c42\u4e2d\u7684\u90e8\u5206\u6570\u636e\u65e0\u6548\u3002',
++  rateLimited:
++    '\u767b\u5f55\u5931\u8d25\uff0c\u8bf7\u6c42\u8fc7\u4e8e\u9891\u7e41\uff0c\u8bf7\u7a0d\u540e\u518d\u8bd5\u3002',
+   unknown: '\u767b\u5f55\u5931\u8d25\uff0c\u539f\u56e0\u672a\u77e5\u3002',
+   pinTitle: '\u9a8c\u8bc1 PIN \u5e76\u767b\u5f55',
+   pinDescription:
+@@ -77,8 +76,7 @@ export function TokenLogin({ token }: TokenLoginProps) {
+     MatrixError,
+     Parameters<typeof login>
+   >(useCallback(login, []));
+-  const loginSuccessData =
+-    loginState.status === AsyncStatus.Success ? loginState.data : undefined;
++  const loginSuccessData = loginState.status === AsyncStatus.Success ? loginState.data : undefined;
+ 
+   useEffect(() => {
+     startLogin(baseUrl, {
+@@ -103,7 +101,7 @@ export function TokenLogin({ token }: TokenLoginProps) {
+     let disposed = false;
+     setResolvingPinRequirement(true);
+ 
+-    resolveAccountPinLoginRequirement(
++    resetPinAfterAuthenticatedLogin(
+       loginSuccessData.baseUrl,
+       loginSuccessData.response.user_id,
+       loginSuccessData.response.access_token
+@@ -181,10 +179,7 @@ export function TokenLogin({ token }: TokenLoginProps) {
+           submitLabel={copy.continueLogin}
+           onCancel={() => setPinProtectedLogin(undefined)}
+           onSuccess={() => {
+-            markAccountPinVerified(
+-              pinProtectedLogin.baseUrl,
+-              pinProtectedLogin.response.user_id
+-            );
++            markAccountPinVerified(pinProtectedLogin.baseUrl, pinProtectedLogin.response.user_id);
+             completeLogin(pinProtectedLogin, navigate);
+           }}
+         />
+diff --git a/src/app/utils/idleLock.ts b/src/app/utils/idleLock.ts
+new file mode 100644
+index 0000000..6d939be
+--- /dev/null
++++ b/src/app/utils/idleLock.ts
+@@ -0,0 +1,23 @@
++export const PIN_IDLE_MINUTES = [1, 5, 10] as const;
++export type PinIdleMinutes = typeof PIN_IDLE_MINUTES[number];
++export const normalizePinIdleMinutes = (value: unknown): PinIdleMinutes =>
++  PIN_IDLE_MINUTES.includes(value as PinIdleMinutes) ? (value as PinIdleMinutes) : 5;
++
++// Check the deadline before accepting activity, including the first event after sleep.
++export const createIdleLock = (minutes: number, lock: () => void, now = Date.now) => {
++  let lastActivity = now();
++  let locked = false;
++  const check = () => {
++    if (!locked && now() - lastActivity >= minutes * 60_000) {
++      locked = true;
++      lock();
++    }
++    return locked;
++  };
++  return {
++    check,
++    activity: () => {
++      if (!check()) lastActivity = now();
++    },
++  };
++};
+diff --git a/src/app/utils/pinLock.ts b/src/app/utils/pinLock.ts
+index dd2b5e2..92a02f4 100644
+--- a/src/app/utils/pinLock.ts
++++ b/src/app/utils/pinLock.ts
+@@ -1,7 +1,7 @@
+ import { AccountDataEvent, CinnyAccountPinPolicyContent } from '../../types/matrix/accountData';
+ import { isDesktopUpdaterSupported } from './desktopUpdater';
+ import { isNativeApp } from './nativePlatform';
+-import { mobileOrTablet } from './user-agent';
++import { consumePinResetRequest, requestPinReset } from './pinRecovery';
+ 
+ export type AccountPinConfig = {
+   version: 1;
+@@ -197,10 +197,12 @@ export const getAccountPinConfig = (
+ 
+ export const supportsPinLock = (): boolean =>
+   typeof window !== 'undefined' &&
+-  (isDesktopUpdaterSupported() || isNativeApp() || mobileOrTablet()) &&
+   typeof crypto !== 'undefined' &&
+   typeof crypto.subtle !== 'undefined';
+ 
++export const isWebPinLockSupported = (): boolean =>
++  supportsPinLock() && !isDesktopUpdaterSupported() && !isNativeApp();
++
+ export const isDesktopPinLockSupported = (): boolean =>
+   isDesktopUpdaterSupported() && supportsPinLock();
+ 
+@@ -455,6 +457,7 @@ export const applyAccountPinPolicyContent = (
+   userId: string,
+   content?: CinnyAccountPinPolicyContent | unknown
+ ): boolean => {
++  if (isWebPinLockSupported()) return hasAccountPin(baseUrl, userId);
+   const localConfig = getConfigByAccountKey(getAccountPinKey(baseUrl, userId));
+   const remotePolicy = getAccountPinPolicyState(content);
+ 
+@@ -477,6 +480,7 @@ export const syncAccountPinPolicy = async (
+   userId: string,
+   accessToken: string
+ ): Promise<boolean> => {
++  if (isWebPinLockSupported()) return hasAccountPin(baseUrl, userId);
+   const localConfig = getConfigByAccountKey(getAccountPinKey(baseUrl, userId));
+   const remoteContent = await fetchAccountPinPolicyContent(baseUrl, userId, accessToken);
+   const remotePolicy = getAccountPinPolicyState(remoteContent);
+@@ -524,6 +528,7 @@ export const resolveAccountPinLoginRequirement = async (
+   }
+ 
+   const localConfig = getConfigByAccountKey(getAccountPinKey(baseUrl, userId));
++  if (isWebPinLockSupported()) return localConfig ? 'prompt' : 'none';
+ 
+   try {
+     const remoteContent = await fetchAccountPinPolicyContent(baseUrl, userId, accessToken);
+@@ -655,3 +660,29 @@ export const restorePinLockStorage = (entries: [string, string][]) => {
+   });
+   emitPinLockChange();
+ };
++
++export const requestAccountPinReset = (baseUrl: string, userId: string) => {
++  const config = getAccountPinConfig(baseUrl, userId);
++  if (config) requestPinReset(getAccountPinKey(baseUrl, userId), config.updatedAt);
++};
++
++// Only call after a fresh login has been authenticated by the homeserver.
++export const resetPinAfterAuthenticatedLogin = async (
++  baseUrl: string,
++  userId: string,
++  accessToken: string
++): Promise<AccountPinLoginRequirement> => {
++  if (!isWebPinLockSupported()) {
++    return resolveAccountPinLoginRequirement(baseUrl, userId, accessToken);
++  }
++  if (
++    consumePinResetRequest(
++      getAccountPinKey(baseUrl, userId),
++      getAccountPinConfig(baseUrl, userId)?.updatedAt
++    )
++  ) {
++    clearLocalAccountPin(baseUrl, userId);
++  }
++  // Ordinary logins keep the PIN; the gate handles verification and recovery.
++  return 'none';
++};
+diff --git a/src/app/utils/pinRecovery.ts b/src/app/utils/pinRecovery.ts
+new file mode 100644
+index 0000000..612589b
+--- /dev/null
++++ b/src/app/utils/pinRecovery.ts
+@@ -0,0 +1,29 @@
++const PIN_RESET_REQUEST_KEY = 'starfire-pin-reset-request';
++const REQUEST_LIFETIME_MS = 30 * 60_000;
++
++// Tab-local intent survives logout/reload, but never replaces server authentication.
++export const requestPinReset = (accountKey: string, pinUpdatedAt: number) => {
++  window.sessionStorage.setItem(
++    PIN_RESET_REQUEST_KEY,
++    JSON.stringify({ accountKey, pinUpdatedAt, requestedAt: Date.now() })
++  );
++};
++
++export const consumePinResetRequest = (accountKey: string, pinUpdatedAt?: number): boolean => {
++  const value = window.sessionStorage.getItem(PIN_RESET_REQUEST_KEY);
++  if (!value) return false;
++  window.sessionStorage.removeItem(PIN_RESET_REQUEST_KEY);
++  try {
++    const request = JSON.parse(value);
++    const age = Date.now() - request.requestedAt;
++    return (
++      request.accountKey === accountKey &&
++      request.pinUpdatedAt === pinUpdatedAt &&
++      typeof request.requestedAt === 'number' &&
++      age >= 0 &&
++      age <= REQUEST_LIFETIME_MS
++    );
++  } catch {
++    return false;
++  }
++};
+diff --git a/tests/web-pin-lock.test.mjs b/tests/web-pin-lock.test.mjs
+new file mode 100644
+index 0000000..31bc75a
+--- /dev/null
++++ b/tests/web-pin-lock.test.mjs
+@@ -0,0 +1,282 @@
++import assert from 'node:assert/strict';
++import { webcrypto } from 'node:crypto';
++import { readFileSync } from 'node:fs';
++import test from 'node:test';
++import vm from 'node:vm';
++import ts from 'typescript';
++
++const baseUrl = 'https://matrix.example.org';
++const userId = '@alice:example.org';
++const source = (file) => readFileSync(new URL(`../src/app/${file}`, import.meta.url), 'utf8');
++const compile = (file, globals, imports = {}) => {
++  const exports = {};
++  vm.runInNewContext(
++    ts.transpileModule(source(file), {
++      fileName: file,
++      compilerOptions: {
++        module: ts.ModuleKind.CommonJS,
++        target: ts.ScriptTarget.ES2020,
++        jsx: ts.JsxEmit.React,
++      },
++    }).outputText,
++    {
++      exports,
++      require: (name) => {
++        assert.ok(name in imports, `Unexpected dependency: ${name}`);
++        return imports[name];
++      },
++      ...globals,
++    }
++  );
++  return exports;
++};
++
++function harness() {
++  let now = 1000;
++  const makeStorage = () => {
++    const data = new Map();
++    return {
++      getItem: (key) => data.get(key) ?? null,
++      setItem: (key, value) => data.set(key, value),
++      removeItem: (key) => data.delete(key),
++      clear: () => data.clear(),
++      data,
++    };
++  };
++  const window = Object.assign(new EventTarget(), {
++    localStorage: makeStorage(),
++    sessionStorage: makeStorage(),
++  });
++  const document = Object.assign(new EventTarget(), {
++    visibilityState: 'visible',
++    hasFocus: () => true,
++  });
++  const globals = {
++    window,
++    document,
++    crypto: webcrypto,
++    TextEncoder,
++    URL,
++    Event,
++    btoa,
++    atob,
++    Date: class extends Date {
++      static now() {
++        return now;
++      }
++    },
++  };
++  const idle = compile('utils/idleLock.ts', globals);
++  const recovery = compile('utils/pinRecovery.ts', globals);
++  const desktop = { isDesktopUpdaterSupported: () => false };
++  const pin = compile('utils/pinLock.ts', globals, {
++    './idleLock': idle,
++    './desktopUpdater': desktop,
++    './nativePlatform': { isNativeApp: () => false },
++    './pinRecovery': recovery,
++    '../../types/matrix/accountData': { AccountDataEvent: {} },
++  });
++  return {
++    pin,
++    idle,
++    globals,
++    window,
++    document,
++    desktop,
++    advance: (ms) => {
++      now += ms;
++    },
++  };
++}
++
++test('desktop browsers can configure a salted PIN without storing plaintext', async () => {
++  const { pin, window } = harness();
++  assert.equal(pin.supportsPinLock(), true);
++  assert.equal(pin.isWebPinLockSupported(), true);
++  await pin.enableAccountPin(baseUrl, userId, '001234');
++  assert.equal(await pin.verifyAccountPin(baseUrl, userId, '001234'), true);
++  assert.equal(await pin.verifyAccountPin(baseUrl, userId, '1234'), false);
++  assert.equal(await pin.verifyAccountPin(baseUrl, '@bob:example.org', '001234'), false);
++  assert.ok(!JSON.stringify([...window.localStorage.data]).includes('001234'));
++  if (pin.setPinIdleMinutes) {
++    pin.setPinIdleMinutes(baseUrl, userId, 10);
++    assert.equal(pin.getPinIdleMinutes(baseUrl, userId), 5);
++  }
++});
++
++test('ordinary logout and authenticated login retain the original PIN', async () => {
++  const { pin, window } = harness();
++  const config = await pin.enableAccountPin(baseUrl, userId, '123456');
++  const entries = pin.snapshotPinLockStorage();
++  window.localStorage.clear();
++  pin.restorePinLockStorage(entries);
++  await pin.resetPinAfterAuthenticatedLogin(baseUrl, userId, 'authenticated-token');
++  assert.deepEqual(pin.getAccountPinConfig(baseUrl, userId), config);
++  assert.equal(await pin.verifyAccountPin(baseUrl, userId, '123456'), true);
++  for (let i = 0; i < 5; i += 1)
++    assert.equal(await pin.verifyAccountPin(baseUrl, userId, '0000'), false);
++  assert.equal(pin.hasAccountPin(baseUrl, userId), true);
++});
++
++test('explicit recovery keeps the PIN until fresh authentication, then allows replacement', async () => {
++  const { pin } = harness();
++  await pin.enableAccountPin(baseUrl, userId, '123456');
++  pin.lockScreenForAccount(baseUrl, userId);
++  pin.requestAccountPinReset(baseUrl, userId);
++  assert.equal(pin.hasAccountPin(baseUrl, userId), true);
++  assert.equal(pin.isAccountScreenLocked(baseUrl, userId), true);
++  await pin.resetPinAfterAuthenticatedLogin(baseUrl, userId, 'authenticated-token');
++  assert.equal(pin.hasAccountPin(baseUrl, userId), false);
++  assert.equal(pin.isAccountScreenLocked(baseUrl, userId), false);
++  await pin.enableAccountPin(baseUrl, userId, '654321');
++  await pin.resetPinAfterAuthenticatedLogin(baseUrl, userId, 'authenticated-token');
++  assert.equal(await pin.verifyAccountPin(baseUrl, userId, '654321'), true);
++  assert.equal(await pin.verifyAccountPin(baseUrl, userId, '123456'), false);
++});
++
++test('recovery never resets another account, a changed PIN, or an expired request', async () => {
++  for (const scenario of ['account', 'changed', 'expired']) {
++    const h = harness();
++    await h.pin.enableAccountPin(baseUrl, userId, '123456');
++    h.pin.requestAccountPinReset(baseUrl, userId);
++    if (scenario === 'changed') {
++      h.advance(1);
++      await h.pin.changeAccountPin(baseUrl, userId, '123456', '654321');
++    }
++    if (scenario === 'expired') h.advance(31 * 60_000);
++    await h.pin.resetPinAfterAuthenticatedLogin(
++      baseUrl,
++      scenario === 'account' ? '@bob:example.org' : userId,
++      'authenticated-token'
++    );
++    assert.equal(h.pin.hasAccountPin(baseUrl, userId), true);
++  }
++});
++
++test('idle deadline resets on activity and cannot be bypassed by the first event after sleep', () => {
++  const h = harness();
++  let locks = 0;
++  const idle = h.idle.createIdleLock(
++    5,
++    () => {
++      locks += 1;
++    },
++    h.globals.Date.now
++  );
++  h.advance(299_999);
++  idle.activity();
++  h.advance(299_999);
++  assert.equal(idle.check(), false);
++  h.advance(1);
++  idle.activity();
++  assert.equal(locks, 1);
++  idle.activity();
++  assert.equal(locks, 1);
++});
++
++test('browser idle listeners count background time, restart after unlock, and clean up', async () => {
++  const h = harness();
++  await h.pin.enableAccountPin(baseUrl, userId, '123456');
++  let cleanup;
++  let interval;
++  h.window.setInterval = (callback) => {
++    interval = callback;
++    return 1;
++  };
++  h.window.clearInterval = () => {
++    interval = undefined;
++  };
++  const { usePinIdleLock } = compile('hooks/usePinIdleLock.ts', h.globals, {
++    react: {
++      useEffect: (effect) => {
++        cleanup = effect();
++      },
++    },
++    '../utils/idleLock': h.idle,
++    '../utils/pinLock': h.pin,
++  });
++  usePinIdleLock(baseUrl, userId, true, 5);
++  h.advance(299_999);
++  h.window.dispatchEvent(new Event('keydown'));
++  h.document.visibilityState = 'hidden';
++  h.advance(300_000);
++  h.document.dispatchEvent(new Event('visibilitychange'));
++  assert.equal(h.pin.isAccountScreenLocked(baseUrl, userId), true);
++  cleanup();
++  assert.equal(interval, undefined);
++  h.pin.clearScreenLock();
++  h.document.visibilityState = 'visible';
++  usePinIdleLock(baseUrl, userId, true, 5);
++  h.advance(300_000);
++  h.window.dispatchEvent(new Event('pointerdown'));
++  assert.equal(h.pin.isAccountScreenLocked(baseUrl, userId), true);
++  cleanup();
++});
++
++test('gate requires setup, unlocks after saving, hides chats when locked, and verifies on reload', async () => {
++  const h = harness();
++  let state;
++  let idleArgs;
++  const react = {
++    createElement: (type, props, ...children) => ({ type, props: { ...props, children } }),
++    useState: (init) => {
++      if (state === undefined) state = typeof init === 'function' ? init() : init;
++      return [
++        state,
++        (value) => {
++          state = value;
++        },
++      ];
++    },
++    useEffect: () => {},
++    useCallback: (fn) => fn,
++  };
++  const { ScreenPinLockGate } = compile('components/pin-lock/ScreenPinLockOverlay.tsx', h.globals, {
++    react: { ...react, default: react },
++    folds: { Box: 'Box', Text: 'Text' },
++    '../../hooks/useMatrixClient': { useMatrixClient: () => ({ getUserId: () => userId }) },
++    '../../hooks/usePinLockSnapshot': { usePinLockSnapshot: h.pin.getPinLockSnapshot },
++    '../../hooks/useAccountData': { useAccountData: () => undefined },
++    '../../hooks/usePinIdleLock': {
++      usePinIdleLock: (...args) => {
++        idleArgs = args;
++      },
++    },
++    '../../state/sessions': { getFallbackSession: () => ({ baseUrl }) },
++    '../../utils/pinLock': h.pin,
++    '../../utils/desktopUpdater': h.desktop,
++    '../../constants/branding': { APP_DISPLAY_NAME: '星火', APP_LOGO_URL: '/logo.png' },
++    '../../../types/matrix/accountData': { AccountDataEvent: {} },
++    '../splash-screen': { SplashScreen: 'SplashScreen' },
++    './AccountPinDialog': { AccountPinForm: 'AccountPinForm' },
++    './LocalPinSetupDialog': { LocalPinSetupDialog: 'LocalPinSetupDialog' },
++    '../../features/settings/devices/DeviceTile': { DeviceLogoutBtn: 'DeviceLogoutBtn' },
++    './style.css': {},
++  });
++  const render = () => ScreenPinLockGate({ children: 'private-chat' });
++  const setup = render().props.children[0];
++  assert.equal(setup.type, 'LocalPinSetupDialog');
++  assert.equal(setup.props.onCancel, undefined);
++  await h.pin.enableAccountPin(baseUrl, userId, '123456');
++  setup.props.onSuccess();
++  assert.equal(render(), 'private-chat');
++  assert.equal(idleArgs[2], true);
++  assert.equal(idleArgs[3], 5);
++  h.pin.lockScreenForAccount(baseUrl, userId);
++  const locked = render();
++  assert.equal(locked.props.children[0].type, 'AccountPinForm');
++  assert.equal(idleArgs[2], false);
++  locked.props.children[0].props.onSuccess();
++  assert.equal(render(), 'private-chat');
++  state = undefined;
++  assert.equal(render().props.children[0].type, 'AccountPinForm');
++});
++
++test('server PIN policies cannot clear or replace a browser-local PIN', async () => {
++  const { pin } = harness();
++  if (!pin.applyAccountPinPolicyContent) return;
++  const config = await pin.enableAccountPin(baseUrl, userId, '123456');
++  pin.applyAccountPinPolicyContent(baseUrl, userId, { enabled: false });
++  await pin.syncAccountPinPolicy(baseUrl, userId, 'token');
++  assert.deepEqual(pin.getAccountPinConfig(baseUrl, userId), config);
++});

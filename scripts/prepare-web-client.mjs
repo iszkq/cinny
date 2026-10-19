@@ -18,6 +18,10 @@ config.audioTranscription.defaultAihubmixApiKey = '';
 config.imageOcr.defaultAihubmixApiKey = '';
 writeFileSync(configFile, `${JSON.stringify(config, null, 2)}\n`);
 
-// Every other tracked file, including package versions and lockfiles, stays unchanged.
-git('diff', '--quiet', 'HEAD', '--', '.', ':(exclude)config.json');
-console.log(`Web source and version preserved at ${baseline.version} (${baseline.ref}).`);
+// Keep the historical client, with the explicitly requested Web PIN protection patch.
+const pinPatch = path.join(root, 'scripts/patches/web-pin-lock.patch');
+git('apply', '--check', pinPatch);
+git('apply', pinPatch);
+// Application version and dependencies remain on the historical baseline.
+git('diff', '--quiet', 'HEAD', '--', 'package.json', 'package-lock.json');
+console.log(`Web ${baseline.version} (${baseline.ref}) prepared with PIN protection.`);

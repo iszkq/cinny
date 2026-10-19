@@ -5,7 +5,7 @@ Windows 和 Web 的应用源码固定到移植前的 **1.9.10**，提交
 记录此共同基准；准备脚本核验检出提交及源码差异，避免新平台移植改变旧客户端。
 
 - Windows：独立检出到 `windows-client/`，保留旧 UI、样式、依赖和 Rust 实现；仅安装包版本元数据更新为 2.0.1。
-- Web：独立检出到 `web-client/`，保留全部旧代码、版本号 1.9.10 和锁文件。
+- Web：独立检出到 `web-client/`，保留旧版基础、版本号 1.9.10 和锁文件；准备脚本应用 `scripts/patches/web-pin-lock.patch`，加入网页版 PIN 入口、首次设置提示、5 分钟闲置锁屏及主动重新登录重设 PIN。
 - 两者都清除历史配置中的内置 API 密钥，用户仍可自行配置。
 - macOS / iOS / Android：继续从根目录的移植源码构建，不使用上述旧检出。
 
@@ -32,7 +32,7 @@ node scripts/prepare-web-client.mjs web-client
 node scripts/prepare-windows-client.mjs windows-client
 ```
 
-准备脚本只接受未修改的基准检出，分别执行一次。在相应子目录执行 `npm ci`，再执行
+准备脚本只接受未修改的基准检出，分别执行一次。网页准备过程会应用上述 PIN 补丁，普通退出或重新登录保留 PIN；只有在锁屏页主动选择“忘记 PIN，重新登录重设”，并在 30 分钟内成功登录同一账号时，才会清除旧 PIN 并提示重设。PIN 校验摘要按账号保存在当前浏览器中，不同步到其他设备。PIN 使用 Web Crypto，网页应通过 HTTPS 或 localhost 访问。在相应子目录执行 `npm ci`，再执行
 `npm run build`（网页）或 `npm run desktop:build:nsis`（Windows）。Windows 需 Rust / MSVC 构建环境。
 根目录的 `npm run build` 用于移植版源码验证；发布网页和 Windows 必须使用上述独立检出或工作流。
 
