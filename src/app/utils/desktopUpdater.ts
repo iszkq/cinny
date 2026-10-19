@@ -68,6 +68,14 @@ export const isDesktopUpdaterSupported = (): boolean =>
     Boolean((window as TauriWindow).__TAURI_INTERNALS__) ||
     /tauri/i.test(window.navigator.userAgent));
 
+type DesktopUpdatePlatform = 'windows' | 'macos';
+
+const getDesktopUpdatePlatform = (): DesktopUpdatePlatform =>
+  isDesktopUpdaterSupported() &&
+  /Macintosh|Mac OS|MacIntel/i.test(`${window.navigator.platform} ${window.navigator.userAgent}`)
+    ? 'macos'
+    : 'windows';
+
 export const getDesktopUpdaterProxyUrl = async (): Promise<string | undefined> => {
   if (!isDesktopUpdaterSupported()) {
     return undefined;
@@ -185,12 +193,15 @@ export const installPendingDesktopUpdate = async (
   throw new Error('Updater download API is unavailable in the current desktop build.');
 };
 
-const parseLatestDesktopManifest = (payload: {
-  version?: unknown;
-  notes?: unknown;
-  pub_date?: unknown;
-  platforms?: unknown;
-}): DesktopUpdateReleaseInfo | undefined => {
+const parseLatestDesktopManifest = (
+  payload: {
+    version?: unknown;
+    notes?: unknown;
+    pub_date?: unknown;
+    platforms?: unknown;
+  },
+  platform: DesktopUpdatePlatform
+): DesktopUpdateReleaseInfo | undefined => {
   if (typeof payload.version !== 'string' || payload.version.trim() === '') {
     return undefined;
   }
@@ -207,23 +218,35 @@ const parseLatestDesktopManifest = (payload: {
     platforms?.['windows-x86_64-pc-windows-msvc'] ??
     (fallbackWindowsPlatformKey ? platforms?.[fallbackWindowsPlatformKey] : undefined);
   const downloadUrl =
-    windowsPlatform && typeof windowsPlatform.url === 'string' ? windowsPlatform.url : undefined;
+    platform === 'windows' && windowsPlatform && typeof windowsPlatform.url === 'string'
+      ? windowsPlatform.url
+      : undefined;
 
   return {
     version: payload.version,
     body: typeof payload.notes === 'string' ? payload.notes : undefined,
     date: typeof payload.pub_date === 'string' ? payload.pub_date : undefined,
     downloadUrl,
+    // macOS is distributed as a manual DMG, not the Windows signed updater payload.
+    releasePageUrl:
+      platform === 'macos'
+        ? `https://github.com/iszkq/cinny/releases/tag/v${normalizeDesktopUpdateVersion(
+            payload.version
+          )}`
+        : undefined,
   };
 };
 
-const parseLatestDesktopRelease = (payload: {
-  tag_name?: unknown;
-  body?: unknown;
-  published_at?: unknown;
-  assets?: unknown;
-  html_url?: unknown;
-}): DesktopUpdateReleaseInfo | undefined => {
+const parseLatestDesktopRelease = (
+  payload: {
+    tag_name?: unknown;
+    body?: unknown;
+    published_at?: unknown;
+    assets?: unknown;
+    html_url?: unknown;
+  },
+  platform: DesktopUpdatePlatform
+): DesktopUpdateReleaseInfo | undefined => {
   if (typeof payload.tag_name !== 'string' || payload.tag_name.trim() === '') {
     return undefined;
   }
@@ -232,7 +255,10 @@ const parseLatestDesktopRelease = (payload: {
   const installerAsset = assets.find((asset) => {
     if (!asset || typeof asset !== 'object') return false;
     const name = 'name' in asset ? asset.name : undefined;
-    return typeof name === 'string' && /-setup\.exe$/i.test(name);
+    return (
+      typeof name === 'string' &&
+      (platform === 'macos' ? /(?:^|[_-])universal\.dmg$/i.test(name) : /-setup\.exe$/i.test(name))
+    );
   }) as { browser_download_url?: unknown } | undefined;
   const downloadUrl =
     installerAsset && typeof installerAsset.browser_download_url === 'string'
@@ -291,6 +317,7 @@ const mergeLatestDesktopReleaseInfo = (
 export const fetchLatestDesktopRelease = async (): Promise<
   DesktopUpdateReleaseInfo | undefined
 > => {
+  const platform = getDesktopUpdatePlatform();
   const [manifestRelease, githubRelease] = await Promise.all([
     (async () => {
       const response = await fetch(DESKTOP_UPDATER_MANIFEST_URL, {
@@ -308,7 +335,7 @@ export const fetchLatestDesktopRelease = async (): Promise<
         platforms?: unknown;
       };
 
-      return parseLatestDesktopManifest(manifestPayload);
+      return parseLatestDesktopManifest(manifestPayload, platform);
     })().catch(() => undefined),
     (async () => {
       const response = await fetch(DESKTOP_UPDATER_RELEASE_API_URL, {
@@ -329,7 +356,7 @@ export const fetchLatestDesktopRelease = async (): Promise<
         assets?: unknown;
       };
 
-      return parseLatestDesktopRelease(releasePayload);
+      return parseLatestDesktopRelease(releasePayload, platform);
     })().catch(() => undefined),
   ]);
 
