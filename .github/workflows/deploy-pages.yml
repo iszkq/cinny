@@ -18,9 +18,20 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      WEB_BASELINE_REF: b3197a6ce2c369a8a40143759486c739a550a38e
+    defaults:
+      run:
+        working-directory: web-client
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+
+      - name: Checkout unchanged Web client
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.WEB_BASELINE_REF }}
+          path: web-client
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
@@ -30,6 +41,11 @@ jobs:
         with:
           node-version-file: '.node-version'
           cache: npm
+          cache-dependency-path: web-client/package-lock.json
+
+      - name: Verify unchanged Web source and remove historical credentials
+        working-directory: .
+        run: node scripts/prepare-web-client.mjs web-client
 
       - name: Calculate deployment base path
         shell: bash
@@ -43,7 +59,7 @@ jobs:
           echo "VITE_HASH_ROUTER_ENABLED=true" >> "$GITHUB_ENV"
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Build app
         env:
@@ -53,7 +69,7 @@ jobs:
       - name: Upload GitHub Pages artifact
         uses: actions/upload-pages-artifact@v4
         with:
-          path: dist
+          path: web-client/dist
 
   deploy:
     needs: build

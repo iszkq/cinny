@@ -10,17 +10,27 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PR_NUMBER: ${{github.event.number}}
+      WEB_BASELINE_REF: b3197a6ce2c369a8a40143759486c739a550a38e
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Setup node
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
         with:
-          node-version-file: ".node-version"
+          node-version-file: '.node-version'
           package-manager-cache: false
+      - name: Checkout unchanged Web client
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.WEB_BASELINE_REF }}
+          path: web-client
+      - name: Verify unchanged Web source and remove historical credentials
+        run: node scripts/prepare-web-client.mjs web-client
       - name: Install dependencies
-        run: npm install
+        working-directory: web-client
+        run: npm ci
       - name: Build app
+        working-directory: web-client
         env:
           NODE_OPTIONS: '--max_old_space_size=4096'
         run: npm run build
@@ -28,7 +38,7 @@ jobs:
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: preview
-          path: dist
+          path: web-client/dist
           retention-days: 1
       - name: Save pr number
         run: echo ${PR_NUMBER} > ./pr.txt

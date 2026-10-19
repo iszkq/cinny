@@ -11,6 +11,8 @@
 
 ## 平台隔离
 
+**后续回滚：Windows 和 Web 已固定回移植前的 1.9.10 源码。** Windows 安装包元数据仍为 2.0.1，Web 保持 1.9.10；macOS / iOS / Android 保留此次移植。构建与部署方式见 [WINDOWS_WEB_BUILD.md](WINDOWS_WEB_BUILD.md)。下文的共享源码验证及最初四平台发布记录描述的是回滚前的移植成果。
+
 计算器入口、移动端名称及图标、隐私设置仅在 `VITE_ANDROID_APP=true` 或 `VITE_IOS_APP=true` 时启用。普通 Web / PWA、Windows 和 macOS 使用星火入口。iOS 兼容 WASM 只在 iOS 构建中替换，Android 和其他平台使用 npm 原模块。
 
 `npm run android:sync` 与 `npm run ios:sync` 通过 Node 设置目标平台变量，支持 Windows 的前端构建与同步；iOS 原生编译仍需 Mac / Xcode。同步脚本先执行项目完整前置检查和构建，再执行 Capacitor 同步。

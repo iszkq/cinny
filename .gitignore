@@ -4,6 +4,8 @@ dist-android/
 dist-ios/
 .local-validation/
 .release-repo/
+windows-client/
+web-client/
 ios/DerivedData/
 ios/App/App/public/
 android/.gradle/

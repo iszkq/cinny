@@ -10,21 +10,33 @@ jobs:
   windows:
     name: Windows debug installer
     runs-on: windows-latest
+    env:
+      WINDOWS_BASELINE_REF: b3197a6ce2c369a8a40143759486c739a550a38e
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Checkout unchanged Windows client
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.WINDOWS_BASELINE_REF }}
+          path: windows-client
       - name: Setup Node
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
         with:
           node-version-file: '.node-version'
           cache: npm
+          cache-dependency-path: windows-client/package-lock.json
+      - name: Prepare unchanged Windows client
+        run: node scripts/prepare-windows-client.mjs windows-client
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
       - name: Install dependencies
+        working-directory: windows-client
         env:
           HUSKY: '0'
         run: npm ci
       - name: Build unsigned debug installer
+        working-directory: windows-client
         env:
           NODE_OPTIONS: '--max_old_space_size=4096'
         run: npm run tauri -- build --bundles nsis --config '{"bundle":{"createUpdaterArtifacts":false}}'
@@ -32,7 +44,7 @@ jobs:
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: starfire-windows-debug-${{ github.run_number }}
-          path: src-tauri/target/release/bundle/nsis/*-setup.exe
+          path: windows-client/src-tauri/target/release/bundle/nsis/*-setup.exe
           if-no-files-found: error
           retention-days: 14
 

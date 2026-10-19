@@ -7,6 +7,7 @@ jobs:
   deploy-and-tarball:
     name: Netlify deploy and tarball
     env:
+      WEB_BASELINE_REF: b3197a6ce2c369a8a40143759486c739a550a38e
       GNUPG_SIGNING_AVAILABLE: ${{ secrets.GNUPG_KEY != '' && secrets.GNUPG_PASSPHRASE != '' }}
     outputs:
       version: ${{ steps.vars.outputs.tag }}
@@ -19,7 +20,7 @@ jobs:
       - name: Setup node
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
         with:
-          node-version-file: ".node-version"
+          node-version-file: '.node-version'
           package-manager-cache: false
       - name: Install dependencies
         run: npm install
@@ -36,14 +37,25 @@ jobs:
         run: |
           TAG=$(git describe --tags --abbrev=0) 
           echo "tag=$TAG" >> $GITHUB_OUTPUT
+      - name: Checkout unchanged Web client
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.WEB_BASELINE_REF }}
+          path: web-client
+      - name: Verify unchanged Web source and remove historical credentials
+        run: node scripts/prepare-web-client.mjs web-client
+      - name: Install Web dependencies
+        working-directory: web-client
+        run: npm ci
       - name: Build app
         env:
           NODE_OPTIONS: '--max_old_space_size=4096'
+        working-directory: web-client
         run: npm run build
       - name: Deploy to Netlify
         uses: nwtgck/actions-netlify@4cbaf4c08f1a7bfa537d6113472ef4424e4eb654 # v3.0.0
         with:
-          publish-dir: dist
+          publish-dir: web-client/dist
           deploy-message: 'Prod deploy ${{ steps.vars.outputs.tag }}'
           enable-commit-comment: false
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -56,10 +68,10 @@ jobs:
         timeout-minutes: 1
       - name: Create static zip
         run: |
-          cd dist
-          zip -r ../cinny-${{ steps.vars.outputs.tag }}-static.zip .
+          cd web-client/dist
+          zip -r ../../cinny-${{ steps.vars.outputs.tag }}-static.zip .
       - name: Create tar.gz
-        run: tar -czvf cinny-${{ steps.vars.outputs.tag }}.tar.gz dist
+        run: tar -czvf cinny-${{ steps.vars.outputs.tag }}.tar.gz -C web-client dist
       - name: Sign tar.gz
         if: env.GNUPG_SIGNING_AVAILABLE == 'true'
         run: |
@@ -90,6 +102,7 @@ jobs:
     name: Push Docker image to Docker Hub, GHCR
     needs: deploy-and-tarball
     env:
+      WEB_BASELINE_REF: b3197a6ce2c369a8a40143759486c739a550a38e
       VERSION: ${{ needs.deploy-and-tarball.outputs.version }}
       DOCKER_HUB_AVAILABLE: ${{ secrets.DOCKER_USERNAME != '' && secrets.DOCKER_PASSWORD != '' }}
       DOCKER_HUB_IMAGE: ${{ secrets.DOCKER_USERNAME != '' && format('{0}/cinny', secrets.DOCKER_USERNAME) || '' }}
@@ -104,6 +117,13 @@ jobs:
           fetch-depth: 0
       - name: Set up QEMU
         uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+      - name: Checkout unchanged Web client
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.WEB_BASELINE_REF }}
+          path: web-client
+      - name: Verify unchanged Web source and remove historical credentials
+        run: node scripts/prepare-web-client.mjs web-client
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
       - name: Login to Docker Hub #Do not update this action from a outside PR
@@ -131,7 +151,7 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
-          context: .
+          context: ./web-client
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}

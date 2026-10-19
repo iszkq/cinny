@@ -2,6 +2,11 @@ name: Build Windows installer
 
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Existing release to replace the Windows EXE, signature and updater manifest (optional).'
+        required: false
+        type: string
   push:
     branches:
       - dev
@@ -16,15 +21,24 @@ jobs:
     runs-on: windows-latest
     permissions:
       contents: write
+    env:
+      WINDOWS_BASELINE_REF: b3197a6ce2c369a8a40143759486c739a550a38e
+    timeout-minutes: 60
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - name: Checkout unchanged Windows client
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ env.WINDOWS_BASELINE_REF }}
+          path: windows-client
+
       - name: Validate release version metadata
         shell: pwsh
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
         run: |
           $packageJson = Get-Content -LiteralPath 'package.json' -Raw | ConvertFrom-Json
           $tauriConfig = Get-Content -LiteralPath 'src-tauri/tauri.conf.json' -Raw | ConvertFrom-Json
@@ -55,6 +69,10 @@ jobs:
         with:
           node-version-file: '.node-version'
           cache: 'npm'
+          cache-dependency-path: windows-client/package-lock.json
+
+      - name: Prepare Windows installer version without changing client source
+        run: node scripts/prepare-windows-client.mjs windows-client
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -62,12 +80,13 @@ jobs:
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
-          workspaces: './src-tauri -> target'
+          workspaces: './windows-client/src-tauri -> target'
 
       - name: Install dependencies
         env:
           HUSKY: '0'
         run: npm ci
+        working-directory: windows-client
 
       - name: Write updater signing key
         shell: bash
@@ -85,7 +104,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ runner.temp }}/tauri-updater.key
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          projectPath: .
+          projectPath: windows-client
           tauriScript: npm run tauri
           args: --bundles nsis
 
@@ -94,17 +113,17 @@ jobs:
         with:
           name: starfire-windows-debug-${{ github.run_number }}
           path: |
-            src-tauri/target/release/bundle/nsis/*-setup.exe
-            src-tauri/target/release/bundle/nsis/*-setup.exe.sig
+            windows-client/src-tauri/target/release/bundle/nsis/*-setup.exe
+            windows-client/src-tauri/target/release/bundle/nsis/*-setup.exe.sig
           if-no-files-found: error
           retention-days: 14
 
       - name: Generate updater latest.json
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
           RELEASE_REPOSITORY: ${{ github.repository }}
         run: |
           [Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)
@@ -113,8 +132,8 @@ jobs:
           if ($version -notmatch '^\d+\.\d+\.\d+([-.+][0-9A-Za-z.-]+)?$') {
             throw "Invalid release tag '$($env:RELEASE_TAG)'. Use tags like v1.0.1, not v.1.0.1. The updater manifest version must be plain semver like 1.0.1."
           }
-          $setupFile = Get-ChildItem -Path 'src-tauri/target/release/bundle/nsis' -Filter '*-setup.exe' | Select-Object -First 1
-          $signatureFile = Get-ChildItem -Path 'src-tauri/target/release/bundle/nsis' -Filter '*-setup.exe.sig' | Select-Object -First 1
+          $setupFile = Get-ChildItem -Path 'windows-client/src-tauri/target/release/bundle/nsis' -Filter '*-setup.exe' | Select-Object -First 1
+          $signatureFile = Get-ChildItem -Path 'windows-client/src-tauri/target/release/bundle/nsis' -Filter '*-setup.exe.sig' | Select-Object -First 1
           $releaseNotesPath = ".github/release-notes/$($env:RELEASE_TAG).md"
           $releaseNotes = $null
           if (-not $setupFile) {
