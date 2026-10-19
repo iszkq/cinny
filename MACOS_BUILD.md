@@ -47,4 +47,14 @@ gh workflow run macos-installer.yml --repo iszkq/cinny --ref dev -f release_tag=
 该操作只替换 Mac DMG，不移动原标签，也不重建 Windows / Web / Android / iOS。
 已安装原 2.0.1 Mac 客户端的用户需手动安装修复后的 DMG 一次；相同版本号不会触发升级。
 
+### 更新路径修复验证（2026-10-19）
+
+- 应用修复提交 `5305056ac7ae0223f657433ace1f1f1bd9ae83f1`；类型检查、关键 ESLint、200 项测试通过。
+- 后续版本回归测试提交 `d7dcf0c`：9 项更新专项测试通过，覆盖 2.0.2 / 2.1.0 / 3.0.0、Windows 清单滞后、DMG 尚未发布、Release API 失败及 Windows 路径隔离。
+- 使用真实 Release API 数据验证，Mac 选择通用 DMG，Windows 选择原 EXE。
+- [Mac 构建工作流](https://github.com/iszkq/cinny/actions/runs/39245337451)成功，v2.0.1 DMG 已替换。原标签未移动。
+- DMG 大小 55,148,395 字节，SHA256：`c24dc216ec444ef859d8313e278d159877285a43f53acc99eb44fe182b283dd3`；本地下载校验与 GitHub 记录一致。
+- EXE / EXE 签名 / `latest.json` / APK / IPA 的资产 ID 与 SHA256 均保持不变。网页版未重新部署。
+- 当前环境为 Windows，未执行 Mac 真机覆盖安装及登录后的更新交互；上述证据覆盖路径逻辑、通用原生构建与发布文件完整性。
+
 麦克风和摄像头用途说明位于 `src-tauri/Info.macos.plist`。登录、消息同步、通话和 Office 在线服务仍需要可访问的服务器及账号。
