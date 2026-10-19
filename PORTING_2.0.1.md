@@ -35,4 +35,15 @@
 
 本次检查日志保存在 `.local-validation/2.0.1/`（不进入版本库）。来源版本文档中的测试、模拟器和安装包记录不代表 2.0.1 已完成相同验证。
 
-当前环境为 Windows，无法执行 Xcode / macOS 原生打包和 Apple 设备真机验证；macOS 正式签名、公证及自动更新配置沿用来源版本的限制。此记录不代表已发布安装包。
+当前环境为 Windows，本地无法执行 Xcode / macOS 原生打包和 Apple 设备真机验证；macOS 正式签名、公证及自动更新配置沿用来源版本的限制。
+
+## GitHub 构建与发布
+
+已上传至 [iszkq/cinny](https://github.com/iszkq/cinny)，源码提交 `59c8849a21da33c881830fc4409448afa456e092`，标签 `v2.0.1`。四个平台的原生构建全部成功，产物已发布在 [Starfire 2.0.1](https://github.com/iszkq/cinny/releases/tag/v2.0.1)：
+
+- [Windows x64 EXE](https://github.com/iszkq/cinny/actions/runs/39209993586)：含更新签名及 latest.json。
+- [Android APK](https://github.com/iszkq/cinny/actions/runs/39209993532)：使用仓库已有发布证书签名。
+- [macOS 通用 DMG](https://github.com/iszkq/cinny/actions/runs/39209993634)：Apple Silicon / Intel，ad-hoc 签名，未公证。
+- [iOS 16+ IPA](https://github.com/iszkq/cinny/actions/runs/39211253075)：未签名。首次原生编译成功后，上传步骤因父目录模式被 artifact action 拒绝；提交 `ed54c4a225c5625c92455ae5876cf0939a1439d0` 修正流程，并检出原 `v2.0.1` 标签源码重新构建上传成功，未移动标签。
+
+安装包本地副本位于 `.local-validation/2.0.1/packages/`，SHA256 已与 GitHub Release 记录核对一致。构建成功不等同于 Apple 真机功能验证。
