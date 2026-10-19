@@ -1,7 +1,8 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { restoreDefaultAIConfig } from './prepare-client-config.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const baseline = JSON.parse(readFileSync(path.join(root, 'windows-baseline.json'), 'utf8'));
@@ -10,27 +11,33 @@ if (target === root) throw new Error('Web baseline must use a separate checkout.
 const git = (...args) => execFileSync('git', ['-C', target, ...args], { encoding: 'utf8' }).trim();
 if (git('rev-parse', 'HEAD') !== baseline.ref) throw new Error('Unexpected Web baseline commit.');
 const pinPatch = path.join(root, 'scripts/patches/web-pin-lock.patch');
-const alreadyPrepared =
+const compatPatch = path.join(root, 'scripts/patches/web-settings-compat.patch');
+const compatibilityPrepared =
+  process.argv.includes('--reuse') &&
+  spawnSync('git', ['-C', target, 'apply', '--reverse', '--check', compatPatch], {
+    stdio: 'ignore',
+  }).status === 0;
+const pinPrepared =
+  !compatibilityPrepared &&
   process.argv.includes('--reuse') &&
   spawnSync('git', ['-C', target, 'apply', '--reverse', '--check', pinPatch], { stdio: 'ignore' })
     .status === 0;
-if (!alreadyPrepared) git('diff', '--quiet', 'HEAD');
-
-// Do not publish credentials from the historical configuration.
-const configFile = path.join(target, 'config.json');
-const config = JSON.parse(readFileSync(configFile, 'utf8'));
-config.audioTranscription.defaultAihubmixApiKey = '';
-config.imageOcr.defaultAihubmixApiKey = '';
-writeFileSync(configFile, `${JSON.stringify(config, null, 2)}\n`);
+if (!pinPrepared && !compatibilityPrepared) git('diff', '--quiet', 'HEAD');
 
 // Keep the historical client, with the explicitly requested Web PIN protection patch.
-if (!alreadyPrepared) {
+if (!pinPrepared && !compatibilityPrepared) {
   git('apply', '--check', pinPatch);
   git('apply', pinPatch);
 }
+if (!compatibilityPrepared) {
+  git('apply', '--check', compatPatch);
+  git('apply', compatPatch);
+}
+// Use the same working defaults as native builds, including reused checkouts.
+restoreDefaultAIConfig(path.join(target, 'config.json'));
 // No general layout/style changes may sneak into the frozen Web checkout.
-const pinFiles = [...readFileSync(pinPatch, 'utf8').matchAll(/^\+\+\+ b\/(.+)$/gm)].map(
-  (match) => match[1]
+const pinFiles = [pinPatch, compatPatch].flatMap((patchFile) =>
+  [...readFileSync(patchFile, 'utf8').matchAll(/^\+\+\+ b\/(.+)$/gm)].map((match) => match[1])
 );
 git(
   'diff',

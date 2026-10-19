@@ -43,7 +43,7 @@ jobs:
           cache: npm
           cache-dependency-path: web-client/package-lock.json
 
-      - name: Verify unchanged Web source and remove historical credentials
+      - name: Prepare classic Web client with PIN and restored settings
         working-directory: .
         run: node scripts/prepare-web-client.mjs web-client
 

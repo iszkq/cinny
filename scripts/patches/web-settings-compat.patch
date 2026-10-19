@@ -1,0 +1,718 @@
+diff --git a/src/app/components/pin-lock/ScreenPinLockOverlay.tsx b/src/app/components/pin-lock/ScreenPinLockOverlay.tsx
+index aef92c0..1b5f3ab 100644
+--- a/src/app/components/pin-lock/ScreenPinLockOverlay.tsx
++++ b/src/app/components/pin-lock/ScreenPinLockOverlay.tsx
+@@ -1,11 +1,12 @@
+ import React, { ReactNode, useCallback, useState } from 'react';
+-import { Box, Text } from 'folds';
++import { Box, Button, Text } from 'folds';
+ import { APP_DISPLAY_NAME, APP_LOGO_URL } from '../../constants/branding';
+ import { DeviceLogoutBtn } from '../../features/settings/devices/DeviceTile';
+ import { useAccountData } from '../../hooks/useAccountData';
+ import { useMatrixClient } from '../../hooks/useMatrixClient';
+ import { usePinLockSnapshot } from '../../hooks/usePinLockSnapshot';
+ import { usePinIdleLock } from '../../hooks/usePinIdleLock';
++import { useWebPinMigration } from '../../hooks/useWebPinMigration';
+ import { getFallbackSession } from '../../state/sessions';
+ import {
+   cacheAccountPinConfig,
+@@ -134,6 +135,7 @@ export function ScreenPinLockGate({ children }: ScreenPinLockGateProps) {
+   const remotePinConfig = getAccountPinPolicyConfig(policyContent);
+   const localPinConfig = baseUrl && userId ? getAccountPinConfig(baseUrl, userId) : undefined;
+   const webPinRequired = isWebPinLockSupported();
++  const pinMigration = useWebPinMigration(baseUrl, userId ?? undefined, session?.accessToken);
+   const activePinConfig = webPinRequired
+     ? localPinConfig
+     : policyEvent
+@@ -170,6 +172,25 @@ export function ScreenPinLockGate({ children }: ScreenPinLockGateProps) {
+   }
+
+   const accountLabel = getAccountPinLabel(baseUrl, userId);
++  if (webPinRequired && !activePinConfig && pinMigration.status !== 'ready') {
++    return (
++      <SplashScreen>
++        <Box direction="Column" gap="300" alignItems="Center" justifyContent="Center" grow="Yes">
++          <Text>
++            {pinMigration.status === 'error'
++              ? '无法读取已有 PIN，请检查网络后重试。'
++              : '正在检查已有 PIN…'}
++          </Text>
++          {pinMigration.status === 'error' && (
++            <Button onClick={pinMigration.retry} variant="Primary">
++              <Text>重试</Text>
++            </Button>
++          )}
++          <DeviceLogoutBtn />
++        </Box>
++      </SplashScreen>
++    );
++  }
+   if (webPinRequired && !activePinConfig) {
+     return (
+       <SplashScreen>
+diff --git a/src/app/hooks/useWebPinMigration.ts b/src/app/hooks/useWebPinMigration.ts
+new file mode 100644
+index 0000000..df22abc
+--- /dev/null
++++ b/src/app/hooks/useWebPinMigration.ts
+@@ -0,0 +1,57 @@
++import { useEffect, useState } from 'react';
++import {
++  getAccountPinKey,
++  hasAccountPin,
++  isLegacyWebPinMigrationBlocked,
++  isWebPinLockSupported,
++  syncAccountPinPolicy,
++} from '../utils/pinLock';
++
++type Lookup = { accountKey: string; status: 'ready' | 'error' };
++
++export function useWebPinMigration(baseUrl?: string, userId?: string, accessToken?: string) {
++  const [lookup, setLookup] = useState<Lookup>();
++  const [attempt, setAttempt] = useState(0);
++  const accountKey = baseUrl && userId ? getAccountPinKey(baseUrl, userId) : undefined;
++  const localReady = Boolean(
++    baseUrl &&
++      userId &&
++      (hasAccountPin(baseUrl, userId) || isLegacyWebPinMigrationBlocked(baseUrl, userId))
++  );
++  const supported = isWebPinLockSupported();
++
++  useEffect(() => {
++    if (!supported || !baseUrl || !userId || !accountKey || localReady) return undefined;
++    let disposed = false;
++    setLookup(undefined);
++    if (!accessToken) {
++      setLookup({ accountKey, status: 'error' });
++      return undefined;
++    }
++    syncAccountPinPolicy(baseUrl, userId, accessToken).then(
++      () => {
++        if (!disposed) setLookup({ accountKey, status: 'ready' });
++      },
++      () => {
++        if (!disposed) setLookup({ accountKey, status: 'error' });
++      }
++    );
++    return () => {
++      disposed = true;
++    };
++  }, [supported, baseUrl, userId, accessToken, accountKey, localReady, attempt]);
++
++  const status =
++    !supported || localReady
++      ? 'ready'
++      : lookup && lookup.accountKey === accountKey
++      ? lookup.status
++      : 'loading';
++  return {
++    status,
++    retry: () => {
++      setLookup(undefined);
++      setAttempt((value) => value + 1);
++    },
++  };
++}
+diff --git a/src/app/pages/client/ClientNonUIFeatures.tsx b/src/app/pages/client/ClientNonUIFeatures.tsx
+index 9ded36c..dbdc144 100644
+--- a/src/app/pages/client/ClientNonUIFeatures.tsx
++++ b/src/app/pages/client/ClientNonUIFeatures.tsx
+@@ -50,6 +50,7 @@ import {
+   DEFAULT_APPEARANCE_ACCOUNT_DATA_SIGNATURE,
+   getAppearanceAccountDataContent,
+   getAppearanceAccountDataSignature,
++  nextBackgroundMxc,
+ } from '../../state/appearanceAccountData';
+ import {
+   applyAccountPinPolicyContent,
+@@ -578,11 +579,11 @@ function AppearanceSettingsAccountDataFeature() {
+
+       const currentSettings = settingsRef.current;
+       const currentSignature = getAppearanceAccountDataSignature(currentSettings);
+-      const remoteBackgroundMxc = content.chatBackgroundMediaMxc;
++      const remoteBackgroundMxc = nextBackgroundMxc(currentSettings, content);
+       const backgroundChanged = currentSettings.chatBackgroundMediaMxc !== remoteBackgroundMxc;
+       let nextSettings = applyAppearanceAccountData(currentSettings, content);
+
+-      if (!remoteBackgroundMxc) {
++      if (content.chatBackgroundMediaMxc === null) {
+         nextSettings = {
+           ...nextSettings,
+           chatBackgroundMediaMxc: undefined,
+@@ -595,8 +596,13 @@ function AppearanceSettingsAccountDataFeature() {
+         };
+       }
+
+-      if (currentSignature !== remoteSignature || backgroundChanged) {
+-        applyingRemoteSignatureRef.current = remoteSignature;
++      if (
++        currentSignature !== remoteSignature ||
++        backgroundChanged ||
++        (content.chatBackgroundMediaMxc === null && currentSettings.chatBackgroundDataUrl)
++      ) {
++        applyingRemoteSignatureRef.current = getAppearanceAccountDataSignature(nextSettings);
++        settingsRef.current = nextSettings;
+         setSettings(nextSettings);
+       } else {
+         applyingRemoteSignatureRef.current = undefined;
+diff --git a/src/app/state/appearanceAccountData.ts b/src/app/state/appearanceAccountData.ts
+index ba1d948..6232f41 100644
+--- a/src/app/state/appearanceAccountData.ts
++++ b/src/app/state/appearanceAccountData.ts
+@@ -30,14 +30,10 @@ const normalizeAppearanceSettings = (
+   interfaceStyle: source?.interfaceStyle ?? defaultSettings.interfaceStyle,
+   accentColorId: source?.accentColorId ?? defaultSettings.accentColorId,
+   accentOpacity: source?.accentOpacity ?? defaultSettings.accentOpacity,
+-  outgoingBubbleColorId:
+-    source?.outgoingBubbleColorId ?? defaultSettings.outgoingBubbleColorId,
+-  outgoingBubbleOpacity:
+-    source?.outgoingBubbleOpacity ?? defaultSettings.outgoingBubbleOpacity,
+-  incomingBubbleColorId:
+-    source?.incomingBubbleColorId ?? defaultSettings.incomingBubbleColorId,
+-  incomingBubbleOpacity:
+-    source?.incomingBubbleOpacity ?? defaultSettings.incomingBubbleOpacity,
++  outgoingBubbleColorId: source?.outgoingBubbleColorId ?? defaultSettings.outgoingBubbleColorId,
++  outgoingBubbleOpacity: source?.outgoingBubbleOpacity ?? defaultSettings.outgoingBubbleOpacity,
++  incomingBubbleColorId: source?.incomingBubbleColorId ?? defaultSettings.incomingBubbleColorId,
++  incomingBubbleOpacity: source?.incomingBubbleOpacity ?? defaultSettings.incomingBubbleOpacity,
+   chatBackgroundMediaMxc: source?.chatBackgroundMediaMxc ?? null,
+   monochromeMode: source?.monochromeMode ?? defaultSettings.monochromeMode ?? false,
+ });
+@@ -46,6 +42,11 @@ export const DEFAULT_APPEARANCE_ACCOUNT_DATA_SIGNATURE = JSON.stringify(
+   normalizeAppearanceSettings(defaultSettings)
+ );
+
++export const nextBackgroundMxc = (settings: Settings, content: CinnyAppearanceSettingsContent) =>
++  content.chatBackgroundMediaMxc === undefined
++    ? settings.chatBackgroundMediaMxc
++    : content.chatBackgroundMediaMxc ?? undefined;
++
+ export const getAppearanceAccountDataSignature = (
+   source?: Partial<SyncedAppearanceSettings> | CinnyAppearanceSettingsContent
+ ): string | undefined => {
+@@ -65,7 +66,8 @@ export const getAppearanceAccountDataContent = (
+   themeId: settings.themeId,
+   lightThemeId: settings.lightThemeId,
+   darkThemeId: settings.darkThemeId,
+-  chatBackgroundMediaMxc: settings.chatBackgroundMediaMxc,
++  // null explicitly removes a background; older clients may omit the field.
++  chatBackgroundMediaMxc: settings.chatBackgroundMediaMxc ?? null,
+ });
+
+ export const applyAppearanceAccountData = (
+@@ -85,16 +87,11 @@ export const applyAppearanceAccountData = (
+     interfaceStyle: content.interfaceStyle ?? settings.interfaceStyle,
+     accentColorId: content.accentColorId ?? settings.accentColorId,
+     accentOpacity: content.accentOpacity ?? settings.accentOpacity,
+-    outgoingBubbleColorId:
+-      content.outgoingBubbleColorId ?? settings.outgoingBubbleColorId,
+-    outgoingBubbleOpacity:
+-      content.outgoingBubbleOpacity ?? settings.outgoingBubbleOpacity,
+-    incomingBubbleColorId:
+-      content.incomingBubbleColorId ?? settings.incomingBubbleColorId,
+-    incomingBubbleOpacity:
+-      content.incomingBubbleOpacity ?? settings.incomingBubbleOpacity,
+-    chatBackgroundMediaMxc:
+-      content.chatBackgroundMediaMxc ?? settings.chatBackgroundMediaMxc,
++    outgoingBubbleColorId: content.outgoingBubbleColorId ?? settings.outgoingBubbleColorId,
++    outgoingBubbleOpacity: content.outgoingBubbleOpacity ?? settings.outgoingBubbleOpacity,
++    incomingBubbleColorId: content.incomingBubbleColorId ?? settings.incomingBubbleColorId,
++    incomingBubbleOpacity: content.incomingBubbleOpacity ?? settings.incomingBubbleOpacity,
++    chatBackgroundMediaMxc: nextBackgroundMxc(settings, content),
+     monochromeMode: content.monochromeMode ?? settings.monochromeMode,
+   };
+ };
+diff --git a/src/app/utils/pinLock.ts b/src/app/utils/pinLock.ts
+index 92a02f4..98e67db 100644
+--- a/src/app/utils/pinLock.ts
++++ b/src/app/utils/pinLock.ts
+@@ -27,6 +27,7 @@ type AccountPinPolicyState = {
+ export type AccountPinLoginRequirement = 'none' | 'prompt';
+
+ const ACCOUNT_PIN_CONFIGS_KEY = 'starfire-account-pin-configs';
++const LEGACY_WEB_PIN_RESET_KEY = 'starfire-web-pin-legacy-resets';
+ const SCREEN_LOCK_STATE_KEY = 'starfire-screen-lock-state';
+ const PIN_LOCK_CHANGE_EVENT = 'starfire-pin-lock-change';
+ const PIN_LOCK_ITERATIONS = 150000;
+@@ -325,6 +326,12 @@ const saveAccountPinPolicyContent = async (
+ export const hasAccountPin = (baseUrl: string, userId: string): boolean =>
+   !!getConfigByAccountKey(getAccountPinKey(baseUrl, userId));
+
++// A successful, explicit recovery must not re-import the old server PIN.
++export const isLegacyWebPinMigrationBlocked = (baseUrl: string, userId: string): boolean =>
++  readJson<Record<string, boolean>>(LEGACY_WEB_PIN_RESET_KEY, {})[
++    getAccountPinKey(baseUrl, userId)
++  ] === true;
++
+ export const cacheAccountPinConfig = (
+   baseUrl: string,
+   userId: string,
+@@ -457,7 +464,15 @@ export const applyAccountPinPolicyContent = (
+   userId: string,
+   content?: CinnyAccountPinPolicyContent | unknown
+ ): boolean => {
+-  if (isWebPinLockSupported()) return hasAccountPin(baseUrl, userId);
++  if (isWebPinLockSupported()) {
++    if (!hasAccountPin(baseUrl, userId) && !isLegacyWebPinMigrationBlocked(baseUrl, userId)) {
++      const legacyPolicy = getAccountPinPolicyState(content);
++      if (legacyPolicy.enabled && legacyPolicy.config) {
++        cacheAccountPinConfig(baseUrl, userId, legacyPolicy.config);
++      }
++    }
++    return hasAccountPin(baseUrl, userId);
++  }
+   const localConfig = getConfigByAccountKey(getAccountPinKey(baseUrl, userId));
+   const remotePolicy = getAccountPinPolicyState(content);
+
+@@ -480,7 +495,14 @@ export const syncAccountPinPolicy = async (
+   userId: string,
+   accessToken: string
+ ): Promise<boolean> => {
+-  if (isWebPinLockSupported()) return hasAccountPin(baseUrl, userId);
++  if (isWebPinLockSupported()) {
++    if (hasAccountPin(baseUrl, userId) || isLegacyWebPinMigrationBlocked(baseUrl, userId)) {
++      return hasAccountPin(baseUrl, userId);
++    }
++    // Read historical PINs only. Never change another client's account policy.
++    const legacyContent = await fetchAccountPinPolicyContent(baseUrl, userId, accessToken);
++    return applyAccountPinPolicyContent(baseUrl, userId, legacyContent);
++  }
+   const localConfig = getConfigByAccountKey(getAccountPinKey(baseUrl, userId));
+   const remoteContent = await fetchAccountPinPolicyContent(baseUrl, userId, accessToken);
+   const remotePolicy = getAccountPinPolicyState(remoteContent);
+@@ -647,8 +669,10 @@ export const snapshotPinLockStorage = (): [string, string][] => {
+   const storage = safeLocalStorage();
+   if (!storage) return [];
+
+-  const configs = storage.getItem(ACCOUNT_PIN_CONFIGS_KEY);
+-  return configs ? [[ACCOUNT_PIN_CONFIGS_KEY, configs]] : [];
++  return [ACCOUNT_PIN_CONFIGS_KEY, LEGACY_WEB_PIN_RESET_KEY].flatMap((key) => {
++    const value = storage.getItem(key);
++    return value === null ? [] : [[key, value] as [string, string]];
++  });
+ };
+
+ export const restorePinLockStorage = (entries: [string, string][]) => {
+@@ -681,6 +705,9 @@ export const resetPinAfterAuthenticatedLogin = async (
+       getAccountPinConfig(baseUrl, userId)?.updatedAt
+     )
+   ) {
++    const resets = readJson<Record<string, boolean>>(LEGACY_WEB_PIN_RESET_KEY, {});
++    resets[getAccountPinKey(baseUrl, userId)] = true;
++    writeJson(LEGACY_WEB_PIN_RESET_KEY, resets);
+     clearLocalAccountPin(baseUrl, userId);
+   }
+   // Ordinary logins keep the PIN; the gate handles verification and recovery.
+diff --git a/src/client/initMatrix.ts b/src/client/initMatrix.ts
+index 4993ef6..19447fe 100644
+--- a/src/client/initMatrix.ts
++++ b/src/client/initMatrix.ts
+@@ -824,12 +824,11 @@ export const startClient = async (mx: MatrixClient) => {
+                   try {
+                     const result = await crypto.restoreKeyBackup({});
+                     if (result.imported < result.total) {
+-                      throw new Error(`Only restored ${result.imported} of ${result.total} room keys.`);
++                      throw new Error(
++                        `Only restored ${result.imported} of ${result.total} room keys.`
++                      );
+                     }
+-                    await setAndroidSecureValue(
+-                      ANDROID_FULL_BACKUP_RESTORE_MARKER,
+-                      backupVersion
+-                    );
++                    await setAndroidSecureValue(ANDROID_FULL_BACKUP_RESTORE_MARKER, backupVersion);
+                     recordAndroidDiagnostic('crypto_full_backup_restore_completed', {
+                       version: backupVersion,
+                       imported: result.imported,
+@@ -1140,6 +1139,7 @@ export const logoutClient = async (mx: MatrixClient) => {
+ };
+
+ export const clearLoginData = async () => {
+-  await clearAllLocalData();
++  // Signing out during startup must preserve the same settings as normal logout.
++  await clearLocalSessionAfterLogout();
+   window.location.reload();
+ };
+diff --git a/src/types/matrix/accountData.ts b/src/types/matrix/accountData.ts
+index 26696f5..80249c9 100644
+--- a/src/types/matrix/accountData.ts
++++ b/src/types/matrix/accountData.ts
+@@ -158,7 +158,7 @@ export type CinnyAppearanceSettingsContent = {
+   outgoingBubbleOpacity?: number;
+   incomingBubbleColorId?: string;
+   incomingBubbleOpacity?: number;
+-  chatBackgroundMediaMxc?: string;
++  chatBackgroundMediaMxc?: string | null;
+   monochromeMode?: boolean;
+ };
+
+diff --git a/tests/web-pin-lock.test.mjs b/tests/web-pin-lock.test.mjs
+index 31bc75a..461b9c9 100644
+--- a/tests/web-pin-lock.test.mjs
++++ b/tests/web-pin-lock.test.mjs
+@@ -31,7 +31,7 @@ const compile = (file, globals, imports = {}) => {
+   return exports;
+ };
+
+-function harness() {
++function harness(fetchPolicy = async () => ({ status: 404, ok: false })) {
+   let now = 1000;
+   const makeStorage = () => {
+     const data = new Map();
+@@ -60,6 +60,7 @@ function harness() {
+     Event,
+     btoa,
+     atob,
++    fetch: fetchPolicy,
+     Date: class extends Date {
+       static now() {
+         return now;
+@@ -242,6 +243,9 @@ test('gate requires setup, unlocks after saving, hides chats when locked, and ve
+         idleArgs = args;
+       },
+     },
++    '../../hooks/useWebPinMigration': {
++      useWebPinMigration: () => ({ status: 'ready' }),
++    },
+     '../../state/sessions': { getFallbackSession: () => ({ baseUrl }) },
+     '../../utils/pinLock': h.pin,
+     '../../utils/desktopUpdater': h.desktop,
+@@ -280,3 +284,338 @@ test('server PIN policies cannot clear or replace a browser-local PIN', async ()
+   await pin.syncAccountPinPolicy(baseUrl, userId, 'token');
+   assert.deepEqual(pin.getAccountPinConfig(baseUrl, userId), config);
+ });
++
++const flushAsync = () => new Promise((resolve) => setImmediate(resolve));
++
++function hookRuntime() {
++  const slots = [];
++  let cursor = 0;
++  let pending = [];
++  const react = {
++    createElement: (type, props, ...children) => ({ type, props: { ...props, children } }),
++    useState: (initial) => {
++      const index = cursor++;
++      if (!(index in slots)) slots[index] = typeof initial === 'function' ? initial() : initial;
++      return [
++        slots[index],
++        (value) => {
++          slots[index] = typeof value === 'function' ? value(slots[index]) : value;
++        },
++      ];
++    },
++    useRef: (initial) => {
++      const index = cursor++;
++      if (!(index in slots)) slots[index] = { current: initial };
++      return slots[index];
++    },
++    useCallback: (callback, deps) => {
++      const index = cursor++;
++      if (!slots[index] || deps.some((dep, i) => dep !== slots[index].deps[i])) {
++        slots[index] = { deps, callback };
++      }
++      return slots[index].callback;
++    },
++    useEffect: (effect, deps) => {
++      const index = cursor++;
++      const previous = slots[index];
++      if (!previous || deps.some((dep, i) => dep !== previous.deps[i])) {
++        pending.push(() => {
++          previous?.cleanup?.();
++          slots[index] = { deps, cleanup: effect() };
++        });
++      }
++    },
++  };
++  return {
++    react,
++    render: (callback) => {
++      cursor = 0;
++      return callback();
++    },
++    flush: () => {
++      const effects = pending;
++      pending = [];
++      effects.forEach((effect) => effect());
++    },
++  };
++}
++
++test('a historical account PIN is imported read-only and the original digits still unlock', async () => {
++  let policy;
++  const requests = [];
++  const h = harness(async (url, init) => {
++    requests.push({ url, ...init });
++    return { ok: true, status: 200, json: async () => policy };
++  });
++  const config = await h.pin.enableAccountPin(baseUrl, userId, '001234');
++  policy = h.pin.createEnabledAccountPinPolicyContent(config);
++  h.window.localStorage.clear();
++  assert.equal(await h.pin.syncAccountPinPolicy(baseUrl, userId, 'token'), true);
++  assert.equal(await h.pin.verifyAccountPin(baseUrl, userId, '001234'), true);
++  assert.deepEqual(h.pin.getAccountPinConfig(baseUrl, userId), config);
++  assert.equal(requests.length, 1);
++  assert.equal(requests[0].method, 'GET');
++  await h.pin.resetPinAfterAuthenticatedLogin(baseUrl, userId, 'token');
++  assert.equal(await h.pin.verifyAccountPin(baseUrl, userId, '001234'), true);
++});
++
++test('explicit authenticated recovery prevents legacy PIN resurrection across logout and reload', async () => {
++  const h = harness();
++  const config = await h.pin.enableAccountPin(baseUrl, userId, '123456');
++  const policy = h.pin.createEnabledAccountPinPolicyContent(config);
++  h.pin.requestAccountPinReset(baseUrl, userId);
++  await h.pin.resetPinAfterAuthenticatedLogin(baseUrl, userId, 'token');
++  const entries = h.pin.snapshotPinLockStorage();
++  h.window.localStorage.clear();
++  h.pin.restorePinLockStorage(entries);
++  assert.equal(h.pin.isLegacyWebPinMigrationBlocked(baseUrl, userId), true);
++  assert.equal(h.pin.applyAccountPinPolicyContent(baseUrl, userId, policy), false);
++  assert.equal(await h.pin.syncAccountPinPolicy(baseUrl, userId, 'token'), false);
++  assert.equal(h.pin.hasAccountPin(baseUrl, userId), false);
++  await h.pin.enableAccountPin(baseUrl, userId, '654321');
++  h.pin.applyAccountPinPolicyContent(baseUrl, userId, policy);
++  assert.equal(await h.pin.verifyAccountPin(baseUrl, userId, '654321'), true);
++  assert.equal(await h.pin.verifyAccountPin(baseUrl, userId, '123456'), false);
++  assert.equal(h.pin.isLegacyWebPinMigrationBlocked(baseUrl, '@bob:example.org'), false);
++});
++
++test('a legacy policy cannot overwrite a browser PIN set while the migration GET was pending', async () => {
++  let finish;
++  const h = harness(
++    () =>
++      new Promise((resolve) => {
++        finish = resolve;
++      })
++  );
++  const old = await h.pin.enableAccountPin(baseUrl, userId, '123456');
++  h.window.localStorage.clear();
++  const request = h.pin.syncAccountPinPolicy(baseUrl, userId, 'token');
++  await h.pin.enableAccountPin(baseUrl, userId, '654321');
++  finish({ ok: true, json: async () => h.pin.createEnabledAccountPinPolicyContent(old) });
++  await request;
++  assert.equal(await h.pin.verifyAccountPin(baseUrl, userId, '654321'), true);
++});
++
++test('migration waits for lookup, fails closed on network errors, and supports retry', async () => {
++  let fail;
++  let missing = false;
++  const h = harness(() =>
++    missing
++      ? Promise.resolve({ status: 404 })
++      : new Promise((resolve, reject) => {
++          fail = reject;
++        })
++  );
++  const runtime = hookRuntime();
++  const { useWebPinMigration } = compile('hooks/useWebPinMigration.ts', h.globals, {
++    react: runtime.react,
++    '../utils/pinLock': h.pin,
++  });
++  const render = () => runtime.render(() => useWebPinMigration(baseUrl, userId, 'token'));
++  assert.equal(render().status, 'loading');
++  runtime.flush();
++  assert.equal(render().status, 'loading');
++  fail(new Error('offline'));
++  await flushAsync();
++  const failed = render();
++  assert.equal(failed.status, 'error');
++  assert.equal(h.pin.hasAccountPin(baseUrl, userId), false);
++  missing = true;
++  failed.retry();
++  assert.equal(render().status, 'loading');
++  runtime.flush();
++  await flushAsync();
++  assert.equal(render().status, 'ready');
++  assert.equal(h.pin.hasAccountPin(baseUrl, userId), false);
++});
++
++function appearanceHarness(initial, remote, mediaFetch = async () => ({ ok: false })) {
++  const h = harness();
++  const settingsModule = compile(
++    'state/settings.ts',
++    { localStorage: h.window.localStorage },
++    {
++      jotai: { atom: () => ({}) },
++      'matrix-js-sdk': { SetPresence: { Online: 'online', Offline: 'offline' } },
++      '../theme/appearanceShared': { THEME_DEFAULT_ACCENT_ID: 'teal' },
++      './settingsStorage': { SETTINGS_STORAGE_KEY: 'settings' },
++    }
++  );
++  const appearance = compile(
++    'state/appearanceAccountData.ts',
++    {},
++    { './settings': settingsModule }
++  );
++  let current = { ...settingsModule.defaultSettings, ...initial };
++  const runtime = hookRuntime();
++  const saves = [];
++  const timers = new Map();
++  let timerId = 0;
++  const mx = {
++    getAccountData: () => remote && { getContent: () => remote },
++    on: () => {},
++    removeListener: () => {},
++    setAccountData: async (type, content) => {
++      saves.push(content);
++    },
++    uploadContent: async () => ({ content_uri: 'mxc://example.org/uploaded' }),
++  };
++  const context = {
++    ...runtime.react,
++    ...appearance,
++    settingsAtom: {},
++    useMatrixClient: () => mx,
++    useMediaAuthentication: () => true,
++    useAtomValue: () => current,
++    useSetAtom: () => setSettings,
++    AccountDataEvent: { CinnyAppearanceSettings: 'appearance' },
++    ClientEvent: { AccountData: 'accountData' },
++    mxcUrlToHttp: (client, mxc) => `https://example.org/${mxc}`,
++    fetchMediaWithAuth: mediaFetch,
++    blobToDataUrl: async () => 'data:image/png;base64,cmVtb3Rl',
++    isDataUrl: (value) => value.startsWith('data:'),
++    dataUrlToFile: async () => ({}),
++    APPEARANCE_BACKGROUND_FILE_NAME: 'background.webp',
++    APPEARANCE_ACCOUNT_DATA_SAVE_DEBOUNCE_MS: 450,
++    window: {
++      setTimeout: (callback) => {
++        timers.set(++timerId, callback);
++        return timerId;
++      },
++      clearTimeout: (id) => timers.delete(id),
++    },
++  };
++  function setSettings(next) {
++    current = next;
++  }
++  const sourceText = source('pages/client/ClientNonUIFeatures.tsx');
++  const feature = sourceText.slice(
++    sourceText.indexOf('function AppearanceSettingsAccountDataFeature()'),
++    sourceText.indexOf('function AISettingsAccountDataFeature()')
++  );
++  vm.createContext(context);
++  vm.runInContext(
++    ts.transpileModule(feature, { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText,
++    context
++  );
++  const render = () => {
++    runtime.render(() => context.AppearanceSettingsAccountDataFeature());
++    runtime.flush();
++  };
++  return { render, settings: () => current, appearance, saves, timers };
++}
++
++test('legacy appearance data without a background field preserves uploaded and local-only images', async () => {
++  for (const initial of [
++    {
++      chatBackgroundMediaMxc: 'mxc://example.org/original',
++      chatBackgroundDataUrl: 'data:image/png;base64,bG9jYWw=',
++    },
++    { chatBackgroundDataUrl: 'data:image/png;base64,bG9jYWw=' },
++  ]) {
++    const h = appearanceHarness(initial, { version: 1, themeId: 'remote-theme' });
++    h.render();
++    assert.equal(h.settings().chatBackgroundDataUrl, initial.chatBackgroundDataUrl);
++    assert.equal(h.settings().chatBackgroundMediaMxc, initial.chatBackgroundMediaMxc);
++    h.render();
++    await flushAsync();
++    h.render();
++    for (const callback of h.timers.values()) callback();
++    await flushAsync();
++    assert.ok(h.saves.length > 0, 'preserving a legacy background must not stall future sync');
++    assert.ok(h.saves.at(-1).chatBackgroundMediaMxc);
++  }
++});
++
++test('explicit remote deletion still removes the background and serializes a deletion marker', () => {
++  const h = appearanceHarness(
++    { chatBackgroundDataUrl: 'data:image/png;base64,bG9jYWw=' },
++    { version: 1, chatBackgroundMediaMxc: null }
++  );
++  h.render();
++  assert.equal(h.settings().chatBackgroundDataUrl, undefined);
++  assert.equal(h.settings().chatBackgroundMediaMxc, undefined);
++  const serialized = JSON.parse(
++    JSON.stringify(h.appearance.getAppearanceAccountDataContent(h.settings()))
++  );
++  assert.equal(serialized.chatBackgroundMediaMxc, null);
++});
++
++test('a downloaded background is hydrated against the latest settings even before React renders', async () => {
++  const h = appearanceHarness(
++    {},
++    { version: 1, chatBackgroundMediaMxc: 'mxc://example.org/remote' },
++    async () => ({ ok: true, blob: async () => ({}) })
++  );
++  h.render();
++  await flushAsync();
++  assert.equal(h.settings().chatBackgroundMediaMxc, 'mxc://example.org/remote');
++  assert.equal(h.settings().chatBackgroundDataUrl, 'data:image/png;base64,cmVtb3Rl');
++});
++
++test('startup logout preserves PIN and settings; explicit clear-all still deletes them', async () => {
++  const h = harness();
++  const init = readFileSync(new URL('../src/client/initMatrix.ts', import.meta.url), 'utf8');
++  const ast = ts.createSourceFile('initMatrix.ts', init, ts.ScriptTarget.Latest, true);
++  const extract = (name) =>
++    ast.statements
++      .find(
++        (node) =>
++          ts.isVariableStatement(node) &&
++          node.declarationList.declarations.some((d) => d.name.getText(ast) === name)
++      )
++      .getText(ast)
++      .replace(/^export /, '');
++  const noOp = async () => {};
++  let reloads = 0;
++  const context = {
++    window: {
++      localStorage: h.window.localStorage,
++      sessionStorage: h.window.sessionStorage,
++      location: {
++        reload: () => {
++          reloads += 1;
++        },
++      },
++    },
++    pushSessionToSW: () => {},
++    clearClientStores: noOp,
++    clearSecretStorageKeys: noOp,
++    removeAndroidPersistedSession: noOp,
++    clearAllServiceWorkerCaches: noOp,
++    clearAllServiceWorkerRegistrations: noOp,
++    clearDesktopMediaCache: noOp,
++    clearAllIndexedDbDatabases: noOp,
++    SETTINGS_STORAGE_KEY: 'settings',
++    snapshotPinLockStorage: h.pin.snapshotPinLockStorage,
++    restorePinLockStorage: h.pin.restorePinLockStorage,
++  };
++  vm.createContext(context);
++  const functions = [
++    'snapshotLocalStorageEntries',
++    'restoreLocalStorageEntries',
++    'clearAllLocalData',
++    'clearLocalSessionAfterLogout',
++    'clearLoginData',
++  ];
++  vm.runInContext(
++    ts.transpileModule(
++      functions.map(extract).join('\n') +
++        '\nglobalThis.api = { clearLoginData, clearAllLocalData };',
++      { compilerOptions: { target: ts.ScriptTarget.ES2020 } }
++    ).outputText,
++    context
++  );
++  await h.pin.enableAccountPin(baseUrl, userId, '123456');
++  const settings = JSON.stringify({ chatBackgroundDataUrl: 'data:image/png;base64,bG9jYWw=' });
++  h.window.localStorage.setItem('settings', settings);
++  h.window.localStorage.setItem('cinny_access_token', 'old-token');
++  await context.api.clearLoginData();
++  assert.equal(reloads, 1);
++  assert.equal(await h.pin.verifyAccountPin(baseUrl, userId, '123456'), true);
++  assert.equal(h.window.localStorage.getItem('settings'), settings);
++  assert.equal(h.window.localStorage.getItem('cinny_access_token'), null);
++  await context.api.clearAllLocalData();
++  assert.equal(h.pin.hasAccountPin(baseUrl, userId), false);
++  assert.equal(h.window.localStorage.getItem('settings'), null);
++});

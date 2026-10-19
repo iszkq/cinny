@@ -6,7 +6,8 @@ Windows 和 Web 的应用源码固定到移植前的 **1.9.10**，提交
 
 - Windows：独立检出到 `windows-client/`，保留旧 UI、样式、依赖和 Rust 实现；仅安装包版本元数据更新为 2.0.1。
 - Web：独立检出到 `web-client/`，保留旧版基础、版本号 1.9.10 和锁文件；准备脚本应用 `scripts/patches/web-pin-lock.patch`，加入网页版 PIN 入口、首次设置提示、5 分钟闲置锁屏及主动重新登录重设 PIN。
-- 两者都清除历史配置中的内置 API 密钥，用户仍可自行配置。
+- Web 另应用 `scripts/patches/web-settings-compat.patch`，兼容旧 PIN 和聊天背景设置，并保留启动失败退出时的本地设置。
+- 所有端恢复原有语音转文字和图片识别默认配置；Web / Windows 准备脚本从根目录 `config.json` 同步这两项配置。
 - macOS / iOS / Android：继续从根目录的移植源码构建，不使用上述旧检出。
 
 ## 正式构建与部署
@@ -32,7 +33,7 @@ node scripts/prepare-web-client.mjs web-client
 node scripts/prepare-windows-client.mjs windows-client
 ```
 
-准备脚本只接受未修改的基准检出，分别执行一次。网页准备过程会应用上述 PIN 补丁，普通退出或重新登录保留 PIN；只有在锁屏页主动选择“忘记 PIN，重新登录重设”，并在 30 分钟内成功登录同一账号时，才会清除旧 PIN 并提示重设。PIN 校验摘要按账号保存在当前浏览器中，不同步到其他设备。PIN 使用 Web Crypto，网页应通过 HTTPS 或 localhost 访问。在相应子目录执行 `npm ci`，再执行
+准备脚本接受未修改的基准检出；Web 使用 `--reuse` 可复用已准备的检出或升级旧 PIN 补丁。普通退出或重新登录保留 PIN；只有在锁屏页主动选择“忘记 PIN，重新登录重设”，并在 30 分钟内成功登录同一账号时，才会清除旧 PIN 并提示重设。网页版优先使用本地 PIN；本地没有 PIN 时，只读兼容旧账号数据中的 PIN，不修改其他端的策略。重设成功后不会再次导入旧 PIN。PIN 使用 Web Crypto，网页应通过 HTTPS 或 localhost 访问。在相应子目录执行 `npm ci`，再执行
 `npm run build`（网页）或 `npm run desktop:build:nsis`（Windows）。Windows 需 Rust / MSVC 构建环境。
 根目录的 `npm start`、`npm run build` 和 `npm run preview` 现在统一使用上述旧版网页及 PIN 补丁，避免误用移植版的新 UI；首次运行自动准备 `web-client/`。`npm run build` 同时将静态文件复制到根目录 `dist/`。根目录移植版源码仍供原生客户端使用，通过 `npm run start:native` / `npm run build:native` 启动和构建；Tauri 使用明确的原生入口，移动端根据已有平台标记选择原生入口。Windows 发布继续使用独立旧检出。
 

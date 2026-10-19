@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { restoreDefaultAIConfig } from './prepare-client-config.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const baseline = JSON.parse(readFileSync(path.join(root, 'windows-baseline.json'), 'utf8'));
@@ -47,11 +48,7 @@ if (existsSync(lock)) {
     )
   );
 }
-// Retain the current policy of requiring users to configure their own AI keys.
-updateJson('config.json', (json) => {
-  json.audioTranscription.defaultAihubmixApiKey = '';
-  json.imageOcr.defaultAihubmixApiKey = '';
-});
+restoreDefaultAIConfig(path.join(target, 'config.json'));
 
 git(
   'diff',

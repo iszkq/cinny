@@ -24,7 +24,7 @@ jobs:
         with:
           ref: ${{ env.WEB_BASELINE_REF }}
           path: web-client
-      - name: Verify unchanged Web source and remove historical credentials
+      - name: Prepare classic Web client with PIN and restored settings
         run: node scripts/prepare-web-client.mjs web-client
       - name: Install dependencies
         working-directory: web-client
