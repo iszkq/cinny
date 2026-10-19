@@ -23,6 +23,7 @@ function updater({
   platform = 'MacIntel',
   userAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
   desktop = true,
+  releaseVersion = '2.0.1',
   manifestVersion = '2.0.1',
   manifestKey = 'windows-x86_64',
   manifestFails = false,
@@ -46,7 +47,11 @@ function updater({
         json: async () =>
           isManifest
             ? { version: manifestVersion, platforms: { [manifestKey]: { url: windowsUrl } } }
-            : { tag_name: 'v2.0.1', assets: releaseAssets, html_url: releasePage },
+            : {
+                tag_name: `v${releaseVersion}`,
+                assets: releaseAssets,
+                html_url: `https://github.com/iszkq/cinny/releases/tag/v${releaseVersion}`,
+              },
       };
     },
   });
@@ -106,4 +111,44 @@ test('Windows desktop keeps its EXE and legacy Windows manifest paths', async ()
 test('ordinary Mac browsers retain the Windows link used by the existing download page', async () => {
   const { api } = updater({ desktop: false });
   assert.equal((await api.fetchLatestDesktopRelease()).downloadUrl, windowsUrl);
+});
+
+test('Mac discovers future patch and minor releases without a fixed version or Windows manifest', async () => {
+  for (const version of ['2.0.2', '2.1.0', '3.0.0']) {
+    const url = `https://github.com/iszkq/cinny/releases/download/v${version}/Starfire_${version}_universal.dmg`;
+    const { api } = updater({
+      releaseVersion: version,
+      // Publishing the Mac first must not depend on the Windows manifest version.
+      manifestVersion: '2.0.1',
+      releaseAssets: [
+        assets[0],
+        { name: `Starfire_${version}_universal.dmg`, browser_download_url: url },
+      ],
+    });
+    const release = await api.fetchLatestDesktopRelease();
+    assert.equal(release.version, version);
+    assert.equal(release.downloadUrl, url);
+    assert.equal(api.isDesktopUpdateVersionNewer(release.version, '2.0.1'), true);
+    assert.equal(api.isDesktopUpdateVersionNewer('2.0.1', release.version), false);
+  }
+});
+
+test('Mac never falls back to EXE while the next release DMG is still being published', async () => {
+  const { api } = updater({
+    releaseVersion: '2.0.2',
+    manifestVersion: '2.0.2',
+    releaseAssets: [{ name: 'Starfire_2.0.2_x64-setup.exe', browser_download_url: windowsUrl }],
+  });
+  const release = await api.fetchLatestDesktopRelease();
+  assert.equal(release.version, '2.0.2');
+  assert.equal(release.downloadUrl, undefined);
+  assert.equal(release.releasePageUrl, 'https://github.com/iszkq/cinny/releases/tag/v2.0.2');
+});
+
+test('Mac recovers to the next version release page when the GitHub API is unavailable', async () => {
+  const { api } = updater({ githubFails: true, manifestVersion: '2.0.2' });
+  const release = await api.fetchLatestDesktopRelease();
+  assert.equal(release.version, '2.0.2');
+  assert.equal(release.downloadUrl, undefined);
+  assert.equal(release.releasePageUrl, 'https://github.com/iszkq/cinny/releases/tag/v2.0.2');
 });
