@@ -1,0 +1,435 @@
+diff --git a/src/app/utils/pinLock.ts b/src/app/utils/pinLock.ts
+index 98e67db..81de4a3 100644
+--- a/src/app/utils/pinLock.ts
++++ b/src/app/utils/pinLock.ts
+@@ -28,6 +28,7 @@ export type AccountPinLoginRequirement = 'none' | 'prompt';
+ 
+ const ACCOUNT_PIN_CONFIGS_KEY = 'starfire-account-pin-configs';
+ const LEGACY_WEB_PIN_RESET_KEY = 'starfire-web-pin-legacy-resets';
++const WEB_PIN_DISABLED_ACCOUNTS_KEY = 'starfire-web-pin-disabled-accounts';
+ const SCREEN_LOCK_STATE_KEY = 'starfire-screen-lock-state';
+ const PIN_LOCK_CHANGE_EVENT = 'starfire-pin-lock-change';
+ const PIN_LOCK_ITERATIONS = 150000;
+@@ -326,8 +327,23 @@ const saveAccountPinPolicyContent = async (
+ export const hasAccountPin = (baseUrl: string, userId: string): boolean =>
+   !!getConfigByAccountKey(getAccountPinKey(baseUrl, userId));
+ 
+-// A successful, explicit recovery must not re-import the old server PIN.
++export const isWebAccountPinDisabled = (baseUrl: string, userId: string): boolean =>
++  isWebPinLockSupported() &&
++  readJson<Record<string, boolean>>(WEB_PIN_DISABLED_ACCOUNTS_KEY, {})[
++    getAccountPinKey(baseUrl, userId)
++  ] === true;
++
++const setWebAccountPinDisabled = (baseUrl: string, userId: string, disabled: boolean) => {
++  const accounts = readJson<Record<string, boolean>>(WEB_PIN_DISABLED_ACCOUNTS_KEY, {});
++  const accountKey = getAccountPinKey(baseUrl, userId);
++  if (disabled) accounts[accountKey] = true;
++  else delete accounts[accountKey];
++  writeJson(WEB_PIN_DISABLED_ACCOUNTS_KEY, accounts);
++};
++
++// Explicit recovery or disabling protection must not re-import the old server PIN.
+ export const isLegacyWebPinMigrationBlocked = (baseUrl: string, userId: string): boolean =>
++  isWebAccountPinDisabled(baseUrl, userId) ||
+   readJson<Record<string, boolean>>(LEGACY_WEB_PIN_RESET_KEY, {})[
+     getAccountPinKey(baseUrl, userId)
+   ] === true;
+@@ -373,9 +389,20 @@ export const enableAccountPin = async (
+ 
+   const config = await createPinConfig(pin);
+   cacheAccountPinConfig(baseUrl, userId, config);
++  if (isWebAccountPinDisabled(baseUrl, userId)) {
++    setWebAccountPinDisabled(baseUrl, userId, false);
++  }
+   return config;
+ };
+ 
++// The settings dialog verifies the current PIN before calling this.
++export const disableWebAccountPin = (baseUrl: string, userId: string) => {
++  if (!isWebPinLockSupported()) return;
++  // Persist the choice before removing the PIN so the gate never requests setup again.
++  setWebAccountPinDisabled(baseUrl, userId, true);
++  clearLocalAccountPin(baseUrl, userId);
++};
++
+ export const verifyPinConfig = async (pin: string, config: AccountPinConfig): Promise<boolean> => {
+   try {
+     const hash = await derivePinHash(pin, config.salt, config.iterations);
+@@ -423,7 +450,8 @@ export const disableAccountPin = async (
+     throw new Error('\u5f53\u524d PIN \u7801\u9519\u8bef\u3002');
+   }
+ 
+-  clearLocalAccountPin(baseUrl, userId);
++  if (isWebPinLockSupported()) disableWebAccountPin(baseUrl, userId);
++  else clearLocalAccountPin(baseUrl, userId);
+ };
+ 
+ export const isAccountPinPolicyEnabled = (
+@@ -651,7 +679,11 @@ export const subscribePinLockChange = (listener: () => void): (() => void) => {
+ 
+   const handleCustomChange = () => listener();
+   const handleStorageChange = (evt: StorageEvent) => {
+-    if (evt.key === ACCOUNT_PIN_CONFIGS_KEY || evt.key === SCREEN_LOCK_STATE_KEY) {
++    if (
++      evt.key === ACCOUNT_PIN_CONFIGS_KEY ||
++      evt.key === SCREEN_LOCK_STATE_KEY ||
++      evt.key === WEB_PIN_DISABLED_ACCOUNTS_KEY
++    ) {
+       listener();
+     }
+   };
+@@ -669,10 +701,12 @@ export const snapshotPinLockStorage = (): [string, string][] => {
+   const storage = safeLocalStorage();
+   if (!storage) return [];
+ 
+-  return [ACCOUNT_PIN_CONFIGS_KEY, LEGACY_WEB_PIN_RESET_KEY].flatMap((key) => {
+-    const value = storage.getItem(key);
+-    return value === null ? [] : [[key, value] as [string, string]];
+-  });
++  return [ACCOUNT_PIN_CONFIGS_KEY, LEGACY_WEB_PIN_RESET_KEY, WEB_PIN_DISABLED_ACCOUNTS_KEY].flatMap(
++    (key) => {
++      const value = storage.getItem(key);
++      return value === null ? [] : [[key, value] as [string, string]];
++    }
++  );
+ };
+ 
+ export const restorePinLockStorage = (entries: [string, string][]) => {
+diff --git a/src/app/features/settings/general/Security.tsx b/src/app/features/settings/general/Security.tsx
+index 74d5ff1..c704def 100644
+--- a/src/app/features/settings/general/Security.tsx
++++ b/src/app/features/settings/general/Security.tsx
+@@ -15,7 +15,7 @@ import {
+ import {
+   createDisabledAccountPinPolicyContent,
+   createEnabledAccountPinPolicyContent,
+-  clearLocalAccountPin,
++  disableWebAccountPin,
+   changeAccountPin,
+   getAccountPinKey,
+   getAccountPinLabel,
+@@ -207,10 +207,12 @@ export function Security({ requestClose }: SecurityProps) {
+             pinSupported ? (
+               accountPinEnabled ? (
+                 webPinRequired ? (
+-                  '网页版已开启 PIN 保护，连续 5 分钟没有操作后自动锁定。可在下方修改 PIN 或立即锁屏。'
++                  '网页版已开启 PIN 保护，连续 5 分钟没有操作后自动锁定。可关闭开关停用，也可在下方修改 PIN 或立即锁屏。'
+                 ) : (
+                   '当前账号已开启账号级 PIN 策略。其他新设备登录同一账号时，也必须先设置本机 PIN 才能进入。'
+                 )
++              ) : webPinRequired ? (
++                '当前浏览器已关闭 PIN 保护，不再要求输入 PIN，也不会自动锁屏。可随时重新开启并设置新的 PIN。'
+               ) : (
+                 '开启后，这个账号在每台设备上都需要先设置各自的本机 PIN。PIN 码本身只保存在本地，不会同步到服务器。'
+               )
+@@ -224,7 +226,8 @@ export function Security({ requestClose }: SecurityProps) {
+             <Switch
+               variant="Primary"
+               value={accountPinEnabled}
+-              disabled={!pinSupported || (webPinRequired && accountPinEnabled)}
++              aria-label="PIN 保护"
++              disabled={!pinSupported}
+               onChange={() => setDialogMode(accountPinEnabled ? 'disable' : 'setup')}
+             />
+           }
+@@ -234,6 +237,8 @@ export function Security({ requestClose }: SecurityProps) {
+           description={
+             localPinEnabled
+               ? '这台设备已经保存了本机 PIN，可以用于解锁锁屏和下次登录验证。'
++              : webPinRequired
++              ? '当前浏览器未启用 PIN 保护，可打开上方开关重新设置。'
+               : '这台设备尚未设置 PIN，请先创建本机 PIN。'
+           }
+           after={
+@@ -290,7 +295,7 @@ export function Security({ requestClose }: SecurityProps) {
+           <Text size="L400">说明</Text>
+           <Text size="T300" priority="300">
+             {webPinRequired
+-              ? '网页版 PIN 只保护当前浏览器中的账号。'
++              ? '网页版 PIN 默认开启，可验证当前 PIN 后关闭；此选择只对当前浏览器中的账号生效，不影响其他端。'
+               : '账号级策略会跟随账号同步，用来告诉其他设备“这个账号需要本机 PIN”。'}
+           </Text>
+           <Text size="T300" priority="300">
+@@ -336,12 +341,16 @@ export function Security({ requestClose }: SecurityProps) {
+           baseUrl={baseUrl}
+           userId={userId}
+           title="关闭 PIN 保护"
+-          description="输入当前设备的 PIN 后，会关闭这个账号的账号级 PIN 策略，并清除当前设备保存的本机 PIN。"
++          description={
++            webPinRequired
++              ? '输入当前 PIN 后，将关闭当前浏览器中此账号的 PIN 验证和自动锁屏，并清除本机 PIN。刷新或重新登录后仍保持关闭，不影响其他端。'
++              : '输入当前设备的 PIN 后，会关闭这个账号的账号级 PIN 策略，并清除当前设备保存的本机 PIN。'
++          }
+           submitLabel="关闭 PIN 保护"
+           embedded
+           onCancel={() => setDialogMode(undefined)}
+           onSuccess={async () => {
+-            if (webPinRequired) clearLocalAccountPin(baseUrl, userId);
++            if (webPinRequired) disableWebAccountPin(baseUrl, userId);
+             else
+               await mx.setAccountData(
+                 AccountDataEvent.CinnyAccountPinPolicy,
+diff --git a/src/app/components/pin-lock/ScreenPinLockOverlay.tsx b/src/app/components/pin-lock/ScreenPinLockOverlay.tsx
+index 1b5f3ab..2c7c5e0 100644
+--- a/src/app/components/pin-lock/ScreenPinLockOverlay.tsx
++++ b/src/app/components/pin-lock/ScreenPinLockOverlay.tsx
+@@ -18,6 +18,7 @@ import {
+   getAccountPinPolicyConfig,
+   isAccountPinPolicyEnabled,
+   isAccountScreenLocked,
++  isWebAccountPinDisabled,
+   isWebPinLockSupported,
+   requestAccountPinReset,
+   supportsPinLock,
+@@ -135,8 +136,11 @@ export function ScreenPinLockGate({ children }: ScreenPinLockGateProps) {
+   const remotePinConfig = getAccountPinPolicyConfig(policyContent);
+   const localPinConfig = baseUrl && userId ? getAccountPinConfig(baseUrl, userId) : undefined;
+   const webPinRequired = isWebPinLockSupported();
++  const webPinDisabled = Boolean(baseUrl && userId && isWebAccountPinDisabled(baseUrl, userId));
+   const pinMigration = useWebPinMigration(baseUrl, userId ?? undefined, session?.accessToken);
+-  const activePinConfig = webPinRequired
++  const activePinConfig = webPinDisabled
++    ? undefined
++    : webPinRequired
+     ? localPinConfig
+     : policyEvent
+     ? policyEnabled
+@@ -171,6 +175,8 @@ export function ScreenPinLockGate({ children }: ScreenPinLockGateProps) {
+     return children;
+   }
+ 
++  if (webPinDisabled) return children;
++
+   const accountLabel = getAccountPinLabel(baseUrl, userId);
+   if (webPinRequired && !activePinConfig && pinMigration.status !== 'ready') {
+     return (
+diff --git a/tests/web-pin-lock.test.mjs b/tests/web-pin-lock.test.mjs
+index 8d7a180..519fc84 100644
+--- a/tests/web-pin-lock.test.mjs
++++ b/tests/web-pin-lock.test.mjs
+@@ -274,6 +274,17 @@ test('gate requires setup, unlocks after saving, hides chats when locked, and ve
+   assert.equal(render(), 'private-chat');
+   state = undefined;
+   assert.equal(render().props.children[0].type, 'AccountPinForm');
++  await h.pin.disableAccountPin(baseUrl, userId, '123456');
++  assert.equal(render(), 'private-chat');
++  assert.equal(idleArgs[2], false);
++  state = undefined;
++  assert.equal(render(), 'private-chat', 'reload must not request PIN setup after disabling');
++  await h.pin.enableAccountPin(baseUrl, userId, '654321');
++  const reenabled = render();
++  assert.equal(reenabled.props.children[0].type, 'AccountPinForm');
++  reenabled.props.children[0].props.onSuccess();
++  assert.equal(render(), 'private-chat');
++  assert.equal(idleArgs[2], true);
+ });
+ 
+ test('server PIN policies cannot clear or replace a browser-local PIN', async () => {
+@@ -340,6 +351,206 @@ function hookRuntime() {
+   };
+ }
+ 
++test('disabling browser PIN survives logout and login, blocks legacy import, and isolates accounts', async () => {
++  const requests = [];
++  const h = harness(async (...args) => {
++    requests.push(args);
++    throw new Error('Disabling a browser PIN must not contact the server');
++  });
++  assert.equal(h.pin.isWebAccountPinDisabled(baseUrl, userId), false);
++  const old = await h.pin.enableAccountPin(baseUrl, userId, '123456');
++  await h.pin.enableAccountPin(baseUrl, '@bob:example.org', '456789');
++  h.pin.lockScreenForAccount(baseUrl, userId);
++  await assert.rejects(h.pin.disableAccountPin(baseUrl, userId, '000000'));
++  assert.equal(h.pin.isWebAccountPinDisabled(baseUrl, userId), false);
++  assert.equal(h.pin.hasAccountPin(baseUrl, userId), true);
++  await h.pin.disableAccountPin(baseUrl, userId, '123456');
++  assert.equal(h.pin.isAccountScreenLocked(baseUrl, userId), false);
++  const saved = h.pin.snapshotPinLockStorage();
++  h.window.localStorage.clear();
++  h.pin.restorePinLockStorage(saved);
++  await h.pin.resetPinAfterAuthenticatedLogin(baseUrl, userId, 'authenticated-token');
++  assert.equal(h.pin.isWebAccountPinDisabled(baseUrl, userId), true);
++  assert.equal(h.pin.hasAccountPin(baseUrl, userId), false);
++  assert.equal(await h.pin.resolveAccountPinLoginRequirement(baseUrl, userId, 'token'), 'none');
++  assert.equal(await h.pin.syncAccountPinPolicy(baseUrl, userId, 'token'), false);
++  assert.equal(
++    h.pin.applyAccountPinPolicyContent(
++      baseUrl,
++      userId,
++      h.pin.createEnabledAccountPinPolicyContent(old)
++    ),
++    false
++  );
++  assert.equal(h.pin.hasAccountPin(baseUrl, userId), false);
++  assert.equal(h.pin.isWebAccountPinDisabled(baseUrl, '@bob:example.org'), false);
++  assert.equal(await h.pin.verifyAccountPin(baseUrl, '@bob:example.org', '456789'), true);
++  assert.equal(h.pin.isWebAccountPinDisabled('https://other.example.org', userId), false);
++  assert.equal(requests.length, 0);
++  await assert.rejects(h.pin.enableAccountPin(baseUrl, userId, 'invalid'));
++  assert.equal(h.pin.isWebAccountPinDisabled(baseUrl, userId), true);
++  await h.pin.enableAccountPin(baseUrl, userId, '654321');
++  assert.equal(h.pin.isWebAccountPinDisabled(baseUrl, userId), false);
++  assert.equal(await h.pin.verifyAccountPin(baseUrl, userId, '654321'), true);
++  assert.equal(await h.pin.verifyAccountPin(baseUrl, userId, '123456'), false);
++});
++
++test('disabling PIN during an outstanding legacy lookup prevents it from being imported again', async () => {
++  let finish;
++  const h = harness(
++    () =>
++      new Promise((resolve) => {
++        finish = resolve;
++      })
++  );
++  const old = await h.pin.enableAccountPin(baseUrl, userId, '123456');
++  h.window.localStorage.clear();
++  const request = h.pin.syncAccountPinPolicy(baseUrl, userId, 'token');
++  await h.pin.enableAccountPin(baseUrl, userId, '654321');
++  await h.pin.disableAccountPin(baseUrl, userId, '654321');
++  finish({ ok: true, json: async () => h.pin.createEnabledAccountPinPolicyContent(old) });
++  assert.equal(await request, false);
++  assert.equal(h.pin.isWebAccountPinDisabled(baseUrl, userId), true);
++  assert.equal(h.pin.hasAccountPin(baseUrl, userId), false);
++});
++
++test('a disabled browser PIN skips migration without a network token and notifies other tabs', async () => {
++  const h = harness();
++  await h.pin.enableAccountPin(baseUrl, userId, '123456');
++  await h.pin.disableAccountPin(baseUrl, userId, '123456');
++  const runtime = hookRuntime();
++  const { useWebPinMigration } = compile('hooks/useWebPinMigration.ts', h.globals, {
++    react: runtime.react,
++    '../utils/pinLock': h.pin,
++  });
++  assert.equal(runtime.render(() => useWebPinMigration(baseUrl, userId)).status, 'ready');
++  runtime.flush();
++  assert.equal(runtime.render(() => useWebPinMigration(baseUrl, userId)).status, 'ready');
++  let updates = 0;
++  const unsubscribe = h.pin.subscribePinLockChange(() => {
++    updates += 1;
++  });
++  const storageEvent = new Event('storage');
++  storageEvent.key = 'starfire-web-pin-disabled-accounts';
++  h.window.dispatchEvent(storageEvent);
++  assert.equal(updates, 1);
++  unsubscribe();
++  h.window.dispatchEvent(storageEvent);
++  assert.equal(updates, 1);
++  h.desktop.isDesktopUpdaterSupported = () => true;
++  assert.equal(h.pin.isWebAccountPinDisabled(baseUrl, userId), false);
++});
++
++const findElement = (tree, predicate) => {
++  if (!tree || typeof tree !== 'object') return undefined;
++  if (predicate(tree)) return tree;
++  for (const child of tree.props?.children?.flat(Infinity) ?? []) {
++    const match = findElement(child, predicate);
++    if (match) return match;
++  }
++  return undefined;
++};
++
++test('the settings switch verifies the PIN before disabling and offers setup again without server writes', async () => {
++  const h = harness();
++  await h.pin.enableAccountPin(baseUrl, userId, '123456');
++  const runtime = hookRuntime();
++  const react = { ...runtime.react, useMemo: (fn) => fn() };
++  react.default = react;
++  const mx = {
++    getUserId: () => userId,
++    setAccountData: () => assert.fail('Web PIN must stay local'),
++  };
++  const { Security } = compile('features/settings/general/Security.tsx', h.globals, {
++    react,
++    folds: {
++      Box: 'Box',
++      Button: 'Button',
++      Input: 'Input',
++      Switch: 'Switch',
++      Text: 'Text',
++      color: { Critical: { Main: 'red' } },
++    },
++    '../../../hooks/useAccountData': { useAccountData: () => undefined },
++    '../../../hooks/useMatrixClient': { useMatrixClient: () => mx },
++    '../../../state/sessions': { getFallbackSession: () => ({ baseUrl }) },
++    '../../../components/sequence-card': { SequenceCard: 'SequenceCard' },
++    '../../../components/setting-tile': { SettingTile: 'SettingTile' },
++    '../styles.css': {},
++    '../../../hooks/usePinLockSnapshot': { usePinLockSnapshot: h.pin.getPinLockSnapshot },
++    '../../../components/pin-lock': {
++      AccountPinDialog: 'AccountPinDialog',
++      LocalPinSetupDialog: 'LocalPinSetupDialog',
++      PinLockDialogShell: 'PinLockDialogShell',
++    },
++    '../../../utils/pinLock': h.pin,
++    '../../../../types/matrix/accountData': { AccountDataEvent: {} },
++    '../../../components/pin-lock/style.css': {},
++  });
++  const render = () => runtime.render(() => Security({ requestClose: () => {} }));
++  const getSwitch = (tree) =>
++    findElement(tree, (node) => node.props?.title === 'PIN 保护').props.after;
++  let tree = render();
++  assert.equal(getSwitch(tree).props.value, true);
++  assert.equal(getSwitch(tree).props.disabled, false);
++  getSwitch(tree).props.onChange();
++  let dialog = findElement(render(), (node) => node.type === 'AccountPinDialog');
++  dialog.props.onCancel();
++  assert.equal(h.pin.hasAccountPin(baseUrl, userId), true);
++  assert.equal(
++    findElement(render(), (node) => node.type === 'AccountPinDialog'),
++    undefined
++  );
++  getSwitch(render()).props.onChange();
++  dialog = findElement(render(), (node) => node.type === 'AccountPinDialog');
++  const formRuntime = hookRuntime();
++  const formReact = { ...formRuntime.react };
++  formReact.default = formReact;
++  const { AccountPinForm } = compile('components/pin-lock/AccountPinDialog.tsx', h.globals, {
++    react: formReact,
++    folds: {
++      Box: 'Box',
++      Button: 'Button',
++      Input: 'Input',
++      Text: 'Text',
++      color: { Critical: { Main: 'red' } },
++    },
++    '../../utils/pinLock': h.pin,
++    './PinLockShell': {},
++    './style.css': {},
++  });
++  const renderForm = () => formRuntime.render(() => AccountPinForm(dialog.props));
++  const enter = async (pin) => {
++    findElement(renderForm(), (node) => node.type === 'Input').props.onChange({
++      currentTarget: { value: pin },
++    });
++    await renderForm().props.onSubmit({ preventDefault: () => {} });
++  };
++  await enter('000000');
++  assert.equal(h.pin.hasAccountPin(baseUrl, userId), true);
++  assert.equal(h.pin.isWebAccountPinDisabled(baseUrl, userId), false);
++  await enter('123456');
++  tree = render();
++  assert.equal(getSwitch(tree).props.value, false);
++  assert.equal(h.pin.isWebAccountPinDisabled(baseUrl, userId), true);
++  assert.equal(h.pin.hasAccountPin(baseUrl, userId), false);
++  assert.equal(
++    findElement(tree, (node) => node.props?.title === '立即锁屏'),
++    undefined
++  );
++  assert.equal(
++    findElement(tree, (node) => node.props?.title === '无操作后自动锁定'),
++    undefined
++  );
++  getSwitch(tree).props.onChange();
++  const setup = findElement(render(), (node) => node.type === 'LocalPinSetupDialog');
++  assert.ok(setup);
++  const config = await h.pin.enableAccountPin(baseUrl, userId, '654321');
++  await setup.props.onSuccess(config);
++  assert.equal(getSwitch(render()).props.value, true);
++  assert.equal(h.pin.isWebAccountPinDisabled(baseUrl, userId), false);
++});
++
+ test('a historical account PIN is imported read-only and the original digits still unlock', async () => {
+   let policy;
+   const requests = [];

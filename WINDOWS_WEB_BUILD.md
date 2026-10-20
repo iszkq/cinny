@@ -8,6 +8,7 @@ Windows 和 Web 的应用源码固定到移植前的 **1.9.10**，提交
 - Web：独立检出到 `web-client/`，保留旧版基础、版本号 1.9.10 和锁文件；准备脚本应用 `scripts/patches/web-pin-lock.patch`，加入网页版 PIN 入口、首次设置提示、5 分钟闲置锁屏及主动重新登录重设 PIN。
 - Web 另应用 `scripts/patches/web-settings-compat.patch`，兼容旧 PIN 和聊天背景设置，并保留启动失败退出时的本地设置。
 - Web 再应用 `scripts/patches/web-background-recovery.patch`：启动时先读取服务器账号设置再允许写回，读取失败保持待同步；已保存背景优先从媒体缓存恢复，下载失败定时重试，联网或返回网页也会重试。此补丁不改变其他端。
+- Web 应用 `scripts/patches/web-pin-toggle.patch`：PIN 默认开启，用户可在“安全 / PIN 码”中验证当前 PIN 后关闭保护，也可重新开启并设置新 PIN。关闭状态按浏览器和账号保存在本地，刷新、退出和重新登录后仍保留；关闭期间不要求设置或输入 PIN，也不自动锁屏，不修改其他端或服务器的 PIN 策略。
 - 所有端恢复原有语音转文字和图片识别默认配置；Web / Windows 准备脚本从根目录 `config.json` 同步这两项配置。
 - macOS / iOS / Android：继续从根目录的移植源码构建，不使用上述旧检出。
 

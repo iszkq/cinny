@@ -14,6 +14,7 @@ const patches = [
   'web-pin-lock.patch',
   'web-settings-compat.patch',
   'web-background-recovery.patch',
+  'web-pin-toggle.patch',
 ].map((file) => path.join(root, 'scripts/patches', file));
 let preparedThrough = -1;
 if (process.argv.includes('--reuse')) {
@@ -48,4 +49,4 @@ git(
 );
 // Application version and dependencies remain on the historical baseline.
 git('diff', '--quiet', 'HEAD', '--', 'package.json', 'package-lock.json');
-console.log(`Web ${baseline.version} (${baseline.ref}) prepared with PIN and background recovery.`);
+console.log(`Web ${baseline.version} (${baseline.ref}) prepared with optional PIN and background recovery.`);

@@ -2,3 +2,6 @@
 vendor/ios-matrix-sdk-crypto-wasm/pkg/*.js text eol=lf
 vendor/ios-matrix-sdk-crypto-wasm/pkg/*.cjs text eol=lf
 vendor/ios-matrix-sdk-crypto-wasm/pkg/*.wasm binary
+
+# Web patches must remain applicable on Windows checkouts with core.autocrlf enabled.
+scripts/patches/*.patch text eol=lf
