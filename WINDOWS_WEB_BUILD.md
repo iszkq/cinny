@@ -8,7 +8,8 @@ Windows 和 Web 的应用源码固定到移植前的 **1.9.10**，提交
 - Web：独立检出到 `web-client/`，保留旧版基础、版本号 1.9.10 和锁文件；准备脚本应用 `scripts/patches/web-pin-lock.patch`，加入网页版 PIN 入口、首次设置提示、5 分钟闲置锁屏及主动重新登录重设 PIN。
 - Web 另应用 `scripts/patches/web-settings-compat.patch`，兼容旧 PIN 和聊天背景设置，并保留启动失败退出时的本地设置。
 - Web 再应用 `scripts/patches/web-background-recovery.patch`：启动时先读取服务器账号设置再允许写回，读取失败保持待同步；已保存背景优先从媒体缓存恢复，下载失败定时重试，联网或返回网页也会重试。此补丁不改变其他端。
-- Web 应用 `scripts/patches/web-pin-toggle.patch`：PIN 默认开启，用户可在“安全 / PIN 码”中验证当前 PIN 后关闭保护，也可重新开启并设置新 PIN。关闭状态按浏览器和账号保存在本地，刷新、退出和重新登录后仍保留；关闭期间不要求设置或输入 PIN，也不自动锁屏，不修改其他端或服务器的 PIN 策略。
+- Web 应用 `scripts/patches/web-pin-toggle.patch`，提供关闭和重新开启 PIN 的设置开关。
+- Web 最后应用 `scripts/patches/web-pin-account-sync.patch`：仅保留“安全 / PIN 码”入口，移除“常规”中的重复安全设置。PIN 默认开启，PIN 的加盐验证数据和开关状态通过独立账号数据 `in.cinny.web_pin_policy` 同步；不同浏览器使用相同 PIN，关闭后在新浏览器登录也不要求设置或输入 PIN，不自动锁屏。保存成功后才更新本地缓存，失败允许重试；其他客户端的 `in.cinny.account_pin_policy` 不写入、不改动。
 - 所有端恢复原有语音转文字和图片识别默认配置；Web / Windows 准备脚本从根目录 `config.json` 同步这两项配置。
 - macOS / iOS / Android：继续从根目录的移植源码构建，不使用上述旧检出。
 
@@ -35,7 +36,7 @@ node scripts/prepare-web-client.mjs web-client
 node scripts/prepare-windows-client.mjs windows-client
 ```
 
-准备脚本接受未修改的基准检出；Web 使用 `--reuse` 可复用已准备的检出或升级旧 PIN 补丁。普通退出或重新登录保留 PIN；只有在锁屏页主动选择“忘记 PIN，重新登录重设”，并在 30 分钟内成功登录同一账号时，才会清除旧 PIN 并提示重设。网页版优先使用本地 PIN；本地没有 PIN 时，只读兼容旧账号数据中的 PIN，不修改其他端的策略。重设成功后不会再次导入旧 PIN。PIN 使用 Web Crypto，网页应通过 HTTPS 或 localhost 访问。在相应子目录执行 `npm ci`，再执行
+准备脚本接受未修改的基准检出；Web 使用 `--reuse` 可复用已准备的检出或升级旧 PIN 补丁。普通退出或重新登录保留账号 PIN 和开关；每次进入先读取服务器设置，读取失败显示重试，避免使用过期缓存放行或重复设置。账号数据事件实时同步其他浏览器的修改，PIN 变化后需要重新验证。只有在锁屏页主动选择“忘记 PIN，重新登录重设”，并在 30 分钟内成功登录同一账号时，才会重设网页端账号 PIN；重设失败保留原 PIN，成功后的新 PIN 同步到所有浏览器。首次迁移仅在服务器明确返回未设置时进行：保留当前浏览器已关闭的选择，否则优先迁移旧账号 PIN / 开关，再使用已有本地 PIN；已存在网页端账号设置时以该设置为准。全新账号仍默认要求设置一次 PIN，不上传明文 PIN，不改动其他端策略。PIN 使用 Web Crypto，网页应通过 HTTPS 或 localhost 访问。在相应子目录执行 `npm ci`，再执行
 `npm run build`（网页）或 `npm run desktop:build:nsis`（Windows）。Windows 需 Rust / MSVC 构建环境。
 根目录的 `npm start`、`npm run build` 和 `npm run preview` 现在统一使用上述旧版网页及 PIN 补丁，避免误用移植版的新 UI；首次运行自动准备 `web-client/`。`npm run build` 同时将静态文件复制到根目录 `dist/`。根目录移植版源码仍供原生客户端使用，通过 `npm run start:native` / `npm run build:native` 启动和构建；Tauri 使用明确的原生入口，移动端根据已有平台标记选择原生入口。Windows 发布继续使用独立旧检出。
 

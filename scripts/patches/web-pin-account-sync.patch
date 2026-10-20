@@ -1,0 +1,1324 @@
+diff --git a/src/app/utils/pinLock.ts b/src/app/utils/pinLock.ts
+index 81de4a3..3e4aca2 100644
+--- a/src/app/utils/pinLock.ts
++++ b/src/app/utils/pinLock.ts
+@@ -29,6 +29,9 @@ export type AccountPinLoginRequirement = 'none' | 'prompt';
+ const ACCOUNT_PIN_CONFIGS_KEY = 'starfire-account-pin-configs';
+ const LEGACY_WEB_PIN_RESET_KEY = 'starfire-web-pin-legacy-resets';
+ const WEB_PIN_DISABLED_ACCOUNTS_KEY = 'starfire-web-pin-disabled-accounts';
++const WEB_PIN_POLICIES_KEY = 'starfire-web-pin-policies';
++const webPolicyRevisions = new Map<string, number>();
++const webPolicyLookups = new Map<string, Promise<boolean>>();
+ const SCREEN_LOCK_STATE_KEY = 'starfire-screen-lock-state';
+ const PIN_LOCK_CHANGE_EVENT = 'starfire-pin-lock-change';
+ const PIN_LOCK_ITERATIONS = 150000;
+@@ -210,10 +213,14 @@ export const isDesktopPinLockSupported = (): boolean =>
+ 
+ export const isPinCodeFormatValid = (pin: string): boolean => PIN_CODE_REGEX.test(pin.trim());
+ 
+-const buildAccountPinPolicyUrl = (baseUrl: string, userId: string): string => {
++const buildAccountPinPolicyUrl = (
++  baseUrl: string,
++  userId: string,
++  eventType: string = AccountDataEvent.CinnyAccountPinPolicy
++): string => {
+   const origin = normalizeBaseUrl(baseUrl);
+   const encodedUserId = encodeURIComponent(userId.trim());
+-  const encodedType = encodeURIComponent(AccountDataEvent.CinnyAccountPinPolicy);
++  const encodedType = encodeURIComponent(eventType);
+ 
+   return `${origin}/_matrix/client/v3/user/${encodedUserId}/account_data/${encodedType}`;
+ };
+@@ -682,7 +689,8 @@ export const subscribePinLockChange = (listener: () => void): (() => void) => {
+     if (
+       evt.key === ACCOUNT_PIN_CONFIGS_KEY ||
+       evt.key === SCREEN_LOCK_STATE_KEY ||
+-      evt.key === WEB_PIN_DISABLED_ACCOUNTS_KEY
++      evt.key === WEB_PIN_DISABLED_ACCOUNTS_KEY ||
++      evt.key === WEB_PIN_POLICIES_KEY
+     ) {
+       listener();
+     }
+@@ -701,12 +709,15 @@ export const snapshotPinLockStorage = (): [string, string][] => {
+   const storage = safeLocalStorage();
+   if (!storage) return [];
+ 
+-  return [ACCOUNT_PIN_CONFIGS_KEY, LEGACY_WEB_PIN_RESET_KEY, WEB_PIN_DISABLED_ACCOUNTS_KEY].flatMap(
+-    (key) => {
+-      const value = storage.getItem(key);
+-      return value === null ? [] : [[key, value] as [string, string]];
+-    }
+-  );
++  return [
++    ACCOUNT_PIN_CONFIGS_KEY,
++    LEGACY_WEB_PIN_RESET_KEY,
++    WEB_PIN_DISABLED_ACCOUNTS_KEY,
++    WEB_PIN_POLICIES_KEY,
++  ].flatMap((key) => {
++    const value = storage.getItem(key);
++    return value === null ? [] : [[key, value] as [string, string]];
++  });
+ };
+ 
+ export const restorePinLockStorage = (entries: [string, string][]) => {
+@@ -736,9 +747,23 @@ export const resetPinAfterAuthenticatedLogin = async (
+   if (
+     consumePinResetRequest(
+       getAccountPinKey(baseUrl, userId),
+-      getAccountPinConfig(baseUrl, userId)?.updatedAt
++      getAccountPinConfig(baseUrl, userId)?.updatedAt,
++      false
+     )
+   ) {
++    const current = getAccountPinConfig(baseUrl, userId);
++    const remote = await fetchWebPinPolicy(baseUrl, userId, accessToken);
++    // A recovery started before another browser changed/disabled its PIN is stale.
++    if (
++      remote &&
++      (!remote.enabled || !isSamePinConfig(getAccountPinPolicyConfig(remote), current))
++    ) {
++      consumePinResetRequest(getAccountPinKey(baseUrl, userId), current?.updatedAt);
++      applyWebAccountPinPolicyContent(baseUrl, userId, remote);
++      return 'none';
++    }
++    await saveWebPinPolicy(baseUrl, userId, accessToken, true);
++    consumePinResetRequest(getAccountPinKey(baseUrl, userId), current?.updatedAt);
+     const resets = readJson<Record<string, boolean>>(LEGACY_WEB_PIN_RESET_KEY, {});
+     resets[getAccountPinKey(baseUrl, userId)] = true;
+     writeJson(LEGACY_WEB_PIN_RESET_KEY, resets);
+@@ -747,3 +772,200 @@ export const resetPinAfterAuthenticatedLogin = async (
+   // Ordinary logins keep the PIN; the gate handles verification and recovery.
+   return 'none';
+ };
++
++const getCachedWebPinPolicy = (baseUrl: string, userId: string) =>
++  readJson<Record<string, CinnyAccountPinPolicyContent>>(WEB_PIN_POLICIES_KEY, {})[
++    getAccountPinKey(baseUrl, userId)
++  ];
++
++const validateWebPinPolicy = (value: unknown): CinnyAccountPinPolicyContent => {
++  if (
++    !isRecord(value) ||
++    value.version !== 1 ||
++    typeof value.enabled !== 'boolean' ||
++    !isFiniteNumber(value.updatedAt)
++  )
++    throw new Error('账号 PIN 设置无效，请重试。');
++  if (value.enabled && ('hash' in value || 'salt' in value || 'iterations' in value)) {
++    if (
++      !isNonEmptyString(value.hash) ||
++      !isNonEmptyString(value.salt) ||
++      !Number.isInteger(value.iterations) ||
++      (value.iterations as number) < 1 ||
++      (value.iterations as number) > 1_000_000
++    )
++      throw new Error('账号 PIN 验证数据无效。');
++    try {
++      if (fromBase64(value.hash).length !== 32 || fromBase64(value.salt).length !== 16)
++        throw new Error();
++    } catch {
++      throw new Error('账号 PIN 验证数据无效。');
++    }
++  }
++  return value as CinnyAccountPinPolicyContent;
++};
++
++const fetchWebPinPolicy = async (baseUrl: string, userId: string, accessToken?: string) => {
++  if (!accessToken) throw new Error('登录状态已失效，请重新登录后同步 PIN 设置。');
++  const response = await fetch(
++    buildAccountPinPolicyUrl(baseUrl, userId, AccountDataEvent.CinnyWebPinPolicy),
++    {
++      method: 'GET',
++      headers: { Authorization: `Bearer ${accessToken}` },
++    }
++  );
++  if (response.status === 404) return undefined;
++  if (!response.ok) throw new Error('无法读取账号 PIN 设置，请检查网络后重试。');
++  return validateWebPinPolicy(await response.json());
++};
++
++// This event is Web-only: never write the policy consumed by native/Windows clients.
++export const applyWebAccountPinPolicyContent = (
++  baseUrl: string,
++  userId: string,
++  content: unknown
++): boolean => {
++  if (!isWebPinLockSupported()) return false;
++  const policy = validateWebPinPolicy(content);
++  const previous = getCachedWebPinPolicy(baseUrl, userId);
++  if (previous && (previous.updatedAt ?? 0) > (policy.updatedAt ?? 0))
++    return hasAccountPin(baseUrl, userId);
++  const key = getAccountPinKey(baseUrl, userId);
++  webPolicyRevisions.set(key, (webPolicyRevisions.get(key) ?? 0) + 1);
++  const policies = readJson<Record<string, CinnyAccountPinPolicyContent>>(WEB_PIN_POLICIES_KEY, {});
++  policies[key] = policy;
++  // Cache first, then notify subscribers after the effective state is installed.
++  safeLocalStorage()?.setItem(WEB_PIN_POLICIES_KEY, JSON.stringify(policies));
++  if (policy.enabled) {
++    const config = getAccountPinPolicyConfig(policy);
++    if (config) cacheAccountPinConfig(baseUrl, userId, config);
++    else clearLocalAccountPin(baseUrl, userId);
++    setWebAccountPinDisabled(baseUrl, userId, false);
++  } else disableWebAccountPin(baseUrl, userId);
++  return policy.enabled === true && hasAccountPin(baseUrl, userId);
++};
++
++const saveWebPinPolicy = async (
++  baseUrl: string,
++  userId: string,
++  accessToken: string | undefined,
++  enabled: boolean,
++  config?: AccountPinConfig,
++  remoteUpdatedAt = 0
++) => {
++  if (!isWebPinLockSupported() || !accessToken)
++    throw new Error('无法保存账号 PIN 设置，请重新登录。');
++  const updatedAt = Math.max(
++    Date.now(),
++    remoteUpdatedAt + 1,
++    (getCachedWebPinPolicy(baseUrl, userId)?.updatedAt ?? 0) + 1
++  );
++  const policy = createAccountPinPolicyContent({ enabled, updatedAt, config });
++  validateWebPinPolicy(policy);
++  const response = await fetch(
++    buildAccountPinPolicyUrl(baseUrl, userId, AccountDataEvent.CinnyWebPinPolicy),
++    {
++      method: 'PUT',
++      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
++      body: JSON.stringify(policy),
++    }
++  );
++  if (!response.ok) throw new Error('保存账号 PIN 设置失败，请检查网络后重试。');
++  applyWebAccountPinPolicyContent(baseUrl, userId, policy);
++  return getAccountPinPolicyConfig(policy);
++};
++
++export const syncWebAccountPinPolicy = (
++  baseUrl: string,
++  userId: string,
++  accessToken?: string
++): Promise<boolean> => {
++  if (!isWebPinLockSupported()) return Promise.resolve(false);
++  const key = getAccountPinKey(baseUrl, userId);
++  const lookupKey = `${key}::${accessToken}`;
++  const pending = webPolicyLookups.get(lookupKey);
++  if (pending) return pending;
++  const revision = webPolicyRevisions.get(key) ?? 0;
++  const lookup = (async () => {
++    const remote = await fetchWebPinPolicy(baseUrl, userId, accessToken);
++    if ((webPolicyRevisions.get(key) ?? 0) !== revision) return hasAccountPin(baseUrl, userId);
++    if (remote) return applyWebAccountPinPolicyContent(baseUrl, userId, remote);
++    // Only migrate on a confirmed 404, never on offline/auth/server errors.
++    const cached = getCachedWebPinPolicy(baseUrl, userId);
++    if (cached) throw new Error('服务器未返回已同步的 PIN 设置，请重试。');
++    const disabled = isWebAccountPinDisabled(baseUrl, userId);
++    const blocked = isLegacyWebPinMigrationBlocked(baseUrl, userId);
++    const legacy = blocked
++      ? undefined
++      : await fetchAccountPinPolicyContent(baseUrl, userId, accessToken!);
++    if ((webPolicyRevisions.get(key) ?? 0) !== revision) return hasAccountPin(baseUrl, userId);
++    const config = getAccountPinPolicyConfig(legacy) ?? getAccountPinConfig(baseUrl, userId);
++    if (disabled || legacy?.enabled === false || config || blocked) {
++      // Recheck before first publication in case another browser just migrated.
++      const latest = await fetchWebPinPolicy(baseUrl, userId, accessToken);
++      if ((webPolicyRevisions.get(key) ?? 0) !== revision) return hasAccountPin(baseUrl, userId);
++      if (latest) return applyWebAccountPinPolicyContent(baseUrl, userId, latest);
++      await saveWebPinPolicy(
++        baseUrl,
++        userId,
++        accessToken,
++        !disabled && legacy?.enabled !== false,
++        config
++      );
++    }
++    return hasAccountPin(baseUrl, userId);
++  })().finally(() => {
++    webPolicyLookups.delete(lookupKey);
++  });
++  webPolicyLookups.set(lookupKey, lookup);
++  return lookup;
++};
++
++export const enableWebAccountPin = async (
++  baseUrl: string,
++  userId: string,
++  pin: string,
++  accessToken?: string
++): Promise<AccountPinConfig> => {
++  const config = await createPinConfig(pin);
++  const remote = await fetchWebPinPolicy(baseUrl, userId, accessToken);
++  if (remote?.enabled && getAccountPinPolicyConfig(remote)) {
++    applyWebAccountPinPolicyContent(baseUrl, userId, remote);
++    throw new Error('此账号已在其他浏览器设置 PIN，请使用已有 PIN。');
++  }
++  return (await saveWebPinPolicy(baseUrl, userId, accessToken, true, config, remote?.updatedAt))!;
++};
++
++export const changeWebAccountPin = async (
++  baseUrl: string,
++  userId: string,
++  currentPin: string,
++  nextPin: string,
++  accessToken?: string
++): Promise<AccountPinConfig> => {
++  const remote = await fetchWebPinPolicy(baseUrl, userId, accessToken);
++  const current = remote?.enabled ? getAccountPinPolicyConfig(remote) : undefined;
++  if (!current || !(await verifyPinConfig(currentPin, current)))
++    throw new Error('当前账号 PIN 错误或已在其他浏览器变更。');
++  const config = await createPinConfig(nextPin);
++  return (await saveWebPinPolicy(baseUrl, userId, accessToken, true, config, remote?.updatedAt))!;
++};
++
++export const disableSyncedWebAccountPin = async (
++  baseUrl: string,
++  userId: string,
++  accessToken: string | undefined,
++  verified: AccountPinConfig | undefined
++) => {
++  // The dialog has verified the cached PIN; reject if the account changed meanwhile.
++  const remote = await fetchWebPinPolicy(baseUrl, userId, accessToken);
++  if (
++    !verified ||
++    !remote?.enabled ||
++    !isSamePinConfig(getAccountPinPolicyConfig(remote), verified)
++  ) {
++    if (remote) applyWebAccountPinPolicyContent(baseUrl, userId, remote);
++    throw new Error('账号 PIN 设置已变更，请重试。');
++  }
++  await saveWebPinPolicy(baseUrl, userId, accessToken, false, undefined, remote.updatedAt);
++};
+diff --git a/src/app/utils/pinRecovery.ts b/src/app/utils/pinRecovery.ts
+index 612589b..4d11a52 100644
+--- a/src/app/utils/pinRecovery.ts
++++ b/src/app/utils/pinRecovery.ts
+@@ -9,10 +9,14 @@ export const requestPinReset = (accountKey: string, pinUpdatedAt: number) => {
+   );
+ };
+ 
+-export const consumePinResetRequest = (accountKey: string, pinUpdatedAt?: number): boolean => {
++export const consumePinResetRequest = (
++  accountKey: string,
++  pinUpdatedAt?: number,
++  consume = true
++): boolean => {
+   const value = window.sessionStorage.getItem(PIN_RESET_REQUEST_KEY);
+   if (!value) return false;
+-  window.sessionStorage.removeItem(PIN_RESET_REQUEST_KEY);
++  if (consume) window.sessionStorage.removeItem(PIN_RESET_REQUEST_KEY);
+   try {
+     const request = JSON.parse(value);
+     const age = Date.now() - request.requestedAt;
+diff --git a/src/app/hooks/useWebPinMigration.ts b/src/app/hooks/useWebPinMigration.ts
+index df22abc..0bc0f20 100644
+--- a/src/app/hooks/useWebPinMigration.ts
++++ b/src/app/hooks/useWebPinMigration.ts
+@@ -1,11 +1,5 @@
+ import { useEffect, useState } from 'react';
+-import {
+-  getAccountPinKey,
+-  hasAccountPin,
+-  isLegacyWebPinMigrationBlocked,
+-  isWebPinLockSupported,
+-  syncAccountPinPolicy,
+-} from '../utils/pinLock';
++import { getAccountPinKey, isWebPinLockSupported, syncWebAccountPinPolicy } from '../utils/pinLock';
+ 
+ type Lookup = { accountKey: string; status: 'ready' | 'error' };
+ 
+@@ -13,22 +7,17 @@ export function useWebPinMigration(baseUrl?: string, userId?: string, accessToke
+   const [lookup, setLookup] = useState<Lookup>();
+   const [attempt, setAttempt] = useState(0);
+   const accountKey = baseUrl && userId ? getAccountPinKey(baseUrl, userId) : undefined;
+-  const localReady = Boolean(
+-    baseUrl &&
+-      userId &&
+-      (hasAccountPin(baseUrl, userId) || isLegacyWebPinMigrationBlocked(baseUrl, userId))
+-  );
+   const supported = isWebPinLockSupported();
+ 
+   useEffect(() => {
+-    if (!supported || !baseUrl || !userId || !accountKey || localReady) return undefined;
++    if (!supported || !baseUrl || !userId || !accountKey) return undefined;
+     let disposed = false;
+     setLookup(undefined);
+     if (!accessToken) {
+       setLookup({ accountKey, status: 'error' });
+       return undefined;
+     }
+-    syncAccountPinPolicy(baseUrl, userId, accessToken).then(
++    syncWebAccountPinPolicy(baseUrl, userId, accessToken).then(
+       () => {
+         if (!disposed) setLookup({ accountKey, status: 'ready' });
+       },
+@@ -39,14 +28,13 @@ export function useWebPinMigration(baseUrl?: string, userId?: string, accessToke
+     return () => {
+       disposed = true;
+     };
+-  }, [supported, baseUrl, userId, accessToken, accountKey, localReady, attempt]);
++  }, [supported, baseUrl, userId, accessToken, accountKey, attempt]);
+ 
+-  const status =
+-    !supported || localReady
+-      ? 'ready'
+-      : lookup && lookup.accountKey === accountKey
+-      ? lookup.status
+-      : 'loading';
++  const status = !supported
++    ? 'ready'
++    : lookup && lookup.accountKey === accountKey
++    ? lookup.status
++    : 'loading';
+   return {
+     status,
+     retry: () => {
+diff --git a/src/app/components/pin-lock/ScreenPinLockOverlay.tsx b/src/app/components/pin-lock/ScreenPinLockOverlay.tsx
+index 2c7c5e0..083ef5f 100644
+--- a/src/app/components/pin-lock/ScreenPinLockOverlay.tsx
++++ b/src/app/components/pin-lock/ScreenPinLockOverlay.tsx
+@@ -9,6 +9,7 @@ import { usePinIdleLock } from '../../hooks/usePinIdleLock';
+ import { useWebPinMigration } from '../../hooks/useWebPinMigration';
+ import { getFallbackSession } from '../../state/sessions';
+ import {
++  AccountPinConfig,
+   cacheAccountPinConfig,
+   clearScreenLock,
+   consumeRecentAccountPinVerification,
+@@ -126,7 +127,9 @@ export function ScreenPinLockGate({ children }: ScreenPinLockGateProps) {
+     }
+ 
+     return consumeRecentAccountPinVerification(baseUrl, userId)
+-      ? getAccountPinKey(baseUrl, userId)
++      ? isWebPinLockSupported()
++        ? `${getAccountPinKey(baseUrl, userId)}:${getAccountPinConfig(baseUrl, userId)?.hash ?? ''}`
++        : getAccountPinKey(baseUrl, userId)
+       : undefined;
+   });
+ 
+@@ -147,45 +150,60 @@ export function ScreenPinLockGate({ children }: ScreenPinLockGateProps) {
+       ? remotePinConfig ?? localPinConfig
+       : undefined
+     : localPinConfig;
++  const verificationKey = webPinRequired
++    ? `${accountKey}:${activePinConfig?.hash ?? ''}`
++    : accountKey;
+ 
+   usePinIdleLock(
+     baseUrl,
+     userId,
+     Boolean(
+       webPinRequired &&
++        pinMigration.status === 'ready' &&
+         activePinConfig &&
+-        verifiedAccountKey === accountKey &&
++        verifiedAccountKey === verificationKey &&
+         !(baseUrl && userId && isAccountScreenLocked(baseUrl, userId))
+     ),
+     5
+   );
+ 
+-  const handleVerifySuccess = useCallback(() => {
+-    if (!accountKey || !baseUrl || !userId) return;
++  const handleVerifySuccess = useCallback(
++    (verifiedConfig?: AccountPinConfig) => {
++      if (!accountKey || !baseUrl || !userId) return;
+ 
+-    if (!webPinRequired && remotePinConfig) {
+-      cacheAccountPinConfig(baseUrl, userId, remotePinConfig);
+-    }
++      if (
++        webPinRequired &&
++        getAccountPinConfig(baseUrl, userId)?.hash !== (verifiedConfig ?? activePinConfig)?.hash
++      )
++        return;
++
++      if (!webPinRequired && remotePinConfig) {
++        cacheAccountPinConfig(baseUrl, userId, remotePinConfig);
++      }
+ 
+-    setVerifiedAccountKey(accountKey);
+-    clearScreenLock();
+-  }, [accountKey, baseUrl, remotePinConfig, userId, webPinRequired]);
++      setVerifiedAccountKey(
++        webPinRequired
++          ? `${accountKey}:${getAccountPinConfig(baseUrl, userId)?.hash ?? ''}`
++          : accountKey
++      );
++      clearScreenLock();
++    },
++    [accountKey, activePinConfig, baseUrl, remotePinConfig, userId, webPinRequired]
++  );
+ 
+   if (!pinLockSupported || !userId || !baseUrl || !accountKey) {
+     return children;
+   }
+ 
+-  if (webPinDisabled) return children;
+-
+   const accountLabel = getAccountPinLabel(baseUrl, userId);
+-  if (webPinRequired && !activePinConfig && pinMigration.status !== 'ready') {
++  if (webPinRequired && pinMigration.status !== 'ready') {
+     return (
+       <SplashScreen>
+         <Box direction="Column" gap="300" alignItems="Center" justifyContent="Center" grow="Yes">
+           <Text>
+             {pinMigration.status === 'error'
+-              ? '无法读取已有 PIN，请检查网络后重试。'
+-              : '正在检查已有 PIN…'}
++              ? '无法同步账号 PIN 设置，请检查网络后重试。'
++              : '正在同步账号 PIN 设置…'}
+           </Text>
+           {pinMigration.status === 'error' && (
+             <Button onClick={pinMigration.retry} variant="Primary">
+@@ -197,6 +215,7 @@ export function ScreenPinLockGate({ children }: ScreenPinLockGateProps) {
+       </SplashScreen>
+     );
+   }
++  if (webPinDisabled) return children;
+   if (webPinRequired && !activePinConfig) {
+     return (
+       <SplashScreen>
+@@ -205,7 +224,7 @@ export function ScreenPinLockGate({ children }: ScreenPinLockGateProps) {
+           baseUrl={baseUrl}
+           userId={userId}
+           title="设置 PIN 码"
+-          description="请为当前浏览器中的账号设置 PIN 码。连续 5 分钟没有操作后，网页会自动锁定，输入 PIN 码即可继续使用。"
++          description="请为账号设置网页端 PIN，其他浏览器将使用相同 PIN。连续 5 分钟没有操作后自动锁定，可在安全设置中关闭保护。"
+           submitLabel="保存并进入"
+           onSuccess={handleVerifySuccess}
+         />
+@@ -215,7 +234,7 @@ export function ScreenPinLockGate({ children }: ScreenPinLockGateProps) {
+   const manuallyLocked =
+     Boolean(activePinConfig) && screenLockState.locked && isAccountScreenLocked(baseUrl, userId);
+   const entryVerificationRequired =
+-    Boolean(activePinConfig) && verifiedAccountKey !== accountKey && !manuallyLocked;
++    Boolean(activePinConfig) && verifiedAccountKey !== verificationKey && !manuallyLocked;
+ 
+   if (entryVerificationRequired && activePinConfig) {
+     return (
+diff --git a/src/app/components/pin-lock/LocalPinSetupDialog.tsx b/src/app/components/pin-lock/LocalPinSetupDialog.tsx
+index f115f3f..43605c4 100644
+--- a/src/app/components/pin-lock/LocalPinSetupDialog.tsx
++++ b/src/app/components/pin-lock/LocalPinSetupDialog.tsx
+@@ -3,11 +3,14 @@ import { Box, Button, Input, Text, color } from 'folds';
+ import {
+   AccountPinConfig,
+   enableAccountPin,
++  enableWebAccountPin,
++  isWebPinLockSupported,
+   isPinCodeFormatValid,
+   supportsPinLock,
+ } from '../../utils/pinLock';
+ import { PinLockDialogShell } from './PinLockShell';
+ import * as css from './style.css';
++import { getFallbackSession } from '../../state/sessions';
+ 
+ type LocalPinSetupFormProps = {
+   baseUrl: string;
+@@ -53,7 +56,9 @@ export function LocalPinSetupForm({
+     setError(undefined);
+ 
+     try {
+-      const config = await enableAccountPin(baseUrl, userId, pin);
++      const config = isWebPinLockSupported()
++        ? await enableWebAccountPin(baseUrl, userId, pin, getFallbackSession()?.accessToken)
++        : await enableAccountPin(baseUrl, userId, pin);
+       await onSuccess(config);
+     } catch (err) {
+       setError(err instanceof Error ? err.message : '启用 PIN 失败，请稍后重试。');
+@@ -96,7 +101,9 @@ export function LocalPinSetupForm({
+           onChange={(evt) => setConfirmPin(evt.currentTarget.value)}
+         />
+         <Text size="T200" priority="400">
+-          这个 PIN 只保存在当前设备，本身不会上传到服务器。
++          {isWebPinLockSupported()
++            ? 'PIN 的验证数据和开关会同步到账号，其他浏览器使用相同 PIN。不会上传明文 PIN。'
++            : '这个 PIN 只保存在当前设备，本身不会上传到服务器。'}
+         </Text>
+         {error && (
+           <Text size="T200" style={{ color: color.Critical.Main }}>
+diff --git a/src/app/features/settings/general/Security.tsx b/src/app/features/settings/general/Security.tsx
+index c704def..12a7dc7 100644
+--- a/src/app/features/settings/general/Security.tsx
++++ b/src/app/features/settings/general/Security.tsx
+@@ -15,9 +15,11 @@ import {
+ import {
+   createDisabledAccountPinPolicyContent,
+   createEnabledAccountPinPolicyContent,
+-  disableWebAccountPin,
++  disableSyncedWebAccountPin,
++  changeWebAccountPin,
+   changeAccountPin,
+   getAccountPinKey,
++  getAccountPinConfig,
+   getAccountPinLabel,
+   isAccountPinPolicyEnabled,
+   isPinCodeFormatValid,
+@@ -69,7 +71,15 @@ function ChangePinDialog({ baseUrl, userId, syncPolicy, requestClose }: ChangePi
+     setError(undefined);
+ 
+     try {
+-      const config = await changeAccountPin(baseUrl, userId, currentPin, nextPin);
++      const config = isWebPinLockSupported()
++        ? await changeWebAccountPin(
++            baseUrl,
++            userId,
++            currentPin,
++            nextPin,
++            getFallbackSession()?.accessToken
++          )
++        : await changeAccountPin(baseUrl, userId, currentPin, nextPin);
+ 
+       if (syncPolicy && !isWebPinLockSupported()) {
+         await mx.setAccountData(
+@@ -88,8 +98,12 @@ function ChangePinDialog({ baseUrl, userId, syncPolicy, requestClose }: ChangePi
+ 
+   return (
+     <PinLockDialogShell
+-      title="修改本机 PIN"
+-      description="修改当前设备使用的 PIN，供锁屏和下次进入时验证。"
++      title={isWebPinLockSupported() ? '修改账号 PIN' : '修改本机 PIN'}
++      description={
++        isWebPinLockSupported()
++          ? '修改后，此账号在所有浏览器中使用新的网页端 PIN。'
++          : '修改当前设备使用的 PIN，供锁屏和下次进入时验证。'
++      }
+       accountLabel={getAccountPinLabel(baseUrl, userId)}
+       requestClose={requestClose}
+       embedded
+@@ -138,7 +152,9 @@ function ChangePinDialog({ baseUrl, userId, syncPolicy, requestClose }: ChangePi
+             onChange={(evt) => setConfirmPin(evt.currentTarget.value)}
+           />
+           <Text size="T200" priority="400">
+-            PIN 码只会保存在当前设备，不会上报到服务器。
++            {isWebPinLockSupported()
++              ? '加盐验证数据同步到账号，不上传明文 PIN。'
++              : 'PIN 码只会保存在当前设备，不会上报到服务器。'}
+           </Text>
+           {error && (
+             <Text size="T200" style={{ color: color.Critical.Main }}>
+@@ -182,6 +198,7 @@ export function Security({ requestClose }: SecurityProps) {
+     policyEvent?.getContent<CinnyAccountPinPolicyContent>()
+   );
+   const accountKey = baseUrl && userId ? getAccountPinKey(baseUrl, userId) : undefined;
++  const localPinConfig = baseUrl && userId ? getAccountPinConfig(baseUrl, userId) : undefined;
+   const localPinEnabled = useMemo(
+     () => !!accountKey && protectedAccountKeys.includes(accountKey),
+     [accountKey, protectedAccountKeys]
+@@ -207,12 +224,12 @@ export function Security({ requestClose }: SecurityProps) {
+             pinSupported ? (
+               accountPinEnabled ? (
+                 webPinRequired ? (
+-                  '网页版已开启 PIN 保护，连续 5 分钟没有操作后自动锁定。可关闭开关停用，也可在下方修改 PIN 或立即锁屏。'
++                  '账号已开启网页端 PIN 保护，所有浏览器使用相同 PIN，连续 5 分钟没有操作后自动锁定。可关闭开关停用。'
+                 ) : (
+                   '当前账号已开启账号级 PIN 策略。其他新设备登录同一账号时，也必须先设置本机 PIN 才能进入。'
+                 )
+               ) : webPinRequired ? (
+-                '当前浏览器已关闭 PIN 保护，不再要求输入 PIN，也不会自动锁屏。可随时重新开启并设置新的 PIN。'
++                '账号已关闭网页端 PIN 保护。换浏览器或重新登录后也无需设置、输入 PIN，不会自动锁屏。可随时重新开启。'
+               ) : (
+                 '开启后，这个账号在每台设备上都需要先设置各自的本机 PIN。PIN 码本身只保存在本地，不会同步到服务器。'
+               )
+@@ -233,24 +250,36 @@ export function Security({ requestClose }: SecurityProps) {
+           }
+         />
+         <SettingTile
+-          title="当前设备状态"
++          title={webPinRequired ? '账号保护状态' : '当前设备状态'}
+           description={
+             localPinEnabled
+-              ? '这台设备已经保存了本机 PIN，可以用于解锁锁屏和下次登录验证。'
++              ? webPinRequired
++                ? 'PIN 已同步到账号，其他浏览器使用相同 PIN，无需重复设置。'
++                : '这台设备已经保存了本机 PIN，可以用于解锁锁屏和下次登录验证。'
+               : webPinRequired
+-              ? '当前浏览器未启用 PIN 保护，可打开上方开关重新设置。'
++              ? '关闭状态已同步到账号，可打开上方开关重新设置 PIN。'
+               : '这台设备尚未设置 PIN，请先创建本机 PIN。'
+           }
+           after={
+             <Text size="T200" priority="300">
+-              {localPinEnabled ? '已设置' : '未设置'}
++              {webPinRequired
++                ? accountPinEnabled
++                  ? '已开启'
++                  : '已关闭'
++                : localPinEnabled
++                ? '已设置'
++                : '未设置'}
+             </Text>
+           }
+         />
+         {localPinEnabled && (
+           <SettingTile
+-            title="修改本机 PIN"
+-            description="建议使用只有你自己知道的 4 到 12 位数字。修改后不会影响其他设备上的本机 PIN。"
++            title={webPinRequired ? '修改账号 PIN' : '修改本机 PIN'}
++            description={
++              webPinRequired
++                ? '使用 4 到 12 位数字。修改后所有浏览器使用新 PIN，其他客户端不受影响。'
++                : '建议使用只有你自己知道的 4 到 12 位数字。修改后不会影响其他设备上的本机 PIN。'
++            }
+             after={
+               <Button
+                 variant="Secondary"
+@@ -295,15 +324,17 @@ export function Security({ requestClose }: SecurityProps) {
+           <Text size="L400">说明</Text>
+           <Text size="T300" priority="300">
+             {webPinRequired
+-              ? '网页版 PIN 默认开启，可验证当前 PIN 后关闭；此选择只对当前浏览器中的账号生效，不影响其他端。'
++              ? '网页版 PIN 默认开启。PIN 和开关状态跟随账号同步，可验证当前 PIN 后关闭；此设置不影响其他客户端。'
+               : '账号级策略会跟随账号同步，用来告诉其他设备“这个账号需要本机 PIN”。'}
+           </Text>
+           <Text size="T300" priority="300">
+-            真正的 PIN 码和加密摘要只保存在当前设备，不会上传，也不会在设备之间同步。
++            {webPinRequired
++              ? '服务器保存加盐后的 PIN 验证数据和开关状态，不保存明文 PIN。更换浏览器后会读取同一份账号设置。'
++              : '真正的 PIN 码和加密摘要只保存在当前设备，不会上传，也不会在设备之间同步。'}
+           </Text>
+           <Text size="T300" priority="300">
+             {webPinRequired
+-              ? '普通重新登录保留原 PIN。忘记 PIN 时，请在锁屏页选择“忘记 PIN，重新登录重设”，通过账号认证后设置新 PIN。设备验证仍需另一台已验证设备或恢复密钥；未备份的本机加密密钥可能随退出丢失。'
++              ? '普通重新登录保留账号 PIN 和开关。忘记 PIN 时，在锁屏页选择“忘记 PIN，重新登录重设”，认证后设置的新 PIN 将同步到所有浏览器。设备验证仍需已验证设备或恢复密钥。'
+               : '如果忘记 PIN，只能通过清空这台设备的本地数据来重置，本地会话和缓存也会一起被移除。'}
+           </Text>
+         </Box>
+@@ -314,7 +345,11 @@ export function Security({ requestClose }: SecurityProps) {
+           baseUrl={baseUrl}
+           userId={userId}
+           title={webPinRequired ? '设置 PIN 码' : '开启账号级 PIN 保护'}
+-          description="先为当前设备创建本机 PIN。"
++          description={
++            webPinRequired
++              ? '为账号设置网页端 PIN，其他浏览器使用相同 PIN。'
++              : '先为当前设备创建本机 PIN。'
++          }
+           submitLabel="开启 PIN 保护"
+           onCancel={() => setDialogMode(undefined)}
+           embedded
+@@ -341,16 +376,23 @@ export function Security({ requestClose }: SecurityProps) {
+           baseUrl={baseUrl}
+           userId={userId}
+           title="关闭 PIN 保护"
++          pinConfig={webPinRequired ? localPinConfig : undefined}
+           description={
+             webPinRequired
+-              ? '输入当前 PIN 后，将关闭当前浏览器中此账号的 PIN 验证和自动锁屏，并清除本机 PIN。刷新或重新登录后仍保持关闭，不影响其他端。'
++              ? '输入当前 PIN 后，此账号在所有浏览器中关闭 PIN 验证和自动锁屏。更换浏览器或重新登录也保持关闭，不影响其他客户端。'
+               : '输入当前设备的 PIN 后，会关闭这个账号的账号级 PIN 策略，并清除当前设备保存的本机 PIN。'
+           }
+           submitLabel="关闭 PIN 保护"
+           embedded
+           onCancel={() => setDialogMode(undefined)}
+           onSuccess={async () => {
+-            if (webPinRequired) disableWebAccountPin(baseUrl, userId);
++            if (webPinRequired)
++              await disableSyncedWebAccountPin(
++                baseUrl,
++                userId,
++                session?.accessToken,
++                localPinConfig
++              );
+             else
+               await mx.setAccountData(
+                 AccountDataEvent.CinnyAccountPinPolicy,
+diff --git a/src/app/features/settings/general/General.tsx b/src/app/features/settings/general/General.tsx
+index 74abdb7..b8822fb 100644
+--- a/src/app/features/settings/general/General.tsx
++++ b/src/app/features/settings/general/General.tsx
+@@ -57,7 +57,6 @@ import { useMessageSpacingItems } from '../../../hooks/useMessageSpacing';
+ import { useDateFormatItems } from '../../../hooks/useDateFormat';
+ import { SequenceCardStyle } from '../styles.css';
+ import { AppearanceCustomizer } from './AppearanceCustomizer';
+-import { Security } from './Security';
+ 
+ const MIN_READ_RECEIPT_AVATAR_COUNT = 1;
+ const MAX_READ_RECEIPT_AVATAR_COUNT = 50;
+@@ -361,9 +360,7 @@ function ReadReceiptAvatarCountInput() {
+   return (
+     <Input
+       style={{ width: toRem(100) }}
+-      variant={
+-        readReceiptAvatarCount === parseInt(currentCount, 10) ? 'Secondary' : 'Success'
+-      }
++      variant={readReceiptAvatarCount === parseInt(currentCount, 10) ? 'Secondary' : 'Success'}
+       size="300"
+       radii="300"
+       type="number"
+@@ -899,10 +896,7 @@ function PrivacyMode() {
+     settingsAtom,
+     'sendTypingNotifications'
+   );
+-  const [sendReadReceipts, setSendReadReceipts] = useSetting(
+-    settingsAtom,
+-    'sendReadReceipts'
+-  );
++  const [sendReadReceipts, setSendReadReceipts] = useSetting(settingsAtom, 'sendReadReceipts');
+ 
+   return (
+     <Box direction="Column" gap="100">
+@@ -932,11 +926,7 @@ function PrivacyMode() {
+           title="发送已读回执"
+           description="开启后，其他人可以看到你已读到哪条消息。"
+           after={
+-            <Switch
+-              variant="Primary"
+-              value={sendReadReceipts}
+-              onChange={setSendReadReceipts}
+-            />
++            <Switch variant="Primary" value={sendReadReceipts} onChange={setSendReadReceipts} />
+           }
+         />
+       </SequenceCard>
+@@ -1210,7 +1200,6 @@ export function General({ requestClose }: GeneralProps) {
+               <Editor />
+               <PrivacyMode />
+               <Messages />
+-              <Security requestClose={requestClose} />
+             </Box>
+           </PageContent>
+         </Scroll>
+diff --git a/src/app/pages/client/ClientNonUIFeatures.tsx b/src/app/pages/client/ClientNonUIFeatures.tsx
+index 9560086..1386d44 100644
+--- a/src/app/pages/client/ClientNonUIFeatures.tsx
++++ b/src/app/pages/client/ClientNonUIFeatures.tsx
+@@ -54,6 +54,8 @@ import {
+ } from '../../state/appearanceAccountData';
+ import {
+   applyAccountPinPolicyContent,
++  applyWebAccountPinPolicyContent,
++  isWebPinLockSupported,
+   hasAccountPin,
+   lockScreenForAccount,
+   supportsPinLock,
+@@ -923,19 +925,34 @@ function AccountPinPolicyFeature() {
+       return undefined;
+     }
+ 
++    const web = isWebPinLockSupported();
++    const eventType = web
++      ? AccountDataEvent.CinnyWebPinPolicy
++      : AccountDataEvent.CinnyAccountPinPolicy;
+     const applyPolicy = (content?: CinnyAccountPinPolicyContent) => {
+-      applyAccountPinPolicyContent(baseUrl, userId, content);
++      if (web) {
++        if (content) {
++          try {
++            applyWebAccountPinPolicyContent(baseUrl, userId, content);
++          } catch {
++            lockScreenForAccount(baseUrl, userId);
++          }
++        }
++      } else applyAccountPinPolicyContent(baseUrl, userId, content);
+     };
+ 
+-    applyPolicy(
+-      mx
+-        .getAccountData(AccountDataEvent.CinnyAccountPinPolicy)
+-        ?.getContent<CinnyAccountPinPolicyContent>()
+-    );
+-    void syncAccountPinPolicy(baseUrl, userId, accessToken).catch(() => undefined);
++    // Web waits for an authoritative lookup in its gate; SDK cache can be stale.
++    if (!web) {
++      applyPolicy(
++        mx
++          .getAccountData(AccountDataEvent.CinnyAccountPinPolicy)
++          ?.getContent<CinnyAccountPinPolicyContent>()
++      );
++      void syncAccountPinPolicy(baseUrl, userId, accessToken).catch(() => undefined);
++    }
+ 
+     const handleAccountData = (event: MatrixEvent) => {
+-      if (event.getType() !== AccountDataEvent.CinnyAccountPinPolicy) {
++      if (event.getType() !== eventType) {
+         return;
+       }
+ 
+diff --git a/src/types/matrix/accountData.ts b/src/types/matrix/accountData.ts
+index 80249c9..ba5221d 100644
+--- a/src/types/matrix/accountData.ts
++++ b/src/types/matrix/accountData.ts
+@@ -5,6 +5,7 @@ export enum AccountDataEvent {
+ 
+   CinnySpaces = 'in.cinny.spaces',
+   CinnyAccountPinPolicy = 'in.cinny.account_pin_policy',
++  CinnyWebPinPolicy = 'in.cinny.web_pin_policy',
+   CinnyFavorites = 'in.cinny.favorites',
+   CinnyFavoriteItems = 'in.cinny.favorite_items',
+   CinnyFavoriteNotes = 'in.cinny.favorite_notes',
+diff --git a/tests/web-pin-lock.test.mjs b/tests/web-pin-lock.test.mjs
+index 519fc84..7f84a89 100644
+--- a/tests/web-pin-lock.test.mjs
++++ b/tests/web-pin-lock.test.mjs
+@@ -31,7 +31,15 @@ const compile = (file, globals, imports = {}) => {
+   return exports;
+ };
+ 
+-function harness(fetchPolicy = async () => ({ status: 404, ok: false })) {
++const pinEvents = {
++  CinnyAccountPinPolicy: 'in.cinny.account_pin_policy',
++  CinnyWebPinPolicy: 'in.cinny.web_pin_policy',
++};
++
++function harness(
++  fetchPolicy = async (url, init) =>
++    init?.method === 'PUT' ? { status: 200, ok: true } : { status: 404, ok: false }
++) {
+   let now = 1000;
+   const makeStorage = () => {
+     const data = new Map();
+@@ -75,7 +83,7 @@ function harness(fetchPolicy = async () => ({ status: 404, ok: false })) {
+     './desktopUpdater': desktop,
+     './nativePlatform': { isNativeApp: () => false },
+     './pinRecovery': recovery,
+-    '../../types/matrix/accountData': { AccountDataEvent: {} },
++    '../../types/matrix/accountData': { AccountDataEvent: pinEvents },
+   });
+   return {
+     pin,
+@@ -90,6 +98,339 @@ function harness(fetchPolicy = async () => ({ status: 404, ok: false })) {
+   };
+ }
+ 
++function accountPinServer() {
++  const data = new Map();
++  const requests = [];
++  let failWrites = false;
++  let failReads = false;
++  const urlFor = (type, account = userId, server = baseUrl) =>
++    `${server}/_matrix/client/v3/user/${encodeURIComponent(account)}/account_data/${type}`;
++  return {
++    data,
++    requests,
++    policy: () => data.get(urlFor(pinEvents.CinnyWebPinPolicy)),
++    legacy: (value) => data.set(urlFor(pinEvents.CinnyAccountPinPolicy), value),
++    failWrites: (value) => {
++      failWrites = value;
++    },
++    failReads: (value) => {
++      failReads = value;
++    },
++    fetch: async (url, init) => {
++      requests.push({ url, ...init });
++      if (init.method === 'PUT') {
++        if (failWrites) return { ok: false, status: 503 };
++        data.set(url, JSON.parse(init.body));
++        return { ok: true, status: 200 };
++      }
++      if (failReads) throw new Error('offline');
++      const value = data.get(url);
++      return value
++        ? { ok: true, status: 200, json: async () => value }
++        : { ok: false, status: 404 };
++    },
++  };
++}
++
++test('two independent browsers share PIN, changed PIN, disabled state, and re-enabling', async () => {
++  const server = accountPinServer();
++  const a = harness(server.fetch);
++  const b = harness(server.fetch);
++  assert.equal(await a.pin.syncWebAccountPinPolicy(baseUrl, userId, 'token'), false);
++  assert.equal(
++    a.pin.isWebAccountPinDisabled(baseUrl, userId),
++    false,
++    'new accounts default to setup'
++  );
++  await a.pin.enableWebAccountPin(baseUrl, userId, '001234', 'token');
++  await b.pin.syncWebAccountPinPolicy(baseUrl, userId, 'token');
++  assert.equal(await b.pin.verifyAccountPin(baseUrl, userId, '001234'), true);
++  await assert.rejects(b.pin.enableWebAccountPin(baseUrl, userId, '999999', 'token'));
++  await assert.rejects(a.pin.changeWebAccountPin(baseUrl, userId, '000000', '654321', 'token'));
++  const oldConfig = b.pin.getAccountPinConfig(baseUrl, userId);
++  await a.pin.changeWebAccountPin(baseUrl, userId, '001234', '654321', 'token');
++  await assert.rejects(b.pin.disableSyncedWebAccountPin(baseUrl, userId, 'token', oldConfig));
++  await b.pin.syncWebAccountPinPolicy(baseUrl, userId, 'token');
++  assert.equal(await b.pin.verifyAccountPin(baseUrl, userId, '654321'), true);
++  assert.equal(await b.pin.verifyAccountPin(baseUrl, userId, '001234'), false);
++  await a.pin.disableSyncedWebAccountPin(
++    baseUrl,
++    userId,
++    'token',
++    a.pin.getAccountPinConfig(baseUrl, userId)
++  );
++  await b.pin.syncWebAccountPinPolicy(baseUrl, userId, 'token');
++  assert.equal(b.pin.isWebAccountPinDisabled(baseUrl, userId), true);
++  assert.equal(b.pin.hasAccountPin(baseUrl, userId), false);
++  const c = harness(server.fetch);
++  await c.pin.syncWebAccountPinPolicy(baseUrl, userId, 'token');
++  assert.equal(
++    c.pin.isWebAccountPinDisabled(baseUrl, userId),
++    true,
++    'fresh browser must not set up PIN'
++  );
++  await c.pin.enableWebAccountPin(baseUrl, userId, '778899', 'token');
++  await b.pin.syncWebAccountPinPolicy(baseUrl, userId, 'token');
++  assert.equal(b.pin.isWebAccountPinDisabled(baseUrl, userId), false);
++  assert.equal(await b.pin.verifyAccountPin(baseUrl, userId, '778899'), true);
++  assert.equal(b.pin.isWebAccountPinDisabled(baseUrl, '@bob:example.org'), false);
++  assert.equal(b.pin.hasAccountPin('https://other.example.org', userId), false);
++  for (const request of server.requests.filter((req) => req.method === 'PUT')) {
++    assert.ok(request.url.endsWith(pinEvents.CinnyWebPinPolicy));
++    for (const plaintext of ['001234', '654321', '778899'])
++      assert.ok(!request.body.includes(plaintext));
++  }
++});
++
++test('failed reads/writes preserve the saved PIN and disabled state without false success', async () => {
++  const server = accountPinServer();
++  const h = harness(server.fetch);
++  await h.pin.enableWebAccountPin(baseUrl, userId, '123456', 'token');
++  const before = h.pin.getAccountPinConfig(baseUrl, userId);
++  server.failWrites(true);
++  await assert.rejects(h.pin.disableSyncedWebAccountPin(baseUrl, userId, 'token', before));
++  await assert.rejects(h.pin.changeWebAccountPin(baseUrl, userId, '123456', '654321', 'token'));
++  assert.equal(h.pin.isWebAccountPinDisabled(baseUrl, userId), false);
++  assert.deepEqual(h.pin.getAccountPinConfig(baseUrl, userId), before);
++  h.pin.requestAccountPinReset(baseUrl, userId);
++  await assert.rejects(h.pin.resetPinAfterAuthenticatedLogin(baseUrl, userId, 'token'));
++  assert.deepEqual(h.pin.getAccountPinConfig(baseUrl, userId), before);
++  server.failWrites(false);
++  await h.pin.resetPinAfterAuthenticatedLogin(baseUrl, userId, 'token');
++  assert.equal(h.pin.hasAccountPin(baseUrl, userId), false, 'recovery retries after write failure');
++  await h.pin.enableWebAccountPin(baseUrl, userId, '654321', 'token');
++  await h.pin.disableSyncedWebAccountPin(
++    baseUrl,
++    userId,
++    'token',
++    h.pin.getAccountPinConfig(baseUrl, userId)
++  );
++  server.failWrites(true);
++  await assert.rejects(h.pin.enableWebAccountPin(baseUrl, userId, '778899', 'token'));
++  assert.equal(h.pin.isWebAccountPinDisabled(baseUrl, userId), true);
++  server.failReads(true);
++  await assert.rejects(h.pin.syncWebAccountPinPolicy(baseUrl, userId, 'token'));
++  const fresh = harness(server.fetch);
++  await assert.rejects(fresh.pin.syncWebAccountPinPolicy(baseUrl, userId, 'token'));
++  assert.equal(fresh.pin.hasAccountPin(baseUrl, userId), false);
++});
++
++test('existing account PIN and local opt-out migrate once without changing native policy', async () => {
++  for (const disabled of [false, true]) {
++    const server = accountPinServer();
++    const h = harness(server.fetch);
++    const old = await h.pin.enableAccountPin(baseUrl, userId, '001234');
++    const legacy = h.pin.createEnabledAccountPinPolicyContent(old);
++    server.legacy(legacy);
++    if (disabled) await h.pin.disableAccountPin(baseUrl, userId, '001234');
++    else h.window.localStorage.clear();
++    await h.pin.syncWebAccountPinPolicy(baseUrl, userId, 'token');
++    const fresh = harness(server.fetch);
++    await fresh.pin.syncWebAccountPinPolicy(baseUrl, userId, 'token');
++    assert.equal(fresh.pin.isWebAccountPinDisabled(baseUrl, userId), disabled);
++    if (!disabled) assert.equal(await fresh.pin.verifyAccountPin(baseUrl, userId, '001234'), true);
++    assert.ok([...server.data.values()].includes(legacy));
++    assert.ok(
++      server.requests
++        .filter((req) => req.method === 'PUT')
++        .every((req) => req.url.endsWith(pinEvents.CinnyWebPinPolicy))
++    );
++  }
++});
++
++test('stale account lookup cannot undo a live PIN change, and stale events are ignored', async () => {
++  const server = accountPinServer();
++  const a = harness(server.fetch);
++  await a.pin.enableWebAccountPin(baseUrl, userId, '123456', 'token');
++  const old = server.policy();
++  let finish;
++  const b = harness(
++    () =>
++      new Promise((resolve) => {
++        finish = resolve;
++      })
++  );
++  const pending = b.pin.syncWebAccountPinPolicy(baseUrl, userId, 'token');
++  await a.pin.changeWebAccountPin(baseUrl, userId, '123456', '654321', 'token');
++  b.pin.applyWebAccountPinPolicyContent(baseUrl, userId, server.policy());
++  finish({ ok: true, status: 200, json: async () => old });
++  await pending;
++  b.pin.applyWebAccountPinPolicyContent(baseUrl, userId, old);
++  assert.equal(await b.pin.verifyAccountPin(baseUrl, userId, '654321'), true);
++});
++
++test('explicit recovery resets the account PIN across browsers and never resurrects legacy PIN', async () => {
++  const server = accountPinServer();
++  const a = harness(server.fetch);
++  const b = harness(server.fetch);
++  const initial = await a.pin.enableWebAccountPin(baseUrl, userId, '123456', 'token');
++  server.legacy(a.pin.createEnabledAccountPinPolicyContent(initial));
++  await b.pin.syncWebAccountPinPolicy(baseUrl, userId, 'token');
++  a.pin.requestAccountPinReset(baseUrl, userId);
++  await a.pin.resetPinAfterAuthenticatedLogin(baseUrl, userId, 'token');
++  await b.pin.syncWebAccountPinPolicy(baseUrl, userId, 'token');
++  assert.equal(b.pin.hasAccountPin(baseUrl, userId), false);
++  assert.equal(
++    b.pin.isWebAccountPinDisabled(baseUrl, userId),
++    false,
++    'recovery requires new setup'
++  );
++  await a.pin.enableWebAccountPin(baseUrl, userId, '654321', 'token');
++  await b.pin.syncWebAccountPinPolicy(baseUrl, userId, 'token');
++  assert.equal(await b.pin.verifyAccountPin(baseUrl, userId, '654321'), true);
++  assert.equal(await b.pin.verifyAccountPin(baseUrl, userId, '123456'), false);
++  a.pin.requestAccountPinReset(baseUrl, userId);
++  await b.pin.changeWebAccountPin(baseUrl, userId, '654321', '778899', 'token');
++  await a.pin.resetPinAfterAuthenticatedLogin(baseUrl, userId, 'token');
++  assert.equal(
++    await a.pin.verifyAccountPin(baseUrl, userId, '778899'),
++    true,
++    'stale recovery must preserve the newer PIN'
++  );
++});
++
++test('account-data events update browser protection live and ignore the native event', async () => {
++  const server = accountPinServer();
++  const a = harness(server.fetch);
++  const b = harness(server.fetch);
++  await a.pin.enableWebAccountPin(baseUrl, userId, '123456', 'token');
++  await b.pin.syncWebAccountPinPolicy(baseUrl, userId, 'token');
++  let listener;
++  let cleanup;
++  const mx = {
++    getUserId: () => userId,
++    getAccountData: () => assert.fail('Web must not use stale SDK account-data cache at startup'),
++    on: (event, callback) => {
++      listener = callback;
++    },
++    removeListener: (event, callback) => {
++      assert.equal(callback, listener);
++      listener = undefined;
++    },
++  };
++  const context = {
++    ...b.pin,
++    useEffect: (effect) => {
++      cleanup = effect();
++    },
++    useMatrixClient: () => mx,
++    getFallbackSession: () => ({ baseUrl, accessToken: 'token' }),
++    AccountDataEvent: pinEvents,
++    ClientEvent: { AccountData: 'accountData' },
++  };
++  const text = source('pages/client/ClientNonUIFeatures.tsx');
++  const feature = text.slice(
++    text.indexOf('function AccountPinPolicyFeature()'),
++    text.indexOf('function DesktopImagePackMediaWarmFeature()')
++  );
++  vm.createContext(context);
++  vm.runInContext(
++    ts.transpileModule(feature, { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText,
++    context
++  );
++  context.AccountPinPolicyFeature();
++  listener({
++    getType: () => pinEvents.CinnyAccountPinPolicy,
++    getContent: () => ({ enabled: false }),
++  });
++  assert.equal(b.pin.hasAccountPin(baseUrl, userId), true);
++  await a.pin.disableSyncedWebAccountPin(
++    baseUrl,
++    userId,
++    'token',
++    a.pin.getAccountPinConfig(baseUrl, userId)
++  );
++  listener({ getType: () => pinEvents.CinnyWebPinPolicy, getContent: () => server.policy() });
++  assert.equal(b.pin.isWebAccountPinDisabled(baseUrl, userId), true);
++  assert.equal(b.pin.hasAccountPin(baseUrl, userId), false);
++  await a.pin.enableWebAccountPin(baseUrl, userId, '654321', 'token');
++  listener({ getType: () => pinEvents.CinnyWebPinPolicy, getContent: () => server.policy() });
++  assert.equal(b.pin.isWebAccountPinDisabled(baseUrl, userId), false);
++  assert.equal(await b.pin.verifyAccountPin(baseUrl, userId, '654321'), true);
++  cleanup();
++  assert.equal(listener, undefined);
++});
++
++test('the setup form waits for account persistence and shows a save failure without enabling locally', async () => {
++  const server = accountPinServer();
++  const h = harness(server.fetch);
++  const runtime = hookRuntime();
++  const react = { ...runtime.react };
++  react.default = react;
++  let saved;
++  const { LocalPinSetupForm } = compile('components/pin-lock/LocalPinSetupDialog.tsx', h.globals, {
++    react,
++    folds: {
++      Box: 'Box',
++      Button: 'Button',
++      Input: 'Input',
++      Text: 'Text',
++      color: { Critical: { Main: 'red' } },
++    },
++    '../../utils/pinLock': h.pin,
++    '../../state/sessions': { getFallbackSession: () => ({ baseUrl, accessToken: 'token' }) },
++    './PinLockShell': {},
++    './style.css': {},
++  });
++  const render = () =>
++    runtime.render(() =>
++      LocalPinSetupForm({
++        baseUrl,
++        userId,
++        submitLabel: '保存',
++        onSuccess: (config) => {
++          saved = config;
++        },
++      })
++    );
++  const inputs = render()
++    .props.children.slice(0, 2)
++    .map((group) => findElement(group, (node) => node.type === 'Input'));
++  inputs.forEach((input) => input.props.onChange({ currentTarget: { value: '001234' } }));
++  server.failWrites(true);
++  await render().props.onSubmit({ preventDefault: () => {} });
++  assert.equal(saved, undefined);
++  assert.equal(h.pin.hasAccountPin(baseUrl, userId), false);
++  assert.ok(
++    findElement(render(), (node) => node.type === 'Text' && node.props.style?.color === 'red')
++  );
++  server.failWrites(false);
++  await render().props.onSubmit({ preventDefault: () => {} });
++  assert.ok(saved);
++  const fresh = harness(server.fetch);
++  await fresh.pin.syncWebAccountPinPolicy(baseUrl, userId, 'token');
++  assert.equal(await fresh.pin.verifyAccountPin(baseUrl, userId, '001234'), true);
++});
++
++test('invalid account PIN data fails closed without replacing a cached PIN', async () => {
++  for (const content of [
++    {},
++    { version: 1, enabled: true, updatedAt: 2, hash: 'bad', salt: 'bad', iterations: 150000 },
++    { version: 1, enabled: 'false', updatedAt: 2 },
++  ]) {
++    const h = harness(async () => ({ ok: true, status: 200, json: async () => content }));
++    const config = await h.pin.enableAccountPin(baseUrl, userId, '123456');
++    await assert.rejects(h.pin.syncWebAccountPinPolicy(baseUrl, userId, 'token'));
++    assert.deepEqual(h.pin.getAccountPinConfig(baseUrl, userId), config);
++  }
++  const server = accountPinServer();
++  server.legacy({
++    version: 1,
++    enabled: true,
++    updatedAt: 2,
++    hash: 'invalid',
++    salt: 'invalid',
++    iterations: 150000,
++  });
++  const h = harness(server.fetch);
++  await assert.rejects(h.pin.syncWebAccountPinPolicy(baseUrl, userId, 'token'));
++  assert.equal(
++    server.requests.filter((request) => request.method === 'PUT').length,
++    0,
++    'malformed legacy records must never be published'
++  );
++});
++
+ test('desktop browsers can configure a salted PIN without storing plaintext', async () => {
+   const { pin, window } = harness();
+   assert.equal(pin.supportsPinLock(), true);
+@@ -218,6 +559,7 @@ test('gate requires setup, unlocks after saving, hides chats when locked, and ve
+   const h = harness();
+   let state;
+   let idleArgs;
++  let lookupStatus = 'ready';
+   const react = {
+     createElement: (type, props, ...children) => ({ type, props: { ...props, children } }),
+     useState: (init) => {
+@@ -244,7 +586,7 @@ test('gate requires setup, unlocks after saving, hides chats when locked, and ve
+       },
+     },
+     '../../hooks/useWebPinMigration': {
+-      useWebPinMigration: () => ({ status: 'ready' }),
++      useWebPinMigration: () => ({ status: lookupStatus }),
+     },
+     '../../state/sessions': { getFallbackSession: () => ({ baseUrl }) },
+     '../../utils/pinLock': h.pin,
+@@ -261,8 +603,8 @@ test('gate requires setup, unlocks after saving, hides chats when locked, and ve
+   const setup = render().props.children[0];
+   assert.equal(setup.type, 'LocalPinSetupDialog');
+   assert.equal(setup.props.onCancel, undefined);
+-  await h.pin.enableAccountPin(baseUrl, userId, '123456');
+-  setup.props.onSuccess();
++  const setupConfig = await h.pin.enableAccountPin(baseUrl, userId, '123456');
++  setup.props.onSuccess(setupConfig);
+   assert.equal(render(), 'private-chat');
+   assert.equal(idleArgs[2], true);
+   assert.equal(idleArgs[3], 5);
+@@ -279,12 +621,23 @@ test('gate requires setup, unlocks after saving, hides chats when locked, and ve
+   assert.equal(idleArgs[2], false);
+   state = undefined;
+   assert.equal(render(), 'private-chat', 'reload must not request PIN setup after disabling');
++  lookupStatus = 'loading';
++  assert.equal(render().type, 'SplashScreen', 'cached opt-out must wait for the server on reload');
++  lookupStatus = 'ready';
+   await h.pin.enableAccountPin(baseUrl, userId, '654321');
+   const reenabled = render();
+   assert.equal(reenabled.props.children[0].type, 'AccountPinForm');
+   reenabled.props.children[0].props.onSuccess();
+   assert.equal(render(), 'private-chat');
+   assert.equal(idleArgs[2], true);
++  const staleUnlock = reenabled.props.children[0].props.onSuccess;
++  await h.pin.enableAccountPin(baseUrl, userId, '778899');
++  staleUnlock();
++  assert.equal(
++    render().props.children[0].type,
++    'AccountPinForm',
++    'changing the account PIN invalidates an unlocked session'
++  );
+ });
+ 
+ test('server PIN policies cannot clear or replace a browser-local PIN', async () => {
+@@ -414,7 +767,7 @@ test('disabling PIN during an outstanding legacy lookup prevents it from being i
+   assert.equal(h.pin.hasAccountPin(baseUrl, userId), false);
+ });
+ 
+-test('a disabled browser PIN skips migration without a network token and notifies other tabs', async () => {
++test('cached disabled PIN still waits for account lookup and notifies other tabs', async () => {
+   const h = harness();
+   await h.pin.enableAccountPin(baseUrl, userId, '123456');
+   await h.pin.disableAccountPin(baseUrl, userId, '123456');
+@@ -423,9 +776,9 @@ test('a disabled browser PIN skips migration without a network token and notifie
+     react: runtime.react,
+     '../utils/pinLock': h.pin,
+   });
+-  assert.equal(runtime.render(() => useWebPinMigration(baseUrl, userId)).status, 'ready');
++  assert.equal(runtime.render(() => useWebPinMigration(baseUrl, userId)).status, 'loading');
+   runtime.flush();
+-  assert.equal(runtime.render(() => useWebPinMigration(baseUrl, userId)).status, 'ready');
++  assert.equal(runtime.render(() => useWebPinMigration(baseUrl, userId)).status, 'error');
+   let updates = 0;
+   const unsubscribe = h.pin.subscribePinLockChange(() => {
+     updates += 1;
+@@ -451,9 +804,10 @@ const findElement = (tree, predicate) => {
+   return undefined;
+ };
+ 
+-test('the settings switch verifies the PIN before disabling and offers setup again without server writes', async () => {
+-  const h = harness();
+-  await h.pin.enableAccountPin(baseUrl, userId, '123456');
++test('the settings switch verifies PIN, synchronizes disabling, and offers setup again', async () => {
++  const server = accountPinServer();
++  const h = harness(server.fetch);
++  await h.pin.enableWebAccountPin(baseUrl, userId, '123456', 'token');
+   const runtime = hookRuntime();
+   const react = { ...runtime.react, useMemo: (fn) => fn() };
+   react.default = react;
+@@ -473,7 +827,7 @@ test('the settings switch verifies the PIN before disabling and offers setup aga
+     },
+     '../../../hooks/useAccountData': { useAccountData: () => undefined },
+     '../../../hooks/useMatrixClient': { useMatrixClient: () => mx },
+-    '../../../state/sessions': { getFallbackSession: () => ({ baseUrl }) },
++    '../../../state/sessions': { getFallbackSession: () => ({ baseUrl, accessToken: 'token' }) },
+     '../../../components/sequence-card': { SequenceCard: 'SequenceCard' },
+     '../../../components/setting-tile': { SettingTile: 'SettingTile' },
+     '../styles.css': {},
+@@ -545,7 +899,8 @@ test('the settings switch verifies the PIN before disabling and offers setup aga
+   getSwitch(tree).props.onChange();
+   const setup = findElement(render(), (node) => node.type === 'LocalPinSetupDialog');
+   assert.ok(setup);
+-  const config = await h.pin.enableAccountPin(baseUrl, userId, '654321');
++  assert.equal(server.policy().enabled, false);
++  const config = await h.pin.enableWebAccountPin(baseUrl, userId, '654321', 'token');
+   await setup.props.onSuccess(config);
+   assert.equal(getSwitch(render()).props.value, true);
+   assert.equal(h.pin.isWebAccountPinDisabled(baseUrl, userId), false);
